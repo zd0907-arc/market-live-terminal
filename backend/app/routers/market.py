@@ -8,14 +8,14 @@ from datetime import datetime
 router = APIRouter()
 
 @router.get("/verify_realtime", response_model=VerifyResult)
-def verify_realtime(symbol: str):
+async def verify_realtime(symbol: str):
     """
     多源验证：同时拉取腾讯和东财的最新快照
     """
-    return verify_realtime_data(symbol)
+    return await verify_realtime_data(symbol)
 
 @router.get("/ticks_full", response_model=APIResponse)
-def get_full_day_ticks(symbol: str):
+async def get_full_day_ticks(symbol: str):
     """
     获取某只股票当天的全量逐笔数据。
     """
@@ -26,7 +26,7 @@ def get_full_day_ticks(symbol: str):
 
     if not rows:
         # 2. 如果库里没数据，尝试现场拉取 (Fall back to live fetch)
-        records = fetch_live_ticks(symbol)
+        records = await fetch_live_ticks(symbol)
         if records:
             return APIResponse(code=200, data=records)
         else:

@@ -1,4 +1,4 @@
-import { TickData, CapitalRatioData } from '../../types';
+import { TickData, CapitalRatioData } from '@/types';
 
 /**
  * 核心资金计算逻辑

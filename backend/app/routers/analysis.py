@@ -41,7 +41,7 @@ def get_local_history(symbol: str):
     return data
 
 @router.get("/history_analysis", response_model=APIResponse)
-def get_history_analysis(symbol: str, source: str = "sina"):
+async def get_history_analysis(symbol: str, source: str = "sina"):
     """
     核心聚合接口：合并资金流向与K线行情
     """
@@ -53,11 +53,11 @@ def get_history_analysis(symbol: str, source: str = "sina"):
         if not symbol or not symbol.startswith(("sh", "sz", "bj")):
             return APIResponse(code=400, message="Invalid symbol format")
 
-        flows = get_sina_money_flow(symbol)
+        flows = await get_sina_money_flow(symbol)
         if not flows:
             return APIResponse(code=200, data=[])
 
-        kline_map = get_sina_kline(symbol)
+        kline_map = await get_sina_kline(symbol)
         result = []
         
         for item in flows:
