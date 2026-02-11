@@ -50,6 +50,7 @@ class HistoryAnalysisItem(BaseModel):
     total_amount: Optional[float] = 0
     super_large_in: Optional[float] = 0
     super_large_out: Optional[float] = 0
+    super_large_ratio: Optional[float] = 0
 
 class AggregateResult(BaseModel):
     date: str

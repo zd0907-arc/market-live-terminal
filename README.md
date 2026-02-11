@@ -122,5 +122,11 @@ market-live-terminal/
 
 ### Versioning
 *   Frontend version is defined in `package.json` and `src/version.ts`.
-*   Current Version: **v2.0.0**
+*   Current Version: **v2.1.0**
+
+### Release Notes (v2.1.0)
+*   **Feature**: 新增“超大单占比”指标 (Super Large Ratio)，用于捕捉主力核心动向。
+*   **UI**: 优化顶部搜索框布局，增加宽度并居中显示。
+*   **Logic**: 修正活跃度算法逻辑，增加对超大单的独立监控。
+
 

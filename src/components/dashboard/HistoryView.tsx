@@ -182,6 +182,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus })
                                             contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
                                             formatter={(val: number, name: string, props: any) => {
                                                 if (name === '主力交易占比') return val.toFixed(1) + '%';
+                                                if (name === '超大单占比') return val.toFixed(1) + '%';
                                                 let amount = 0;
                                                 if (name === '主力买入占比') amount = props.payload.main_buy_amount;
                                                 if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
@@ -192,6 +193,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus })
                                         <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                         <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                         <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                                        <Line yAxisId="right" type="monotone" dataKey="super_large_ratio" name="超大单占比" stroke="#a855f7" strokeWidth={2} dot={false} strokeDasharray="5 5" />
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>

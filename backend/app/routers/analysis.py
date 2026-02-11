@@ -101,6 +101,10 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
                 sellRatio = (main_sell / total_amount * 100) if total_amount > 0 else 0
                 activityRatio = ((main_buy + main_sell) / total_amount * 100) if total_amount > 0 else 0
 
+                # Calculate Super Large Ratio (r0 / Total)
+                super_large_total = r0
+                super_large_ratio = (super_large_total / total_amount * 100) if total_amount > 0 else 0
+
                 result.append({
                     "date": date,
                     "close": close_price,
@@ -112,7 +116,8 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
                     "super_large_out": r0_out,
                     "buyRatio": buyRatio,
                     "sellRatio": sellRatio,
-                    "activityRatio": activityRatio
+                    "activityRatio": activityRatio,
+                    "super_large_ratio": super_large_ratio
                 })
             except Exception as inner_e:
                 logger.warning(f"Error parsing item: {inner_e}")
