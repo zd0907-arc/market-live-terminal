@@ -288,8 +288,11 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
     const url = `http://127.0.0.1:8001/api/history_analysis?symbol=${symbol}&source=${source}`;
     const res = await fetch(url);
     const json = await res.json();
-    if(source === 'local') return json.data || [];
-    return json || []; // Sina returns list directly
+    // 统一处理后端返回的 {code: 200, data: [...]} 格式
+    if (json && json.data && Array.isArray(json.data)) {
+        return json.data;
+    }
+    return [];
   } catch (e) {
     console.error("Fetch history error:", e);
     return [];

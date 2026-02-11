@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Info, Calendar, Zap, Layers, Server, Star, Play, Pause, Eye, BookOpen, Settings, Split, CheckCircle2 } from 'lucide-react';
+import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Info, Calendar, Zap, Layers, Server, Star, Play, Pause, Eye, BookOpen, Settings, Split, CheckCircle2, Database } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area, ComposedChart, Bar, Cell } from 'recharts';
 import { RealTimeQuote, TickData, SearchResult, CapitalRatioData, HistoryAnalysisData } from './types';
 import * as StockService from './services/stockService';
@@ -174,7 +174,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [lastUpdate, setLastUpdate] = useState<string>('');
 
-  // 搜索处理
+  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+  };
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (query.length > 1) {
@@ -285,6 +287,18 @@ const App: React.FC = () => {
       setTimeout(() => setVerifyData(null), 5000); // 5秒后自动关闭校验提示
   };
   
+  // Check trading hours
+  const isTradingHours = () => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const time = hours * 100 + minutes;
+    return (time >= 930 && time <= 1130) || (time >= 1300 && time <= 1500);
+  };
+
+  const hasRealtimeData = displayTicks.length > 0;
+  const showEmptyState = !loading && !hasRealtimeData && !isTradingHours();
+
   // 监听历史源切换
   useEffect(() => {
       if (viewMode === 'history' && activeStock) {
@@ -462,19 +476,42 @@ const App: React.FC = () => {
             <span>ZhangData</span>
           </div>
           
-          <div className="relative flex-1 max-w-md w-full">
-            <div className="relative">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                placeholder="输入代码 (600519) 或简称 (茅台)..."
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors text-white placeholder-slate-500"
-              />
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-            </div>
+          <div className="flex-1 flex justify-center">
+             {/* 彻底移除顶部中央的切换按钮 */}
+          </div>
+          
+          <div className="relative flex-1 max-w-md w-full flex items-center gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 text-slate-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="输入代码 (600519) 或简称 (茅台)..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  value={query}
+                  onChange={handleSearch}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                />
+                {/* Search Results Dropdown ... */}
+                {/* ... */}
+              </div>
+
+              {/* 唯一的视图切换入口 (Toggle Group) */}
+              <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                  <button 
+                    onClick={() => setViewMode('realtime')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <Activity className="w-4 h-4" /> 实时
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('history')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <BarChart3 className="w-4 h-4" /> 历史
+                  </button>
+               </div>
+          </div>
 
             {/* 搜索历史下拉框 */}
             {isSearchFocused && !query && searchHistory.length > 0 && (
@@ -519,26 +556,6 @@ const App: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
-
-          {activeStock && (
-            <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-              <button
-                onClick={() => setViewMode('realtime')}
-                className={`px-4 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-2 ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Zap className="w-4 h-4" />
-                实时
-              </button>
-              <button
-                 onClick={() => setViewMode('history')}
-                 className={`px-4 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-2 ${viewMode === 'history' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Calendar className="w-4 h-4" />
-                历史
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
@@ -573,45 +590,34 @@ const App: React.FC = () => {
         )}
 
         {activeStock && (
-            <div className="flex justify-between items-center">
-                   {/* 视图切换 Tabs */}
-                   <div className="flex gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800 w-fit">
-                      <button 
-                        onClick={() => setViewMode('realtime')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                      >
-                        <Activity className="w-4 h-4" /> 实时盯盘
-                      </button>
-                      <button 
-                        onClick={() => setViewMode('history')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                      >
-                        <BarChart3 className="w-4 h-4" /> 历史复盘
-                      </button>
-                   </div>
-                   
-                   {/* 数据源控制器 */}
-                   <div className="flex gap-2">
-                       {viewMode === 'history' && (historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && (
-                           <button 
-                             onClick={() => setShowConfig(true)}
-                             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
-                           >
-                               <Settings className="w-3.5 h-3.5" /> 规则设置
-                           </button>
-                       )}
-                       
-                       <DataSourceControl 
-                           mode={viewMode}
-                           source={viewMode === 'realtime' ? realtimeSource : historySource}
-                           setSource={viewMode === 'realtime' ? setRealtimeSource : setHistorySource}
-                           compareMode={viewMode === 'realtime' ? realtimeCompareMode : historyCompareMode}
-                           setCompareMode={viewMode === 'realtime' ? setRealtimeCompareMode : setHistoryCompareMode}
-                           onVerify={handleVerifyRealtime}
-                       />
-                   </div>
-               </div>
-        )}
+             <div className="flex justify-end items-center mb-2">
+                    {/* 数据源控制器 (Moved here) */}
+                    <div className="flex gap-2">
+                        {viewMode === 'history' && (historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && (
+                            <button 
+                              onClick={() => setShowConfig(true)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
+                            >
+                                <Settings className="w-3.5 h-3.5" /> 规则设置
+                            </button>
+                        )}
+                        
+                        <DataSourceControl 
+                            mode={viewMode}
+                            source={viewMode === 'realtime' ? realtimeSource : historySource}
+                            setSource={viewMode === 'realtime' ? setRealtimeSource : setHistorySource}
+                            compareMode={viewMode === 'realtime' ? realtimeCompareMode : historyCompareMode}
+                            setCompareMode={viewMode === 'realtime' ? setRealtimeCompareMode : setHistoryCompareMode}
+                            onVerify={handleVerifyRealtime}
+                        />
+                    </div>
+             </div>
+         )}
+         {activeStock && (
+             <div className="flex justify-between items-center mb-4 hidden">
+                    {/* 彻底移除旧的切换区域 */}
+             </div>
+         )}
         {!activeStock && !loading && !quote && (
           <div className="text-center py-20 text-slate-500">
             <Activity className="w-16 h-16 mx-auto mb-4 opacity-20" />
@@ -785,7 +791,19 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
                {/* 实时主力监控图表 */}
-               <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+               <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative">
+                  {/* Control Bar inside Chart Card */}
+                  <div className="absolute top-4 right-4 z-20">
+                    <DataSourceControl 
+                        mode="realtime"
+                        source={realtimeSource}
+                        setSource={setRealtimeSource}
+                        compareMode={realtimeCompareMode}
+                        setCompareMode={setRealtimeCompareMode}
+                        onVerify={handleVerifyRealtime}
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       <TrendingUp className="w-5 h-5 text-blue-400" />
@@ -904,7 +922,20 @@ const App: React.FC = () => {
                {/* 左侧 (主) */}
                <div className="space-y-6">
                  {/* 1. 主力净流入 */}
-                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
+                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative">
+                    {/* Control Bar inside Chart Card (For History View - Main) */}
+                    {!historyCompareMode && (
+                        <div className="absolute top-4 right-4 z-20">
+                            <DataSourceControl 
+                                mode="history"
+                                source={historySource}
+                                setSource={setHistorySource}
+                                compareMode={historyCompareMode}
+                                setCompareMode={setHistoryCompareMode}
+                            />
+                        </div>
+                    )}
+
                     <div className="mb-6 flex justify-between items-center">
                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
                            {historySource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
@@ -915,21 +946,29 @@ const App: React.FC = () => {
                        <ResponsiveContainer width="100%" height="100%">
                          <ComposedChart data={historyData} syncId="historyGraph">
                             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                            <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                            <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
-                            <Tooltip 
-                                position={{ y: 0 }}
-                                contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
-                                formatter={(val: number) => (val/100000000).toFixed(2) + '亿'} 
-                            />
-                            <Legend />
-                            <ReferenceLine y={0} stroke="#334155" />
-                            <Bar dataKey="net_inflow" name="主力净流入">
-                              {historyData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
-                              ))}
-                            </Bar>
-                         </ComposedChart>
+                                    <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
+                                    {/* Left Y-Axis: Net Inflow */}
+                                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
+                                    {/* Right Y-Axis: Price */}
+                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 12}} domain={['auto', 'auto']} />
+                                    
+                                    <Tooltip 
+                                        position={{ y: 0 }}
+                                        contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                        formatter={(val: number, name: string) => {
+                                            if (name === '收盘价') return val.toFixed(2);
+                                            return (val/100000000).toFixed(2) + '亿';
+                                        }} 
+                                    />
+                                    <Legend />
+                                    <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
+                                    <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入">
+                                      {historyData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
+                                      ))}
+                                    </Bar>
+                                    <Line yAxisId="right" type="monotone" dataKey="close" name="收盘价" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                                 </ComposedChart>
                        </ResponsiveContainer>
                     </div>
                  </div>
@@ -976,21 +1015,20 @@ const App: React.FC = () => {
 
                {/* 右侧 (对比) */}
                {historyCompareMode && (
-                   <div className="space-y-6 border-l border-slate-800 pl-6 border-dashed">
-                     <div className="flex justify-between items-center mb-2">
-                         <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Comparison Source</span>
-                         <select 
-                             value={historyCompareSource} 
-                             onChange={(e) => setHistoryCompareSource(e.target.value)}
-                             className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
-                         >
-                             <option value="sina">🔴 新浪 (Sina)</option>
-                             <option value="local">🟣 本地自算 (Local)</option>
-                         </select>
+                   <div className="space-y-6 border-l border-slate-800 pl-6 border-dashed relative">
+                     {/* Global Controls for Split View (Right Side) */}
+                     <div className="absolute top-0 right-0 z-20">
+                          <DataSourceControl 
+                                mode="history"
+                                source={historySource} // In split view, left is fixed to 'source', right is 'compareSource'
+                                setSource={setHistorySource}
+                                compareMode={historyCompareMode}
+                                setCompareMode={setHistoryCompareMode}
+                            />
                      </div>
 
                      {/* 1. 对比-主力净流入 */}
-                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg opacity-90">
+                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg opacity-90 mt-12 relative">
                         <div className="mb-6">
                            <h3 className="text-lg font-bold text-slate-300 flex items-center gap-2">
                                {historyCompareSource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
@@ -998,25 +1036,34 @@ const App: React.FC = () => {
                            </h3>
                         </div>
                         <div className="h-[300px]">
-                           <ResponsiveContainer width="100%" height="100%">
-                             <ComposedChart data={historyCompareData} syncId="historyGraph">
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                                <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
-                                <Tooltip 
-                                    position={{ y: 0 }}
-                                    contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
-                                    formatter={(val: number) => (val/100000000).toFixed(2) + '亿'} 
-                                />
-                                <Legend />
-                                <ReferenceLine y={0} stroke="#334155" />
-                                <Bar dataKey="net_inflow" name="主力净流入">
-                                  {historyCompareData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
-                                  ))}
-                                </Bar>
-                             </ComposedChart>
-                           </ResponsiveContainer>
+                           {/* Empty State for Local Data */}
+                           {historyCompareSource === 'local' && historyCompareData.length === 0 ? (
+                               <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                                   <Database className="w-12 h-12 mb-4 opacity-20" />
+                                   <p>暂无本地数据</p>
+                                   <p className="text-xs mt-2 opacity-60">请先加关注并等待收盘计算</p>
+                               </div>
+                           ) : (
+                               <ResponsiveContainer width="100%" height="100%">
+                                 <ComposedChart data={historyCompareData} syncId="historyGraph">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                    <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
+                                    <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
+                                    <Tooltip 
+                                        position={{ y: 0 }}
+                                        contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                        formatter={(val: number) => (val/100000000).toFixed(2) + '亿'} 
+                                    />
+                                    <Legend />
+                                    <ReferenceLine y={0} stroke="#334155" />
+                                    <Bar dataKey="net_inflow" name="主力净流入">
+                                      {historyCompareData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
+                                      ))}
+                                    </Bar>
+                                 </ComposedChart>
+                               </ResponsiveContainer>
+                           )}
                         </div>
                      </div>
 
