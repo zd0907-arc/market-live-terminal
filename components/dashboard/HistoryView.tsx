@@ -97,8 +97,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus })
                 <div className="bg-red-950/30 border border-red-900/50 p-3 rounded-lg flex items-center gap-3 text-red-300 text-sm">
                     <AlertCircle className="w-4 h-4" />
                     <span>
-                        本地 Python 服务未连接 (端口 8001)。请在终端运行：
-                        <code className="bg-black/30 px-2 py-0.5 rounded ml-2 text-red-200 font-mono">python server.py</code>
+                        本地 Python 服务未连接 (端口 8000)。请在终端运行：
+                        <code className="bg-black/30 px-2 py-0.5 rounded ml-2 text-red-200 font-mono">python -m backend.app.main</code>
                     </span>
                 </div>
             )}

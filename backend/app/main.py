@@ -51,8 +51,8 @@ def health_check():
         "status": "running", 
         "service": "AlphaData Backend v2", 
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "docs": "http://127.0.0.1:8001/docs"
+        "docs": "http://127.0.0.1:8000/docs"
     }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
