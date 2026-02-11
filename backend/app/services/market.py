@@ -1,4 +1,5 @@
 import httpx
+import requests
 import re
 import json
 import logging
@@ -44,12 +45,21 @@ async def get_sina_money_flow(symbol: str):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
+    def _sync_fetch():
+        try:
+            # Fallback to requests for better compatibility with Sina legacy API
+            resp = requests.get(url, params=params, headers=headers, timeout=10.0)
+            resp.raise_for_status()
+            # requests handles encoding automatically better than httpx
+            return resp.text
+        except Exception as e:
+            logger.error(f"Sina Money Flow Sync Request Error: {e}")
+            return None
+
     try:
         logger.info(f"Fetching money flow for {symbol}...")
-        async with httpx.AsyncClient(verify=False) as client:
-            resp = await client.get(url, params=params, headers=headers, timeout=10.0)
-            resp.raise_for_status()
-            raw_text = resp.text
+        loop = asyncio.get_running_loop()
+        raw_text = await loop.run_in_executor(None, _sync_fetch)
 
         if not raw_text or raw_text == "null" or raw_text == "[]":
             return []
@@ -72,9 +82,13 @@ async def get_sina_money_flow(symbol: str):
 async def get_sina_kline(symbol: str):
     try:
         k_url = f"https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol={symbol}&scale=240&ma=no&datalen=100"
-        async with httpx.AsyncClient(verify=False) as client:
-            resp = await client.get(k_url, timeout=10.0)
-            data = resp.json()
+        
+        def _sync_kline():
+            r = requests.get(k_url, timeout=10.0)
+            return r.json()
+
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, _sync_kline)
         
         k_map = {}
         if isinstance(data, list):

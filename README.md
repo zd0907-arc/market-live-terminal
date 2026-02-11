@@ -86,7 +86,7 @@ market-live-terminal/
     # Install dependencies
     pip install -r backend/requirements.txt
     
-    # Start Server (Port 8001)
+    # Start Server (Port 8000)
     python -m backend.app.main
     ```
 
@@ -95,7 +95,7 @@ market-live-terminal/
     # Install dependencies
     npm install
     
-    # Start Dev Server (Port 3000/3001)
+    # Start Dev Server (Port 3001)
     npm run dev
     ```
 
@@ -110,3 +110,17 @@ market-live-terminal/
 *   `GET /api/config`: Get public thresholds for frontend calculation.
 *   `GET /api/ticks_full?symbol=sh600519`: Get full day trade ticks.
 *   `POST /api/aggregate`: Trigger manual history aggregation for a stock.
+
+---
+
+## 6. Version Management (版本管理)
+
+### Branch Strategy
+*   **`main`**: Production ready code.
+*   **`develop`**: Main development branch.
+*   **`feature/*`**: Feature specific branches (e.g., `feature/v2.1-optimization`).
+
+### Versioning
+*   Frontend version is defined in `package.json` and `src/version.ts`.
+*   Current Version: **v2.0.0**
+

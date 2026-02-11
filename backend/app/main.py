@@ -40,6 +40,8 @@ app.include_router(config.router, prefix="/api", tags=["Config"])
 async def startup_event():
     init_db()
     collector.start()
+    for route in app.routes:
+        print(f"Registered Route: {route.path} [{route.methods}]")
 
 @app.on_event("shutdown")
 async def shutdown_event():

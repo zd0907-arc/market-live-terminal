@@ -9,7 +9,7 @@
 ## 2. 技术架构
 
 ### 2.1 前端 (表现层)
-- **核心框架**: React 18, TypeScript, Vite.
+- **核心框架**: React 19, TypeScript, Vite.
 - **UI 组件库**: Tailwind CSS, Recharts.
 - **主要职责**:
   - **RealtimeView (实时视图)**: 渲染实时交易逐笔和资金流向图表。在前端利用共享逻辑计算核心指标。
@@ -18,9 +18,10 @@
 
 ### 2.2 后端 (数据与逻辑层)
 - **核心框架**: FastAPI (Python 3.9+).
+- **并发模型**: AsyncIO + HTTPX (全异步非阻塞).
 - **数据库**: SQLite (通过 SQLAlchemy ORM 管理).
 - **主要职责**:
-  - **数据代理**: 转发外部 API 请求，解决浏览器跨域 (CORS) 问题。
+  - **数据代理**: 异步转发外部 API 请求，解决浏览器跨域 (CORS) 问题。
   - **数据持久化**: 存储历史分析结果和用户配置。
   - **复杂计算**: 执行每日资金流向汇总等重计算任务。
   - **单一事实来源 (Source of Truth)**: 管理核心配置阈值（如“大单”的定义）。
@@ -28,17 +29,18 @@
 ### 2.3 目录结构
 ```text
 market-live-terminal/
-├── components/           # 前端组件
-│   ├── dashboard/        # 功能视图 (Realtime, History)
-│   └── ...
-├── src/
-│   └── utils/
-│       └── calculator.ts # 前后端共享的资金流算法
+├── src/                  # 前端源代码
+│   ├── components/       # 前端组件
+│   │   ├── dashboard/    # 功能视图 (Realtime, History)
+│   │   └── ...
+│   ├── utils/
+│   │   └── calculator.ts # 前后端共享的资金流算法
+│   └── App.tsx           # 主应用入口
 ├── backend/              # 后端应用
 │   └── app/
-│       ├── main.py       # 启动入口
-│       ├── routers/      # API 路由接口
-│       ├── services/     # 业务逻辑层
+│       ├── main.py       # 启动入口 (Port 8000)
+│       ├── routers/      # 异步 API 路由接口
+│       ├── services/     # 异步业务逻辑层
 │       └── models/       # Pydantic 数据模型
 └── docs/                 # 项目文档
 ```
@@ -54,5 +56,5 @@ market-live-terminal/
 
 ### 配置策略
 - **阈值管理**: 存储在后端数据库中。
-- **同步机制**: 前端启动时通过 `/api/config/public` 接口获取。
+- **同步机制**: 前端启动时通过 `/api/config` 接口获取。
 - **默认阈值**: 200,000 (20万) 定义为“大单”。

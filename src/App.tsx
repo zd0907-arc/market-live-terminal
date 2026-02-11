@@ -4,6 +4,7 @@ import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
 import HistoryView from './components/dashboard/HistoryView';
+import { APP_VERSION } from './version';
 
 const App: React.FC = () => {
   // State
@@ -167,6 +168,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2 font-bold text-lg text-red-500">
             <Activity className="w-6 h-6" />
             <span>ZhangData</span>
+            <span className="text-xs text-slate-500 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">v{APP_VERSION}</span>
           </div>
           
           <div className="flex-1 flex justify-center"></div>

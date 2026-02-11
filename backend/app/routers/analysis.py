@@ -40,7 +40,7 @@ def get_local_history(symbol: str):
         })
     return data
 
-@router.get("/history_analysis", response_model=APIResponse)
+@router.get("/history_analysis")
 async def get_history_analysis(symbol: str, source: str = "sina"):
     """
     核心聚合接口：合并资金流向与K线行情
@@ -58,6 +58,7 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
             return APIResponse(code=200, data=[])
 
         kline_map = await get_sina_kline(symbol)
+        logger.info(f"DEBUG: get_sina_kline returned {len(kline_map)} items")
         result = []
         
         for item in flows:
