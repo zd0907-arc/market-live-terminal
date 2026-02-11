@@ -1,4 +1,4 @@
-# AlphaData 智能博弈监控系统 (Hybrid Version)
+# ZhangData 智能博弈监控系统 
 
 本项目采用 **React 前端 + Python 后端** 的混合架构，旨在突破浏览器纯前端无法获取历史资金细分数据的限制。
 
