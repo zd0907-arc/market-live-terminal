@@ -3,7 +3,7 @@ import { TrendingUp, Layers, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { RealTimeQuote, TickData, SearchResult, CapitalRatioData } from '../../types';
 import * as StockService from '../../services/stockService';
-import { calculateCapitalFlow } from '../../src/utils/calculator';
+import { calculateCapitalFlow } from '@/utils/calculator';
 import DataSourceControl from '../common/DataSourceControl';
 
 interface RealtimeViewProps {

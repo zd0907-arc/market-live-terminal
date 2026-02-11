@@ -1,10 +1,10 @@
-# Market Live Terminal (v1.0)
+# Market Live Terminal (v2.0)
 
 > **AI Context Metadata**
 > *   **Role**: Financial Data Terminal (Realtime & History)
 > *   **Stack**: React 19 (Frontend) + FastAPI (Backend) + SQLite
 > *   **Key Logic**: Capital Flow Analysis (Main Force Calculation)
-> *   **Status**: Production Ready (v1.0)
+> *   **Status**: Production Ready (v2.0)
 
 ## 1. Project Overview (项目概览)
 
@@ -12,6 +12,10 @@
 
 *   **Frontend**: 提供实时逐笔交易监控、主力资金动态图表、历史数据回溯分析。
 *   **Backend**: 负责数据持久化（SQLite）、后台自动采集（AkShare/Crawler）、复杂聚合计算。
+
+**v2.0 关键更新**:
+- **前端重构**: 标准化 `src/` 目录结构。
+- **后端优化**: 全面异步化 (Async/Await + HTTPX)，提升并发性能。
 
 ---
 
@@ -21,23 +25,22 @@
 
 ```text
 market-live-terminal/
-├── components/           # Frontend Components
-│   ├── common/           # Shared UI (ConfigModal, DataSourceControl)
-│   └── dashboard/        # Feature Views
-│       ├── RealtimeView.tsx  # [Core] Realtime monitoring & calculation
-│       └── HistoryView.tsx   # [Core] History analysis & comparison
-├── src/
-│   └── utils/
-│       └── calculator.ts # [Logic] Shared Capital Flow Algorithm
+├── src/                  # Frontend Source Code
+│   ├── components/       # React Components
+│   │   ├── common/       # Shared UI (ConfigModal, DataSourceControl)
+│   │   └── dashboard/    # Feature Views
+│   ├── services/         # Frontend API Services
+│   ├── utils/            # Shared Utilities (calculator.ts)
+│   ├── App.tsx           # Main Layout
+│   └── main.tsx          # Entry Point
 ├── backend/              # Backend Application (Python)
 │   └── app/
-│       ├── main.py       # Entry Point
+│       ├── main.py       # FastAPI Entry Point
 │       ├── db/           # Database Layer (SQLite + CRUD)
-│       ├── services/     # Business Logic (Collector, Market, Analysis)
-│       ├── routers/      # API Routes (Watchlist, Market, Config)
-│       └── models/       # Pydantic Schemas (Type Safety)
-├── App.tsx               # Main Layout & Routing
-└── server.py             # (Deprecated) Old entry point, removed in v1.0
+│       ├── services/     # Business Logic (Async Collector, Market)
+│       ├── routers/      # Async API Routes
+│       └── models/       # Pydantic Schemas
+└── README.md
 ```
 
 ### Data Flow (数据流)
@@ -45,7 +48,7 @@ market-live-terminal/
 1.  **Realtime Mode**:
     *   Frontend -> `StockService.fetchTicks()` -> Backend `/api/ticks_full` -> AkShare/DB
     *   Frontend -> `calculator.ts` -> Aggregate Ticks -> Render Charts
-    *   *Note*: Thresholds are loaded from Backend `/api/config/public` on mount.
+    *   *Note*: Thresholds are loaded from Backend `/api/config` on mount.
 
 2.  **History Mode**:
     *   Frontend -> `StockService.fetchHistoryAnalysis()` -> Backend `/api/history_analysis`
@@ -81,9 +84,9 @@ market-live-terminal/
 1.  **Backend**:
     ```bash
     # Install dependencies
-    pip install -r requirements.txt
+    pip install -r backend/requirements.txt
     
-    # Start Server (Port 8001)
+    # Start Server (Port 8000)
     python -m backend.app.main
     ```
 
@@ -92,7 +95,7 @@ market-live-terminal/
     # Install dependencies
     npm install
     
-    # Start Dev Server (Port 3000/3001)
+    # Start Dev Server (Port 3001)
     npm run dev
     ```
 
@@ -104,6 +107,26 @@ market-live-terminal/
 
 ## 5. API Reference (部分核心接口)
 
-*   `GET /api/config/public`: Get public thresholds for frontend calculation.
+*   `GET /api/config`: Get public thresholds for frontend calculation.
 *   `GET /api/ticks_full?symbol=sh600519`: Get full day trade ticks.
 *   `POST /api/aggregate`: Trigger manual history aggregation for a stock.
+
+---
+
+## 6. Version Management (版本管理)
+
+### Branch Strategy
+*   **`main`**: Production ready code.
+*   **`develop`**: Main development branch.
+*   **`feature/*`**: Feature specific branches (e.g., `feature/v2.1-optimization`).
+
+### Versioning
+*   Frontend version is defined in `package.json` and `src/version.ts`.
+*   Current Version: **v2.1.0**
+
+### Release Notes (v2.1.0)
+*   **Feature**: 新增“超大单占比”指标 (Super Large Ratio)，用于捕捉主力核心动向。
+*   **UI**: 优化顶部搜索框布局，增加宽度并居中显示。
+*   **Logic**: 修正活跃度算法逻辑，增加对超大单的独立监控。
+
+

@@ -4,6 +4,7 @@ import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
 import HistoryView from './components/dashboard/HistoryView';
+import { APP_VERSION } from './version';
 
 const App: React.FC = () => {
   // State
@@ -164,14 +165,13 @@ const App: React.FC = () => {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-[#0f1623]/95 backdrop-blur border-b border-slate-800 p-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 font-bold text-lg text-red-500">
+          <div className="flex items-center gap-2 font-bold text-lg text-red-500 w-full md:w-auto">
             <Activity className="w-6 h-6" />
             <span>ZhangData</span>
+            <span className="text-xs text-slate-500 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">v{APP_VERSION}</span>
           </div>
           
-          <div className="flex-1 flex justify-center"></div>
-          
-          <div className="relative flex-1 max-w-md w-full flex items-center gap-4">
+          <div className="relative flex-1 max-w-3xl w-full flex items-center gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 text-slate-400 w-5 h-5" />
                 <input
@@ -183,29 +183,10 @@ const App: React.FC = () => {
                   onFocus={() => setIsSearchFocused(true)}
                   onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                 />
-              </div>
-
-              {/* View Toggle */}
-              <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
-                  <button 
-                    onClick={() => setViewMode('realtime')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <Activity className="w-4 h-4" /> 实时
-                  </button>
-                  <button 
-                    onClick={() => setViewMode('history')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <BarChart3 className="w-4 h-4" /> 历史
-                  </button>
-               </div>
-          </div>
-
-            {/* Search History Dropdown */}
-            {isSearchFocused && !query && searchHistory.length > 0 && (
-              <div className="absolute top-16 right-0 left-0 mx-auto max-w-6xl px-4 pointer-events-none">
-                  <div className="absolute right-4 md:right-[30%] top-0 w-64 pointer-events-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-80 overflow-y-auto z-50">
+                
+                {/* Search History Dropdown */}
+                {isSearchFocused && !query && searchHistory.length > 0 && (
+                  <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-80 overflow-y-auto z-50">
                      <div className="px-3 py-2 text-xs text-slate-500 bg-slate-900/50 border-b border-slate-700 flex justify-between items-center">
                         <span>最近访问</span>
                         <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">History</span>
@@ -226,28 +207,47 @@ const App: React.FC = () => {
                         </button>
                       ))}
                   </div>
-              </div>
-            )}
+                )}
 
-            {results.length > 0 && (
-              <div className="absolute top-16 right-0 left-0 mx-auto max-w-6xl px-4 pointer-events-none">
-                <div className="absolute right-4 md:right-[30%] top-0 w-64 pointer-events-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto z-50">
-                    {results.map((res) => (
-                      <button
-                        key={res.symbol}
-                        onClick={() => handleSelectStock(res)}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-700 flex justify-between items-center group transition-colors"
-                      >
-                        <div>
-                          <span className="font-bold text-white">{res.name}</span>
-                          <span className="ml-2 text-xs text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">{res.code}</span>
-                        </div>
-                        <span className="text-xs text-slate-500 group-hover:text-blue-400 uppercase">{res.market}</span>
-                      </button>
-                    ))}
-                </div>
+                {/* Search Results Dropdown */}
+                {results.length > 0 && (
+                  <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto z-50">
+                      {results.map((res) => (
+                        <button
+                          key={res.symbol}
+                          onClick={() => handleSelectStock(res)}
+                          className="w-full text-left px-4 py-3 hover:bg-slate-700 flex justify-between items-center group transition-colors"
+                        >
+                          <div>
+                            <span className="font-bold text-white">{res.name}</span>
+                            <span className="ml-2 text-xs text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">{res.code}</span>
+                          </div>
+                          <span className="text-xs text-slate-500 group-hover:text-blue-400 uppercase">{res.market}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* View Toggle */}
+              <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 shrink-0">
+                  <button 
+                    onClick={() => setViewMode('realtime')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <Activity className="w-4 h-4" /> 实时
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('history')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <BarChart3 className="w-4 h-4" /> 历史
+                  </button>
+               </div>
+          </div>
+          
+          {/* Spacer for centering */}
+          <div className="hidden md:block w-48"></div>
         </div>
       </header>
 

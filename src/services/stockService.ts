@@ -70,7 +70,7 @@ export const checkBackendHealth = async (): Promise<boolean> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
     
-    const response = await fetch('http://127.0.0.1:8001/', { 
+    const response = await fetch('http://127.0.0.1:8000/', { 
       method: 'GET',
       signal: controller.signal
     });
@@ -242,7 +242,7 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
 
 // 新版：从本地后端获取全天数据
 export const fetchTicks = async (symbol: string): Promise<TickData[]> => {
-    const url = `http://127.0.0.1:8001/api/ticks_full?symbol=${symbol}`;
+    const url = `http://127.0.0.1:8000/api/ticks_full?symbol=${symbol}`;
     try {
         const response = await fetch(url);
         if (!response.ok) return [];
@@ -268,15 +268,15 @@ export const fetchTicks = async (symbol: string): Promise<TickData[]> => {
 // Watchlist API
 // ==========================================
 export const addToWatchlist = async (symbol: string, name: string) => {
-    await fetch(`http://127.0.0.1:8001/api/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+    await fetch(`http://127.0.0.1:8000/api/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
 };
 
 export const removeFromWatchlist = async (symbol: string) => {
-    await fetch(`http://127.0.0.1:8001/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+    await fetch(`http://127.0.0.1:8000/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
 };
 
 export const getWatchlist = async (): Promise<any[]> => {
-    const res = await fetch('http://127.0.0.1:8001/api/watchlist');
+    const res = await fetch('http://127.0.0.1:8000/api/watchlist');
     return await res.json();
 };
 
@@ -285,7 +285,7 @@ export const getWatchlist = async (): Promise<any[]> => {
 // ==========================================
 export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'local' = 'sina'): Promise<HistoryAnalysisData[]> => {
   try {
-    const url = `http://127.0.0.1:8001/api/history_analysis?symbol=${symbol}&source=${source}`;
+    const url = `http://127.0.0.1:8000/api/history_analysis?symbol=${symbol}&source=${source}`;
     const res = await fetch(url);
     const json = await res.json();
     // 统一处理后端返回的 {code: 200, data: [...]} 格式
@@ -300,20 +300,20 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
 };
 
 export const aggregateLocalHistory = async (symbol: string, date?: string) => {
-    const url = `http://127.0.0.1:8001/api/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
+    const url = `http://127.0.0.1:8000/api/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
     await fetch(url, { method: 'POST' });
 };
 
 export const getAppConfig = async () => {
-    const res = await fetch('http://127.0.0.1:8001/api/config');
+    const res = await fetch('http://127.0.0.1:8000/api/config');
     return await res.json();
 };
 
 export const updateAppConfig = async (key: string, value: string) => {
-    await fetch(`http://127.0.0.1:8001/api/config?key=${key}&value=${value}`, { method: 'POST' });
+    await fetch(`http://127.0.0.1:8000/api/config?key=${key}&value=${value}`, { method: 'POST' });
 };
 
 export const verifyRealtime = async (symbol: string) => {
-    const res = await fetch(`http://127.0.0.1:8001/api/verify_realtime?symbol=${symbol}`);
+    const res = await fetch(`http://127.0.0.1:8000/api/verify_realtime?symbol=${symbol}`);
     return await res.json();
 };

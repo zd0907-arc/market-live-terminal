@@ -63,4 +63,5 @@ export interface HistoryAnalysisData {
   buyRatio?: number;
   sellRatio?: number;
   activityRatio?: number;
+  super_large_ratio?: number;
 }

@@ -40,8 +40,8 @@ def get_local_history(symbol: str):
         })
     return data
 
-@router.get("/history_analysis", response_model=APIResponse)
-def get_history_analysis(symbol: str, source: str = "sina"):
+@router.get("/history_analysis")
+async def get_history_analysis(symbol: str, source: str = "sina"):
     """
     核心聚合接口：合并资金流向与K线行情
     """
@@ -53,11 +53,12 @@ def get_history_analysis(symbol: str, source: str = "sina"):
         if not symbol or not symbol.startswith(("sh", "sz", "bj")):
             return APIResponse(code=400, message="Invalid symbol format")
 
-        flows = get_sina_money_flow(symbol)
+        flows = await get_sina_money_flow(symbol)
         if not flows:
             return APIResponse(code=200, data=[])
 
-        kline_map = get_sina_kline(symbol)
+        kline_map = await get_sina_kline(symbol)
+        logger.info(f"DEBUG: get_sina_kline returned {len(kline_map)} items")
         result = []
         
         for item in flows:
@@ -100,6 +101,10 @@ def get_history_analysis(symbol: str, source: str = "sina"):
                 sellRatio = (main_sell / total_amount * 100) if total_amount > 0 else 0
                 activityRatio = ((main_buy + main_sell) / total_amount * 100) if total_amount > 0 else 0
 
+                # Calculate Super Large Ratio (r0 / Total)
+                super_large_total = r0
+                super_large_ratio = (super_large_total / total_amount * 100) if total_amount > 0 else 0
+
                 result.append({
                     "date": date,
                     "close": close_price,
@@ -111,7 +116,8 @@ def get_history_analysis(symbol: str, source: str = "sina"):
                     "super_large_out": r0_out,
                     "buyRatio": buyRatio,
                     "sellRatio": sellRatio,
-                    "activityRatio": activityRatio
+                    "activityRatio": activityRatio,
+                    "super_large_ratio": super_large_ratio
                 })
             except Exception as inner_e:
                 logger.warning(f"Error parsing item: {inner_e}")
