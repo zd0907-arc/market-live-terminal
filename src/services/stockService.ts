@@ -317,3 +317,9 @@ export const verifyRealtime = async (symbol: string) => {
     const res = await fetch(`http://127.0.0.1:8000/api/verify_realtime?symbol=${symbol}`);
     return await res.json();
 };
+
+export const fetchSentimentData = async (symbol: string) => {
+    const res = await fetch(`http://127.0.0.1:8000/api/sentiment?symbol=${symbol}`);
+    const json = await res.json();
+    return json.data;
+};

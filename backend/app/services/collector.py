@@ -38,7 +38,7 @@ class DataCollector:
             logger.info(f"Auto-fetching ticks for {symbol}...")
             try:
                 # 调用 AkShare 拉取全天数据
-                df = ak.stock_zh_a_tick_tx_js(code=symbol)
+                df = ak.stock_zh_a_tick_tx_js(symbol)
                 if df is not None and not df.empty:
                     self._save_ticks(symbol, df, today_str)
             except Exception as e:
@@ -46,13 +46,20 @@ class DataCollector:
 
     def _save_ticks(self, symbol, df, date_str):
         data_to_insert = []
+        # Print columns to debug if needed
+        # logger.info(f"AkShare columns for {symbol}: {df.columns.tolist()}")
+        
+        # Try to adapt to new column names
+        vol_col = '成交量' if '成交量' in df.columns else '成交量(手)'
+        amt_col = '成交额' if '成交额' in df.columns else '成交金额(元)'
+        
         for _, row in df.iterrows():
             data_to_insert.append((
                 symbol,
                 row['成交时间'],
                 float(row['成交价格']),
-                int(row['成交量(手)']),
-                float(row['成交金额(元)']),
+                int(row[vol_col]),
+                float(row[amt_col]),
                 row['性质'], # 买盘/卖盘/中性盘
                 date_str
             ))
