@@ -78,6 +78,16 @@ export interface HistoryAnalysisData {
   super_large_ratio?: number;
 }
 
+export interface HistoryTrendData {
+  time: string; // "YYYY-MM-DD HH:MM:SS"
+  net_inflow: number;
+  main_buy: number;
+  main_sell: number;
+  super_net: number;
+  super_buy: number;
+  super_sell: number;
+}
+
 export interface SentimentData {
   symbol: string;
   name: string;

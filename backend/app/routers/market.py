@@ -28,37 +28,20 @@ async def verify_realtime(symbol: str):
     # return await verify_realtime_data(symbol)
     return VerifyResult(sina_price=0, tencent_price=0, diff=0, status="disabled")
 
-@router.get("/ticks_full", response_model=APIResponse)
-async def get_full_day_ticks(symbol: str):
+from backend.app.services.analysis import calculate_realtime_aggregation
+
+@router.get("/realtime/dashboard", response_model=APIResponse)
+async def get_realtime_dashboard(symbol: str):
     """
-    获取某只股票当天的全量逐笔数据。
-    (从本地数据库读取，不再触发实时爬虫)
+    获取实时仪表盘聚合数据（分钟级资金流 + 最新Ticks）
+    替代原有的 /ticks_full，解决前端计算压力和数据传输过大的问题。
     """
     if MOCK_DATA_DATE:
         today_str = MOCK_DATA_DATE
     else:
         today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    # 纯读库
-    rows = get_ticks_by_date(symbol, today_str)
 
-    if not rows:
-        # 如果没数据，返回空列表，前端显示"等待更新"
-        return APIResponse(code=200, message="Waiting for background sync", data=[])
-            
-    # 格式化返回
-    result = []
-    for r in rows:
-        t_type = 'neutral'
-        if r[4] == '买盘': t_type = 'buy'
-        elif r[4] == '卖盘': t_type = 'sell'
-        
-        result.append({
-            "time": r[0],
-            "price": r[1],
-            "volume": r[2],
-            "amount": r[3],
-            "type": t_type
-        })
-        
-    return APIResponse(code=200, data=result)
+    data = calculate_realtime_aggregation(symbol, today_str)
+    
+    return APIResponse(code=200, data=data)
+

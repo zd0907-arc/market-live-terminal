@@ -22,6 +22,27 @@ class DataCollector:
     def stop(self):
         self.running = False
 
+    def _is_trading_time(self):
+        """Check if current time is within trading hours (with buffer)"""
+        now = datetime.now()
+        current_time = now.time()
+        
+        # Hard Stop at 15:05:00
+        # Anything after 15:05 is definitely closed, even for closing auction (14:57-15:00)
+        hard_stop = datetime.strptime("15:05:00", "%H:%M:%S").time()
+        if current_time > hard_stop:
+            return False
+
+        # 09:15 - 11:35 (Morning + Buffer)
+        # 12:55 - 15:05 (Afternoon + Buffer)
+        morning_start = datetime.strptime("09:15", "%H:%M").time()
+        morning_end = datetime.strptime("11:35", "%H:%M").time()
+        afternoon_start = datetime.strptime("12:55", "%H:%M").time()
+        afternoon_end = hard_stop # 15:05
+        
+        return (morning_start <= current_time <= morning_end) or \
+               (afternoon_start <= current_time <= afternoon_end)
+
     def _loop(self):
         # 立即执行一次
         logger.info("Executing initial fetch...")
@@ -33,6 +54,11 @@ class DataCollector:
         while self.running:
             time.sleep(180) # 每3分钟轮询一次
             if not self.running: break
+            
+            if not self._is_trading_time():
+                # logger.debug("Not trading time, skipping poll.")
+                continue
+
             try:
                 self._poll_watchlist()
             except Exception as e:
@@ -68,9 +94,14 @@ class DataCollector:
 
         for _, row in df.iterrows():
             try:
+                t_time = row['成交时间']
+                # FILTER: Drop any ticks after 15:00:05
+                if t_time > "15:00:05":
+                    continue
+
                 data_to_insert.append((
                     symbol,
-                    row['成交时间'],
+                    t_time,
                     float(row['成交价格']),
                     int(row[vol_col]),
                     float(row[amt_col]),

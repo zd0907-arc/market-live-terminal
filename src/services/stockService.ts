@@ -1,4 +1,4 @@
-import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData } from '../types';
+import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData } from '../types';
 
 // ==========================================
 // 基础网络层：JSONP / Script Injection
@@ -240,27 +240,19 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
   }
 };
 
-// 新版：从本地后端获取全天数据
-export const fetchTicks = async (symbol: string): Promise<TickData[]> => {
-    const url = `http://127.0.0.1:8000/api/ticks_full?symbol=${symbol}`;
+export const fetchRealtimeDashboard = async (symbol: string) => {
+    const url = `http://127.0.0.1:8000/api/realtime/dashboard?symbol=${symbol}`;
     try {
         const response = await fetch(url);
-        if (!response.ok) return [];
+        if (!response.ok) return null;
         const json = await response.json();
-        if (json.code === 200 && Array.isArray(json.data)) {
-            return json.data.map((t: any) => ({
-                time: t.time,
-                price: t.price,
-                volume: t.volume,
-                amount: t.amount,
-                type: t.type,
-                color: t.type === 'buy' ? 'text-red-500' : (t.type === 'sell' ? 'text-green-500' : 'text-slate-400')
-            }));
+        if (json.code === 200) {
+            return json.data; // { chart_data, cumulative_data, latest_ticks }
         }
-        return [];
+        return null;
     } catch (e) {
-        console.error("Full tick fetch error:", e);
-        return [];
+        console.error("Realtime dashboard fetch error:", e);
+        return null;
     }
 };
 
@@ -295,6 +287,21 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
     return [];
   } catch (e) {
     console.error("Fetch history error:", e);
+    return [];
+  }
+};
+
+export const fetchHistoryTrend = async (symbol: string, days: number = 20): Promise<HistoryTrendData[]> => {
+  try {
+    const url = `http://127.0.0.1:8000/api/history/trend?symbol=${symbol}&days=${days}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.code === 200 && Array.isArray(json.data)) {
+        return json.data;
+    }
+    return [];
+  } catch (e) {
+    console.error("Fetch history trend error:", e);
     return [];
   }
 };

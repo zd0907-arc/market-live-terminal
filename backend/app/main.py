@@ -5,6 +5,7 @@ from backend.app.db.database import init_db
 from backend.app.routers import watchlist, market, analysis, config, monitor
 from backend.app.services.collector import collector
 from backend.app.services.monitor import monitor as sentiment_monitor
+from backend.app.scheduler import init_scheduler
 from datetime import datetime
 import logging
 import urllib3
@@ -43,6 +44,7 @@ async def startup_event():
     init_db()
     collector.start()
     sentiment_monitor.start()
+    init_scheduler()
     for route in app.routes:
         print(f"Registered Route: {route.path} [{route.methods}]")
 
