@@ -122,7 +122,12 @@ market-live-terminal/
 
 ### Versioning
 *   Frontend version is defined in `package.json` and `src/version.ts`.
-*   Current Version: **v2.1.0**
+*   Current Version: **v2.2.0**
+
+### Release Notes (v2.2.0)
+*   **Feature**: 新增“情绪仪表盘” (Sentiment Dashboard)，接入腾讯快照数据，实时展示内外盘（主动买卖）与委比（挂单）博弈。
+*   **Optimization**: 实时页面刷新频率优化，支持 1m/5m/15m/30m 切换，默认 5m，大幅降低数据拉取压力。
+*   **Fix**: 修复腾讯接口超时问题（3s -> 10s），解决部分网络环境下数据缺失的问题。
 
 ### Release Notes (v2.1.0)
 *   **Feature**: 新增“超大单占比”指标 (Super Large Ratio)，用于捕捉主力核心动向。

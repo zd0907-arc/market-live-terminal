@@ -24,6 +24,7 @@ const DataSourceControl: React.FC<DataSourceControlProps> = ({ mode, source, set
                     {mode === 'realtime' ? (
                         <>
                             <option value="tencent">🟢 腾讯 (Tencent)</option>
+                            <option value="sina">🔴 新浪 (Sina)</option>
                             <option value="eastmoney">🔵 东财 (Eastmoney)</option>
                         </>
                     ) : (

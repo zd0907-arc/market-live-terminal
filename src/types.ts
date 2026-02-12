@@ -65,3 +65,17 @@ export interface HistoryAnalysisData {
   activityRatio?: number;
   super_large_ratio?: number;
 }
+
+export interface SentimentData {
+  symbol: string;
+  name: string;
+  price: number;
+  last_close: number;
+  volume: number;
+  outer_disk: number; // Active Buy
+  inner_disk: number; // Active Sell
+  buy_queue_vol: number; // Total Buy 1-5
+  sell_queue_vol: number; // Total Sell 1-5
+  turnover_rate: number;
+  timestamp: string;
+}

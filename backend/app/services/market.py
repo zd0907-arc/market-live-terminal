@@ -14,15 +14,23 @@ async def fetch_live_ticks(symbol: str):
         logger.info(f"Live fetching {symbol} for API request...")
         loop = asyncio.get_running_loop()
         # akshare internal logic is synchronous and blocking
-        df = await loop.run_in_executor(None, lambda: ak.stock_zh_a_tick_tx_js(code=symbol))
+        # ak.stock_zh_a_tick_tx_js changed its signature, remove 'code='
+        df = await loop.run_in_executor(None, lambda: ak.stock_zh_a_tick_tx_js(symbol))
         if df is not None and not df.empty:
+            # Print columns to debug
+            logger.info(f"AkShare columns: {df.columns.tolist()}")
+            
+            # Map columns safely
+            vol_col = '成交量' if '成交量' in df.columns else '成交量(手)'
+            amt_col = '成交金额' if '成交金额' in df.columns else '成交金额(元)'
+            
             records = []
             for _, row in df.iterrows():
                 records.append({
                     "time": row['成交时间'],
                     "price": float(row['成交价格']),
-                    "volume": int(row['成交量(手)']),
-                    "amount": float(row['成交金额(元)']),
+                    "volume": int(row[vol_col]), 
+                    "amount": float(row[amt_col]), 
                     "type": 'buy' if row['性质'] == '买盘' else ('sell' if row['性质'] == '卖盘' else 'neutral')
                 })
             return records
@@ -105,47 +113,62 @@ async def get_sina_kline(symbol: str):
         logger.error(f"Kline API Error: {e}")
         return {}
 
-async def verify_realtime_data(symbol: str):
-    # 1. Tencent
-    tencent_data = {}
-    
-    async with httpx.AsyncClient() as client:
-        # Tencent
-        try:
-            url = f"http://qt.gtimg.cn/q={symbol}"
-            r = await client.get(url, timeout=2.0)
+async def fetch_tencent_snapshot(symbol: str):
+    """
+    Fetch comprehensive snapshot data from Tencent for Sentiment Dashboard
+    Returns parsed fields including Outer/Inner disk, Buy/Sell queues, Turnover rate.
+    """
+    try:
+        url = f"http://qt.gtimg.cn/q={symbol}"
+        async with httpx.AsyncClient() as client:
+            # Increased timeout to 10s to handle network jitter
+            r = await client.get(url, timeout=10.0)
             if r.status_code == 200:
-                parts = r.text.split('~')
-                if len(parts) > 30:
-                    tencent_data = {
-                        "price": float(parts[3]),
-                        "change": float(parts[31]),
-                        "volume": float(parts[6]),
-                        "time": parts[30]
-                    }
-        except:
-            pass
+                text = r.text
+                # Format: v_sh600519="1~name~code~price~last_close~open~vol~outer~inner~...~turnover~...";
+                if '~' not in text: 
+                    logger.warning(f"Tencent response invalid format for {symbol}: {text[:50]}...")
+                    return None
+                
+                parts = text.split('~')
+                if len(parts) < 40: 
+                    logger.warning(f"Tencent response incomplete for {symbol}, parts={len(parts)}")
+                    return None
+                
+                # Parse basic info
+                name = parts[1]
+                price = float(parts[3])
+                last_close = float(parts[4])
+                volume = float(parts[6]) # Total Volume (Hands)
+                
+                # Parse Active Buy/Sell (Outer/Inner Disk)
+                outer_disk = float(parts[7]) # Active Buy (Hands)
+                inner_disk = float(parts[8]) # Active Sell (Hands)
+                
+                # Parse Order Book (5 Levels) - Buy: 9-18, Sell: 19-28
+                # Format: Price, Volume, Price, Volume...
+                buy_vol_sum = sum([float(parts[10]), float(parts[12]), float(parts[14]), float(parts[16]), float(parts[18])])
+                sell_vol_sum = sum([float(parts[20]), float(parts[22]), float(parts[24]), float(parts[26]), float(parts[28])])
+                
+                turnover_rate = float(parts[38]) if len(parts) > 38 else 0
+                
+                return {
+                    "symbol": symbol,
+                    "name": name,
+                    "price": price,
+                    "last_close": last_close,
+                    "volume": volume,
+                    "outer_disk": outer_disk,
+                    "inner_disk": inner_disk,
+                    "buy_queue_vol": buy_vol_sum,
+                    "sell_queue_vol": sell_vol_sum,
+                    "turnover_rate": turnover_rate,
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                }
+    except Exception as e:
+        logger.error(f"Tencent snapshot error: {e}")
+        return None
 
-        # 2. Eastmoney
-        eastmoney_data = {}
-        try:
-            m_id = "1" if symbol.startswith("sh") else "0"
-            s_code = symbol[2:]
-            url_simple = f"http://push2.eastmoney.com/api/qt/stock/get?secid={m_id}.{s_code}&fields=f43,f57,f58,f169,f46"
-            r = await client.get(url_simple, timeout=2.0)
-            if r.status_code == 200:
-                js = r.json()
-                if js and js.get('data'):
-                    d = js['data']
-                    eastmoney_data = {
-                        "price": d.get('f43', 0) / 100 if d.get('f43') > 10000 else d.get('f43'), 
-                        "change": d.get('f169', 0) / 100 if d.get('f169') > 1000 else d.get('f169'),
-                        "time": datetime.now().strftime("%H:%M:%S")
-                    }
-        except:
-            pass
-        
-    return {
-        "tencent": tencent_data,
-        "eastmoney": eastmoney_data
-    }
+# Removed verify_realtime_data from imports since it's not implemented yet
+# async def verify_realtime_data(symbol: str):
+#    ...
