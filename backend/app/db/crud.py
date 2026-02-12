@@ -99,8 +99,8 @@ def save_sentiment_snapshot(data_list):
     cursor = conn.cursor()
     cursor.executemany('''
         INSERT OR REPLACE INTO sentiment_snapshots 
-        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol, signals)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', data_list)
     conn.commit()
     conn.close()
@@ -109,14 +109,14 @@ def get_sentiment_history(symbol: str, date: str):
     conn = get_db_connection()
     c = conn.cursor()
     c.execute('''
-        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol 
+        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol, signals
         FROM sentiment_snapshots 
         WHERE symbol=? AND date=? 
         ORDER BY timestamp ASC
     ''', (symbol, date))
     rows = c.fetchall()
     conn.close()
-    return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5]} for r in rows]
+    return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5], "signals": r[6]} for r in rows]
 
 def save_history_30m_batch(data_list):
     conn = get_db_connection()

@@ -237,7 +237,6 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
                                     <div className="mb-2 flex justify-between items-center">
                                         <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                            {historySource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
                                             主力净流入
                                         </h3>
                                     </div>
@@ -259,7 +258,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                 />
                                                 <Legend wrapperStyle={{fontSize: 12}} />
                                                 <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
-                                                <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入">
+                                                <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
                                                     {historyData.map((entry, index) => (
                                                         <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
                                                     ))}
@@ -357,7 +356,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                         />
                                                         <Legend wrapperStyle={{fontSize: 12}} />
                                                         <ReferenceLine y={0} stroke="#334155" />
-                                                        <Bar dataKey="net_inflow" name="主力净流入">
+                                                        <Bar dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
                                                             {historyCompareData.map((entry, index) => (
                                                                 <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
                                                             ))}
