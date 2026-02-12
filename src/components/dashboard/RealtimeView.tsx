@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Layers, Activity, RefreshCw } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { RealTimeQuote, TickData, SearchResult, CapitalRatioData } from '../../types';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
+import { RealTimeQuote, TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
 import * as StockService from '../../services/stockService';
-import { calculateCapitalFlow } from '@/utils/calculator';
+import { calculateCapitalFlow, calculateCumulativeCapitalFlow } from '@/utils/calculator';
 import SentimentTrend from './SentimentTrend';
 
 interface RealtimeViewProps {
@@ -20,6 +20,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
     const allTicksRef = useRef<TickData[]>([]);
     const [displayTicks, setDisplayTicks] = useState<TickData[]>([]); 
     const [chartData, setChartData] = useState<CapitalRatioData[]>([]);
+    const [cumulativeData, setCumulativeData] = useState<CumulativeCapitalData[]>([]);
     const isFetchingRef = useRef(false);
     const [lastUpdated, setLastUpdated] = useState<string>('');
 
@@ -43,8 +44,10 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
 
     // 核心计算逻辑：使用 Utility Function
     const recalcChartData = () => {
-        const result = calculateCapitalFlow(allTicksRef.current, thresholds.large);
-        setChartData(result);
+        const ratioResult = calculateCapitalFlow(allTicksRef.current, thresholds.large);
+        const cumResult = calculateCumulativeCapitalFlow(allTicksRef.current, thresholds.large, thresholds.superLarge);
+        setChartData(ratioResult);
+        setCumulativeData(cumResult);
     };
 
     // 逐笔成交数据处理
@@ -79,6 +82,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
         allTicksRef.current = [];
         setDisplayTicks([]);
         setChartData([]);
+        setCumulativeData([]);
         setLastUpdated('');
 
         let isMounted = true;
@@ -112,6 +116,23 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
         };
     }, [activeStock]); // 移除 refreshInterval 依赖，固定轮询本地库
 
+    // Dynamic Gradient Offset Calculation
+    const gradientOffset = () => {
+      const dataMax = Math.max(...cumulativeData.map((i) => i.cumNetInflow));
+      const dataMin = Math.min(...cumulativeData.map((i) => i.cumNetInflow));
+    
+      if (dataMax <= 0) {
+        return 0;
+      }
+      if (dataMin >= 0) {
+        return 1;
+      }
+    
+      return dataMax / (dataMax - dataMin);
+    };
+    
+    const off = gradientOffset();
+    
     if (!quote) return null;
 
     return (
@@ -132,43 +153,135 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
                         <span className="text-xs text-slate-500 font-mono">
                             {lastUpdated ? `Updated: ${lastUpdated} (${displayTicks.length} ticks)` : '正在后台同步数据 (约需1-3分钟)...'}
                         </span>
-
-                        <div className="text-xs text-slate-500 flex items-center gap-2">
-                            <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>主买</span>
-                            <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>主卖</span>
-                            <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-yellow-400 mr-1"></span>参与度</span>
-                        </div>
                     </div>
                 </div>
                 
-                <div className="h-[300px] w-full">
-                    {chartData.length > 1 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                <XAxis 
-                                    dataKey="time" 
-                                    stroke="#64748b" 
-                                    tick={{fontSize: 12}} 
-                                    ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
-                                    interval="preserveStartEnd"
-                                />
-                                <YAxis stroke="#64748b" tick={{fontSize: 12}} unit="%" domain={[0, 'auto']} />
-                                <Tooltip 
-                                    contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
-                                    itemStyle={{fontSize: 12}}
-                                />
-                                <Legend wrapperStyle={{fontSize: 12}} />
-                                <Line type="monotone" dataKey="mainBuyRatio" name="买入占比" stroke="#ef4444" strokeWidth={2} dot={false} />
-                                <Line type="monotone" dataKey="mainSellRatio" name="卖出占比" stroke="#22c55e" strokeWidth={2} dot={false} />
-                                <Line type="monotone" dataKey="mainParticipationRatio" name="参与度" stroke="#eab308" strokeWidth={2} strokeDasharray="4 4" dot={false} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                            等待更多交易数据生成图表...
+                <div className="grid grid-rows-2 gap-4 h-[500px]">
+                    {/* 1. 分时强度图 (Instantaneous) */}
+                    <div className="h-full w-full relative">
+                        <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
+                            分时博弈强度 (%)
                         </div>
-                    )}
+                        {chartData.length > 1 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} syncId="capitalFlow">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                    <XAxis 
+                                        dataKey="time" 
+                                        stroke="#64748b" 
+                                        tick={{fontSize: 12}} 
+                                        ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                                        interval="preserveStartEnd"
+                                        hide // Hide X Axis for top chart
+                                    />
+                                    <YAxis stroke="#64748b" tick={{fontSize: 12}} unit="%" domain={[0, 'auto']} />
+                                    <Tooltip 
+                                        contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                        itemStyle={{fontSize: 12}}
+                                    />
+                                    <Legend wrapperStyle={{fontSize: 12}} verticalAlign="top" height={36}/>
+                                    <Line type="monotone" dataKey="mainBuyRatio" name="买入占比" stroke="#ef4444" strokeWidth={2} dot={false} animationDuration={500}/>
+                                    <Line type="monotone" dataKey="mainSellRatio" name="卖出占比" stroke="#22c55e" strokeWidth={2} dot={false} animationDuration={500}/>
+                                    <Line type="monotone" dataKey="mainParticipationRatio" name="参与度" stroke="#eab308" strokeWidth={2} strokeDasharray="4 4" dot={false} animationDuration={500}/>
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                                等待数据...
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 2. 累计趋势图 (Cumulative) */}
+                    <div className="h-full w-full relative">
+                        <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
+                            主力累计资金 (万元)
+                        </div>
+                        {cumulativeData.length > 1 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={cumulativeData} syncId="capitalFlow">
+                                    <defs>
+                                        <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset={off} stopColor="#ef4444" stopOpacity={0.3}/>
+                                            <stop offset={off} stopColor="#22c55e" stopOpacity={0.3}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                    <XAxis 
+                                        dataKey="time" 
+                                        stroke="#64748b" 
+                                        tick={{fontSize: 12}} 
+                                        ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                                        interval="preserveStartEnd"
+                                    />
+                                    {/* Left Axis: Net Inflow */}
+                                    <YAxis 
+                                        yAxisId="net"
+                                        stroke="#a78bfa" 
+                                        tick={{fontSize: 12}} 
+                                        tickFormatter={(val) => (val / 10000).toFixed(0)}
+                                        domain={['auto', 'auto']}
+                                    />
+                                    {/* Right Axis: Total Buy/Sell */}
+                                    <YAxis 
+                                        yAxisId="total"
+                                        orientation="right"
+                                        stroke="#64748b" 
+                                        tick={{fontSize: 12}} 
+                                        tickFormatter={(val) => (val / 10000).toFixed(0)}
+                                        domain={['auto', 'auto']}
+                                        hide // Hide right axis ticks to avoid clutter, just use for scaling
+                                    />
+                                    <Tooltip 
+                                        contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                        itemStyle={{fontSize: 12}}
+                                        formatter={(val: number, name: string) => {
+                                            const v = (val / 10000).toFixed(1) + '万';
+                                            return [v, name];
+                                        }}
+                                    />
+                                    <Legend wrapperStyle={{fontSize: 12}} verticalAlign="top" height={36}/>
+                                    
+                                    {/* Area for Main Net Inflow - Red/Green based on value */}
+                                    <Area 
+                                        yAxisId="net"
+                                        type="monotone" 
+                                        dataKey="cumNetInflow" 
+                                        name="主力净流入" 
+                                        stroke="none" 
+                                        fill="url(#splitColor)" 
+                                        animationDuration={500}
+                                    />
+
+                                    {/* Super Large Net Inflow Line */}
+                                    <Line 
+                                        yAxisId="net"
+                                        type="monotone" 
+                                        dataKey="cumSuperNetInflow" 
+                                        name="超大单净流入" 
+                                        stroke="#d946ef" 
+                                        strokeWidth={2} 
+                                        dot={false} 
+                                        strokeDasharray="5 5"
+                                        animationDuration={500}
+                                    />
+
+                                    {/* Background Reference Lines (Total) */}
+                                    {/* Main Force: Solid Lines */}
+                                    <Line yAxisId="total" type="monotone" dataKey="cumMainBuy" name="主力买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500}/>
+                                    <Line yAxisId="total" type="monotone" dataKey="cumMainSell" name="主力卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500}/>
+                                    
+                                    {/* Super Large: Dashed Lines */}
+                                    <Line yAxisId="total" type="monotone" dataKey="cumSuperBuy" name="超大单买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500}/>
+                                    <Line yAxisId="total" type="monotone" dataKey="cumSuperSell" name="超大单卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500}/>
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                                计算累计趋势中...
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

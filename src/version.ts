@@ -1,5 +1,6 @@
-export const APP_VERSION = '2.2.2';
+export const APP_VERSION = '2.3.0';
 export const RELEASE_NOTES = [
+    "v2.3.0: 新增主力累计资金趋势图 (红绿面积图) 与超大单独立监控",
     "v2.2.2: 重构主力动态数据采集，支持后台3分钟自动轮询与本地秒级加载",
     "v2.2.1: 优化多空情绪仪表盘，新增SQLite本地持久化存储",
     "v2.2.0: 新增腾讯多空情绪仪表盘 (CVD/OIB双轨分析)",
