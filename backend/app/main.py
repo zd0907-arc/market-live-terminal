@@ -2,8 +2,10 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.db.database import init_db
-from backend.app.routers import watchlist, market, analysis, config
+from backend.app.routers import watchlist, market, analysis, config, monitor
 from backend.app.services.collector import collector
+from backend.app.services.monitor import monitor as sentiment_monitor
+from backend.app.scheduler import init_scheduler
 from datetime import datetime
 import logging
 import urllib3
@@ -35,17 +37,21 @@ app.include_router(watchlist.router, prefix="/api", tags=["Watchlist"])
 app.include_router(market.router, prefix="/api", tags=["Market Data"])
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(config.router, prefix="/api", tags=["Config"])
+app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
 
 @app.on_event("startup")
 async def startup_event():
     init_db()
     collector.start()
+    sentiment_monitor.start()
+    init_scheduler()
     for route in app.routes:
         print(f"Registered Route: {route.path} [{route.methods}]")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     collector.stop()
+    sentiment_monitor.stop()
 
 @app.get("/")
 def health_check():

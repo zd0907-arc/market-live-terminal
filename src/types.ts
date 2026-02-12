@@ -50,6 +50,18 @@ export interface CapitalRatioData {
   mainParticipationRatio: number; // 主力参与度 (买+卖)/总 %
 }
 
+export interface CumulativeCapitalData {
+  time: string;           // HH:mm
+  cumMainBuy: number;     // 累计主力买入 (元)
+  cumMainSell: number;    // 累计主力卖出 (元)
+  cumNetInflow: number;   // 累计净流入 (元)
+  
+  // 超大单数据
+  cumSuperNetInflow: number; // 累计超大单净流入
+  cumSuperBuy: number;
+  cumSuperSell: number;
+}
+
 // 新增：历史分析数据结构
 export interface HistoryAnalysisData {
   date: string;
@@ -64,6 +76,16 @@ export interface HistoryAnalysisData {
   sellRatio?: number;
   activityRatio?: number;
   super_large_ratio?: number;
+}
+
+export interface HistoryTrendData {
+  time: string; // "YYYY-MM-DD HH:MM:SS"
+  net_inflow: number;
+  main_buy: number;
+  main_sell: number;
+  super_net: number;
+  super_buy: number;
+  super_sell: number;
 }
 
 export interface SentimentData {

@@ -1,4 +1,9 @@
-from backend.app.db.database import get_db_connection
+import sqlite3
+from backend.app.core.config import DB_FILE
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE)
+    return conn
 
 def get_watchlist_items():
     conn = get_db_connection()
@@ -23,15 +28,21 @@ def get_all_symbols():
     conn.close()
     return symbols
 
-def save_ticks_batch(data_to_insert):
+def save_ticks_daily_overwrite(symbol, date, data_to_insert):
+    """
+    全量覆盖写入：先删除当日该股票所有数据，再插入新数据。
+    用于解决 Sina L2 数据无唯一 ID 导致的重复/丢失问题。
+    """
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.executemany('''
-        INSERT OR REPLACE INTO trade_ticks (symbol, time, price, volume, amount, type, date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', data_to_insert)
-    conn.commit()
-    conn.close()
+    try:
+        with conn: # 自动提交事务
+            conn.execute("DELETE FROM trade_ticks WHERE symbol=? AND date=?", (symbol, date))
+            conn.executemany('''
+                INSERT INTO trade_ticks (symbol, time, price, volume, amount, type, date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', data_to_insert)
+    finally:
+        conn.close()
 
 def get_ticks_by_date(symbol: str, date_str: str):
     conn = get_db_connection()
@@ -82,3 +93,75 @@ def get_local_history_data(symbol: str, config_sig: str):
     rows = c.fetchall()
     conn.close()
     return rows
+
+def save_sentiment_snapshot(data_list):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.executemany('''
+        INSERT OR REPLACE INTO sentiment_snapshots 
+        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
+def get_sentiment_history(symbol: str, date: str):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol 
+        FROM sentiment_snapshots 
+        WHERE symbol=? AND date=? 
+        ORDER BY timestamp ASC
+    ''', (symbol, date))
+    rows = c.fetchall()
+    conn.close()
+    return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5]} for r in rows]
+
+def save_history_30m_batch(data_list):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.executemany('''
+        INSERT OR REPLACE INTO history_30m 
+        (symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
+def get_history_30m(symbol: str, limit_days: int = 20):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # 1. Get last N dates (descending)
+    c.execute("SELECT DISTINCT substr(start_time, 1, 10) as d FROM history_30m WHERE symbol=? ORDER BY d DESC LIMIT ?", (symbol, limit_days))
+    dates = [row[0] for row in c.fetchall()]
+    
+    if not dates:
+        conn.close()
+        return []
+        
+    min_date = dates[-1]
+    
+    # 2. Get all bars since min_date
+    c.execute('''
+        SELECT start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell 
+        FROM history_30m 
+        WHERE symbol=? AND substr(start_time, 1, 10) >= ?
+        ORDER BY start_time ASC
+    ''', (symbol, min_date))
+    rows = c.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "time": r[0],
+            "net_inflow": r[1],
+            "main_buy": r[2],
+            "main_sell": r[3],
+            "super_net": r[4],
+            "super_buy": r[5],
+            "super_sell": r[6]
+        }
+        for r in rows
+    ]

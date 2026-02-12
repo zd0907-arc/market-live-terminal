@@ -22,10 +22,25 @@ def init_db():
                  volume INTEGER,
                  amount REAL,
                  type TEXT,
-                 date TEXT,
-                 UNIQUE(symbol, date, time, price, volume, type)
+                 date TEXT
                  )''')
+    
+    # 创建索引加速按天删除
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON trade_ticks (symbol, date)")
                  
+    # 30分钟历史K线表 (History 30m)
+    c.execute('''CREATE TABLE IF NOT EXISTS history_30m (
+                 symbol TEXT,
+                 start_time TEXT,
+                 net_inflow REAL,
+                 main_buy REAL,
+                 main_sell REAL,
+                 super_net REAL,
+                 super_buy REAL,
+                 super_sell REAL,
+                 UNIQUE(symbol, start_time)
+                 )''')
+
     # 本地历史分析表 (Local History)
     c.execute('''CREATE TABLE IF NOT EXISTS local_history (
                  symbol TEXT,
@@ -39,6 +54,19 @@ def init_db():
                  config_signature TEXT,
                  UNIQUE(symbol, date, config_signature)
                  )''')
+
+    # 情绪快照表 (Sentiment Snapshots) - High Frequency
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_snapshots (
+                 symbol TEXT,
+                 timestamp TEXT,
+                 date TEXT,
+                 cvd REAL,
+                 oib REAL,
+                 price REAL,
+                 outer_vol INTEGER,
+                 inner_vol INTEGER,
+                 UNIQUE(symbol, date, timestamp)
+                 )''')
                  
     # 配置表 (Config)
     c.execute('''CREATE TABLE IF NOT EXISTS app_config (
@@ -48,7 +76,7 @@ def init_db():
                  
     # 插入默认配置
     c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '500000')")
     
     conn.commit()
     conn.close()

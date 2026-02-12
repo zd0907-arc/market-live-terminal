@@ -5,6 +5,8 @@ from backend.app.services.market import fetch_live_ticks, fetch_tencent_snapshot
 from backend.app.db.crud import get_ticks_by_date
 from datetime import datetime
 
+from backend.app.core.config import MOCK_DATA_DATE
+
 router = APIRouter()
 
 @router.get("/sentiment", response_model=APIResponse)
@@ -26,37 +28,20 @@ async def verify_realtime(symbol: str):
     # return await verify_realtime_data(symbol)
     return VerifyResult(sina_price=0, tencent_price=0, diff=0, status="disabled")
 
-@router.get("/ticks_full", response_model=APIResponse)
-async def get_full_day_ticks(symbol: str):
-    """
-    获取某只股票当天的全量逐笔数据。
-    """
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    # 1. 尝试查库
-    rows = get_ticks_by_date(symbol, today_str)
+from backend.app.services.analysis import calculate_realtime_aggregation
 
-    if not rows:
-        # 2. 如果库里没数据，尝试现场拉取 (Fall back to live fetch)
-        records = await fetch_live_ticks(symbol)
-        if records:
-            return APIResponse(code=200, data=records)
-        else:
-            return APIResponse(code=500, message="Live fetch failed", data=[])
-            
-    # 3. 库里有数据，格式化返回
-    result = []
-    for r in rows:
-        t_type = 'neutral'
-        if r[4] == '买盘': t_type = 'buy'
-        elif r[4] == '卖盘': t_type = 'sell'
-        
-        result.append({
-            "time": r[0],
-            "price": r[1],
-            "volume": r[2],
-            "amount": r[3],
-            "type": t_type
-        })
-        
-    return APIResponse(code=200, data=result)
+@router.get("/realtime/dashboard", response_model=APIResponse)
+async def get_realtime_dashboard(symbol: str):
+    """
+    获取实时仪表盘聚合数据（分钟级资金流 + 最新Ticks）
+    替代原有的 /ticks_full，解决前端计算压力和数据传输过大的问题。
+    """
+    if MOCK_DATA_DATE:
+        today_str = MOCK_DATA_DATE
+    else:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+    data = calculate_realtime_aggregation(symbol, today_str)
+    
+    return APIResponse(code=200, data=data)
+
