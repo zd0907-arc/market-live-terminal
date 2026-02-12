@@ -28,15 +28,21 @@ def get_all_symbols():
     conn.close()
     return symbols
 
-def save_ticks_batch(data_to_insert):
+def save_ticks_daily_overwrite(symbol, date, data_to_insert):
+    """
+    全量覆盖写入：先删除当日该股票所有数据，再插入新数据。
+    用于解决 Sina L2 数据无唯一 ID 导致的重复/丢失问题。
+    """
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.executemany('''
-        INSERT OR REPLACE INTO trade_ticks (symbol, time, price, volume, amount, type, date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', data_to_insert)
-    conn.commit()
-    conn.close()
+    try:
+        with conn: # 自动提交事务
+            conn.execute("DELETE FROM trade_ticks WHERE symbol=? AND date=?", (symbol, date))
+            conn.executemany('''
+                INSERT INTO trade_ticks (symbol, time, price, volume, amount, type, date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', data_to_insert)
+    finally:
+        conn.close()
 
 def get_ticks_by_date(symbol: str, date_str: str):
     conn = get_db_connection()
