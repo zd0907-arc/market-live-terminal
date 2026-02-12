@@ -288,98 +288,87 @@ const App: React.FC = () => {
 
         {/* Quote Header Card */}
         {quote && (
-           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative overflow-hidden mb-6">
+           <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative overflow-hidden mb-6">
               <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full blur-[80px] opacity-20 pointer-events-none ${quote.price >= quote.lastClose ? 'bg-red-500' : 'bg-green-500'}`}></div>
 
-              <div className="flex justify-between items-start mb-6 relative z-10">
-                <div>
-                  <h1 className="text-2xl font-bold text-white mb-1 flex items-center gap-3">
-                    {quote.name} 
-                    <span className="text-sm font-mono text-slate-500 font-normal bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                      {quote.symbol.toUpperCase()}
-                    </span>
-                    <button 
-                        onClick={toggleWatchlist}
-                        className={`p-1.5 rounded-full transition-colors ${isWatchlisted ? 'text-yellow-400 bg-yellow-400/10' : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800'}`}
-                        title={isWatchlisted ? "取消全天监控" : "加入全天监控 (后台自动存储)"}
-                    >
-                        <Star className={`w-5 h-5 ${isWatchlisted ? 'fill-yellow-400' : ''}`} />
-                    </button>
-                  </h1>
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {quote.date} {quote.time}</span>
-                      
-                      <span className="w-px h-3 bg-slate-700"></span>
-                      
-                      {viewMode === 'history' && (
-                         <div className="flex items-center gap-2 text-slate-400">
-                            <BookOpen className="w-3 h-3" />
-                            <span>历史复盘模式</span>
-                         </div>
-                      )}
-                      
-                      {/* API Status Indicators */}
-                      <span className="flex items-center gap-1 text-slate-400">
-                         <Wifi className="w-3 h-3 text-green-500" /> API: Tencent
-                      </span>
+              <div className="flex justify-between items-center relative z-10">
+                {/* Left Section: Stock Info + Indicators */}
+                <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-8 flex-1">
+                    
+                    {/* 1. Name & Status */}
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">
+                                {quote.name}
+                            </h1>
+                            <span className="text-xs font-mono text-slate-400 font-normal bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                {quote.symbol.toUpperCase()}
+                            </span>
+                            <button 
+                                onClick={toggleWatchlist}
+                                className={`p-1 rounded-full transition-colors ${isWatchlisted ? 'text-yellow-400 bg-yellow-400/10' : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800'}`}
+                            >
+                                <Star className={`w-4 h-4 ${isWatchlisted ? 'fill-yellow-400' : ''}`} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono">
+                             <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-slate-600" /> 
+                                {quote.date} {quote.time}
+                             </span>
+                             <span className={`flex items-center gap-1 ${backendStatus ? 'text-green-500/80' : 'text-red-500/80'}`}>
+                                <Server className="w-3 h-3" />
+                                {backendStatus ? '核心服务: 已连接' : '核心服务: 断开'}
+                             </span>
+                        </div>
+                    </div>
 
-                      <span className="w-px h-3 bg-slate-700"></span>
+                    {/* 2. Key Indicators (Grid) */}
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono border-l border-slate-800 pl-6">
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500">成交:</span>
+                            <span className="text-slate-200">{formatAmount(quote.volume)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500">金额:</span>
+                            <span className="text-slate-200">{formatAmount(quote.amount)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500">高/低:</span>
+                            <span>
+                                <span className="text-red-400">{quote.high.toFixed(2)}</span>
+                                <span className="text-slate-600 mx-0.5">/</span>
+                                <span className="text-green-400">{quote.low.toFixed(2)}</span>
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-slate-500">开/收:</span>
+                             <span>
+                                <span className={quote.open > quote.lastClose ? 'text-red-400' : 'text-green-400'}>{quote.open.toFixed(2)}</span>
+                                <span className="text-slate-600 mx-0.5">/</span>
+                                <span className="text-slate-200">{quote.lastClose.toFixed(2)}</span>
+                            </span>
+                        </div>
+                    </div>
 
-                      <span className={`flex items-center gap-1 transition-colors ${backendStatus ? 'text-green-500' : 'text-red-500'}`}>
-                         <Server className="w-3 h-3" />
-                         {backendStatus ? 'Python: Connected' : 'Python: Disconnected'}
-                      </span>
-                  </div>
                 </div>
-                <div className="text-right">
-                  <div className={`text-5xl font-mono font-bold tracking-tight ${getPriceColor(quote.price, quote.lastClose)}`}>
+
+                {/* Right Section: Price */}
+                <div className="text-right pl-4">
+                  <div className={`text-4xl font-mono font-bold tracking-tight ${getPriceColor(quote.price, quote.lastClose)}`}>
                     {quote.price.toFixed(2)}
                   </div>
-                  <div className={`mt-2 text-lg font-mono flex items-center justify-end gap-3 ${getPriceColor(quote.price, quote.lastClose)}`}>
+                  <div className={`text-sm font-mono flex items-center justify-end gap-2 mt-1 ${getPriceColor(quote.price, quote.lastClose)}`}>
                       <span className="flex items-center">
-                        {quote.price >= quote.lastClose ? <ArrowUp className="w-4 h-4 mr-1"/> : <ArrowDown className="w-4 h-4 mr-1"/>}
+                        {quote.price >= quote.lastClose ? <ArrowUp className="w-3 h-3 mr-1"/> : <ArrowDown className="w-3 h-3 mr-1"/>}
                         {(quote.price - quote.lastClose).toFixed(2)}
                       </span>
-                      <span className="bg-slate-800 px-2 py-0.5 rounded text-sm">
+                      <span className="bg-slate-800/50 px-1.5 py-0.5 rounded">
                         {((quote.price - quote.lastClose) / quote.lastClose * 100).toFixed(2)}%
                       </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-                  {viewMode === 'realtime' ? (
-                      <>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Activity className="w-3 h-3"/> 实时成交量</div>
-                            <div className="font-mono text-slate-200">{formatAmount(quote.volume)}股</div>
-                        </div>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Activity className="w-3 h-3"/> 实时成交额</div>
-                            <div className="font-mono text-slate-200">{formatAmount(quote.amount)}</div>
-                        </div>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1">今开/昨收</div>
-                            <div className="font-mono text-slate-200">{quote.open.toFixed(2)} / {quote.lastClose.toFixed(2)}</div>
-                        </div>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1">最高/最低</div>
-                            <div className="font-mono text-slate-200">{quote.high.toFixed(2)} / {quote.low.toFixed(2)}</div>
-                        </div>
-                      </>
-                  ) : (
-                      <>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1 flex items-center gap-1"><BookOpen className="w-3 h-3"/> 复盘模式</div>
-                            <div className="font-mono text-slate-200">历史数据</div>
-                        </div>
-                        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-                            <div className="text-xs text-slate-500 mb-1">提示</div>
-                            <div className="font-mono text-slate-400 text-xs mt-1">请在下方选择日期范围</div>
-                        </div>
-                      </>
-                  )}
               </div>
            </div>
         )}

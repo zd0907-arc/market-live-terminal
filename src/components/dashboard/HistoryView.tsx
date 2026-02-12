@@ -92,7 +92,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     if (!activeStock) return null;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-2">
             <ConfigModal 
                 isOpen={showConfig} 
                 onClose={() => setShowConfig(false)} 
@@ -103,7 +103,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
             />
 
             {/* Config Button Area */}
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center mb-1">
                 {/* View Mode Toggle */}
                 <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
                     <button
@@ -144,7 +144,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
             {/* Backend Status Warning */}
             {!backendStatus && (
-                <div className="bg-red-950/30 border border-red-900/50 p-3 rounded-lg flex items-center gap-3 text-red-300 text-sm">
+                <div className="bg-red-950/30 border border-red-900/50 p-2 rounded-lg flex items-center gap-3 text-red-300 text-xs">
                     <AlertCircle className="w-4 h-4" />
                     <span>
                         本地 Python 服务未连接 (端口 8000)。请在终端运行：
@@ -154,8 +154,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
             )}
 
             {historyError && (
-                <div className="bg-red-900/20 border border-red-800 p-4 rounded-lg flex items-center gap-3 text-red-200">
-                    <AlertCircle className="w-5 h-5" />
+                <div className="bg-red-900/20 border border-red-800 p-3 rounded-lg flex items-center gap-3 text-red-200 text-xs">
+                    <AlertCircle className="w-4 h-4" />
                     <span>{historyError}</span>
                 </div>
             )}
@@ -171,11 +171,11 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                 <>
                     {/* Intraday Trend Chart */}
                     {viewMode === 'intraday' && trendData.length > 0 && (
-                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative">
-                             <div className="mb-6 flex justify-between items-center">
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
+                             <div className="mb-2 flex justify-between items-center">
+                                <h3 className="text-base font-bold text-white flex items-center gap-2">
                                     <span className="text-purple-500">🟣 30分钟资金趋势</span>
-                                    <span className="text-xs font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
+                                    <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
                                         Source: Local DB (30m Bars)
                                     </span>
                                 </h3>
@@ -184,7 +184,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <button
                                             key={d}
                                             onClick={() => setTrendDays(d)}
-                                            className={`px-3 py-1 text-xs rounded border transition-colors ${trendDays === d ? 'bg-purple-900/50 border-purple-500 text-purple-200' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-600'}`}
+                                            className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${trendDays === d ? 'bg-purple-900/50 border-purple-500 text-purple-200' : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-600'}`}
                                         >
                                             {d}日
                                         </button>
@@ -209,8 +209,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                             tickFormatter={(val) => val.substring(5, 16)} // MM-DD HH:MM
                                             minTickGap={30}
                                         />
-                                        <YAxis yAxisId="net" stroke="#a78bfa" tick={{fontSize: 12}} tickFormatter={(val) => (val/10000).toFixed(0)} />
-                                        <YAxis yAxisId="total" orientation="right" stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/10000).toFixed(0)} hide />
+                                        <YAxis yAxisId="net" stroke="#a78bfa" tick={{fontSize: 10}} tickFormatter={(val) => (val/10000).toFixed(0)} />
+                                        <YAxis yAxisId="total" orientation="right" stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/10000).toFixed(0)} hide />
                                         <Tooltip 
                                             contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
                                             formatter={(val: number) => (val/10000).toFixed(1) + '万'}
@@ -230,13 +230,13 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                     )}
 
                     {viewMode === 'daily' && historyData.length > 0 && (
-                        <div className={`grid ${historyCompareMode ? 'grid-cols-2' : 'grid-cols-1'} gap-6`}>
+                        <div className={`grid ${historyCompareMode ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                             {/* Left Side (Main) */}
-                            <div className="space-y-6">
+                            <div className="space-y-2">
                                 {/* 1. Main Net Inflow */}
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative">
-                                    <div className="mb-6 flex justify-between items-center">
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
+                                    <div className="mb-2 flex justify-between items-center">
+                                        <h3 className="text-base font-bold text-white flex items-center gap-2">
                                             {historySource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
                                             主力净流入
                                         </h3>
@@ -245,9 +245,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 12}} domain={['auto', 'auto']} />
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
+                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
+                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} domain={['auto', 'auto']} />
                                                 
                                                 <Tooltip 
                                                     position={{ y: 0 }}
@@ -257,7 +257,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                         return (val/100000000).toFixed(2) + '亿';
                                                     }} 
                                                 />
-                                                <Legend />
+                                                <Legend wrapperStyle={{fontSize: 12}} />
                                                 <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
                                                 <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入">
                                                     {historyData.map((entry, index) => (
@@ -271,11 +271,11 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                 </div>
 
                                 {/* 2. Buying/Selling Power */}
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg">
-                                    <div className="mb-6 flex items-center gap-2">
-                                        <h3 className="text-lg font-bold text-white">买卖力度分离监控</h3>
+                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <h3 className="text-base font-bold text-white">买卖力度分离监控</h3>
                                         <div className="group relative">
-                                            <Info className="w-4 h-4 text-slate-500 cursor-help hover:text-blue-400" />
+                                            <Info className="w-3.5 h-3.5 text-slate-500 cursor-help hover:text-blue-400" />
                                             <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl text-xs text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                                                 分析：当买入额（红）持续高于卖出额（绿）时，即便股价不涨，也可能是吸筹信号。<br/>
                                                 <span className="text-yellow-400">主力交易占比</span>：反映主力资金在当天的统治力，占比越高说明散户越少。
@@ -286,9 +286,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} unit="%" domain={[0, 100]} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 12}} unit="%" domain={[0, 100]} />
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
+                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
+                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
                                                 <Tooltip 
                                                     position={{ y: 0 }}
                                                     contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
@@ -301,7 +301,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                         return `${val.toFixed(1)}% (${(amount/100000000).toFixed(2)}亿)`;
                                                     }} 
                                                 />
-                                                <Legend />
+                                                <Legend wrapperStyle={{fontSize: 12}} />
                                                 <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                                 <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                                 <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
@@ -314,14 +314,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
                             {/* Right Side (Compare) */}
                             {historyCompareMode && (
-                                <div className="space-y-6 border-l border-slate-800 pl-6 border-dashed relative">
+                                <div className="space-y-2 border-l border-slate-800 pl-2 border-dashed relative">
                                     <div className="absolute top-0 right-0 z-20">
-                                        <div className="flex items-center gap-3 bg-slate-950/50 p-1.5 rounded-lg border border-slate-800/50">
-                                             <span className="text-xs text-slate-400">对比源:</span>
+                                        <div className="flex items-center gap-3 bg-slate-950/50 p-1 rounded-lg border border-slate-800/50">
+                                             <span className="text-[10px] text-slate-400">对比源:</span>
                                              <select 
                                                 value={historyCompareSource} 
                                                 onChange={(e) => setHistoryCompareSource(e.target.value)}
-                                                className="bg-transparent text-sm font-medium text-blue-400 focus:outline-none cursor-pointer"
+                                                className="bg-transparent text-xs font-medium text-blue-400 focus:outline-none cursor-pointer"
                                              >
                                                 <option value="sina">🔴 新浪 (Sina)</option>
                                                 <option value="local">🟣 本地自算 (Local)</option>
@@ -330,9 +330,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                     </div>
 
                                     {/* Compare 1 */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg opacity-90 mt-12 relative">
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-300 flex items-center gap-2">
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90 mt-8 relative">
+                                        <div className="mb-2">
+                                            <h3 className="text-base font-bold text-slate-300 flex items-center gap-2">
                                                 {historyCompareSource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
                                                 主力净流入
                                             </h3>
@@ -348,14 +348,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <ComposedChart data={historyCompareData} syncId="historyGraph">
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                        <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                                                        <YAxis stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
+                                                        <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
+                                                        <YAxis stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
                                                         <Tooltip 
                                                             position={{ y: 0 }}
                                                             contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
                                                             formatter={(val: number) => (val/100000000).toFixed(2) + '亿'} 
                                                         />
-                                                        <Legend />
+                                                        <Legend wrapperStyle={{fontSize: 12}} />
                                                         <ReferenceLine y={0} stroke="#334155" />
                                                         <Bar dataKey="net_inflow" name="主力净流入">
                                                             {historyCompareData.map((entry, index) => (
@@ -369,17 +369,17 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                     </div>
 
                                     {/* Compare 2 */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg opacity-90">
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-300">买卖力度分离监控</h3>
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90">
+                                        <div className="mb-2">
+                                            <h3 className="text-base font-bold text-slate-300">买卖力度分离监控</h3>
                                         </div>
                                         <div className="h-[300px]">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <ComposedChart data={historyCompareData} syncId="historyGraph">
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                    <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 12}} />
-                                                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} unit="%" domain={[0, 100]} />
-                                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 12}} unit="%" domain={[0, 100]} />
+                                                    <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
+                                                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
+                                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
                                                     <Tooltip 
                                                         position={{ y: 0 }}
                                                         contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
@@ -391,7 +391,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                             return `${val.toFixed(1)}% (${(amount/100000000).toFixed(2)}亿)`;
                                                         }} 
                                                     />
-                                                    <Legend />
+                                                    <Legend wrapperStyle={{fontSize: 12}} />
                                                     <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                                     <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                                     <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />

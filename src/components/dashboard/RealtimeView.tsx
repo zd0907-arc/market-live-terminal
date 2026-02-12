@@ -123,27 +123,27 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     if (!quote) return null;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-2">
             {/* Top Row: Main Chart (Full Width) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg relative">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-blue-400" />
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-blue-400" />
                         主力动态 (实时)
-                        <span className="text-xs font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
-                            Source: Local DB (Aggregated)
+                        <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
+                            Source: Local DB
                         </span>
                     </h3>
                     
                     <div className="flex items-center gap-4">
                         {/* Last Updated */}
-                        <span className="text-xs text-slate-500 font-mono">
+                        <span className="text-[10px] text-slate-500 font-mono">
                             {lastUpdated ? `Updated: ${lastUpdated}` : '正在同步数据...'}
                         </span>
                     </div>
                 </div>
                 
-                <div className="grid grid-rows-2 gap-4 h-[500px]">
+                <div className="grid grid-rows-2 gap-2 h-[500px]">
                     {/* 1. 分时强度图 (Instantaneous) */}
                     <div className="h-full w-full relative">
                         <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
@@ -273,46 +273,52 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             </div>
 
             {/* Bottom Row: Sentiment (Left) + Ticks (Right) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-                {/* Left: Tencent Sentiment */}
-                <div className="h-full">
-                    {activeStock && <SentimentTrend symbol={activeStock.symbol} />}
+            <div className="flex gap-2 h-[400px]">
+                {/* Left: Sentiment Analysis */}
+                <div className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative flex flex-col">
+                     <h3 className="text-base font-bold text-white flex items-center gap-2 mb-2 shrink-0">
+                        <TrendingUp className="w-4 h-4 text-purple-400" />
+                        资金博弈分析
+                    </h3>
+                    <div className="flex-1 min-h-0">
+                         {activeStock && <SentimentTrend symbol={activeStock.symbol} />}
+                    </div>
                 </div>
 
                 {/* Right: Level-1 Ticks */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-0 overflow-hidden shadow-lg h-full flex flex-col">
-                    <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-200 flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-blue-400" />
-                            Level-1 逐笔 (最新50笔)
+                <div className="w-[320px] shrink-0 bg-slate-900 border border-slate-800 rounded-xl p-0 overflow-hidden shadow-lg h-full flex flex-col">
+                    <div className="p-2 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center shrink-0">
+                        <h3 className="font-bold text-slate-200 flex items-center gap-2 text-sm">
+                            <Layers className="w-3.5 h-3.5 text-blue-400" />
+                            逐笔成交
                         </h3>
-                        <span className="text-xs text-slate-500 animate-pulse flex items-center gap-1">
+                        <span className="text-[10px] text-slate-500 animate-pulse flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Live
                         </span>
                     </div>
                     <div className="flex-1 overflow-y-auto p-0">
-                        <table className="w-full text-xs">
+                        <table className="w-full text-xs table-fixed">
                             <thead className="bg-slate-950 sticky top-0 text-slate-500">
                                 <tr>
-                                    <th className="px-3 py-2 text-left font-medium">时间</th>
-                                    <th className="px-3 py-2 text-right font-medium">价格</th>
-                                    <th className="px-3 py-2 text-right font-medium">量(手)</th>
-                                    <th className="px-3 py-2 text-right font-medium">额(万)</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-16">时间</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">价格</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">量</th>
+                                    <th className="px-2 py-1.5 text-right font-medium">额</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800/50">
                                 {displayTicks.map((t, idx) => (
                                     <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-3 py-1.5 text-slate-400 font-mono">{t.time}</td>
-                                        <td className={`px-3 py-1.5 text-right font-mono font-medium ${t.color}`}>
+                                        <td className="px-2 py-1 text-slate-400 font-mono truncate">{t.time}</td>
+                                        <td className={`px-2 py-1 text-right font-mono font-medium truncate ${t.color}`}>
                                             {t.price.toFixed(2)}
                                         </td>
-                                        <td className="px-3 py-1.5 text-right text-slate-300 font-mono">
+                                        <td className="px-2 py-1 text-right text-slate-300 font-mono truncate">
                                             {t.volume}
                                         </td>
-                                        <td className="px-3 py-1.5 text-right text-slate-500 font-mono">
-                                            {(t.amount / 10000).toFixed(1)}
-                                            {t.amount > thresholds.superLarge && <span className="ml-1 text-purple-400 font-bold">*</span>}
+                                        <td className="px-2 py-1 text-right text-slate-500 font-mono truncate">
+                                            {(t.amount / 10000).toFixed(0)}
+                                            {t.amount > thresholds.superLarge && <span className="ml-0.5 text-purple-400 font-bold">*</span>}
                                         </td>
                                     </tr>
                                 ))}
