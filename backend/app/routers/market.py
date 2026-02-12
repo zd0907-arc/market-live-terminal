@@ -5,6 +5,8 @@ from backend.app.services.market import fetch_live_ticks, fetch_tencent_snapshot
 from backend.app.db.crud import get_ticks_by_date
 from datetime import datetime
 
+from backend.app.core.config import MOCK_DATA_DATE
+
 router = APIRouter()
 
 @router.get("/sentiment", response_model=APIResponse)
@@ -32,7 +34,10 @@ async def get_full_day_ticks(symbol: str):
     获取某只股票当天的全量逐笔数据。
     (从本地数据库读取，不再触发实时爬虫)
     """
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    if MOCK_DATA_DATE:
+        today_str = MOCK_DATA_DATE
+    else:
+        today_str = datetime.now().strftime("%Y-%m-%d")
     
     # 纯读库
     rows = get_ticks_by_date(symbol, today_str)
