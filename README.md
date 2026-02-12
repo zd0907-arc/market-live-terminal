@@ -126,6 +126,15 @@ market-live-terminal/
 
 ### 更新日志 (Release Notes)
 
+#### v2.2.2
+*   **Refactor**: 重构主力动态数据采集架构。后台每3分钟自动轮询采集全量逐笔数据并持久化到本地 SQLite 数据库。
+*   **Performance**: 前端读取本地数据库实现秒级加载，彻底解决数据拉取慢、卡顿的问题。
+*   **Optimization**: 增加数据自动同步机制，前端实时展示数据更新时间。
+
+#### v2.2.1
+*   **Optimization**: 优化多空情绪仪表盘的数据持久化，支持本地 SQLite 存储，防止数据断层。
+*   **Backend**: 新增 `SentimentMonitor` 后台服务，实现 3秒/次 的高频数据录制。
+
 #### v2.2.0
 *   **Feature**: 新增“情绪仪表盘” (Sentiment Dashboard)，接入腾讯快照数据，实时展示内外盘（主动买卖）与委比（挂单）博弈。
 *   **Optimization**: 实时页面刷新频率优化，支持 1m/5m/15m/30m 切换，默认 5m，大幅降低数据拉取压力。

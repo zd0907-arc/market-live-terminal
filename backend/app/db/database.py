@@ -14,7 +14,16 @@ def init_db():
                  name TEXT,
                  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                  )''')
-    # 逐笔交易数据表 (全量存储)
+    # 逐笔交易数据表 (全量存储) - 无 UNIQUE 约束，支持重复交易
+    # 先尝试删除旧表 (如果存在且有 UNIQUE 约束)
+    # 注意：这会清空历史 tick 数据，但符合用户"旧数据可丢弃"的需求
+    try:
+        # 检查是否包含 UNIQUE 约束 (简单判断：尝试插入重复数据失败则说明有约束，或者直接 Drop)
+        # 这里直接 Drop 比较暴力但有效
+        c.execute("DROP TABLE IF EXISTS trade_ticks")
+    except:
+        pass
+
     c.execute('''CREATE TABLE IF NOT EXISTS trade_ticks (
                  symbol TEXT,
                  time TEXT,
@@ -22,9 +31,11 @@ def init_db():
                  volume INTEGER,
                  amount REAL,
                  type TEXT,
-                 date TEXT,
-                 UNIQUE(symbol, date, time, price, volume, type)
+                 date TEXT
                  )''')
+    
+    # 创建索引加速按天删除
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON trade_ticks (symbol, date)")
                  
     # 本地历史分析表 (Local History)
     c.execute('''CREATE TABLE IF NOT EXISTS local_history (

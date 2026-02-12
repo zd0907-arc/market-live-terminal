@@ -30,21 +30,18 @@ async def verify_realtime(symbol: str):
 async def get_full_day_ticks(symbol: str):
     """
     获取某只股票当天的全量逐笔数据。
+    (从本地数据库读取，不再触发实时爬虫)
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
     
-    # 1. 尝试查库
+    # 纯读库
     rows = get_ticks_by_date(symbol, today_str)
 
     if not rows:
-        # 2. 如果库里没数据，尝试现场拉取 (Fall back to live fetch)
-        records = await fetch_live_ticks(symbol)
-        if records:
-            return APIResponse(code=200, data=records)
-        else:
-            return APIResponse(code=500, message="Live fetch failed", data=[])
+        # 如果没数据，返回空列表，前端显示"等待更新"
+        return APIResponse(code=200, message="Waiting for background sync", data=[])
             
-    # 3. 库里有数据，格式化返回
+    # 格式化返回
     result = []
     for r in rows:
         t_type = 'neutral'
