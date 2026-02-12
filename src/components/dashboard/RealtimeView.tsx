@@ -4,7 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { RealTimeQuote, TickData, SearchResult, CapitalRatioData } from '../../types';
 import * as StockService from '../../services/stockService';
 import { calculateCapitalFlow } from '@/utils/calculator';
-import SentimentDashboard from './SentimentDashboard';
+import SentimentTrend from './SentimentTrend';
 
 interface RealtimeViewProps {
     activeStock: SearchResult | null;
@@ -210,7 +210,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
                 {/* Left: Tencent Sentiment */}
                 <div className="h-full">
-                    {activeStock && <SentimentDashboard symbol={activeStock.symbol} refreshInterval={refreshInterval} />}
+                    {activeStock && <SentimentTrend symbol={activeStock.symbol} />}
                 </div>
 
                 {/* Right: Level-1 Ticks */}

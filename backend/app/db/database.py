@@ -39,6 +39,19 @@ def init_db():
                  config_signature TEXT,
                  UNIQUE(symbol, date, config_signature)
                  )''')
+
+    # 情绪快照表 (Sentiment Snapshots) - High Frequency
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_snapshots (
+                 symbol TEXT,
+                 timestamp TEXT,
+                 date TEXT,
+                 cvd REAL,
+                 oib REAL,
+                 price REAL,
+                 outer_vol INTEGER,
+                 inner_vol INTEGER,
+                 UNIQUE(symbol, date, timestamp)
+                 )''')
                  
     # 配置表 (Config)
     c.execute('''CREATE TABLE IF NOT EXISTS app_config (
