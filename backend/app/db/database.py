@@ -14,16 +14,7 @@ def init_db():
                  name TEXT,
                  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                  )''')
-    # 逐笔交易数据表 (全量存储) - 无 UNIQUE 约束，支持重复交易
-    # 先尝试删除旧表 (如果存在且有 UNIQUE 约束)
-    # 注意：这会清空历史 tick 数据，但符合用户"旧数据可丢弃"的需求
-    try:
-        # 检查是否包含 UNIQUE 约束 (简单判断：尝试插入重复数据失败则说明有约束，或者直接 Drop)
-        # 这里直接 Drop 比较暴力但有效
-        c.execute("DROP TABLE IF EXISTS trade_ticks")
-    except:
-        pass
-
+    # 逐笔交易数据表 (全量存储)
     c.execute('''CREATE TABLE IF NOT EXISTS trade_ticks (
                  symbol TEXT,
                  time TEXT,
@@ -37,6 +28,19 @@ def init_db():
     # 创建索引加速按天删除
     c.execute("CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON trade_ticks (symbol, date)")
                  
+    # 30分钟历史K线表 (History 30m)
+    c.execute('''CREATE TABLE IF NOT EXISTS history_30m (
+                 symbol TEXT,
+                 start_time TEXT,
+                 net_inflow REAL,
+                 main_buy REAL,
+                 main_sell REAL,
+                 super_net REAL,
+                 super_buy REAL,
+                 super_sell REAL,
+                 UNIQUE(symbol, start_time)
+                 )''')
+
     # 本地历史分析表 (Local History)
     c.execute('''CREATE TABLE IF NOT EXISTS local_history (
                  symbol TEXT,
@@ -72,7 +76,7 @@ def init_db():
                  
     # 插入默认配置
     c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '500000')")
     
     conn.commit()
     conn.close()

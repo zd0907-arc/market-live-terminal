@@ -4,6 +4,7 @@ import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
 import HistoryView from './components/dashboard/HistoryView';
+import ThresholdConfig from './components/dashboard/ThresholdConfig';
 import { APP_VERSION } from './version';
 
 const App: React.FC = () => {
@@ -29,6 +30,11 @@ const App: React.FC = () => {
 
   // System Status
   const [backendStatus, setBackendStatus] = useState<boolean>(false);
+  const [configVersion, setConfigVersion] = useState(0);
+
+  const handleConfigUpdate = () => {
+    setConfigVersion(prev => prev + 1);
+  };
 
   const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -247,7 +253,9 @@ const App: React.FC = () => {
           </div>
           
           {/* Spacer for centering */}
-          <div className="hidden md:block w-48"></div>
+          <div className="hidden md:flex items-center gap-4 w-48 justify-end">
+             <ThresholdConfig onConfigUpdate={handleConfigUpdate} />
+          </div>
         </div>
       </header>
 
@@ -382,6 +390,7 @@ const App: React.FC = () => {
                 activeStock={activeStock} 
                 quote={quote} 
                 isTradingHours={isTradingHours} 
+                configVersion={configVersion}
             />
         )}
 
@@ -389,6 +398,7 @@ const App: React.FC = () => {
             <HistoryView 
                 activeStock={activeStock} 
                 backendStatus={backendStatus} 
+                configVersion={configVersion}
             />
         )}
 

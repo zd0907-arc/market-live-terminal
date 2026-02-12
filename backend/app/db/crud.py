@@ -117,3 +117,51 @@ def get_sentiment_history(symbol: str, date: str):
     rows = c.fetchall()
     conn.close()
     return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5]} for r in rows]
+
+def save_history_30m_batch(data_list):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.executemany('''
+        INSERT OR REPLACE INTO history_30m 
+        (symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
+def get_history_30m(symbol: str, limit_days: int = 20):
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # 1. Get last N dates (descending)
+    c.execute("SELECT DISTINCT substr(start_time, 1, 10) as d FROM history_30m WHERE symbol=? ORDER BY d DESC LIMIT ?", (symbol, limit_days))
+    dates = [row[0] for row in c.fetchall()]
+    
+    if not dates:
+        conn.close()
+        return []
+        
+    min_date = dates[-1]
+    
+    # 2. Get all bars since min_date
+    c.execute('''
+        SELECT start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell 
+        FROM history_30m 
+        WHERE symbol=? AND substr(start_time, 1, 10) >= ?
+        ORDER BY start_time ASC
+    ''', (symbol, min_date))
+    rows = c.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "time": r[0],
+            "net_inflow": r[1],
+            "main_buy": r[2],
+            "main_sell": r[3],
+            "super_net": r[4],
+            "super_buy": r[5],
+            "super_sell": r[6]
+        }
+        for r in rows
+    ]

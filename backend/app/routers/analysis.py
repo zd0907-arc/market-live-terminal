@@ -2,11 +2,19 @@ from fastapi import APIRouter
 from backend.app.models.schemas import APIResponse, AggregateResult
 from backend.app.services.market import get_sina_money_flow, get_sina_kline
 from backend.app.services.analysis import perform_aggregation
-from backend.app.db.crud import get_local_history_data, get_app_config
+from backend.app.db.crud import get_local_history_data, get_app_config, get_history_30m
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+@router.get("/history/trend")
+def get_history_trend(symbol: str, days: int = 20):
+    """
+    Get intraday history bars (30m granularity) for the last N days.
+    """
+    data = get_history_30m(symbol, days)
+    return APIResponse(code=200, data=data)
 
 @router.post("/aggregate", response_model=APIResponse)
 def aggregate_history(symbol: str, date: str = None):

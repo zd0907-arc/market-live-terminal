@@ -1,23 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, Layers, Activity, RefreshCw } from 'lucide-react';
+import { TrendingUp, Layers } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
 import { RealTimeQuote, TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
 import * as StockService from '../../services/stockService';
-import { calculateCapitalFlow, calculateCumulativeCapitalFlow } from '@/utils/calculator';
 import SentimentTrend from './SentimentTrend';
 
 interface RealtimeViewProps {
     activeStock: SearchResult | null;
     quote: RealTimeQuote | null;
     isTradingHours: () => boolean;
+    configVersion?: number;
 }
 
-const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradingHours }) => {
+const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configVersion }) => {
     // State
-    // Removed DataSourceControl state, force Sina logic internally
-
-    // Data
-    const allTicksRef = useRef<TickData[]>([]);
     const [displayTicks, setDisplayTicks] = useState<TickData[]>([]); 
     const [chartData, setChartData] = useState<CapitalRatioData[]>([]);
     const [cumulativeData, setCumulativeData] = useState<CumulativeCapitalData[]>([]);
@@ -27,59 +23,27 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
     // Thresholds (Loaded from Backend)
     const [thresholds, setThresholds] = useState({ large: 200000, superLarge: 1000000 });
 
-    // Refresh Control
-    const [refreshInterval, setRefreshInterval] = useState<number>(300000); // Default 5min
-    const [isRefreshing, setIsRefreshing] = useState(true);
-    const [manualRefreshTrigger, setManualRefreshTrigger] = useState(0);
-
     // Load Thresholds on Mount
-    useEffect(() => {
+    const loadThresholds = () => {
         StockService.getAppConfig().then(cfg => {
             setThresholds({
-                large: parseFloat(cfg.large_threshold) || 200000,
+                large: parseFloat(cfg.large_threshold) || 500000,
                 superLarge: parseFloat(cfg.super_large_threshold) || 1000000
             });
         });
+    };
+
+    useEffect(() => {
+        loadThresholds();
     }, []);
 
-    // 核心计算逻辑：使用 Utility Function
-    const recalcChartData = () => {
-        const ratioResult = calculateCapitalFlow(allTicksRef.current, thresholds.large);
-        const cumResult = calculateCumulativeCapitalFlow(allTicksRef.current, thresholds.large, thresholds.superLarge);
-        setChartData(ratioResult);
-        setCumulativeData(cumResult);
-    };
-
-    // 逐笔成交数据处理
-    const processNewTicks = (newTicks: TickData[]) => {
-        if (newTicks.length === 0) return;
-        
-        // 由于后端现在返回全量数据，前端直接覆盖即可，无需复杂的增量合并逻辑
-        // 但为了保持平滑，我们可以只在数据长度变化或有新数据时更新
-        // 这里简单处理：全量替换。因为本地数据库读取很快，前端React Diff也会高效处理
-        
-        // 简单去重/覆盖逻辑：
-        // 实际上后端 /api/ticks_full 返回的是当天截止目前的全部数据
-        // 我们直接替换 allTicksRef 即可
-        
-        allTicksRef.current = newTicks;
-        
-        // 更新 UI
-        const uiList = [...newTicks].slice(0, 100); // 已经是倒序的 (Time DESC)
-        setDisplayTicks(uiList);
-        recalcChartData();
-        
-        // 更新时间
-        const now = new Date();
-        setLastUpdated(now.toLocaleTimeString());
-    };
-
     // Data Polling
+    const [forceRefresh, setForceRefresh] = useState(0);
+
     useEffect(() => {
         if (!activeStock) return;
         
         // Reset data on stock change
-        allTicksRef.current = [];
         setDisplayTicks([]);
         setChartData([]);
         setCumulativeData([]);
@@ -92,14 +56,28 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
             if (!isMounted || isFetchingRef.current) return;
             isFetchingRef.current = true;
             try {
-                // Only fetch ticks here, quote is fetched by parent
-                const ticksPromise = StockService.fetchTicks(activeStock.symbol);
-                const t = await ticksPromise;
-                if (isMounted && t && t.length > 0) {
-                     processNewTicks(t);
+                // Fetch pre-calculated dashboard data from backend
+                const data = await StockService.fetchRealtimeDashboard(activeStock.symbol);
+                
+                if (isMounted && data) {
+                    // Update Chart Data (Full Series)
+                    setChartData(data.chart_data || []);
+                    setCumulativeData(data.cumulative_data || []);
+                    
+                    // Update Ticks Table (Only latest N)
+                    if (data.latest_ticks && Array.isArray(data.latest_ticks)) {
+                         const ticks = data.latest_ticks.map((t: any) => ({
+                            ...t,
+                            color: t.type === 'buy' ? 'text-red-500' : (t.type === 'sell' ? 'text-green-500' : 'text-slate-400')
+                         }));
+                         setDisplayTicks(ticks);
+                    }
+                    
+                    const now = new Date();
+                    setLastUpdated(now.toLocaleTimeString());
                 }
-            } catch (tickErr) {
-                console.warn("Ticks update failed", tickErr);
+            } catch (err) {
+                console.warn("Dashboard update failed", err);
             } finally {
                 isFetchingRef.current = false;
             }
@@ -107,17 +85,26 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
 
         fetchData();
         
-        // 轮询频率：10秒查一次本地库 (非常轻量)
-        intervalId = setInterval(fetchData, 10000);
+        // Polling every 5 seconds (Lightweight now)
+        intervalId = setInterval(fetchData, 5000);
 
         return () => {
             isMounted = false;
             if (intervalId) clearInterval(intervalId);
         };
-    }, [activeStock]); // 移除 refreshInterval 依赖，固定轮询本地库
+    }, [activeStock, forceRefresh]); 
+    
+    // Callback when config is updated
+    useEffect(() => {
+        if (configVersion) {
+            loadThresholds(); // Reload local thresholds for display/logic if needed
+            setForceRefresh(prev => prev + 1); // Trigger re-fetch of dashboard data
+        }
+    }, [configVersion]);
 
     // Dynamic Gradient Offset Calculation
     const gradientOffset = () => {
+      if (cumulativeData.length === 0) return 0;
       const dataMax = Math.max(...cumulativeData.map((i) => i.cumNetInflow));
       const dataMin = Math.min(...cumulativeData.map((i) => i.cumNetInflow));
     
@@ -144,14 +131,14 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
                         <TrendingUp className="w-5 h-5 text-blue-400" />
                         主力动态 (实时)
                         <span className="text-xs font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
-                            Source: Sina (AkShare)
+                            Source: Local DB (Aggregated)
                         </span>
                     </h3>
                     
                     <div className="flex items-center gap-4">
                         {/* Last Updated */}
                         <span className="text-xs text-slate-500 font-mono">
-                            {lastUpdated ? `Updated: ${lastUpdated} (${displayTicks.length} ticks)` : '正在后台同步数据 (约需1-3分钟)...'}
+                            {lastUpdated ? `Updated: ${lastUpdated}` : '正在同步数据...'}
                         </span>
                     </div>
                 </div>
@@ -162,7 +149,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
                         <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
                             分时博弈强度 (%)
                         </div>
-                        {chartData.length > 1 ? (
+                        {chartData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} syncId="capitalFlow">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -197,7 +184,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
                         <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
                             主力累计资金 (万元)
                         </div>
-                        {cumulativeData.length > 1 ? (
+                        {cumulativeData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={cumulativeData} syncId="capitalFlow">
                                     <defs>
@@ -297,7 +284,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, isTradi
                     <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
                         <h3 className="font-bold text-slate-200 flex items-center gap-2">
                             <Layers className="w-4 h-4 text-blue-400" />
-                            Level-1 逐笔
+                            Level-1 逐笔 (最新50笔)
                         </h3>
                         <span className="text-xs text-slate-500 animate-pulse flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Live
