@@ -1,4 +1,9 @@
-from backend.app.db.database import get_db_connection
+import sqlite3
+from backend.app.core.config import DB_FILE
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_FILE)
+    return conn
 
 def get_watchlist_items():
     conn = get_db_connection()
@@ -82,3 +87,27 @@ def get_local_history_data(symbol: str, config_sig: str):
     rows = c.fetchall()
     conn.close()
     return rows
+
+def save_sentiment_snapshot(data_list):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.executemany('''
+        INSERT OR REPLACE INTO sentiment_snapshots 
+        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
+def get_sentiment_history(symbol: str, date: str):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''
+        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol 
+        FROM sentiment_snapshots 
+        WHERE symbol=? AND date=? 
+        ORDER BY timestamp ASC
+    ''', (symbol, date))
+    rows = c.fetchall()
+    conn.close()
+    return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5]} for r in rows]
