@@ -1,14 +1,35 @@
 import sqlite3
+import logging
 from backend.app.core.config import DB_FILE
+
+logger = logging.getLogger(__name__)
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     return conn
 
-def init_db():
+def ensure_wal_mode():
+    """Explicitly ensure and verify WAL mode is active."""
     conn = get_db_connection()
-    # 开启 WAL 模式以提高并发性能
-    conn.execute("PRAGMA journal_mode=WAL;")
+    try:
+        cursor = conn.cursor()
+        # Set WAL mode
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        # Verify
+        cursor.execute("PRAGMA journal_mode;")
+        mode = cursor.fetchone()[0]
+        logger.info(f"SQLite Database Journal Mode: {mode.upper()}")
+        if mode.upper() != 'WAL':
+            logger.warning("⚠️ Failed to enable SQLite WAL mode! Concurrency performance may be degraded.")
+    except Exception as e:
+        logger.error(f"Error setting WAL mode: {e}")
+    finally:
+        conn.close()
+
+def init_db():
+    ensure_wal_mode()
+    conn = get_db_connection()
+
     c = conn.cursor()
     # 监控列表表
     c.execute('''CREATE TABLE IF NOT EXISTS watchlist (

@@ -7,6 +7,20 @@ from backend.app.db.crud import get_all_symbols, save_sentiment_snapshot
 
 logger = logging.getLogger(__name__)
 
+class TencentSource:
+    """Constants for Tencent Market Data API (qt.gtimg.cn)"""
+    PRICE = 3
+    TOTAL_VOL = 6
+    OUTER_VOL = 7  # Active Buy
+    INNER_VOL = 8  # Active Sell
+    BID1_VOL = 10
+    ASK1_VOL = 20
+    TIMESTAMP = 30
+    
+    # Order Book Indices (Level 1-5)
+    BIDS = [10, 12, 14, 16, 18]
+    ASKS = [20, 22, 24, 26, 28]
+
 class SentimentMonitor:
     def __init__(self):
         self.running = False
@@ -235,36 +249,29 @@ class SentimentMonitor:
                 parts = content.split('~')
                 if len(parts) < 30: continue
 
-                # Index Mapping:
-                # 3: Price
-                # 7: Outer (Active Buy)
-                # 8: Inner (Active Sell)
-                # 9: Bid1 Price, 10: Bid1 Vol
-                # 19: Ask1 Price, 20: Ask1 Vol
-                # 30: Time (YYYYMMDDHHMMSS)
-                
-                price = float(parts[3])
+                # Index Mapping via TencentSource
+                price = float(parts[TencentSource.PRICE])
                 # Data Validation: If price is 0 (pre/post market or error), skip or use previous?
                 # For real-time monitor, 0 price is fatal for charts.
                 if price <= 0:
                     # logger.warning(f"Invalid price {price} for {symbol}, skipping")
                     continue
 
-                outer = float(parts[7])
-                inner = float(parts[8])
+                outer = float(parts[TencentSource.OUTER_VOL])
+                inner = float(parts[TencentSource.INNER_VOL])
                 cvd = outer - inner
                 
-                bid1_vol = float(parts[10])
-                ask1_vol = float(parts[20])
+                bid1_vol = float(parts[TencentSource.BID1_VOL])
+                ask1_vol = float(parts[TencentSource.ASK1_VOL])
                 
                 # Bids (Sum 1-5)
-                bid_vol = sum([float(parts[i]) for i in [10, 12, 14, 16, 18]])
+                bid_vol = sum([float(parts[i]) for i in TencentSource.BIDS])
                 # Asks (Sum 1-5)
-                ask_vol = sum([float(parts[i]) for i in [20, 22, 24, 26, 28]])
+                ask_vol = sum([float(parts[i]) for i in TencentSource.ASKS])
                 oib = bid_vol - ask_vol
                 
                 # Timestamp
-                ts_raw = parts[30] # 20260212132919
+                ts_raw = parts[TencentSource.TIMESTAMP] # 20260212132919
                 if len(ts_raw) == 14:
                     ts_formatted = f"{ts_raw[8:10]}:{ts_raw[10:12]}:{ts_raw[12:14]}"
                     # Strict Time Filter: 09:15 - 15:05
@@ -284,7 +291,7 @@ class SentimentMonitor:
                     'bid1_vol': bid1_vol,
                     'ask1_vol': ask1_vol,
                     'timestamp': ts_formatted,
-                    'total_vol': float(parts[6]) # Store total volume for tick calc
+                    'total_vol': float(parts[TencentSource.TOTAL_VOL]) # Store total volume for tick calc
                 }
 
                 signals = []
