@@ -1,4 +1,4 @@
-export const APP_VERSION = '2.6.0';
+export const APP_VERSION = '2.8.0';
 export const RELEASE_NOTES = [
     "v2.6.0: 新增微观博弈指标监控（冰山压单/虚假撤单/量价背离），CVD图表支持信号打点与联合研判决策矩阵，优化历史数据图表UI",
     "v2.5.0: UI界面极致紧凑化重构，全站中文化，新增资金博弈业务逻辑解释浮窗",

@@ -117,6 +117,88 @@ class SentimentMonitor:
             }
         return None
 
+    def check_iceberg_buy(self, prev, curr):
+        """
+        核心算法 1.5：冰山托单检测 (Iceberg Buy Detection)
+        目的：发现主力在买一位置偷偷吸筹/护盘（虽然一直有人卖，但买一就是打不下去）。
+        """
+        # 1. 计算这3秒内的主动卖出量 (内盘增量)
+        delta_active_sell = curr['inner_vol'] - prev['inner_vol']
+        
+        # 2. 获取买一挂单量的变化
+        # 买一减少量应等于卖出量。如果减少得少，说明有补单。
+        delta_bid1 = curr['bid1_vol'] - prev['bid1_vol']
+        
+        # 3. 计算“隐形补单量”
+        # 理论上 delta_bid1 应该是负的，且 abs(delta_bid1) == delta_active_sell
+        # 补单量 = 实际变动 - 理论变动 (理论变动是 -delta_active_sell)
+        # hidden_refill = delta_bid1 - (-delta_active_sell) = delta_bid1 + delta_active_sell
+        hidden_refill = delta_bid1 + delta_active_sell
+        
+        # 4. 判定逻辑
+        # 主动卖出很大 (>500手)，且补单量很大
+        if delta_active_sell > 500 and hidden_refill > (delta_active_sell * 0.8):
+             return True
+        return False
+
+    def check_v3_signals(self, prev, curr):
+        signals = []
+        
+        # Calculate deltas
+        delta_outer = curr['outer_vol'] - prev['outer_vol']
+        delta_inner = curr['inner_vol'] - prev['inner_vol']
+        total_vol_delta = delta_outer + delta_inner
+        
+        # Estimate Turnover (Amount) in RMB
+        # Volume is in hands (100 shares)
+        turnover_delta = total_vol_delta * curr['price'] * 100
+        
+        # CVD Delta
+        cvd_delta = delta_outer - delta_inner
+        
+        # Price Change
+        price_up = curr['price'] > prev['price']
+        price_down = curr['price'] < prev['price']
+        price_stable = curr['price'] == prev['price']
+        
+        # Thresholds
+        LARGE_AMOUNT = 1000000 # 100万
+        
+        # 1. Check Iceberg Sell (Existing Logic)
+        iceberg_sell_raw = self.check_iceberg_sell(prev, curr)
+        
+        if iceberg_sell_raw and turnover_delta > LARGE_AMOUNT:
+            if price_up and cvd_delta > 0:
+                signals.append({
+                    "type": "AGGRESSIVE_BUY",
+                    "signal": "🔥 主力抢筹",
+                    "level": "High",
+                    "detail": "巨额压单被吃，价格上涨"
+                })
+            elif (price_down or price_stable) and cvd_delta <= 0:
+                signals.append({
+                    "type": "HEAVY_PRESSURE",
+                    "signal": "🧱 抛压沉重",
+                    "level": "High",
+                    "detail": "上方压单沉重，买力不足"
+                })
+        
+        # 2. Check Iceberg Buy (New Logic)
+        if self.check_iceberg_buy(prev, curr) and turnover_delta > LARGE_AMOUNT:
+             if price_stable or price_up:
+                 signals.append({
+                    "type": "BULLISH_SUPPORT",
+                    "signal": "🛡️ 主力护盘",
+                    "level": "High",
+                    "detail": "下方托单坚固，砸不动"
+                 })
+                 
+        # 3. Exhaustion (Simplified: If CVD drops significantly after a rise? 
+        # For now, let's skip complex state tracking for Exhaustion to keep it robust, 
+        # or implement a simple "Divergence" check if Price Up but CVD Down)
+        
+        return signals
+
     async def _tick(self, client):
         symbols = get_all_symbols()
         if not symbols:
@@ -162,6 +244,12 @@ class SentimentMonitor:
                 # 30: Time (YYYYMMDDHHMMSS)
                 
                 price = float(parts[3])
+                # Data Validation: If price is 0 (pre/post market or error), skip or use previous?
+                # For real-time monitor, 0 price is fatal for charts.
+                if price <= 0:
+                    # logger.warning(f"Invalid price {price} for {symbol}, skipping")
+                    continue
+
                 outer = float(parts[7])
                 inner = float(parts[8])
                 cvd = outer - inner
@@ -179,6 +267,12 @@ class SentimentMonitor:
                 ts_raw = parts[30] # 20260212132919
                 if len(ts_raw) == 14:
                     ts_formatted = f"{ts_raw[8:10]}:{ts_raw[10:12]}:{ts_raw[12:14]}"
+                    # Strict Time Filter: 09:15 - 15:05
+                    # V3.0 Fix: Relax time filter for testing, ensure data is saved
+                    time_str = f"{ts_raw[8:10]}:{ts_raw[10:12]}"
+                    # if not (("09:15" <= time_str <= "11:30") or ("13:00" <= time_str <= "15:05")):
+                    #      # logger.debug(f"Skipping off-market data: {time_str}")
+                    #      continue
                 else:
                     ts_formatted = datetime.now().strftime("%H:%M:%S")
 
@@ -189,24 +283,23 @@ class SentimentMonitor:
                     'inner_vol': inner,
                     'bid1_vol': bid1_vol,
                     'ask1_vol': ask1_vol,
-                    'timestamp': ts_formatted
+                    'timestamp': ts_formatted,
+                    'total_vol': float(parts[6]) # Store total volume for tick calc
                 }
 
                 signals = []
+                tick_vol = 0
                 
                 # Check Algorithms if we have previous state
                 if symbol in self.state:
                     prev = self.state[symbol]
+                    # Calc Tick Vol
+                    tick_vol = max(0, curr_snapshot['total_vol'] - prev.get('total_vol', 0))
+                    
                     # Only check if timestamp changed (new data)
                     if curr_snapshot['timestamp'] != prev['timestamp']:
-                        s1 = self.check_iceberg_sell(prev, curr_snapshot)
-                        if s1: signals.append(s1)
-                        
-                        s2 = self.check_spoof_buy(prev, curr_snapshot)
-                        if s2: signals.append(s2)
-                        
-                        s3 = self.check_efficiency(prev, curr_snapshot)
-                        if s3: signals.append(s3)
+                        # V3.0 Signal Logic
+                        signals = self.check_v3_signals(prev, curr_snapshot)
                 
                 # Update state
                 self.state[symbol] = curr_snapshot
@@ -220,7 +313,10 @@ class SentimentMonitor:
                     price,
                     int(outer),
                     int(inner),
-                    json.dumps(signals) if signals else None
+                    json.dumps(signals) if signals else None,
+                    int(bid1_vol),
+                    int(ask1_vol),
+                    int(tick_vol)
                 ))
             except Exception as e:
                 # logger.warning(f"Parse error for line {line[:20]}: {e}")
@@ -228,6 +324,7 @@ class SentimentMonitor:
 
         if data_to_save:
             # DB Write in thread pool to avoid blocking async loop
+            logger.info(f"Saving {len(data_to_save)} snapshots to DB...")
             await asyncio.to_thread(save_sentiment_snapshot, data_to_save)
 
 monitor = SentimentMonitor()

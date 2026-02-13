@@ -6,6 +6,7 @@ import logging
 import asyncio
 import akshare as ak
 from datetime import datetime
+from backend.app.db.crud import get_ticks_by_date, get_sentiment_history_aggregated, get_latest_sentiment_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -147,9 +148,40 @@ async def fetch_tencent_snapshot(symbol: str):
                 
                 # Parse Order Book (5 Levels) - Buy: 9-18, Sell: 19-28
                 # Format: Price, Volume, Price, Volume...
+                
+                # V3.0: Parse detailed sentiment fields
+                bid1_vol = float(parts[10])
+                ask1_vol = float(parts[20])
+
                 buy_vol_sum = sum([float(parts[10]), float(parts[12]), float(parts[14]), float(parts[16]), float(parts[18])])
                 sell_vol_sum = sum([float(parts[20]), float(parts[22]), float(parts[24]), float(parts[26]), float(parts[28])])
                 
+                # Derived Sentiment Metrics
+                cvd = outer_disk - inner_disk
+                oib = buy_vol_sum - sell_vol_sum
+                
+                # Tick Vol Calculation (Stateless API workaround)
+                tick_vol = 0
+                try:
+                    # Use sync DB call in executor
+                    loop = asyncio.get_running_loop()
+                    # V3.0 Fix: Pass today's date to ensure we only diff against today's data
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    prev_snap = await loop.run_in_executor(None, lambda: get_latest_sentiment_snapshot(symbol, today_str))
+                    if prev_snap:
+                        # Reconstruct previous total active volume for consistency
+                        prev_total = prev_snap['outer_vol'] + prev_snap['inner_vol']
+                        curr_total = outer_disk + inner_disk
+                        # Simple diff
+                        diff = curr_total - prev_total
+                        if diff >= 0:
+                            tick_vol = diff
+                except Exception:
+                    pass
+
+                # Debug Log
+                logger.info(f"[{symbol}] Sentiment: Bid1={bid1_vol}, Ask1={ask1_vol}, Tick={tick_vol}, OIB={oib}")
+
                 turnover_rate = float(parts[38]) if len(parts) > 38 else 0
                 
                 return {
@@ -163,7 +195,13 @@ async def fetch_tencent_snapshot(symbol: str):
                     "buy_queue_vol": buy_vol_sum,
                     "sell_queue_vol": sell_vol_sum,
                     "turnover_rate": turnover_rate,
-                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    # Added for SentimentTrend
+                    "bid1_vol": bid1_vol,
+                    "ask1_vol": ask1_vol,
+                    "cvd": cvd,
+                    "oib": oib,
+                    "tick_vol": tick_vol
                 }
     except Exception as e:
         logger.error(f"Tencent snapshot error: {e}")

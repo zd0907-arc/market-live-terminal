@@ -1,8 +1,9 @@
 from fastapi import APIRouter
 from typing import List
+import asyncio
 from backend.app.models.schemas import TickData, VerifyResult, APIResponse
 from backend.app.services.market import fetch_live_ticks, fetch_tencent_snapshot
-from backend.app.db.crud import get_ticks_by_date
+from backend.app.db.crud import get_ticks_by_date, get_sentiment_history_aggregated
 from datetime import datetime
 
 from backend.app.core.config import MOCK_DATA_DATE
@@ -18,6 +19,19 @@ async def get_sentiment_dashboard(symbol: str):
     if data:
         return APIResponse(code=200, data=data)
     return APIResponse(code=500, message="Failed to fetch sentiment data", data=None)
+
+@router.get("/sentiment/history", response_model=APIResponse)
+async def get_sentiment_history_api(symbol: str):
+    """
+    V3.0: 获取分钟级聚合的历史资金博弈数据
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    # For testing, if MOCK_DATA_DATE is set, use it?
+    if MOCK_DATA_DATE:
+        today = MOCK_DATA_DATE
+        
+    data = await asyncio.to_thread(get_sentiment_history_aggregated, symbol, today)
+    return APIResponse(code=200, data=data)
 
 @router.get("/verify_realtime", response_model=VerifyResult)
 async def verify_realtime(symbol: str):

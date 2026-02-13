@@ -67,6 +67,10 @@ def init_db():
                  price REAL,
                  outer_vol INTEGER,
                  inner_vol INTEGER,
+                 signals TEXT,
+                 bid1_vol INTEGER DEFAULT 0,
+                 ask1_vol INTEGER DEFAULT 0,
+                 tick_vol INTEGER DEFAULT 0,
                  UNIQUE(symbol, date, timestamp)
                  )''')
 
