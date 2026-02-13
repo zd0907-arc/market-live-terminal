@@ -48,6 +48,12 @@ export interface CapitalRatioData {
   mainBuyRatio: number;   // 主力买入占比 %
   mainSellRatio: number;  // 主力卖出占比 %
   mainParticipationRatio: number; // 主力参与度 (买+卖)/总 %
+  mainBuyAmount?: number; // 主力买入金额 (元)
+  mainSellAmount?: number; // 主力卖出金额 (元)
+  superBuyAmount?: number; // 超大单买入金额 (元)
+  superSellAmount?: number; // 超大单卖出金额 (元)
+  superParticipationRatio?: number; // 超大单参与度 %
+  closePrice?: number;    // 收盘价
 }
 
 export interface CumulativeCapitalData {

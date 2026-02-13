@@ -25,4 +25,11 @@ dist-ssr
 
 # Database & Local Data
 market_data.db
+market_data.db-shm
+market_data.db-wal
 __pycache__/
+.trae/
+.pytest_cache/
+backend/app/db/*.db
+*.db
+

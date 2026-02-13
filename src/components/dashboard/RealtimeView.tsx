@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Layers } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
+import { LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
 import { RealTimeQuote, TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
 import * as StockService from '../../services/stockService';
 import SentimentTrend from './SentimentTrend';
@@ -61,7 +61,15 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                 
                 if (isMounted && data) {
                     // Update Chart Data (Full Series)
-                    setChartData(data.chart_data || []);
+                    const processedChart = (data.chart_data || []).map((d: any) => ({
+                        ...d,
+                        mainSellAmountPlot: d.mainSellAmount ? -d.mainSellAmount : 0,
+                        mainBuyAmount: d.mainBuyAmount || 0,
+                        superSellAmountPlot: d.superSellAmount ? -d.superSellAmount : 0,
+                        superBuyAmount: d.superBuyAmount || 0,
+                        closePrice: d.closePrice || 0
+                    }));
+                    setChartData(processedChart);
                     setCumulativeData(data.cumulative_data || []);
                     
                     // Update Ticks Table (Only latest N)
@@ -147,30 +155,82 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     {/* 1. 分时强度图 (Instantaneous) */}
                     <div className="h-full w-full relative">
                         <div className="absolute top-2 left-10 z-10 text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
-                            分时博弈强度 (%)
+                            分时博弈强度
                         </div>
                         {chartData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData} syncId="capitalFlow">
+                                <ComposedChart data={chartData} syncId="capitalFlow">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                                     <XAxis 
                                         dataKey="time" 
+                                        xAxisId="0"
                                         stroke="#64748b" 
                                         tick={{fontSize: 12}} 
                                         ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
                                         interval="preserveStartEnd"
                                         hide // Hide X Axis for top chart
                                     />
-                                    <YAxis stroke="#64748b" tick={{fontSize: 12}} unit="%" domain={[0, 'auto']} />
+                                    {/* Second XAxis for Super Large Bars to overlap */}
+                                    <XAxis 
+                                        dataKey="time" 
+                                        xAxisId="1"
+                                        hide 
+                                    />
+                                    {/* Left Axis: Amount (Bar) */}
+                                    <YAxis 
+                                        yAxisId="amount"
+                                        stroke="#94a3b8" 
+                                        tick={{fontSize: 10}} 
+                                        tickFormatter={(val) => (Math.abs(val) / 10000).toFixed(0)}
+                                    />
+                                    {/* Right Axis: Ratio (Line) */}
+                                    <YAxis 
+                                        yAxisId="ratio"
+                                        orientation="right"
+                                        stroke="#cbd5e1" 
+                                        tick={{fontSize: 10}} 
+                                        unit="%" 
+                                        domain={[0, 100]} 
+                                        hide
+                                    />
+                                    {/* Hidden Axis: Price */}
+                                    <YAxis 
+                                        yAxisId="price"
+                                        orientation="right"
+                                        domain={['auto', 'auto']}
+                                        hide
+                                    />
+
                                     <Tooltip 
                                         contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
                                         itemStyle={{fontSize: 12}}
+                                        formatter={(val: number, name: string) => {
+                                            if (name.includes('主力') || name.includes('超大单')) {
+                                                if (name.includes('占比') || name.includes('参与度')) {
+                                                    return [val + '%', name];
+                                                }
+                                                return [(Math.abs(val) / 10000).toFixed(1) + '万', name];
+                                            }
+                                            if (name === '股价') return [val.toFixed(2), name];
+                                            return [val, name];
+                                        }}
                                     />
                                     <Legend wrapperStyle={{fontSize: 12}} verticalAlign="top" height={36}/>
-                                    <Line type="monotone" dataKey="mainBuyRatio" name="买入占比" stroke="#ef4444" strokeWidth={2} dot={false} animationDuration={500}/>
-                                    <Line type="monotone" dataKey="mainSellRatio" name="卖出占比" stroke="#22c55e" strokeWidth={2} dot={false} animationDuration={500}/>
-                                    <Line type="monotone" dataKey="mainParticipationRatio" name="参与度" stroke="#eab308" strokeWidth={2} strokeDasharray="4 4" dot={false} animationDuration={500}/>
-                                </LineChart>
+                                    
+                                    {/* Bars: Buy (Up) / Sell (Down) */}
+                                    {/* Layer 1: Main Force (Background) - Lighter Colors */}
+                                    <Bar xAxisId="0" yAxisId="amount" dataKey="mainBuyAmount" name="主力买入" fill="#f87171" barSize={4} fillOpacity={1} />
+                                    <Bar xAxisId="0" yAxisId="amount" dataKey="mainSellAmountPlot" name="主力卖出" fill="#4ade80" barSize={4} fillOpacity={1} />
+                                    
+                                    {/* Layer 2: Super Large (Foreground) - Darker/Vivid Colors */}
+                                    <Bar xAxisId="1" yAxisId="amount" dataKey="superBuyAmount" name="超大单买入" fill="#9333ea" barSize={4} />
+                                    <Bar xAxisId="1" yAxisId="amount" dataKey="superSellAmountPlot" name="超大单卖出" fill="#14532d" barSize={4} />
+                                    
+                                    {/* Lines: Participation & Price */}
+                                    <Line yAxisId="ratio" type="monotone" dataKey="mainParticipationRatio" name="主力参与度" stroke="#f8fafc" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500}/>
+                                    <Line yAxisId="ratio" type="monotone" dataKey="superParticipationRatio" name="超大单参与度" stroke="#9333ea" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500}/>
+                                    <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500}/>
+                                </ComposedChart>
                             </ResponsiveContainer>
                         ) : (
                             <div className="h-full flex items-center justify-center text-slate-500 text-sm">

@@ -79,15 +79,29 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
         main_buy_amt = group[group['is_main'] & group['is_buy']]['amount'].sum()
         main_sell_amt = group[group['is_main'] & group['is_sell']]['amount'].sum()
         
+        # Super Large (>100w) in this minute
+        super_buy_amt = group[group['is_super'] & group['is_buy']]['amount'].sum()
+        super_sell_amt = group[group['is_super'] & group['is_sell']]['amount'].sum()
+        
+        # Close Price for this minute (Last tick)
+        close_price = group['price'].iloc[-1]
+        
         main_buy_ratio = (main_buy_amt / total_amount) * 100
         main_sell_ratio = (main_sell_amt / total_amount) * 100
         participation_ratio = ((main_buy_amt + main_sell_amt) / total_amount) * 100
+        super_participation_ratio = ((super_buy_amt + super_sell_amt) / total_amount) * 100
         
         chart_data.append({
             "time": minute,
             "mainBuyRatio": round(main_buy_ratio, 1),
             "mainSellRatio": round(main_sell_ratio, 1),
-            "mainParticipationRatio": round(participation_ratio, 1)
+            "mainParticipationRatio": round(participation_ratio, 1),
+            "mainBuyAmount": float(main_buy_amt),
+            "mainSellAmount": float(main_sell_amt),
+            "superBuyAmount": float(super_buy_amt),
+            "superSellAmount": float(super_sell_amt),
+            "superParticipationRatio": round(super_participation_ratio, 1),
+            "closePrice": float(close_price)
         })
         
         # --- Cumulative Flow (Cumulative Data) ---

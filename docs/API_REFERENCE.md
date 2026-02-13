@@ -79,3 +79,27 @@
 *   **Endpoint**: `GET /api/sentiment/comments/{symbol}`
 *   **Query Params**: `limit` (default 50)
 *   **Description**: 获取最新的原始评论列表。
+
+## 4. 实时监控 (Monitor)
+
+### 4.1 获取高频快照 (Snapshots)
+*   **Endpoint**: `GET /api/monitor/history`
+*   **Query Params**: `symbol` (e.g., `sh600519`)
+*   **Description**: 获取当日的微观博弈快照数据（每 3 秒一个点），包含买一/卖一、CVD、OIB 和报警信号。
+*   **Response**:
+    ```json
+    {
+      "code": 200,
+      "data": [
+        {
+          "timestamp": "09:30:05",
+          "price": 100.5,
+          "cvd": 1200,
+          "signals": ["ICEBERG"],
+          "bid1_vol": 500,
+          "ask1_vol": 2000
+        }
+      ]
+    }
+    ```
+
