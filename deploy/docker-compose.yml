@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      # 构建上下文为项目根目录 (相对于 deploy 文件夹的上级)
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    container_name: market-backend
+    volumes:
+      # 将宿主机的 ../data (即项目根目录下的 data) 挂载到容器内的 /app/data
+      # 确保数据库文件持久化，重启容器数据不丢
+      - ../data:/app/data
+    environment:
+      # 告诉后端代码：数据库文件在 /app/data/market_data.db
+      - DB_PATH=/app/data/market_data.db
+      # 设置时区
+      - TZ=Asia/Shanghai
+    restart: always
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    container_name: market-frontend
+    ports:
+      # 映射 80 端口到宿主机
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
