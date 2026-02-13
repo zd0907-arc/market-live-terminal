@@ -317,7 +317,29 @@ export const getAppConfig = async () => {
 };
 
 export const updateAppConfig = async (key: string, value: string) => {
-    await fetch(`http://127.0.0.1:8000/api/config?key=${key}&value=${value}`, { method: 'POST' });
+    await fetch('http://127.0.0.1:8000/api/config', { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ key, value })
+    });
+};
+
+export const testLLMConnection = async (config: {
+    base_url: string;
+    api_key: string;
+    model: string;
+    proxy?: string;
+}) => {
+    const res = await fetch('http://127.0.0.1:8000/api/config/test-llm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+    });
+    return await res.json();
 };
 
 export const verifyRealtime = async (symbol: string) => {

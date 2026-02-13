@@ -57,3 +57,7 @@ class AggregateResult(BaseModel):
     net_inflow: float
     activity_ratio: float
     config: str
+
+class ConfigUpdate(BaseModel):
+    key: str
+    value: str
