@@ -6,3 +6,6 @@ akshare>=1.10.0
 httpx>=0.24.0
 pydantic>=2.0.0
 apscheduler
+python-dotenv
+python-dotenv
+python-dotenv
