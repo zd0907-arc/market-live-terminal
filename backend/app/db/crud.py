@@ -122,26 +122,29 @@ def get_local_history_data(symbol: str, config_sig: str):
 def save_sentiment_snapshot(data_list):
     conn = get_db_connection()
     cursor = conn.cursor()
+    # V3.0 Add bid1/ask1/tick
     cursor.executemany('''
         INSERT OR REPLACE INTO sentiment_snapshots 
-        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol, signals)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (symbol, timestamp, date, cvd, oib, price, outer_vol, inner_vol, signals, bid1_vol, ask1_vol, tick_vol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', data_list)
     conn.commit()
     conn.close()
 
 def get_sentiment_history(symbol: str, date: str):
     conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
+    # V3.0: Select new columns
     c.execute('''
-        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol, signals
+        SELECT timestamp, cvd, oib, price, outer_vol, inner_vol, signals, bid1_vol, ask1_vol, tick_vol
         FROM sentiment_snapshots 
         WHERE symbol=? AND date=? 
         ORDER BY timestamp ASC
     ''', (symbol, date))
     rows = c.fetchall()
     conn.close()
-    return [{"timestamp": r[0], "cvd": r[1], "oib": r[2], "price": r[3], "outer_vol": r[4], "inner_vol": r[5], "signals": r[6]} for r in rows]
+    return [dict(r) for r in rows]
 
 def save_history_30m_batch(data_list):
     conn = get_db_connection()
@@ -190,3 +193,111 @@ def get_history_30m(symbol: str, limit_days: int = 20):
         }
         for r in rows
     ]
+
+def get_latest_sentiment_snapshot(symbol: str, date: str = None):
+    """
+    Get the latest sentiment snapshot for the specified date to calculate tick volume or use as fallback.
+    If date is None, defaults to current date.
+    """
+    if date is None:
+        from datetime import datetime
+        date = datetime.now().strftime("%Y-%m-%d")
+        
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('''
+        SELECT timestamp, price, outer_vol, inner_vol, bid1_vol, ask1_vol 
+        FROM sentiment_snapshots 
+        WHERE symbol=? AND date=?
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    ''', (symbol, date))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return None
+
+def get_sentiment_history_aggregated(symbol: str, date: str):
+    """
+    Aggregate sentiment snapshots by minute for V3.0 History View.
+    Returns: List of { time: 'HH:MM', cvd, oib, price, signals: [] }
+    """
+    import json
+    rows = get_sentiment_history(symbol, date) # existing function returns list of dicts
+    
+    if not rows:
+        return []
+        
+    aggregated = []
+    current_minute = None
+    minute_buffer = []
+    
+    for row in rows:
+        ts = row['timestamp'] # HH:MM:SS
+        minute = ts[:5] # HH:MM
+        
+        # Filter Lunch Break
+        if "11:30" < minute < "13:00":
+            continue
+        
+        if minute != current_minute:
+            if minute_buffer:
+                # Aggregate previous buffer
+                last_pt = minute_buffer[-1]
+                avg_oib = sum(x['oib'] for x in minute_buffer) / len(minute_buffer)
+                
+                # Collect all signals
+                all_signals = []
+                for x in minute_buffer:
+                    if x['signals']:
+                        try:
+                            sigs = json.loads(x['signals']) if isinstance(x['signals'], str) else x['signals']
+                            all_signals.extend(sigs)
+                        except:
+                            pass
+                
+                aggregated.append({
+                    "timestamp": current_minute,
+                    "cvd": last_pt['cvd'],
+                    "oib": avg_oib,
+                    "price": last_pt['price'],
+                    "signals": all_signals,
+                    "bid1_vol": last_pt.get('bid1_vol', 0),
+                    "ask1_vol": last_pt.get('ask1_vol', 0),
+                    "tick_vol": last_pt.get('tick_vol', 0)
+                })
+            
+            current_minute = minute
+            minute_buffer = []
+            
+        minute_buffer.append(row)
+        
+    # Last buffer (current minute, usually incomplete, but for history API we might return it or let realtime handle it)
+    # The proposal says "Right side active zone... 60s archive".
+    # So the history API should return fully closed minutes? Or everything up to now?
+    # Usually history API returns everything persisted.
+    if minute_buffer:
+        last_pt = minute_buffer[-1]
+        avg_oib = sum(x['oib'] for x in minute_buffer) / len(minute_buffer)
+        all_signals = []
+        for x in minute_buffer:
+            if x['signals']:
+                try:
+                    sigs = json.loads(x['signals']) if isinstance(x['signals'], str) else x['signals']
+                    all_signals.extend(sigs)
+                except:
+                    pass
+        aggregated.append({
+            "timestamp": current_minute,
+            "cvd": last_pt['cvd'],
+            "oib": avg_oib,
+            "price": last_pt['price'],
+            "signals": all_signals,
+            "bid1_vol": last_pt.get('bid1_vol', 0),
+            "ask1_vol": last_pt.get('ask1_vol', 0),
+            "tick_vol": last_pt.get('tick_vol', 0)
+        })
+        
+    return aggregated
