@@ -1,6 +1,8 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+// 移除 API_BASE_URL 常量定义，直接使用 config 中导入的
+// const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 export interface SentimentDashboardData {
     score: number;
@@ -44,6 +46,7 @@ export interface SentimentSummary {
 export const sentimentService = {
     // 触发抓取
     crawl: async (symbol: string) => {
+        // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里直接拼
         const response = await axios.post(`${API_BASE_URL}/sentiment/crawl/${symbol}`);
         return response.data;
     },

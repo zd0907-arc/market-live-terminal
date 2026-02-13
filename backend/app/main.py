@@ -40,6 +40,14 @@ app.include_router(config.router, prefix="/api", tags=["Config"])
 app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
 app.include_router(sentiment.router, prefix="/api", tags=["Retail Sentiment"])
 
+@app.get("/api/health")
+def api_health_check():
+    return {
+        "status": "ok",
+        "service": "AlphaData Backend API",
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+
 @app.on_event("startup")
 async def startup_event():
     init_db()

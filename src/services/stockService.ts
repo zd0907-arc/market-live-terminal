@@ -1,4 +1,5 @@
 import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData } from '../types';
+import { API_BASE_URL } from '../config';
 
 // ==========================================
 // 基础网络层：JSONP / Script Injection
@@ -70,7 +71,8 @@ export const checkBackendHealth = async (): Promise<boolean> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
     
-    const response = await fetch('http://127.0.0.1:8000/', { 
+    // 使用新的 /api/health 接口
+    const response = await fetch(`${API_BASE_URL}/health`, { 
       method: 'GET',
       signal: controller.signal
     });
@@ -241,7 +243,10 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
 };
 
 export const fetchRealtimeDashboard = async (symbol: string) => {
-    const url = `http://127.0.0.1:8000/api/realtime/dashboard?symbol=${symbol}`;
+    // URL 中已经包含了 /api，所以这里去掉多余的 api 路径拼接，或者调整 API_BASE_URL
+    // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里应该是 `/api/realtime/dashboard`
+    // 但原来的路径是 /api/realtime/dashboard，所以直接拼
+    const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}`;
     try {
         const response = await fetch(url);
         if (!response.ok) return null;
@@ -260,15 +265,15 @@ export const fetchRealtimeDashboard = async (symbol: string) => {
 // Watchlist API
 // ==========================================
 export const addToWatchlist = async (symbol: string, name: string) => {
-    await fetch(`http://127.0.0.1:8000/api/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+    await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
 };
 
 export const removeFromWatchlist = async (symbol: string) => {
-    await fetch(`http://127.0.0.1:8000/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+    await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, { method: 'DELETE' });
 };
 
 export const getWatchlist = async (): Promise<any[]> => {
-    const res = await fetch('http://127.0.0.1:8000/api/watchlist');
+    const res = await fetch(`${API_BASE_URL}/watchlist`);
     return await res.json();
 };
 
@@ -277,7 +282,7 @@ export const getWatchlist = async (): Promise<any[]> => {
 // ==========================================
 export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'local' = 'sina'): Promise<HistoryAnalysisData[]> => {
   try {
-    const url = `http://127.0.0.1:8000/api/history_analysis?symbol=${symbol}&source=${source}`;
+    const url = `${API_BASE_URL}/history_analysis?symbol=${symbol}&source=${source}`;
     const res = await fetch(url);
     const json = await res.json();
     // 统一处理后端返回的 {code: 200, data: [...]} 格式
@@ -293,7 +298,7 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
 
 export const fetchHistoryTrend = async (symbol: string, days: number = 20): Promise<HistoryTrendData[]> => {
   try {
-    const url = `http://127.0.0.1:8000/api/history/trend?symbol=${symbol}&days=${days}`;
+    const url = `${API_BASE_URL}/history/trend?symbol=${symbol}&days=${days}`;
     const res = await fetch(url);
     const json = await res.json();
     if (json.code === 200 && Array.isArray(json.data)) {
@@ -307,17 +312,17 @@ export const fetchHistoryTrend = async (symbol: string, days: number = 20): Prom
 };
 
 export const aggregateLocalHistory = async (symbol: string, date?: string) => {
-    const url = `http://127.0.0.1:8000/api/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
+    const url = `${API_BASE_URL}/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
     await fetch(url, { method: 'POST' });
 };
 
 export const getAppConfig = async () => {
-    const res = await fetch('http://127.0.0.1:8000/api/config');
+    const res = await fetch(`${API_BASE_URL}/config`);
     return await res.json();
 };
 
 export const updateAppConfig = async (key: string, value: string) => {
-    await fetch('http://127.0.0.1:8000/api/config', { 
+    await fetch(`${API_BASE_URL}/config`, { 
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -332,7 +337,7 @@ export const testLLMConnection = async (config: {
     model: string;
     proxy?: string;
 }) => {
-    const res = await fetch('http://127.0.0.1:8000/api/config/test-llm', {
+    const res = await fetch(`${API_BASE_URL}/config/test-llm`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -343,12 +348,12 @@ export const testLLMConnection = async (config: {
 };
 
 export const verifyRealtime = async (symbol: string) => {
-    const res = await fetch(`http://127.0.0.1:8000/api/verify_realtime?symbol=${symbol}`);
+    const res = await fetch(`${API_BASE_URL}/verify_realtime?symbol=${symbol}`);
     return await res.json();
 };
 
 export const fetchSentimentData = async (symbol: string) => {
-    const res = await fetch(`http://127.0.0.1:8000/api/sentiment?symbol=${symbol}`);
+    const res = await fetch(`${API_BASE_URL}/sentiment?symbol=${symbol}`);
     const json = await res.json();
     return json.data;
 };
