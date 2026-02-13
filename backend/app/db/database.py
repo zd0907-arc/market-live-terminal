@@ -7,6 +7,8 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
+    # 开启 WAL 模式以提高并发性能
+    conn.execute("PRAGMA journal_mode=WAL;")
     c = conn.cursor()
     # 监控列表表
     c.execute('''CREATE TABLE IF NOT EXISTS watchlist (
@@ -67,6 +69,30 @@ def init_db():
                  inner_vol INTEGER,
                  UNIQUE(symbol, date, timestamp)
                  )''')
+
+    # 散户情绪评论表 (Retail Sentiment Comments)
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_comments (
+                 id TEXT PRIMARY KEY,
+                 stock_code TEXT,
+                 content TEXT,
+                 pub_time DATETIME,
+                 read_count INTEGER,
+                 reply_count INTEGER,
+                 sentiment_score INTEGER,
+                 heat_score REAL,
+                 crawl_time DATETIME
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_comments_code_time ON sentiment_comments (stock_code, pub_time)")
+
+    # AI 情绪摘要表 (Sentiment Summaries)
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_summaries (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 stock_code TEXT,
+                 content TEXT,
+                 model_used TEXT,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                 )''')
+
                  
     # 配置表 (Config)
     c.execute('''CREATE TABLE IF NOT EXISTS app_config (

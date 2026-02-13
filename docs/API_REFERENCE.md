@@ -39,3 +39,43 @@
 - **POST /api/aggregate**
     - **请求体**: `{"symbol": "sh600519"}`
     - **描述**: 手动触发指定股票的历史数据聚合计算任务。
+
+## 3. 散户情绪 (Retail Sentiment)
+
+### 3.1 触发抓取 (Crawl)
+*   **Endpoint**: `POST /api/sentiment/crawl/{symbol}`
+*   **Description**: 触发后台爬虫抓取指定股票的股吧评论。首次抓取或数据不足时自动执行 14 天深度抓取，否则执行增量更新。
+*   **Response**: `{"code": 200, "data": {"new_count": 50}}`
+
+### 3.2 获取仪表盘数据 (Dashboard)
+*   **Endpoint**: `GET /api/sentiment/dashboard/{symbol}`
+*   **Description**: 获取实时情绪聚合数据，包括情绪得分、多空比、AI 摘要（如有）。
+*   **Response**:
+    ```json
+    {
+      "score": 8,
+      "bull_bear_ratio": 2.5,
+      "summary": "...",
+      "risk_warning": "高"
+    }
+    ```
+
+### 3.3 获取趋势数据 (Trend)
+*   **Endpoint**: `GET /api/sentiment/trend/{symbol}`
+*   **Query Params**:
+    *   `interval`: `72h` (按小时聚合，默认) 或 `14d` (按天聚合)。
+*   **Response**: 包含 `time_bucket`, `total_heat`, `bull_bear_ratio` 的数组。
+
+### 3.4 生成 AI 摘要 (Generate Summary)
+*   **Endpoint**: `POST /api/sentiment/summary/{symbol}`
+*   **Description**: 调用配置的 LLM 生成最新的舆情摘要并存库。
+*   **Response**: `{"code": 200, "data": {"content": "..."}}`
+
+### 3.5 获取历史摘要 (Summary History)
+*   **Endpoint**: `GET /api/sentiment/summary/history/{symbol}`
+*   **Description**: 获取该股票的历史 AI 摘要记录。
+
+### 3.6 获取原始评论 (Comments)
+*   **Endpoint**: `GET /api/sentiment/comments/{symbol}`
+*   **Query Params**: `limit` (default 50)
+*   **Description**: 获取最新的原始评论列表。

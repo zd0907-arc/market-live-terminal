@@ -1,5 +1,9 @@
 import sqlite3
+import os
+from dotenv import dotenv_values, set_key
 from backend.app.core.config import DB_FILE
+
+ENV_PATH = os.path.join(os.getcwd(), ".env.local")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -61,19 +65,40 @@ def get_ticks_for_aggregation(symbol: str, date: str):
     return ticks
 
 def get_app_config():
+    # 1. DB Config
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("SELECT key, value FROM app_config")
-    rows = c.fetchall()
+    db_rows = c.fetchall()
     conn.close()
-    return {k: v for k, v in rows}
+    config = {k: v for k, v in db_rows}
+
+    # 2. Env Config (Overwrite DB)
+    if os.path.exists(ENV_PATH):
+        env_config = dotenv_values(ENV_PATH)
+        for k, v in env_config.items():
+            # Convert keys to lowercase to match app_config conventions
+            # e.g. LLM_API_KEY -> llm_api_key
+            lower_k = k.lower()
+            if lower_k.startswith("llm_") or "threshold" in lower_k or "sentiment_" in lower_k:
+                config[lower_k] = v
+    
+    return config
 
 def update_app_config(key: str, value: str):
+    # 1. Update DB
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
+
+    # 2. Update .env.local for specific keys
+    if key.startswith("llm_") or "threshold" in key or key.startswith("sentiment_"):
+        if not os.path.exists(ENV_PATH):
+            open(ENV_PATH, 'w').close()
+        # Convert to UPPERCASE for env standard
+        set_key(ENV_PATH, key.upper(), str(value))
 
 def save_local_history(symbol, date, net_inflow, main_buy, main_sell, close, change_pct, activity_ratio, config_sig):
     conn = get_db_connection()

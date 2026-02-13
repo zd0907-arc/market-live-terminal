@@ -4,7 +4,9 @@ import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
 import HistoryView from './components/dashboard/HistoryView';
+import SentimentDashboard from './components/sentiment/SentimentDashboard';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
+import RealTimeClock from './components/common/RealTimeClock';
 import { APP_VERSION } from './version';
 
 const App: React.FC = () => {
@@ -313,10 +315,7 @@ const App: React.FC = () => {
                         </div>
                         
                         <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono">
-                             <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-slate-600" /> 
-                                {quote.date} {quote.time}
-                             </span>
+                             <RealTimeClock />
                              <span className={`flex items-center gap-1 ${backendStatus ? 'text-green-500/80' : 'text-red-500/80'}`}>
                                 <Server className="w-3 h-3" />
                                 {backendStatus ? '核心服务: 已连接' : '核心服务: 断开'}
@@ -371,6 +370,11 @@ const App: React.FC = () => {
                 </div>
               </div>
            </div>
+        )}
+
+        {/* Retail Sentiment Dashboard */}
+        {activeStock && (
+            <SentimentDashboard symbol={activeStock.code} />
         )}
 
         {/* Content Views */}

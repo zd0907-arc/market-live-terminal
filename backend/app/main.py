@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.db.database import init_db
-from backend.app.routers import watchlist, market, analysis, config, monitor
+from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment
 from backend.app.services.collector import collector
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
@@ -38,6 +38,7 @@ app.include_router(market.router, prefix="/api", tags=["Market Data"])
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(config.router, prefix="/api", tags=["Config"])
 app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
+app.include_router(sentiment.router, prefix="/api", tags=["Retail Sentiment"])
 
 @app.on_event("startup")
 async def startup_event():
