@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端 (v2.8.0)
+# ZhangData 金融实时终端 (v3.0.0)
 
 > **⚠️ 重要声明**: 本项目面向中文用户，所有文档、注释、Commit Message 必须使用 **中文** 编写。
 > **Strict Rule**: All documentation and comments must be written in Chinese.
