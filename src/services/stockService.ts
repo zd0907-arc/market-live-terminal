@@ -357,3 +357,26 @@ export const fetchSentimentData = async (symbol: string) => {
     const json = await res.json();
     return json.data;
 };
+
+// ==========================================
+// Focus Management (Hot/Cold Queue)
+// ==========================================
+export const focusSymbol = async (symbol: string) => {
+    try {
+        await fetch(`${API_BASE_URL}/focus`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol })
+        });
+    } catch (e) {
+        console.error("Focus error:", e);
+    }
+};
+
+export const unfocusSymbol = async () => {
+    try {
+        await fetch(`${API_BASE_URL}/unfocus`, { method: 'POST' });
+    } catch (e) {
+        console.error("Unfocus error:", e);
+    }
+};

@@ -43,6 +43,9 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     useEffect(() => {
         if (!activeStock) return;
         
+        // Notify backend to focus on this stock (High Freq Mode)
+        StockService.focusSymbol(activeStock.symbol);
+
         // Reset data on stock change
         setDisplayTicks([]);
         setChartData([]);
@@ -93,11 +96,13 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
 
         fetchData();
         
-        // Polling every 5 seconds (Lightweight now)
-        intervalId = setInterval(fetchData, 5000);
+        // Polling every 3 seconds (to match Hot Queue)
+        intervalId = setInterval(fetchData, 3000);
 
         return () => {
             isMounted = false;
+            // Notify backend to stop high freq polling
+            StockService.unfocusSymbol();
             if (intervalId) clearInterval(intervalId);
         };
     }, [activeStock, forceRefresh]); 
