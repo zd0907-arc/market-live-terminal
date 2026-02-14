@@ -2,13 +2,23 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.db.database import init_db
+import logging
+import uvicorn
+import urllib3
+
+# 1. Initialize DB FIRST (Before importing routers that might access DB)
+try:
+    init_db()
+    logging.info("Database initialized successfully.")
+except Exception as e:
+    logging.error(f"Database initialization failed: {e}")
+
+# 2. Now import routers
 from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment
 from backend.app.services.collector import collector
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
 from datetime import datetime
-import logging
-import urllib3
 
 # 禁用不安全的HTTPS警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -20,7 +30,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AlphaData Local Server", 
     description="本地金融数据服务 - 为前端提供历史资金流向与博弈分析数据",
-    version="3.0.3"
+    version="3.0.4"
 )
 
 # CORS 配置

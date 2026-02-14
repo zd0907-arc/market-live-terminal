@@ -1,5 +1,6 @@
-export const APP_VERSION = '3.0.3';
+export const APP_VERSION = '3.0.4';
 export const RELEASE_NOTES = [
+    "v3.0.4: 修复后端启动顺序问题，确保数据库在服务初始化前完成构建",
     "v3.0.3: 修复云端部署依赖缺失问题 (python-dotenv, apscheduler, bs4)，强制刷新构建缓存",
     "v3.0.0: 云原生架构重构，支持 Docker 容器化部署，实现多端实时访问与云端数据持久化",
     "v2.8.0: 新增资金博弈(Funds Game)模块，深度解析行情快照，优化微观听诊器与持久化趋势闪烁",
