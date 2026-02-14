@@ -3,7 +3,7 @@ import logging
 import httpx
 import json
 from datetime import datetime
-from backend.app.db.crud import get_all_symbols, save_sentiment_snapshot
+from backend.app.db.crud import get_watchlist_items, save_sentiment_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -213,8 +213,18 @@ class SentimentMonitor:
         
         return signals
 
+    def get_all_symbols(self):
+        """
+        获取所有需要监控的股票代码
+        注意: 仅监控 Watchlist 中的股票!
+        """
+        # CRITICAL: This service only monitors symbols in the watchlist table.
+        # Searching for a stock in the frontend does NOT automatically add it here.
+        # User MUST add the stock to watchlist to start data accumulation.
+        return get_watchlist_items()
+
     async def _tick(self, client):
-        symbols = get_all_symbols()
+        symbols = self.get_all_symbols()
         if not symbols:
             return
 

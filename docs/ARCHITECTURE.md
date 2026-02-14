@@ -30,12 +30,6 @@
 ```text
 market-live-terminal/
 ├── src/                  # 前端源代码
-│   ├── components/       # 前端组件
-│   │   ├── dashboard/    # 功能视图 (Realtime, History)
-│   │   └── ...
-│   ├── utils/
-│   │   └── calculator.ts # 前后端共享的资金流算法
-│   └── App.tsx           # 主应用入口
 ├── backend/              # 后端应用
 │   └── app/
 │       ├── main.py       # 启动入口 (Port 8000)
@@ -45,19 +39,41 @@ market-live-terminal/
 └── docs/                 # 项目文档
 ```
 
-## 3. 数据流向 (Data Flow)
+## 3. 前端模块数据源映射 (Frontend Module Data Mapping)
 
-### 3.1 实时数据 (Realtime)
+为了明确各功能模块在云端环境下的表现，特梳理数据来源对照表。
+
+### 3.1 实时看板 (Realtime Dashboard)
+
+| 模块名称 | 数据源类型 | 依赖路径 | 数据特征 | 云端冷启动表现 |
+| :--- | :--- | :--- | :--- | :--- |
+| **顶部基础信息** | **前端直连** | Browser -> Tencent/Sina API | 即时快照 (Snapshot) | **有数据** (不依赖后端) |
+| **散户情绪监测** | **后端按需** | Browser -> Backend -> Crawler (Eastmoney) | 实时爬取 (On-demand) | **有数据** (需手动点击抓取) |
+| **主力动态 (实时)** | **后端数据库** | Browser -> Backend DB (`sentiment_snapshots`) | 时间序列 (Time Series) | **无数据** (需 Monitor 积累) |
+| **资金博弈分析** | **后端数据库** | Browser -> Backend DB (`sentiment_snapshots`) | 累计趋势 (Aggregated Trend) | **无数据** (需 Monitor 积累) |
+| **逐笔成交** | **后端数据库** | Browser -> Backend DB (`trade_ticks`) | 历史流水 (Log) | **无数据** (需 Monitor 积累) |
+
+**关键规则**: 后端 Monitor 服务 **仅监控 Watchlist (关注列表)** 中的股票。未关注的股票不会有数据积累。
+
+### 3.2 历史看板 (History Dashboard)
+
+| 模块名称 | 数据源类型 | 依赖路径 | 数据特征 | 云端冷启动表现 |
+| :--- | :--- | :--- | :--- | :--- |
+| **30分钟数据** | **后端数据库** | Browser -> Backend DB (`trade_ticks`) | 历史聚合 (Aggregated) | **无数据** (依赖实时数据沉淀) |
+| **按天数据** | **后端代理** | Browser -> Backend -> Sina History API | 历史存档 (Archive) | **有数据** (直接调外部接口) |
+
+## 4. 内部数据流向 (Data Flow)
+
+### 4.1 实时数据 (Realtime)
 1.  **采集**: `backend/app/services/monitor.py` 每 3 秒轮询腾讯 API。
 2.  **处理**: 解析买一/卖一与成交量，计算微观博弈信号（冰山/撤单）。
 3.  **存储**: 写入 SQLite `sentiment_snapshots` 表。
 4.  **分发**: 前端轮询 `/api/monitor/dashboard` 获取最新状态。
 
-### 3.2 历史分析 (History)
+### 4.2 历史分析 (History)
 1.  **归档**: 每日收盘后，`scripts/finalize_data.py` 将逐笔数据聚合并存入 `local_history`。
 2.  **查询**: 前端请求 `/api/history_analysis`，后端直接从 SQLite 返回聚合结果。
 
-### 3.3 散户情绪 (Sentiment)
+### 4.3 散户情绪 (Sentiment)
 1.  **爬取**: `services/sentiment_crawler.py` 抓取股吧评论。
 2.  **分析**: LLM 服务生成摘要，写入 `sentiment_summaries`。
-

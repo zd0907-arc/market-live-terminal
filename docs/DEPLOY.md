@@ -71,9 +71,11 @@ cd ~/market-live-terminal
 # 2. 拉取最新代码
 git pull origin main
 
-# 3. 重启服务 (必须进入 deploy 目录)
+# 3. 强制重建并重启服务 (推荐使用 --no-cache 避免缓存问题)
 cd deploy
-docker compose up -d --build
+sudo docker compose down
+sudo docker compose build --no-cache
+sudo docker compose up -d
 ```
 
 ### 4.2 数据备份
@@ -98,5 +100,20 @@ docker compose logs -f backend
 docker compose logs -f frontend
 ```
 
-## 5. 安全建议
-目前的部署方案直接暴露 80 端口。建议在 Nginx 配置中增加 Basic Auth (密码保护) 或配置防火墙白名单，仅允许特定 IP 访问。
+## 5. 故障排查与最佳实践 (Troubleshooting)
+
+本章节汇总了 v3.0.0 上云过程中的实战经验，请务必阅读。
+
+### 5.1 常见报错与修复
+
+| 现象 | 可能原因 | 解决方案 |
+| :--- | :--- | :--- |
+| **Backend 启动失败** (`ModuleNotFoundError`) | `requirements.txt` 缺失依赖 | 本地安装的包未必都在 `requirements.txt` 中。请务必核对依赖列表，特别是 `python-dotenv`, `bs4`, `apscheduler` 等隐式依赖。 |
+| **Backend 无限重启** (`no such table`) | 数据库未初始化 | 确保 `init_db()` 在 `main.py` 导入任何 routers 之前执行。Docker 纯净环境下，数据库文件是全新的，必须自动初始化表结构。 |
+| **版本号不更新** | Docker 构建缓存 | Docker 默认会缓存构建层。如果代码更新了但 `Dockerfile` 没变，可能会沿用旧镜像。发布时请使用 `docker compose build --no-cache`。 |
+| **图表空白 (无数据)** | 1. 休市<br>2. 未加入关注 | 后端 Monitor 服务**仅监控 Watchlist 中的股票**。搜索查看但未收藏的股票不会有实时数据。且非交易时间没有新数据产生。 |
+
+### 5.2 安全建议
+目前的部署方案直接暴露 80 端口。
+1.  **Nginx 密码保护**: 建议在 `nginx.conf` 中配置 Basic Auth。
+2.  **防火墙**: 在腾讯云控制台配置安全组，仅允许特定 IP 访问 80 端口。
