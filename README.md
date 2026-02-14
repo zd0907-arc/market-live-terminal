@@ -4,9 +4,12 @@
 > **Strict Rule**: All documentation and comments must be written in Chinese.
 
 ## 1. 项目简介
-**ZhangData** 是一个本地部署的金融数据终端，专注于 A 股市场的 **主力资金流向监控** 与 **微观博弈分析**。
+**ZhangData** 是一个**个人私有云**金融数据终端，专注于 A 股市场的 **主力资金流向监控** 与 **微观博弈分析**。
 
-通过结合 React 前端的实时可视化能力与 Python 后端的复杂计算能力，本系统解决了传统网页无法进行深度历史回溯和高频 tick 级分析的痛点。
+它采用 **“云主地辅”** 的架构设计：
+*   **云端 (Cloud)**: 部署在腾讯云/阿里云。后端 24 小时运行，持续监控您的“核心关注池”，积累高频历史数据。
+*   **多端 (Clients)**: 支持 PC 浏览器、手机浏览器随时访问，数据实时同步。
+*   **本地 (Local)**: 仅用于开发调试，拥有独立的沙盒环境。
 
 ### 核心功能
 *   **实时资金博弈**: 秒级监控主力买入/卖出，识别“超大单”动向。
@@ -15,13 +18,8 @@
 
 ## 2. 快速开始 (Quick Start)
 
-### 环境要求
-*   Node.js 18+
-*   Python 3.9+
-*   SQLite (无需安装，内置)
-
-### 启动命令
-你需要打开两个终端窗口，分别启动后端和前端。
+### 2.1 本地试运行 (Local Development)
+如果您想在本地修改代码或体验功能：
 
 **终端 1 (后端)**:
 ```bash
@@ -34,8 +32,17 @@ python -m app.main
 ```bash
 npm install
 npm run dev
+# 访问 http://localhost:3001
 ```
-访问浏览器: `http://localhost:3001`
+
+### 2.2 云端部署 (Production Deployment)
+如果您想在服务器上部署属于自己的 ZhangData：
+
+请参考详细的 **[🚀 部署指南 (Deployment Guide)](docs/DEPLOY.md)**。
+简而言之，只需在服务器执行：
+```bash
+cd deploy && ./setup.sh && docker compose up -d
+```
 
 ## 3. 文档导航 (Documentation)
 
@@ -48,24 +55,29 @@ npm run dev
 *   💾 **[数据库字典 (Database Schema)](docs/DATABASE_SCHEMA.md)**
     *   详细的 SQLite 表结构说明。
 *   🛠️ **[开发与贡献指南 (Developer Guide)](docs/DEV_GUIDE.md)**
-    *   **AI 协作必读**。包含了环境搭建、测试规范 (`pytest`) 以及代码风格要求。
+    *   **AI 协作必读**。包含了 Git Flow 规范、环境搭建、测试规范 (`pytest`)。
+*   🚀 **[部署指南 (Deployment Guide)](docs/DEPLOY.md)**
+    *   服务器环境初始化、Docker 部署与日常运维手册。
 *   🔌 **[API 接口文档 (API Reference)](docs/API_REFERENCE.md)**
     *   后端接口定义。
 
 ## 4. 技术栈
 *   **Frontend**: React 19, Vite, TailwindCSS, Recharts
 *   **Backend**: FastAPI, AsyncIO, HTTPX, SQLite
+*   **Infrastructure**: Docker, Nginx, Tencent Cloud
 *   **AI**: DeepSeek / OpenAI (用于舆情分析)
 
 ## 5. 更新日志 (Changelog)
 
 ### v2.8.0 (Latest)
+*   **Architecture**: **云原生架构升级**。
+    *   新增 Docker 部署支持 (`deploy/` 目录)。
+    *   重构前端 API 配置，支持 `API_BASE_URL` 动态切换，完美适配本地/云端环境。
+    *   新增 `health` 健康检查接口。
 *   **Feature**: **资金博弈 (Funds Game) 模块全面升级**。
     *   **Backend**: 深度解析腾讯行情快照，新增 **压单 (Ask1)**、**托单 (Bid1)** 及 **Tick量 (瞬时成交)** 的实时解析与持久化存储。
     *   **Frontend**: 优化“微观听诊器”面板，支持实时显示压托单挂单量及 Tick 成交差值。
-    *   **UX**: 创新实现 **持久化趋势闪烁 (Persistent Trend Flash)**。价格上涨/下跌时，背景色会保留微弱红/绿底色，解决瞬时闪烁易遗漏的问题。
-    *   **Fix**: 修复 Tick 量计算逻辑，增加当日日期过滤，彻底解决因历史脏数据导致的 Tick 量异常偏大问题。
-    *   **Optimization**: 优化 Monitor 数据采集逻辑，确保高频数据在任何时间段均可强制写入，保证数据连续性。
+    *   **UX**: 创新实现 **持久化趋势闪烁 (Persistent Trend Flash)**。
 
 > [查看完整更新历史 (v2.7.0 - v2.1.0)](docs/CHANGELOG.md)
 
