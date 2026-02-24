@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端 (v3.0.3)
+# ZhangData 金融实时终端 (v3.0.5)
 
 > **⚠️ 重要声明**: 本项目面向中文用户，所有文档、注释、Commit Message 必须使用 **中文** 编写。
 > **Strict Rule**: All documentation and comments must be written in Chinese.
@@ -69,17 +69,20 @@ cd deploy && ./setup.sh && docker compose up -d
 
 ## 5. 更新日志 (Changelog)
 
-### v2.8.0 (Latest)
-*   **Architecture**: **云原生架构升级**。
-    *   新增 Docker 部署支持 (`deploy/` 目录)。
-    *   重构前端 API 配置，支持 `API_BASE_URL` 动态切换，完美适配本地/云端环境。
-    *   新增 `health` 健康检查接口。
+### v3.0.5 (Latest)
+*   **Architecture**: **正式演进为多端云原生架构 (v3.0.0+)**。
+    *   全面支持 Docker 容器化部署 (`deploy/` 目录) 与腾讯云/阿里云的 24 小时后台挂机监控。
+    *   解决后端依赖缺失与因启动顺序引发的 SQLite 数据库被锁死的核心 Bug (v3.0.3 - v3.0.4)。
+*   **Feature**: 前端接入最新的“全量 60 日历史 K 线图”并实现动态合盘，底层重构数据库的 K 线表结构，彻底打通回溯屏障。
+*   **UI/UX**: 极致分离并重写了导致崩溃的 `visualMap` 图层渲染逻辑，取而代之的是通透立体的底置红绿面积博弈图，并引入极值强干预杜绝图层遮蔽。
+
+### v2.8.0
 *   **Feature**: **资金博弈 (Funds Game) 模块全面升级**。
     *   **Backend**: 深度解析腾讯行情快照，新增 **压单 (Ask1)**、**托单 (Bid1)** 及 **Tick量 (瞬时成交)** 的实时解析与持久化存储。
     *   **Frontend**: 优化“微观听诊器”面板，支持实时显示压托单挂单量及 Tick 成交差值。
     *   **UX**: 创新实现 **持久化趋势闪烁 (Persistent Trend Flash)**。
 
-> [查看完整更新历史 (v2.7.0 - v2.1.0)](docs/CHANGELOG.md)
+> [查看完整更新历史 (v2.7.0 - v1.0.0)](docs/CHANGELOG.md)
 
 ## 6. 许可证
 MIT License
