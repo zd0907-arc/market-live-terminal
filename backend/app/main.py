@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.db.database import init_db
+from backend.app.core.calendar import TradeCalendar
 import logging
 import uvicorn
 import urllib3
@@ -13,7 +14,14 @@ try:
 except Exception as e:
     logging.error(f"Database initialization failed: {e}")
 
-# 2. Now import routers
+# 2. Initialize Trade Calendar (Network Call)
+try:
+    TradeCalendar.init()
+    logging.info("Trade Calendar initialized.")
+except Exception as e:
+    logging.error(f"Trade Calendar init failed: {e}")
+
+# 3. Now import routers
 from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment
 from backend.app.services.collector import collector
 from backend.app.services.monitor import monitor as sentiment_monitor

@@ -1,5 +1,6 @@
-export const APP_VERSION = '3.0.4';
+export const APP_VERSION = '3.0.5';
 export const RELEASE_NOTES = [
+    "v3.0.5: 修复本地缺失 60 天长跨度 30分钟 K线数据问题 (重构底层 DB 历史表结构并跑通全量回填脚本)；深度重构历史 K线组件渲染引擎 (移除导致崩溃的 visualMap 逻辑，采用正负双轨分裂法) 重塑了极致通透的防遮挡资金面积图；动态混合新增了当日盘中 TICK 实时数据。",
     "v3.0.4: 修复后端启动顺序问题，确保数据库在服务初始化前完成构建",
     "v3.0.3: 修复云端部署依赖缺失问题 (python-dotenv, apscheduler, bs4)，强制刷新构建缓存",
     "v3.0.0: 云原生架构重构，支持 Docker 容器化部署，实现多端实时访问与云端数据持久化",

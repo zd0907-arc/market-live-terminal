@@ -48,6 +48,17 @@ def save_ticks_daily_overwrite(symbol, date, data_to_insert):
     finally:
         conn.close()
 
+def save_trade_ticks(data_list):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.executemany('''
+        INSERT INTO trade_ticks 
+        (symbol, date, time, price, volume, amount, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
 def get_ticks_by_date(symbol: str, date_str: str):
     conn = get_db_connection()
     c = conn.cursor()
@@ -151,8 +162,8 @@ def save_history_30m_batch(data_list):
     c = conn.cursor()
     c.executemany('''
         INSERT OR REPLACE INTO history_30m 
-        (symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', data_list)
     conn.commit()
     conn.close()
@@ -173,7 +184,7 @@ def get_history_30m(symbol: str, limit_days: int = 20):
     
     # 2. Get all bars since min_date
     c.execute('''
-        SELECT start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell 
+        SELECT start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low 
         FROM history_30m 
         WHERE symbol=? AND substr(start_time, 1, 10) >= ?
         ORDER BY start_time ASC
@@ -189,7 +200,11 @@ def get_history_30m(symbol: str, limit_days: int = 20):
             "main_sell": r[3],
             "super_net": r[4],
             "super_buy": r[5],
-            "super_sell": r[6]
+            "super_sell": r[6],
+            "close": r[7] if len(r) > 7 else 0.0,
+            "open": r[8] if len(r) > 8 else 0.0,
+            "high": r[9] if len(r) > 9 else 0.0,
+            "low": r[10] if len(r) > 10 else 0.0
         }
         for r in rows
     ]

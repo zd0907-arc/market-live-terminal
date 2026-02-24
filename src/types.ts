@@ -92,6 +92,10 @@ export interface HistoryTrendData {
   super_net: number;
   super_buy: number;
   super_sell: number;
+  close?: number; // Added for V3.3 price line
+  open?: number;
+  high?: number;
+  low?: number;
 }
 
 export interface SentimentData {

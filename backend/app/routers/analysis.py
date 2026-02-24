@@ -12,8 +12,121 @@ router = APIRouter()
 def get_history_trend(symbol: str, days: int = 20):
     """
     Get intraday history bars (30m granularity) for the last N days.
+    Dynamically appends today's real-time aggregated data if available.
     """
+    from datetime import datetime
+    from backend.app.services.analysis import calculate_realtime_aggregation
+    import pandas as pd
+    
+    # 1. Get history data from DB
     data = get_history_30m(symbol, days)
+    
+    # 2. Get today's real-time ticks
+    # Since today's ticks might not be fully closed into 30m bars yet, we calculate on the fly
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    config = get_app_config()
+    large_th = float(config.get('large_threshold', 200000))
+    super_th = float(config.get('super_large_threshold', 1000000))
+    
+    from backend.app.db.crud import get_ticks_by_date
+    ticks = get_ticks_by_date(symbol, today_str)
+    
+    if ticks:
+        df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
+        df['datetime'] = pd.to_datetime(today_str + ' ' + df['time'])
+        df = df.set_index('datetime').sort_index()
+
+        df['is_main'] = df['amount'] >= large_th
+        df['is_super'] = df['amount'] >= super_th
+        is_buy = df['type'].isin(['买盘', 'buy'])
+        is_sell = df['type'].isin(['卖盘', 'sell'])
+
+        def map_to_standard_bar(dt):
+            h = dt.hour
+            m = dt.minute
+            
+            if h == 9: return pd.Timestamp(f"{today_str} 10:00:00")
+            if h == 10:
+                if m < 30: return pd.Timestamp(f"{today_str} 10:30:00")
+                else: return pd.Timestamp(f"{today_str} 11:00:00")
+            if h == 11 and m < 30: return pd.Timestamp(f"{today_str} 11:30:00")
+                
+            if h == 13:
+                if m < 30: return pd.Timestamp(f"{today_str} 13:30:00")
+                else: return pd.Timestamp(f"{today_str} 14:00:00")
+            if h == 14:
+                if m < 30: return pd.Timestamp(f"{today_str} 14:30:00")
+                else: return pd.Timestamp(f"{today_str} 15:00:00")
+            if h >= 15: return pd.Timestamp(f"{today_str} 15:00:00")
+            return None
+
+        df['bar_time'] = df.index.map(map_to_standard_bar)
+        df_filtered = df.dropna(subset=['bar_time'])
+        
+        if not df_filtered.empty:
+            def calc_stats(sub_df):
+                if sub_df.empty: return pd.Series()
+                b = sub_df['type'].isin(['买盘', 'buy'])
+                s = sub_df['type'].isin(['卖盘', 'sell'])
+                main_buys = sub_df[(sub_df['is_main']) & b]['amount'].sum()
+                main_sells = sub_df[(sub_df['is_main']) & s]['amount'].sum()
+                super_buys = sub_df[(sub_df['is_super']) & b]['amount'].sum()
+                super_sells = sub_df[(sub_df['is_super']) & s]['amount'].sum()
+                
+                return pd.Series({
+                    'net_inflow': main_buys - main_sells,
+                    'main_buy': main_buys,
+                    'main_sell': main_sells,
+                    'super_net': super_buys - super_sells,
+                    'super_buy': super_buys,
+                    'super_sell': super_sells,
+                    'close': sub_df['price'].iloc[-1],
+                    'open': sub_df['price'].iloc[0],
+                    'high': sub_df['price'].max(),
+                    'low': sub_df['price'].min()
+                })
+
+            resampled = df_filtered.groupby('bar_time').apply(calc_stats)
+            
+            # Avoid duplicating bars already in DB
+            existing_times = {row['time'] for row in data}
+            
+            for dt, row in resampled.iterrows():
+                dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                if dt_str in existing_times:
+                    # Replace the existing bar with real-time data
+                    for i, r in enumerate(data):
+                        if r['time'] == dt_str:
+                            data[i] = {
+                                "time": dt_str,
+                                "net_inflow": float(row['net_inflow']),
+                                "main_buy": float(row['main_buy']),
+                                "main_sell": float(row['main_sell']),
+                                "super_net": float(row['super_net']),
+                                "super_buy": float(row['super_buy']),
+                                "super_sell": float(row['super_sell']),
+                                "close": float(row['close']),
+                                "open": float(row['open']),
+                                "high": float(row['high']),
+                                "low": float(row['low'])
+                            }
+                            break
+                elif row['main_buy'] > 0 or row['main_sell'] > 0:
+                    data.append({
+                        "time": dt_str,
+                        "net_inflow": float(row['net_inflow']),
+                        "main_buy": float(row['main_buy']),
+                        "main_sell": float(row['main_sell']),
+                        "super_net": float(row['super_net']),
+                        "super_buy": float(row['super_buy']),
+                        "super_sell": float(row['super_sell']),
+                        "close": float(row['close']),
+                        "open": float(row['open']),
+                        "high": float(row['high']),
+                        "low": float(row['low'])
+                    })
+                    
     return APIResponse(code=200, data=data)
 
 @router.post("/aggregate", response_model=APIResponse)
@@ -132,6 +245,55 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
                 continue
 
         result.sort(key=lambda x: x['date'])
+        
+        # Merge today's real-time ticks
+        from datetime import datetime
+        import pandas as pd
+        from backend.app.db.crud import get_ticks_by_date, get_app_config
+        
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        config = get_app_config()
+        large_th = float(config.get('large_threshold', 200000))
+        super_th = float(config.get('super_large_threshold', 1000000))
+        
+        ticks = get_ticks_by_date(symbol, today_str)
+        if ticks:
+            df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
+            df['is_main'] = df['amount'] >= large_th
+            df['is_super'] = df['amount'] >= super_th
+            b = df['type'].isin(['买盘', 'buy'])
+            s = df['type'].isin(['卖盘', 'sell'])
+            
+            main_buys = df[(df['is_main']) & b]['amount'].sum()
+            main_sells = df[(df['is_main']) & s]['amount'].sum()
+            super_buys = df[(df['is_super']) & b]['amount'].sum()
+            super_sells = df[(df['is_super']) & s]['amount'].sum()
+            total_amount = df['amount'].sum()
+            close_price = df['price'].iloc[0] if not df.empty else 0 # get_ticks_by_date is order by time DESC
+            
+            # Formulate the daily aggregated record
+            today_record = {
+                "date": today_str,
+                "close": float(close_price),
+                "total_amount": float(total_amount),
+                "main_buy_amount": float(main_buys),
+                "main_sell_amount": float(main_sells),
+                "net_inflow": float(main_buys - main_sells),
+                "super_large_in": float(super_buys),
+                "super_large_out": float(super_sells),
+                "buyRatio": float((main_buys / total_amount * 100) if total_amount > 0 else 0),
+                "sellRatio": float((main_sells / total_amount * 100) if total_amount > 0 else 0),
+                "activityRatio": float(((main_buys + main_sells) / total_amount * 100) if total_amount > 0 else 0),
+                "super_large_ratio": float((super_buys / total_amount * 100) if total_amount > 0 else 0)
+            }
+            
+            # Check if today is already in result, update it if exists, else append
+            existing_dates = {r['date']: i for i, r in enumerate(result)}
+            if today_str in existing_dates:
+                result[existing_dates[today_str]] = today_record
+            elif main_buys > 0 or main_sells > 0:
+                result.append(today_record)
+                
         return APIResponse(code=200, data=result)
         
     except Exception as e:

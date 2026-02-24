@@ -61,6 +61,10 @@ def init_db():
                  super_net REAL,
                  super_buy REAL,
                  super_sell REAL,
+                 close REAL,
+                 open REAL,
+                 high REAL,
+                 low REAL,
                  UNIQUE(symbol, start_time)
                  )''')
 

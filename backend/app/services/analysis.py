@@ -46,13 +46,21 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     # Default to 500k if not set, as per user request
     LARGE_THRESHOLD = float(config.get('large_threshold', 500000))     
     SUPER_THRESHOLD = float(config.get('super_large_threshold', 1000000))
+    
+    # DEBUG: Inspect Data Types and Values
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"DEBUG: Thresholds -> Large={LARGE_THRESHOLD}, Super={SUPER_THRESHOLD}")
+    logger.info(f"DEBUG: DataFrame dtypes -> \n{df.dtypes}")
+    logger.info(f"DEBUG: Amount Sample -> {df['amount'].head().tolist()}")
 
     # 5. Group by Minute (HH:MM)
     df['minute'] = df['time'].str.slice(0, 5)
     
     # Pre-calculate flags
-    df['is_buy'] = df['type'] == '买盘'
-    df['is_sell'] = df['type'] == '卖盘'
+    # V3.2 Fix: Handle both Chinese ('买盘') and English ('buy') types from different data sources
+    df['is_buy'] = df['type'].isin(['买盘', 'buy'])
+    df['is_sell'] = df['type'].isin(['卖盘', 'sell'])
     df['is_main'] = df['amount'] >= LARGE_THRESHOLD
     df['is_super'] = df['amount'] >= SUPER_THRESHOLD
 
@@ -197,11 +205,15 @@ def aggregate_intraday_30m(symbol: str, date_str: str = None):
                 'super_net': 0, 'super_buy': 0, 'super_sell': 0
             })
             
-        main_buys = sub_df[(sub_df['is_main']) & (sub_df['type'] == '买盘')]['amount'].sum()
-        main_sells = sub_df[(sub_df['is_main']) & (sub_df['type'] == '卖盘')]['amount'].sum()
+        # V3.2 Fix: Compatible with 'buy'/'sell'
+        is_buy = sub_df['type'].isin(['买盘', 'buy'])
+        is_sell = sub_df['type'].isin(['卖盘', 'sell'])
+            
+        main_buys = sub_df[(sub_df['is_main']) & is_buy]['amount'].sum()
+        main_sells = sub_df[(sub_df['is_main']) & is_sell]['amount'].sum()
         
-        super_buys = sub_df[(sub_df['is_super']) & (sub_df['type'] == '买盘')]['amount'].sum()
-        super_sells = sub_df[(sub_df['is_super']) & (sub_df['type'] == '卖盘')]['amount'].sum()
+        super_buys = sub_df[(sub_df['is_super']) & is_buy]['amount'].sum()
+        super_sells = sub_df[(sub_df['is_super']) & is_sell]['amount'].sum()
         
         return pd.Series({
             'net_inflow': main_buys - main_sells,
@@ -209,7 +221,11 @@ def aggregate_intraday_30m(symbol: str, date_str: str = None):
             'main_sell': main_sells,
             'super_net': super_buys - super_sells,
             'super_buy': super_buys,
-            'super_sell': super_sells
+            'super_sell': super_sells,
+            'close': sub_df['price'].iloc[-1] if not sub_df.empty else 0.0,
+            'open': sub_df['price'].iloc[0] if not sub_df.empty else 0.0,
+            'high': sub_df['price'].max() if not sub_df.empty else 0.0,
+            'low': sub_df['price'].min() if not sub_df.empty else 0.0
         })
 
     # 5. Resample (30T = 30 Minutes) -> Standard 8 Bars Logic
@@ -262,7 +278,11 @@ def aggregate_intraday_30m(symbol: str, date_str: str = None):
             float(row['main_sell']),
             float(row['super_net']),
             float(row['super_buy']),
-            float(row['super_sell'])
+            float(row['super_sell']),
+            float(row['close']),
+            float(row['open']),
+            float(row['high']),
+            float(row['low'])
         ))
         
     if data_list:

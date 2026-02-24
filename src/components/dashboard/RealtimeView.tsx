@@ -19,6 +19,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     const [cumulativeData, setCumulativeData] = useState<CumulativeCapitalData[]>([]);
     const isFetchingRef = useRef(false);
     const [lastUpdated, setLastUpdated] = useState<string>('');
+    const [displayDate, setDisplayDate] = useState<string>('');
 
     // Thresholds (Loaded from Backend)
     const [thresholds, setThresholds] = useState({ large: 200000, superLarge: 1000000 });
@@ -86,6 +87,9 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     
                     const now = new Date();
                     setLastUpdated(now.toLocaleTimeString());
+                    if (data.display_date) {
+                        setDisplayDate(data.display_date);
+                    }
                 }
             } catch (err) {
                 console.warn("Dashboard update failed", err);
@@ -133,6 +137,23 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     
     const off = gradientOffset();
     
+    // Date comparison for UI status
+    const isBackfillMode = () => {
+        if (!displayDate) return false;
+        // Use local time for comparison to avoid UTC mismatch
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
+        return displayDate !== today;
+    };
+    
+    const getWeekDay = (dateStr: string) => {
+        const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        return days[new Date(dateStr).getDay()];
+    };
+    
     if (!quote) return null;
 
     return (
@@ -149,6 +170,16 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     </h3>
                     
                     <div className="flex items-center gap-4">
+                        {/* Status Indicator */}
+                        {isBackfillMode() ? (
+                            <span className="text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded animate-pulse border border-yellow-500/20">
+                                🟡 回溯模式: {displayDate} ({getWeekDay(displayDate)})
+                            </span>
+                        ) : (
+                            <span className="text-[11px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                                🟢 实时交易中
+                            </span>
+                        )}
                         {/* Last Updated */}
                         <span className="text-[10px] text-slate-500 font-mono">
                             {lastUpdated ? `Updated: ${lastUpdated}` : '正在同步数据...'}

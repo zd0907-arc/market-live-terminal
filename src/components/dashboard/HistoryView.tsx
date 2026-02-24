@@ -5,6 +5,7 @@ import { SearchResult, HistoryAnalysisData, HistoryTrendData } from '../../types
 import * as StockService from '../../services/stockService';
 import DataSourceControl from '../common/DataSourceControl';
 import ConfigModal from '../common/ConfigModal';
+import HistoryCandleChart from './HistoryCandleChart';
 
 interface HistoryViewProps {
     activeStock: SearchResult | null;
@@ -18,16 +19,18 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     const [historyCompareMode, setHistoryCompareMode] = useState(false);
     const [historyCompareSource, setHistoryCompareSource] = useState('local');
     const [historyCompareData, setHistoryCompareData] = useState<HistoryAnalysisData[]>([]);
-    
+
     // Intraday Trend State (New)
     const [viewMode, setViewMode] = useState<'daily' | 'intraday'>('daily');
-    const [trendDays, setTrendDays] = useState(5);
+    const [trendDays, setTrendDays] = useState(60);
     const [trendData, setTrendData] = useState<HistoryTrendData[]>([]);
+    const [trendRefreshKey, setTrendRefreshKey] = useState(0);
 
     // Data
     const [historyData, setHistoryData] = useState<HistoryAnalysisData[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyError, setHistoryError] = useState('');
+    const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
     // Config
     const [showConfig, setShowConfig] = useState(false);
@@ -51,59 +54,97 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
     // Load Intraday Trend
     useEffect(() => {
-        if (activeStock && viewMode === 'intraday') {
-            setHistoryLoading(true);
-            StockService.fetchHistoryTrend(activeStock.symbol, trendDays)
-                .then(data => {
-                    setTrendData(data);
-                    setHistoryLoading(false);
-                })
-                .catch(err => {
-                    setHistoryError(err.message);
-                    setHistoryLoading(false);
-                });
+        let isMounted = true;
+
+        const loadIntraday = () => {
+            if (activeStock && viewMode === 'intraday') {
+                // Only show loading state on initial fetch
+                if (trendData.length === 0) setHistoryLoading(true);
+
+                StockService.fetchHistoryTrend(activeStock.symbol, trendDays)
+                    .then(data => {
+                        if (isMounted) {
+                            setTrendData(data);
+                            setHistoryLoading(false);
+                        }
+                    })
+                    .catch(err => {
+                        if (isMounted) {
+                            setHistoryError(err.message);
+                            setHistoryLoading(false);
+                        }
+                    });
+            }
+        };
+
+        if (viewMode === 'intraday') {
+            loadIntraday();
         }
-    }, [activeStock, viewMode, trendDays, configVersion]);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [activeStock, viewMode, trendDays, configVersion, trendRefreshKey]);
 
     // Initial Load & Source Change (Daily Mode)
     useEffect(() => {
         if (activeStock && viewMode === 'daily') {
-            loadHistoryData(activeStock.symbol, historySource as any);
+            loadHistoryData(activeStock.symbol, historySource);
+            if (historyCompareMode) {
+                loadHistoryData(activeStock.symbol, historyCompareSource);
+            }
         }
-    }, [historySource, activeStock, viewMode, configVersion]);
+    }, [activeStock, historySource, historyCompareMode, historyCompareSource, viewMode, configVersion, historyRefreshKey]);
 
-    // Compare Source Change
-    useEffect(() => {
-        if (activeStock && historyCompareMode && viewMode === 'daily') {
-            loadHistoryData(activeStock.symbol, historyCompareSource as any);
-        }
-    }, [historyCompareSource, historyCompareMode, activeStock, viewMode, configVersion]);
-
+    // Calculate gradient offset
     const gradientOffset = () => {
-      if (trendData.length === 0) return 0;
-      const dataMax = Math.max(...trendData.map((i) => i.net_inflow));
-      const dataMin = Math.min(...trendData.map((i) => i.net_inflow));
-      if (dataMax <= 0) return 0;
-      if (dataMin >= 0) return 1;
-      return dataMax / (dataMax - dataMin);
+        if (!trendData.length) return 0;
+        const dataMax = Math.max(...trendData.map(i => i.net_inflow));
+        const dataMin = Math.min(...trendData.map(i => i.net_inflow));
+
+        if (dataMax <= 0) return 0;
+        if (dataMin >= 0) return 1;
+
+        return dataMax / (dataMax - dataMin);
     };
+
     const off = gradientOffset();
+
+    // Calculate dynamic price range for the right Y-axis (Candlestick)
+    const priceRange = React.useMemo(() => {
+        if (!trendData.length) return ['auto', 'auto'];
+
+        // Filter out zero values which might come from missing data
+        const validData = trendData.filter(d => d.close && d.close > 0);
+        if (!validData.length) return ['auto', 'auto'];
+
+        const lows = validData.map(d => d.low || d.close || 0).filter(v => v > 0);
+        const highs = validData.map(d => d.high || d.close || 0).filter(v => v > 0);
+
+        if (!lows.length || !highs.length) return ['auto', 'auto'];
+
+        const minPrice = Math.min(...lows);
+        const maxPrice = Math.max(...highs);
+
+        // Add 1% padding
+        return [minPrice * 0.99, maxPrice * 1.01];
+    }, [trendData]);
 
     if (!activeStock) return null;
 
     return (
-        <div className="space-y-2">
-            <ConfigModal 
-                isOpen={showConfig} 
-                onClose={() => setShowConfig(false)} 
+        <div className="space-y-4">
+            <ConfigModal
+                isOpen={showConfig}
+                onClose={() => setShowConfig(false)}
                 onSave={() => {
-                    if(historySource === 'local') loadHistoryData(activeStock.symbol, 'local');
-                    if(historyCompareMode && historyCompareSource === 'local') loadHistoryData(activeStock.symbol, 'local');
-                }} 
+                    if (historySource === 'local') loadHistoryData(activeStock.symbol, 'local');
+                    if (historyCompareMode && historyCompareSource === 'local') loadHistoryData(activeStock.symbol, 'local');
+                }}
             />
 
             {/* Config Button Area */}
-            <div className="flex justify-between items-center mb-1">
+            <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
                 {/* View Mode Toggle */}
                 <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
                     <button
@@ -122,16 +163,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
                 <div className="flex gap-2">
                     {(historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && viewMode === 'daily' && (
-                        <button 
+                        <button
                             onClick={() => setShowConfig(true)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
                         >
                             <Settings className="w-3.5 h-3.5" /> 规则设置
                         </button>
                     )}
-                    
+
                     {viewMode === 'daily' && (
-                        <DataSourceControl 
+                        <DataSourceControl
                             mode="history"
                             source={historySource}
                             setSource={setHistorySource}
@@ -172,15 +213,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                     {/* Intraday Trend Chart */}
                     {viewMode === 'intraday' && trendData.length > 0 && (
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
-                             <div className="mb-2 flex justify-between items-center">
+                            <div className="mb-2 flex justify-between items-center">
                                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                                     <span className="text-purple-500">🟣 30分钟资金趋势</span>
                                     <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
                                         Source: Local DB (30m Bars)
                                     </span>
                                 </h3>
-                                <div className="flex gap-2">
-                                    {[5, 10, 20].map(d => (
+                                <div className="flex gap-2 items-center">
+                                    <button
+                                        onClick={() => setTrendRefreshKey(prev => prev + 1)}
+                                        className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                        title="刷新最新 30 分钟收盘数据"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                    {[5, 10, 20, 60].map(d => (
                                         <button
                                             key={d}
                                             onClick={() => setTrendDays(d)}
@@ -191,40 +239,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                     ))}
                                 </div>
                             </div>
-                            
+
                             <div className="h-[400px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={trendData}>
-                                        <defs>
-                                            <linearGradient id="trendSplitColor" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset={off} stopColor="#ef4444" stopOpacity={0.3}/>
-                                                <stop offset={off} stopColor="#22c55e" stopOpacity={0.3}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                        <XAxis 
-                                            dataKey="time" 
-                                            stroke="#64748b" 
-                                            tick={{fontSize: 10}} 
-                                            tickFormatter={(val) => val.substring(5, 16)} // MM-DD HH:MM
-                                            minTickGap={30}
-                                        />
-                                        <YAxis yAxisId="net" stroke="#a78bfa" tick={{fontSize: 10}} tickFormatter={(val) => (val/10000).toFixed(0)} />
-                                        <YAxis yAxisId="total" orientation="right" stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/10000).toFixed(0)} hide />
-                                        <Tooltip 
-                                            contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
-                                            formatter={(val: number) => (val/10000).toFixed(1) + '万'}
-                                            labelFormatter={(label) => label}
-                                        />
-                                        <Legend wrapperStyle={{fontSize: 12}} verticalAlign="top" height={36}/>
-                                        
-                                        <Area yAxisId="net" type="monotone" dataKey="net_inflow" name="主力净流入" stroke="none" fill="url(#trendSplitColor)" />
-                                        <Line yAxisId="net" type="monotone" dataKey="super_net" name="超大单净流入" stroke="#d946ef" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                                        
-                                        <Line yAxisId="total" type="monotone" dataKey="main_buy" name="主力买入" stroke="#ef4444" strokeWidth={1} dot={false} strokeOpacity={0.5} />
-                                        <Line yAxisId="total" type="monotone" dataKey="main_sell" name="主力卖出" stroke="#22c55e" strokeWidth={1} dot={false} strokeOpacity={0.5} />
-                                    </ComposedChart>
-                                </ResponsiveContainer>
+                                <HistoryCandleChart data={trendData} height={400} priceRange={priceRange} />
                             </div>
                         </div>
                     )}
@@ -239,24 +256,31 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <h3 className="text-base font-bold text-white flex items-center gap-2">
                                             主力净流入
                                         </h3>
+                                        <button
+                                            onClick={() => setHistoryRefreshKey(prev => prev + 1)}
+                                            className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                            title="刷新本地融合数据"
+                                        >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
                                     <div className="h-[300px]">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} domain={['auto', 'auto']} />
-                                                
-                                                <Tooltip 
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
+                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+
+                                                <Tooltip
                                                     position={{ y: 0 }}
-                                                    contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
                                                     formatter={(val: number, name: string) => {
                                                         if (name === '收盘价') return val.toFixed(2);
-                                                        return (val/100000000).toFixed(2) + '亿';
-                                                    }} 
+                                                        return (val / 100000000).toFixed(2) + '亿';
+                                                    }}
                                                 />
-                                                <Legend wrapperStyle={{fontSize: 12}} />
+                                                <Legend wrapperStyle={{ fontSize: 12 }} />
                                                 <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
                                                 <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
                                                     {historyData.map((entry, index) => (
@@ -276,7 +300,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <div className="group relative">
                                             <Info className="w-3.5 h-3.5 text-slate-500 cursor-help hover:text-blue-400" />
                                             <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl text-xs text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                                分析：当买入额（红）持续高于卖出额（绿）时，即便股价不涨，也可能是吸筹信号。<br/>
+                                                分析：当买入额（红）持续高于卖出额（绿）时，即便股价不涨，也可能是吸筹信号。<br />
                                                 <span className="text-yellow-400">主力交易占比</span>：反映主力资金在当天的统治力，占比越高说明散户越少。
                                             </div>
                                         </div>
@@ -285,22 +309,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
-                                                <Tooltip 
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                <Tooltip
                                                     position={{ y: 0 }}
-                                                    contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
                                                     formatter={(val: number, name: string, props: any) => {
                                                         if (name === '主力交易占比') return val.toFixed(1) + '%';
                                                         if (name === '超大单占比') return val.toFixed(1) + '%';
                                                         let amount = 0;
                                                         if (name === '主力买入占比') amount = props.payload.main_buy_amount;
                                                         if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
-                                                        return `${val.toFixed(1)}% (${(amount/100000000).toFixed(2)}亿)`;
-                                                    }} 
+                                                        return `${val.toFixed(1)}% (${(amount / 100000000).toFixed(2)}亿)`;
+                                                    }}
                                                 />
-                                                <Legend wrapperStyle={{fontSize: 12}} />
+                                                <Legend wrapperStyle={{ fontSize: 12 }} />
                                                 <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                                 <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                                 <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
@@ -316,15 +340,15 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                 <div className="space-y-2 border-l border-slate-800 pl-2 border-dashed relative">
                                     <div className="absolute top-0 right-0 z-20">
                                         <div className="flex items-center gap-3 bg-slate-950/50 p-1 rounded-lg border border-slate-800/50">
-                                             <span className="text-[10px] text-slate-400">对比源:</span>
-                                             <select 
-                                                value={historyCompareSource} 
+                                            <span className="text-[10px] text-slate-400">对比源:</span>
+                                            <select
+                                                value={historyCompareSource}
                                                 onChange={(e) => setHistoryCompareSource(e.target.value)}
                                                 className="bg-transparent text-xs font-medium text-blue-400 focus:outline-none cursor-pointer"
-                                             >
+                                            >
                                                 <option value="sina">🔴 新浪 (Sina)</option>
                                                 <option value="local">🟣 本地自算 (Local)</option>
-                                             </select>
+                                            </select>
                                         </div>
                                     </div>
 
@@ -347,14 +371,14 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <ComposedChart data={historyCompareData} syncId="historyGraph">
                                                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                        <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
-                                                        <YAxis stroke="#64748b" tick={{fontSize: 10}} tickFormatter={(val) => (val/100000000).toFixed(0)} />
-                                                        <Tooltip 
+                                                        <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                        <YAxis stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
+                                                        <Tooltip
                                                             position={{ y: 0 }}
-                                                            contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
-                                                            formatter={(val: number) => (val/100000000).toFixed(2) + '亿'} 
+                                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                                            formatter={(val: number) => (val / 100000000).toFixed(2) + '亿'}
                                                         />
-                                                        <Legend wrapperStyle={{fontSize: 12}} />
+                                                        <Legend wrapperStyle={{ fontSize: 12 }} />
                                                         <ReferenceLine y={0} stroke="#334155" />
                                                         <Bar dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
                                                             {historyCompareData.map((entry, index) => (
@@ -376,21 +400,21 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <ComposedChart data={historyCompareData} syncId="historyGraph">
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                    <XAxis dataKey="date" stroke="#64748b" tick={{fontSize: 10}} />
-                                                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
-                                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{fontSize: 10}} unit="%" domain={[0, 100]} />
-                                                    <Tooltip 
+                                                    <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                    <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                    <Tooltip
                                                         position={{ y: 0 }}
-                                                        contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155'}} 
+                                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
                                                         formatter={(val: number, name: string, props: any) => {
                                                             if (name === '主力交易占比') return val.toFixed(1) + '%';
                                                             let amount = 0;
                                                             if (name === '主力买入占比') amount = props.payload.main_buy_amount;
                                                             if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
-                                                            return `${val.toFixed(1)}% (${(amount/100000000).toFixed(2)}亿)`;
-                                                        }} 
+                                                            return `${val.toFixed(1)}% (${(amount / 100000000).toFixed(2)}亿)`;
+                                                        }}
                                                     />
-                                                    <Legend wrapperStyle={{fontSize: 12}} />
+                                                    <Legend wrapperStyle={{ fontSize: 12 }} />
                                                     <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                                     <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                                     <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />

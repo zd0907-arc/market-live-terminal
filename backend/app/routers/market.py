@@ -7,6 +7,7 @@ from backend.app.db.crud import get_ticks_by_date, get_sentiment_history_aggrega
 from datetime import datetime
 
 from backend.app.core.config import MOCK_DATA_DATE
+from backend.app.core.http_client import MarketClock
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ async def get_sentiment_history_api(symbol: str):
     """
     V3.0: 获取分钟级聚合的历史资金博弈数据
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = MarketClock.get_display_date()
     # For testing, if MOCK_DATA_DATE is set, use it?
     if MOCK_DATA_DATE:
         today = MOCK_DATA_DATE
@@ -49,13 +50,21 @@ async def get_realtime_dashboard(symbol: str):
     """
     获取实时仪表盘聚合数据（分钟级资金流 + 最新Ticks）
     替代原有的 /ticks_full，解决前端计算压力和数据传输过大的问题。
+    V3.1: 自动处理休市回溯逻辑
     """
     if MOCK_DATA_DATE:
         today_str = MOCK_DATA_DATE
     else:
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        # Use smart date fallback
+        today_str = MarketClock.get_display_date()
+        import logging
+        logging.getLogger(__name__).info(f"DEBUG: get_realtime_dashboard using date={today_str} for {symbol}")
 
     data = calculate_realtime_aggregation(symbol, today_str)
+    
+    # Inject display date for frontend awareness
+    if data:
+        data['display_date'] = today_str
     
     return APIResponse(code=200, data=data)
 
