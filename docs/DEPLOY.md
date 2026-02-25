@@ -1,63 +1,45 @@
-# ZhangData 云端部署指南 (Deployment Guide)
+# ZhangData 云端一键发布指南 (v3.1.0+)
 
-本指南详细说明如何将 ZhangData 部署到腾讯云/阿里云服务器，并实现“云端数据中心 + 多端访问”的架构。
+本指南详细说明如何将整个 AIGC 行情监控系统自动化发布到腾讯云生产服务器上。
 
-## 1. 部署架构 (Architecture)
+## 🚀 推荐方式：Mac 终控端一键自动发布
+为了让您专注于本地代码开发，从 v3.1.0 开始，我们在项目根目录预制了交互式自动发版脚本。您 **无需** 每次手动 SSH 进服务器去敲打构建命令。
 
-我们采用 **Docker Compose** 进行容器化部署，确保环境的一致性。
+### 第一步：确保本地代码已入库
+云服务器是去 Github 上直接拉取代码的。因此请确保您在 Mac 本地的修改已经执行了 `git commit` 和 `git push origin main`。
 
-*   **Host (宿主机)**: Ubuntu 22.04 LTS (推荐)
-*   **Containers (容器)**:
-    *   `market-backend`: Python FastAPI 服务，负责 API 响应和数据采集 (Monitor)。
-    *   `market-frontend`: Nginx 服务，托管 React 静态页面，并作为反向代理网关。
-*   **Storage (存储)**:
-    *   SQLite 数据库文件挂载在宿主机 `./data/market_data.db`，确保重启不丢失数据。
-
-## 2. 服务器初始化 (首次部署)
-
-假设您已经购买了一台云服务器，并使用 `ssh` 登录成功。
-
-### 2.1 拉取代码
+### 第二步：在您的 Mac 本地执行脚本
+直接打开您的 Mac 本地终端，进入项目根目录：
 ```bash
-# 回到用户主目录
-cd ~
-
-# 克隆仓库 (如果是私有仓库，需要配置 SSH Key 或输入账号密码)
-git clone https://github.com/zd0907-arc/market-live-terminal.git
-
-# 进入部署目录
-cd market-live-terminal/deploy
+./deploy_to_cloud.sh
 ```
 
-### 2.2 安装 Docker 环境
-我们提供了一键安装脚本，自动配置国内镜像加速（解决下载慢的问题）。
+### 第三步：人工确认与自动流转
+脚本会自动：
+1. 拦截并向您展示本次投向腾讯云的所有 Docker 重建指令流。
+2. 弹出人工授权提示：`请审核部署指令，确认是否立即下发发布任务向云端投送？ [y/N]`。
+3. 输入 `y` 之后，脚本将自动发起跨网段 SSH 隧道直连，在云服务器后台强制拉取 GitHub 最新版本。
+4. 自动停止旧进程，无缓存重建并重启所有微服务架构集群。
+5. 出片成功并打印出访问地址 (`http://111.229.144.202`)。
 
+---
+
+## 🛠 如果您更喜欢传统的手动发布方式 (SOP)
+（如果在您公司的网络策略中禁用了直接 SSH 登录，您可以在云端宿主机内手动执行以下步骤）
+
+### 1. 更新代码
 ```bash
-# 赋予执行权限
-chmod +x setup.sh
-
-# 执行安装 (需要 sudo 权限)
-./setup.sh
-
-# 安装完成后，建议退出 SSH 并重新登录，以使用户组权限生效
-exit
-# (重新 ssh login...)
+cd ~/market-live-terminal
+git pull origin main
 ```
 
-## 3. 启动服务
-
+### 2. 强制重建并重启服务 (推荐使用 --no-cache)
 ```bash
-cd ~/market-live-terminal/deploy
-
-# 启动所有服务 (后台运行)
-# --build 参数确保每次都重新构建镜像，应用最新代码
-docker compose up -d --build
+cd deploy
+sudo docker compose down
+sudo docker compose build --no-cache
+sudo docker compose up -d
 ```
-
-**验证部署：**
-*   访问 `http://您的服务器IP`，应能看到前端页面。
-*   查看容器状态：`docker compose ps`
-*   查看后端日志：`docker compose logs -f backend`
 
 ## 4. 日常运维 (SOP)
 
