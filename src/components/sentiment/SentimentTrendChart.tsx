@@ -68,7 +68,10 @@ const SentimentTrendChart: React.FC<SentimentTrendChartProps> = ({ data }) => {
                         dataKey="time_bucket"
                         scale="band"
                         tick={{ fontSize: 9, fill: '#64748b' }}
-                        tickFormatter={(time) => time.split(' ')[1]}
+                        tickFormatter={(time) => {
+                            if (!time) return '';
+                            return time.includes(' ') ? time.split(' ')[1] : time.substring(5);
+                        }}
                         axisLine={{ stroke: '#334155' }}
                         tickLine={false}
                         interval="preserveStartEnd"
