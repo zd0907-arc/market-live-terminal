@@ -8,11 +8,17 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-def run_daily_sentiment_crawl():
+def run_sentiment_crawl(mode="scheduler"):
     """
-    每天定时抓取自选股的情绪数据 (深度抓取/增量抓取)
+    定时抓取自选股的情绪数据 (深度抓取/增量抓取)
     """
-    logger.info(">>> STARTING DAILY SENTIMENT CRAWL JOB <<<")
+    from backend.app.core.http_client import MarketClock
+    
+    # 如果是盘中轮询模式，但在非交易时间，则直接跳过
+    if mode == "intraday" and not MarketClock.is_trading_time():
+        return
+
+    logger.info(f">>> STARTING SENTIMENT CRAWL JOB (Mode: {mode}) <<<")
     watchlist = get_watchlist_items()
     
     if not watchlist:
@@ -69,14 +75,18 @@ def init_scheduler():
     trigger_finalization = CronTrigger(hour=15, minute=5)
     scheduler.add_job(run_daily_finalization, trigger_finalization)
     
-    # 2. 每日情绪抓取 (08:30) - 盘前预热
+    # 2. 每日情绪抓取 (08:30) - 盘前预热全量
     trigger_sentiment = CronTrigger(hour=8, minute=30)
-    scheduler.add_job(run_daily_sentiment_crawl, trigger_sentiment)
+    scheduler.add_job(run_sentiment_crawl, trigger_sentiment, kwargs={"mode": "scheduler"})
+    
+    # 2.1 盘中情绪轮询 (每半小时) - 增量
+    trigger_sentiment_intraday = CronTrigger(day_of_week='mon-fri', hour='9-14', minute='0,30')
+    scheduler.add_job(run_sentiment_crawl, trigger_sentiment_intraday, kwargs={"mode": "intraday"})
     
     # 3. 每日交易日历自我刷新 (00:05) - 云端长效挂机维稳
     trigger_calendar = CronTrigger(hour=0, minute=5)
     scheduler.add_job(run_daily_calendar_sync, trigger_calendar)
     
     scheduler.start()
-    logger.info("Scheduler initialized. Jobs: [Calendar Sync @ 00:05], [Sentiment Crawl @ 08:30], [Finalization @ 15:05]")
+    logger.info("Scheduler initialized. Jobs: [Calendar Sync @ 00:05], [Sentiment Crawl @ 08:30 & Intraday 30m], [Finalization @ 15:05]")
     return scheduler
