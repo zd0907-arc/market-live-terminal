@@ -130,8 +130,19 @@ class BackfillService:
             symbol = symbol.get('symbol')
 
         logger.info(f"[Backfill] Fetching ticks for {symbol}...")
-        # Run synchronous AkShare call in thread pool
-        df = await asyncio.to_thread(ak.stock_zh_a_tick_tx_js, symbol)
+        try:
+            # Run synchronous AkShare call in thread pool with a 15-second timeout
+            # stock_zh_a_tick_tx_js hangs indefinitely on certain stocks (e.g., sh603629)
+            df = await asyncio.wait_for(
+                asyncio.to_thread(ak.stock_zh_a_tick_tx_js, symbol),
+                timeout=15.0
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"[Backfill] Timeout fetching ticks for {symbol}, skipping Day 1.")
+            return
+        except Exception as e:
+            logger.error(f"[Backfill] Error fetching ticks for {symbol}: {e}")
+            return
         
         if df is None or df.empty:
             logger.warning(f"[Backfill] No ticks found for {symbol}")

@@ -144,28 +144,28 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
             />
 
             {/* Config Button Area */}
-            <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
                 {/* View Mode Toggle */}
-                <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
+                <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 w-full md:w-auto overflow-x-auto">
                     <button
                         onClick={() => setViewMode('daily')}
-                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                        className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                         日线统计
                     </button>
                     <button
                         onClick={() => setViewMode('intraday')}
-                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                        className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                         30分钟趋势
                     </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
                     {(historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && viewMode === 'daily' && (
                         <button
                             onClick={() => setShowConfig(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
+                            className="flex items-center whitespace-nowrap gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
                         >
                             <Settings className="w-3.5 h-3.5" /> 规则设置
                         </button>
@@ -268,7 +268,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
                                                 <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
                                                 <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
 
@@ -309,7 +309,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={historyData} syncId="historyGraph">
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
                                                 <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
                                                 <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
                                                 <Tooltip
