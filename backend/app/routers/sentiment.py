@@ -246,6 +246,30 @@ def get_sentiment_trend(symbol: str, interval: str = "72h"):
     
     try:
         df = pd.read_sql(query, conn, params=(symbol, cutoff_time))
+        
+        # 补全时间序列，修复因数据库数据稀疏导致前端 Recharts X轴标签被压缩折叠的问题
+        now = datetime.now()
+        if interval == "14d":
+            date_range = pd.date_range(end=now.date(), periods=14, freq='D')
+            full_df = pd.DataFrame({'time_bucket': date_range.strftime('%Y-%m-%d')})
+        else:
+            end_time = now.replace(minute=0, second=0, microsecond=0)
+            date_range = pd.date_range(end=end_time, periods=72, freq='H')
+            full_df = pd.DataFrame({'time_bucket': date_range.strftime('%Y-%m-%d %H:00')})
+
+        if not df.empty:
+            df = pd.merge(full_df, df, on='time_bucket', how='left')
+            df.fillna(0, inplace=True)
+            df['post_count'] = df['post_count'].astype(int)
+            df['bull_vol'] = df['bull_vol'].astype(int)
+            df['bear_vol'] = df['bear_vol'].astype(int)
+        else:
+            df = full_df
+            df['total_heat'] = 0.0
+            df['post_count'] = 0
+            df['bull_vol'] = 0
+            df['bear_vol'] = 0
+
         # 计算多空比
         df['bull_bear_ratio'] = df.apply(lambda row: round(row['bull_vol'] / (row['bear_vol'] + 1), 2), axis=1)
         return df.to_dict(orient='records')
