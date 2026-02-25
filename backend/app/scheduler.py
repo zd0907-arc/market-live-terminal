@@ -50,6 +50,18 @@ def run_daily_finalization():
             
     logger.info(">>> DAILY FINALIZATION COMPLETED <<<")
 
+def run_daily_calendar_sync():
+    """
+    每天凌晨更新一次交易日历缓存
+    """
+    logger.info(">>> STARTING DAILY CALENDAR SYNC JOB <<<")
+    try:
+        from backend.app.core.calendar import TradeCalendar
+        TradeCalendar.init(force=True)
+    except Exception as e:
+        logger.error(f"Daily calendar sync failed: {e}")
+    logger.info(">>> DAILY CALENDAR SYNC COMPLETED <<<")
+
 def init_scheduler():
     scheduler = BackgroundScheduler()
     
@@ -61,6 +73,10 @@ def init_scheduler():
     trigger_sentiment = CronTrigger(hour=8, minute=30)
     scheduler.add_job(run_daily_sentiment_crawl, trigger_sentiment)
     
+    # 3. 每日交易日历自我刷新 (00:05) - 云端长效挂机维稳
+    trigger_calendar = CronTrigger(hour=0, minute=5)
+    scheduler.add_job(run_daily_calendar_sync, trigger_calendar)
+    
     scheduler.start()
-    logger.info("Scheduler initialized. Jobs: [Finalization @ 15:05], [Sentiment Crawl @ 08:30]")
+    logger.info("Scheduler initialized. Jobs: [Calendar Sync @ 00:05], [Sentiment Crawl @ 08:30], [Finalization @ 15:05]")
     return scheduler

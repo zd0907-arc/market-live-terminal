@@ -10,12 +10,12 @@ class TradeCalendar:
     _initialized = False
 
     @classmethod
-    def init(cls):
+    def init(cls, force: bool = False):
         """
         初始化交易日历
         从新浪财经获取上证指数(sh000001)的日K线日期，作为权威的交易日列表。
         """
-        if cls._initialized:
+        if cls._initialized and not force:
             return
 
         try:
@@ -25,29 +25,32 @@ class TradeCalendar:
             data = resp.json()
             
             if isinstance(data, list):
+                new_trade_days = set()
                 for item in data:
                     day = item.get('day')
                     if day:
-                        cls._trade_days.add(day)
+                        new_trade_days.add(day)
                 
                 # Workaround for VM having a future date: Fill in missing weekdays up to today
-                if cls._trade_days:
-                    max_d_str = max(cls._trade_days)
+                if new_trade_days:
+                    max_d_str = max(new_trade_days)
                     max_d = datetime.strptime(max_d_str, "%Y-%m-%d")
                     now = datetime.now()
                     while max_d.date() < now.date():
                         max_d += timedelta(days=1)
                         if max_d.weekday() < 5:  # Weekday
-                            cls._trade_days.add(max_d.strftime("%Y-%m-%d"))
+                            new_trade_days.add(max_d.strftime("%Y-%m-%d"))
 
-                logger.info(f"TradeCalendar initialized with {len(cls._trade_days)} trading days.")
+                # 只有成功获取并解析后，才真正覆盖旧缓存 (无损刷新机制)
+                cls._trade_days = new_trade_days
+                logger.info(f"TradeCalendar initialized with {len(cls._trade_days)} trading days (force={force}).")
                 cls._initialized = True
             else:
                 logger.warning("Failed to fetch trade calendar: invalid response format")
                 
         except Exception as e:
-            logger.error(f"Failed to init TradeCalendar: {e}")
-            # Fallback: do nothing, rely on empty set (logic will fail safe or use weekends)
+            logger.error(f"Failed to init TradeCalendar (force={force}): {e}")
+            # Fallback: do nothing, keep existing _trade_days intact if force refresh failed
 
     @classmethod
     def is_trade_day(cls, date_str: str) -> bool:
@@ -62,7 +65,21 @@ class TradeCalendar:
             except:
                 return False
                 
-        return date_str in cls._trade_days
+        if date_str in cls._trade_days:
+            return True
+            
+        # Server might have been running for days without re-init.
+        # If date_str is newer than max cached date, fallback to weekday check.
+        if cls._trade_days:
+            max_d_str = max(cls._trade_days)
+            if date_str > max_d_str:
+                try:
+                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                    return dt.weekday() < 5
+                except:
+                    return False
+                    
+        return False
 
     @classmethod
     def get_last_trading_day(cls, base_date: datetime = None) -> str:
