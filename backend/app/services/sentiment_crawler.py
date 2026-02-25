@@ -30,6 +30,7 @@ class SentimentCrawler:
         now = datetime.datetime.now()
         current_year = now.year
         
+        time_str = time_str.strip()
         if not time_str:
             return now.strftime("%Y-%m-%d %H:%M")
             
@@ -39,11 +40,6 @@ class SentimentCrawler:
                 return f"{now.strftime('%Y-%m-%d')} {time_str}"
             
             # Case 2: "02-12 14:00" -> MM-DD HH:MM
-            # 简单假设是今年，如果月份比当前月份大很多，可能是去年 (不太可能出现在第一页，除非很久没更新)
-            # 或者如果月份比当前月份大，且当前是一月，那可能是去年的
-            # 简单起见，直接拼当前年份
-            # 改进：如果 parsed_date > now + 1 day，说明跨年了 (比如现在是 2026-01-01，帖子是 12-31)
-            
             full_str = f"{current_year}-{time_str}"
             parsed_date = datetime.datetime.strptime(full_str, "%Y-%m-%d %H:%M")
             
@@ -52,7 +48,8 @@ class SentimentCrawler:
                 full_str = f"{current_year - 1}-{time_str}"
             
             return full_str
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Time parse error for '{time_str}': {e}")
             return now.strftime("%Y-%m-%d %H:%M")
 
     def fetch_guba_comments(self, stock_code: str, page: int = 1) -> List[Dict[str, Any]]:
@@ -96,7 +93,7 @@ class SentimentCrawler:
                     reply_div = post.find("span", class_="l2") or post.find("div", class_="reply")
                     title_div = post.find("span", class_="l3") or post.find("div", class_="title")
                     # author_div = post.find("span", class_="l4") or post.find("div", class_="author")
-                    time_div = post.find("span", class_="l5") or post.find("div", class_="pub_time")
+                    time_div = post.find("span", class_="l5") or post.find("div", class_="pub_time") or post.find("div", class_="update")
                     
                     if title_div and read_div:
                         title = title_div.get_text().strip()
