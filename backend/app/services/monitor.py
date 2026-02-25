@@ -85,8 +85,10 @@ class SentimentMonitor:
                 continue
 
             try:
-                # 1. Get all watchlist items
-                all_symbols = get_watchlist_items()
+                # 1. Get all watchlist items (it returns dicts like {'symbol': 'sh600000'})
+                all_symbols_raw = get_watchlist_items()
+                all_symbols = [s['symbol'] if isinstance(s, dict) else s for s in all_symbols_raw]
+                
                 # Remove active symbol from cold queue to avoid duplicate fetching
                 cold_symbols = [s for s in all_symbols if s != self.active_symbol]
                 
