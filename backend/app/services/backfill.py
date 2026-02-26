@@ -60,16 +60,47 @@ class BackfillService:
             pure_code = symbol
             if symbol.startswith('sz') or symbol.startswith('sh'):
                 pure_code = symbol[2:]
-                
-            df = await asyncio.to_thread(
-                ak.stock_zh_a_hist_min_em, 
-                symbol=pure_code, 
-                period='30', 
-                adjust='qfq'
-            )
             
+            df = None
+            try:
+                # 尝试带复权
+                df = await asyncio.wait_for(
+                    asyncio.to_thread(ak.stock_zh_a_hist_min_em, symbol=pure_code, period='30', adjust='qfq'),
+                    timeout=15.0
+                )
+                if df is None or df.empty:
+                    # 尝试不复权
+                    df = await asyncio.wait_for(
+                        asyncio.to_thread(ak.stock_zh_a_hist_min_em, symbol=pure_code, period='30', adjust=''),
+                        timeout=15.0
+                    )
+            except Exception as e:
+                logger.warning(f"[Backfill] EastMoney API Failed or Timeout for {symbol}: {e}")
+
+            # 发动新浪回退机制
             if df is None or df.empty:
-                logger.warning(f"[Backfill] No K-Line data for {symbol}")
+                logger.info(f"[Backfill] EastMoney returned empty for {symbol}, falling back to Sina Finance...")
+                try:
+                    sina_df = await asyncio.wait_for(
+                        asyncio.to_thread(ak.stock_zh_a_minute, symbol=symbol, period='30', adjust='qfq'),
+                        timeout=15.0
+                    )
+                    if sina_df is not None and not sina_df.empty:
+                        sina_df = sina_df.dropna(subset=['close'])
+                        df = pd.DataFrame({
+                            '时间': sina_df['day'],
+                            '收盘': sina_df['close'],
+                            '开盘': sina_df['open'],
+                            '最高': sina_df['high'],
+                            '最低': sina_df['low'],
+                            '成交量': sina_df['volume'],
+                            '成交额': sina_df['volume'] * sina_df['close'] # Approximation as Sina doesn't provide exact amount
+                        })
+                except Exception as e:
+                    logger.error(f"[Backfill] Sina API Failed for {symbol}: {e}")
+
+            if df is None or df.empty:
+                logger.warning(f"[Backfill] No K-Line data available across all sources for {symbol}")
                 return
 
             # Columns: 时间, 开盘, 收盘, 最高, 最低, 成交量, 成交额, ...
