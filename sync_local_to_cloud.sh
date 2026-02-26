@@ -32,8 +32,8 @@ echo "========================================================"
 echo " ☁️ 数据包打包完毕，准备通过 SSH 隧道注入云端服务器..."
 echo "========================================================"
 
-# 2. 传输文件到服务器数据目录
-scp sync_data.sql $SERVER_USER@$SERVER_IP:$PROJECT_DIR/data/sync_data.sql
+# 2. 传输文件到服务器 (先传到 ubuntu 用户的 home 目录，避开 Docker 的 root 权限导致 Permission denied)
+scp sync_data.sql $SERVER_USER@$SERVER_IP:~/sync_data.sql
 if [ $? -ne 0 ]; then
     echo "❌ SCP 传输失败，请确认是否需要密码登录或网络连通性。"
     rm -f sync_data.sql
@@ -44,12 +44,12 @@ fi
 ssh -t $SERVER_USER@$SERVER_IP << 'EOF'
     echo "🔌 正在连线 SQLite 数据库核心..."
     cd ~/market-live-terminal/deploy
-    # 使用 -T 参数避免 tty 分配警告，将 SQL 导入数据库
-    sudo docker compose exec -T backend sqlite3 data/market_data.db < ../data/sync_data.sql
+    # 将家目录的 sql 移动到当前可以被挂载读取的地方，这里用 sudo 或者直接丢给 docker stdin
+    sudo docker compose exec -T backend sqlite3 data/market_data.db < ~/sync_data.sql
     echo "✅ 云端数据库 30 分钟 K 线历史合并/覆盖完成！"
     
     # 顺手把服务器上的同步包删掉，保持整洁
-    rm -f ../data/sync_data.sql
+    rm -f ~/sync_data.sql
     exit
 EOF
 
