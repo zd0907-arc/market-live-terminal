@@ -6,6 +6,12 @@ from backend.app.core.calendar import TradeCalendar
 import logging
 import uvicorn
 import urllib3
+import os
+
+# Disable unstable system proxies that hang AkShare requests to EastMoney
+for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+    if k in os.environ:
+        del os.environ[k]
 
 # 1. Initialize DB FIRST (Before importing routers that might access DB)
 try:

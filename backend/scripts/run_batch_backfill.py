@@ -5,6 +5,11 @@ import os
 # Add project root to path
 sys.path.append(os.getcwd())
 
+# Force ignore system proxies that might interrupt EastMoney API
+for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
+    if k in os.environ:
+        del os.environ[k]
+
 from backend.app.services.backfill import BackfillService
 from backend.app.db.crud import get_watchlist_items
 from backend.app.core.calendar import TradeCalendar
