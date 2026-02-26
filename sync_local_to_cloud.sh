@@ -44,8 +44,8 @@ fi
 ssh -t $SERVER_USER@$SERVER_IP << 'EOF'
     echo "🔌 正在连线 SQLite 数据库核心..."
     cd ~/market-live-terminal/deploy
-    # 将家目录的 sql 移动到当前可以被挂载读取的地方，这里用 sudo 或者直接丢给 docker stdin
-    sudo docker compose exec -T backend sqlite3 data/market_data.db < ~/sync_data.sql
+    # 容器是精简版 python 没预装 sqlite3 命令行工具，因此直接用内置的 python sqlite3 库执行 SQL 管道
+    sudo docker compose exec -T backend python -c "import sys, sqlite3; conn=sqlite3.connect('data/market_data.db'); conn.executescript(sys.stdin.read()); conn.close()" < ~/sync_data.sql
     echo "✅ 云端数据库 30 分钟 K 线历史合并/覆盖完成！"
     
     # 顺手把服务器上的同步包删掉，保持整洁
