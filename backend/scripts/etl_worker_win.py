@@ -1,6 +1,6 @@
 """
 Offline L2 Tick Data Data ETL Worker (Designed for Windows)
-Usage: python etl_worker_win.py <source_csv_folder_path> <output_db_path>
+Usage: python etl_worker_win.py <source_folder> <output_db_path>
 """
 
 import os
@@ -9,6 +9,8 @@ import argparse
 import pandas as pd
 import sqlite3
 import datetime
+import zipfile
+import re
 from tqdm import tqdm
 
 def init_db(db_path):
@@ -48,14 +50,19 @@ def init_db(db_path):
     conn.commit()
     return conn
 
-def process_single_csv(file_path, symbol, date_str, conn, large_th=500000, super_th=1000000):
-    try:
-        df = pd.read_csv(file_path, engine='python', on_bad_lines='skip')
-    except Exception as e:
-        print(f"Error reading {file_path}: {e}")
-        return
+def is_valid_a_share(filename):
+    """过滤杂鱼：仅保留沪深A股 60(沪主), 68(科创), 00(深主), 30(创业)"""
+    base = os.path.basename(filename).lower().replace('.csv', '')
+    # 如果纯数字
+    if re.match(r'^(60|68|00|30)\d{4}$', base):
+        return ('sh' if base.startswith('6') else 'sz') + base
+    # 如果带前缀
+    m = re.match(r'^(sh|sz)(60|68|00|30)\d{4}$', base)
+    if m:
+        return base
+    return None
 
-    # Strip column spaces just in case
+def process_dataframe(df, symbol, date_str, conn, large_th, super_th):
     df.columns = [col.strip() for col in df.columns]
 
     if df.empty or 'Price' not in df.columns or 'Volume' not in df.columns:
@@ -69,8 +76,6 @@ def process_single_csv(file_path, symbol, date_str, conn, large_th=500000, super
     super_buy, super_sell = 0.0, 0.0
     main_buy, main_sell = 0.0, 0.0
 
-    # Fast numpy sum is possible but loop logic ensures strict tick attribution
-    # Optimization: Use pandas vectorized conditioning
     is_active_buy = df['Type'] == 'B'
     is_active_sell = df['Type'] == 'S'
 
@@ -103,10 +108,8 @@ def process_single_csv(file_path, symbol, date_str, conn, large_th=500000, super
     df['datetime'] = pd.to_datetime(f"{date_str} " + df['Time'])
     df.set_index('datetime', inplace=True)
 
-    # Force continuous 30m bins with label='left' so 09:30-10:00 becomes 09:30
     ohlc = df['Price'].resample('30min', label='left', closed='left').ohlc()
     
-    # We also need flows per 30m
     df['is_super_buy'] = (df['Type'] == 'B') & (df['buy_order_total_val'] >= super_th)
     df['is_super_sell'] = (df['Type'] == 'S') & (df['sell_order_total_val'] >= super_th)
     df['is_main_buy'] = (df['Type'] == 'B') & (df['buy_order_total_val'] >= large_th) & (~df['is_super_buy'])
@@ -122,11 +125,11 @@ def process_single_csv(file_path, symbol, date_str, conn, large_th=500000, super
     ohlc['main_buy'] = mb_30
     ohlc['main_sell'] = ms_30
 
-    ohlc.dropna(subset=['open', 'close', 'high', 'low'], inplace=True) # remove empty bins like 12:00
+    ohlc.dropna(subset=['open', 'close', 'high', 'low'], inplace=True) 
 
     # Insert 30m lines
     for start_time, row in ohlc.iterrows():
-        # filter valid trade hours: 09:30, 10:00, 10:30, 11:00, 13:00, 13:30, 14:00, 14:30
+        # filter valid trade hours
         h = start_time.hour
         m = start_time.minute
         if (h == 9 and m < 30) or (h == 11 and m >= 30) or (h == 12) or (h >= 15):
@@ -147,13 +150,29 @@ def process_single_csv(file_path, symbol, date_str, conn, large_th=500000, super
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (symbol, st_str, net, m_buy, m_sell, super_net, s_buy, s_sell, float(row['close']), float(row['open']), float(row['high']), float(row['low'])))
 
+def extract_date_from_path(path):
+    # try to find YYYY-MM-DD or YYYYMMDD
+    name = os.path.basename(path)
+    m1 = re.search(r'20\d{2}-\d{2}-\d{2}', name)
+    if m1:
+        return m1.group(0)
+    m2 = re.search(r'20\d{2}\d{2}\d{2}', name)
+    if m2:
+        return f"{m2.group(0)[:4]}-{m2.group(0)[4:6]}-{m2.group(0)[6:]}"
+        
+    parent_dir = os.path.basename(os.path.dirname(path))
+    m3 = re.search(r'20\d{2}-\d{2}-\d{2}', parent_dir)
+    if m3:
+        return m3.group(0)
+        
+    return '2023-01-01' # Fallback
+
 def main():
     parser = argparse.ArgumentParser(description="L2 Tick Offline ETL Toolkit")
-    parser.add_argument('src_folder', help='Directory containing the L2 history files (Folders by Date or CSVs)')
-    parser.add_argument('output_db', help='Path to output SQLite database (e.g., market_data_history.db)')
-    # Thresholds could optionally be passed or fetched remotely
-    parser.add_argument('--large', type=int, default=500000, help='Large Order Threshold in CNY')
-    parser.add_argument('--super', type=int, default=1000000, help='Super Large Order Threshold in CNY')
+    parser.add_argument('src_folder', help='Directory containing the L2 history files (Folders by Date, CSVs, or ZIPs)')
+    parser.add_argument('output_db', help='Path to output SQLite database')
+    parser.add_argument('--large', type=int, default=500000, help='Large Order Threshold')
+    parser.add_argument('--super', type=int, default=1000000, help='Super Large Threshold')
     args = parser.parse_args()
 
     if not os.path.exists(args.src_folder):
@@ -163,53 +182,43 @@ def main():
     print(f"[*] Initializing SQLite Engine at {args.output_db}")
     conn = init_db(args.output_db)
 
-    # 递归遍历寻找所有的 CSV
-    # 我们暂定您的目录结构是：
-    # /data
-    #   /2023-10-10
-    #      /603639.csv
-    #      /sz000001.csv
-    # 或者所有文件都在一起 603639_20231010.csv
-    # 为了鲁棒性，需要您根据实际文件命名结构进行轻微的日期识别调整。
-    # 这里提供一种通用的处理方案：
-    
-    csv_files = []
+    target_files = []
     for root, dirs, files in os.walk(args.src_folder):
         for f in files:
-            if f.endswith('.csv'):
-                csv_files.append(os.path.join(root, f))
+            if f.endswith('.csv') or f.endswith('.zip'):
+                target_files.append(os.path.join(root, f))
                 
-    print(f"[*] Found {len(csv_files)} historical tick CSV files.")
+    print(f"[*] Found {len(target_files)} target archives or files.")
     
-    for fpath in tqdm(csv_files, desc="ETL Processing"):
-        # 提取文件名作为股票代码
-        filename = os.path.basename(fpath)
-        base = filename.replace('.csv', '')
+    for fpath in tqdm(target_files, desc="Processing Archives"):
+        date_str = extract_date_from_path(fpath)
         
-        # 提取特征
-        # 假设如果父级目录是日期格式 2023-10-10，提取父级目录
-        parent_dir = os.path.basename(os.path.dirname(fpath))
-        
-        try:
-            # 尝试把父目录认作日期 YYYY-MM-DD
-            dt = datetime.datetime.strptime(parent_dir, '%Y-%m-%d')
-            date_str = parent_dir
-            symbol = base.lower()
-            if not symbol.startswith('sh') and not symbol.startswith('sz'):
-                symbol = ('sh' if symbol.startswith('6') else 'sz') + symbol
-        except ValueError:
-            # 如果父目录不是日期，这里可以扩展逻辑：手动指定一个统一假日期，或者根据文件名里提取日期
-            date_str = '2023-10-10'
-            symbol = base.lower()
-            if not symbol.startswith('sh') and not symbol.startswith('sz'):
-                symbol = ('sh' if symbol.startswith('6') else 'sz') + symbol
-
-        process_single_csv(fpath, symbol, date_str, conn, large_th=args.large, super_th=args.super)
+        if fpath.endswith('.zip'):
+            with zipfile.ZipFile(fpath, 'r') as zf:
+                csv_members = [m for m in zf.infolist() if m.filename.endswith('.csv')]
+                for member in csv_members:
+                    symbol = is_valid_a_share(member.filename)
+                    if not symbol: continue # Skip bonds/options
+                    
+                    with zf.open(member) as f:
+                        try:
+                            df = pd.read_csv(f, engine='python', on_bad_lines='skip')
+                            process_dataframe(df, symbol, date_str, conn, args.large, args.super)
+                        except Exception as e:
+                            pass
+        else:
+            symbol = is_valid_a_share(fpath)
+            if not symbol: continue
+            try:
+                df = pd.read_csv(fpath, engine='python', on_bad_lines='skip')
+                process_dataframe(df, symbol, date_str, conn, args.large, args.super)
+            except Exception as e:
+                pass
+                
         conn.commit()
         
     conn.close()
     print(f"\n[+] ETL Success! Database successfully saved to: {args.output_db}")
-    print("[+] Please securely transfer this DB payload to the cloud server!")
 
 if __name__ == "__main__":
     main()
