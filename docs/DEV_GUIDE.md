@@ -107,6 +107,11 @@ npm run dev
     *   **法则**:
         *   后端: 查不到数据需返回 `{"code": 200, "data": [], "message": "No data found"}` 并打印 `logger.warning`。
         *   前端: 必须展示【空状态占位图】(Empty State Placeholder)，如：“暂无数据，请检查本地数据库是否已同步云端”。
+4.  **【核心血泪法则】不准在云端运行爬虫 (Cloud is Display Only)**:
+    *   **历史教训**: 曾经的 AI 错误地认为“云端服务器资源多，可以直接把爬取 30 分钟 K 线图 (akshare) 的任务挂在云端后台”。结果云端的腾讯云公网 IP 被东方财富等数据源**永久封锁**，导致盘中实时数据全部断流。
+    *   **法则**:
+        *   云端 (Cloud/Ubuntu) 只能用来跑 FastAPI 和 Web UI，它提供接口暴露给前端，并持有最终的 `market_data.db`。它**绝对不**主动去外网抓数据。
+        *   盘中的高频轮询 (每3秒/每3分钟) **必须**运行在拥有动态家宽 IP 的 Windows 或 Mac 机器上。爬取后的数据通过调用云端的 Ingestion API 或 SSH 隧道推送给云端。
 
 ### 4.3 架构变动与 ADR (Architecture Decision Records) 记录法则
 如果你（AI 助手）在开发或诊断问题时认为需要**改变系统组件物理位置、改变大纲数据流向**（如：提出要在前端直连某新 API、或提出更换数据库引擎）：
