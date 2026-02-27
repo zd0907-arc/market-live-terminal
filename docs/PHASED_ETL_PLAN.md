@@ -2,6 +2,16 @@
 
 为了确保一年期（超数百GB）的庞大历史数据顺利融入腾讯云并展示在手机前端，我们采取稳扎稳打的“样本 -> 全局”验证策略。
 
+### 阶段2.4：正式全量清洗前的优化准备 (Pre-Computation Readiness)
+### 阶段2.4：正式全量清洗前的优化准备 (Pre-Computation Readiness)
+- **挑战**: L2 历史数据一年可能包含数百个 G 的压缩包，数万个 CSV 文件。原有的 `etl_worker_win.py` 是单线程循环读取，会导致长达数天且静默漏数据的处理过程。
+- **应对方案 (已执行)**:
+  1. 重构并提交了强悍的多进程 `etl_worker_win.py`。
+  2. 实现生产者-消费者模式，主进程单例负责批量写入 SQLite 避免 `database is locked` 错误。
+  3. 增加健壮的 `etl_error_log.txt` 异常追踪机制。
+
+---
+
 ## 第一阶段：POC 概念验证 (Mac 单机小批量) - 已部分完成
 - [x] 获取样本 CSV 数据 (`603639.csv`)。
 - [x] 验证 L2 数据中 `BuyOrderID` 和 `SaleOrderID` 字段是否完整。
