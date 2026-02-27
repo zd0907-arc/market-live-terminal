@@ -4,7 +4,8 @@ import sqlite3
 import logging
 
 # Ensure backend module is found
-sys.path.append(os.getcwd())
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(ROOT_DIR)
 
 from backend.app.services.analysis import aggregate_intraday_30m
 from backend.app.core.config import DB_FILE

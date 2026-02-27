@@ -14,10 +14,16 @@ async def fetch_and_generate_sql(symbols, output_file):
                 
             print(f"[*] 正在从本地宽带抓取 AkShare (东财) 30 分钟 K 线 -> {symbol} ...")
             try:
-                # 强制删除可能残留的代理环境变量
-                for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
-                    if k in os.environ:
-                        del os.environ[k]
+                # 终极屏蔽系统级代理的干扰 (针对 Mac 上的代理软件如 Clash 等导致 SSL 握手失败)
+                import urllib.request
+                urllib.request.getproxies = lambda: {}
+                os.environ['NO_PROXY'] = '*'
+                
+                # 同时强制禁用 requests 库读取任何环境变量代理
+                import requests
+                session = requests.Session()
+                session.trust_env = False
+                requests.sessions.Session = lambda: session # Monkey patch for AkShare
 
                 df = await asyncio.to_thread(ak.stock_zh_a_hist_min_em, symbol=pure_code, period='30', adjust='qfq')
                 if df is not None and not df.empty:

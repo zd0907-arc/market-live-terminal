@@ -3,7 +3,8 @@ import os
 from dotenv import dotenv_values, set_key
 from backend.app.core.config import DB_FILE
 
-ENV_PATH = os.path.join(os.getcwd(), ".env.local")
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+ENV_PATH = os.path.join(ROOT_DIR, ".env.local")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)

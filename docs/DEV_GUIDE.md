@@ -98,6 +98,20 @@ npm run dev
 
 ### 4.2 代码质量 "三不准"
 1.  **不准使用魔术数字 (No Magic Numbers)**:
+    *   所有大单/阈值判断，必须从 SQLite `app_config` 或 `.env` 读取，严禁在代码里写死 `> 200000`。
+2.  **绝对禁止使用相对路径读写核心文件 (No Relative Paths for IO)**:
+    *   **历史教训**: 曾经 `os.getcwd()` 导致在不同目录下执行脚本生成多个 `market_data.db` (真假库分裂)。
+    *   **法则**: Python 脚本如果需要读写 SQLite DB 或 `.env` 文件，**必须** 使用基于当前文件 `__file__` 动态向上解析 `ROOT_DIR` 的绝对路径。例如: `os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))`。
+3.  **不准无声吞没空数据 (No Silent Empty States)**:
+    *   **历史教训**: 前后端如果查询到 `[]` 就把图表组件整体 `display: none`，会导致开发者无法分辨是“报错闪退”还是“纯粹没数据”。
+    *   **法则**:
+        *   后端: 查不到数据需返回 `{"code": 200, "data": [], "message": "No data found"}` 并打印 `logger.warning`。
+        *   前端: 必须展示【空状态占位图】(Empty State Placeholder)，如：“暂无数据，请检查本地数据库是否已同步云端”。
+
+### 4.3 架构变动与 ADR (Architecture Decision Records) 记录法则
+如果你（AI 助手）在开发或诊断问题时认为需要**改变系统组件物理位置、改变大纲数据流向**（如：提出要在前端直连某新 API、或提出更换数据库引擎）：
+1. 你必须先查阅 `/docs/ARCHITECTURE_HISTORY.md`（架构演进史）了解目前的格局原因。
+2. 在获得用户批准变更后，**强制要求你主动修改** `/docs/ARCHITECTURE_HISTORY.md`，以 `[ADR-XXX]` 的格式新增一个条目，清晰写明：变更前 -> 变更后 -> 变更原因 (Why)。不能让未来的接替者去猜你的修改动机！
     *   ❌ `parts[3]`
     *   ✅ `parts[TencentSource.PRICE]`
 2.  **不准破坏数据库配置**:

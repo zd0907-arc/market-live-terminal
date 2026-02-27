@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端 (v3.0.9)
+# ZhangData 金融实时终端 (v4.0.0 分布式重生版)
 
 > **⚠️ 重要声明**: 本项目面向中文用户，所有文档、注释、Commit Message 必须使用 **中文** 编写。
 > **Strict Rule**: All documentation and comments must be written in Chinese.
@@ -6,10 +6,10 @@
 ## 1. 项目简介
 **ZhangData** 是一个**个人私有云**金融数据终端，专注于 A 股市场的 **主力资金流向监控** 与 **微观博弈分析**。
 
-它采用 **“云主地辅”** 的架构设计：
-*   **云端 (Cloud)**: 部署在腾讯云/阿里云。后端 24 小时长连接挂机运行，持续监控您的“核心关注池”，积累高频历史数据。
-*   **多端 (Clients)**: 支持 PC 浏览器、手机浏览器随时访问，数据实时同步。
-*   **本地 (Local)**: 仅用于开发调试，拥有独立的沙盒环境。
+它在 v4.0 时代正式演进为 **“云、离线网关、本地开发” 三体分布式架构**：
+*   **云端 (Cloud/Ubuntu)**: 部署在腾讯云/阿里云。后端 24 小时运行，承担对外 API 接口服务与前端 Web 页面托管，是唯一的线上数据源 (Single Source of Truth)。
+*   **离线算力网关 (Windows Node)**: 针对云端直连历史数据接口容易被封 IP 的痛点，特设本地局域网 Windows 机器为“离线数据提纯提炼厂”。将千 GB 级的发帖情绪和按秒盘口数据在后台清洗聚合，完成后通过 SCP 直投云端主库 (`market_data.db`)。
+*   **本地开发 (Mac Local)**: 仅用于特性开发调试，拥有严格隔离的沙盒环境。新开发特性前，使用 `sync_cloud_db.sh` 一键拉取云端生产库快照，确保不出假数据 Bug。
 
 ### 核心功能 (v3.0 系列跨越式升级)
 *   **多端完美自适应**: 秉持 Mobile-First 理念，使用 **同一套前端代码 (React + Tailwind CSS)** 智能且无缝地兼容宽屏桌面（左右面板极速分屏）与手机竖屏（纵向堆叠加悬浮吸顶表头），真正实现“随时随地盯盘”。
@@ -56,8 +56,9 @@ cd deploy && ./setup.sh && docker compose up -d
 *   💾 **[数据库字典 (Database Schema)](docs/DATABASE_SCHEMA.md)**
     *   详细的 SQLite 表结构说明。
 *   🛠️ **[开发与贡献指南 (Developer Guide)](docs/DEV_GUIDE.md)**
-    *   **AI 协作必读**。包含了 Git Flow 规范、环境搭建、测试规范 (`pytest`)。
-*   🚀 **[部署指南 (Deployment Guide)](docs/DEPLOY.md)**
+    *   **AI 协作铁律 (重点)**。确立了严厉的“代码质量三不准”、“绝不可用相对路径”及“强制记录 ADR”等防呆护航守则。
+*   � **[架构演进史 (ADR)](docs/ARCHITECTURE_HISTORY.md)**
+    *   记录项目为何要从单机演化为云端，又为何必须引入 Windows 节点等核心技术决策原因。
     *   服务器环境初始化、Docker 部署与日常运维手册。
 *   🔌 **[API 接口文档 (API Reference)](docs/API_REFERENCE.md)**
     *   后端接口定义。
@@ -70,12 +71,15 @@ cd deploy && ./setup.sh && docker compose up -d
 
 ## 5. 更新日志 (Changelog)
 
-### v3.0.5 (Latest)
-*   **Architecture**: **正式演进为多端云原生架构 (v3.0.0+)**。
-    *   全面支持 Docker 容器化部署 (`deploy/` 目录) 与腾讯云/阿里云的 24 小时后台挂机监控。
-    *   解决后端依赖缺失与因启动顺序引发的 SQLite 数据库被锁死的核心 Bug (v3.0.3 - v3.0.4)。
-*   **Feature**: 前端接入最新的“全量 60 日历史 K 线图”并实现动态合盘，底层重构数据库的 K 线表结构，彻底打通回溯屏障。
-*   **UI/UX**: 极致分离并重写了导致崩溃的 `visualMap` 图层渲染逻辑，取而代之的是通透立体的底置红绿面积博弈图，并引入极值强干预杜绝图层遮蔽。
+### v4.0.0 (Latest - Distributed Milestone)
+*   **Architecture**: **从云原生长效重构为分布式网络**。
+    *   引入独立的 Windows 节点执行重度历史盘口与舆情分析清洗，从物理架构层面破除 API 防爬虫 IP 封锁限制。
+    *   引入 `sync_cloud_db.sh` 机制，彻底修补“本地与生产数据割裂”造成的数据库分裂与 UI 组件莫名隐身问题。
+*   **AI Rule**: 向全项目植入针对大模型的 **AI Code-Pilot Rules (AI 三不准防线)** 并建立 ADR (架构演进史) 留存制度，确保未来的任意 AI 开发将不可犯下隐藏的魔法路径和隐没报错错误。
+
+### v3.0.x 系列回顾
+*   **Feature**: 前端接入“全量 60 日历史 K 线图”并实现动态合盘，底层重构数据库的 K 线表结构。
+*   **UI/UX**: 采用通透立体的底置红绿面积博弈图，并引入极值强干预杜绝图层遮蔽。
 
 ### v2.8.0
 *   **Feature**: **资金博弈 (Funds Game) 模块全面升级**。

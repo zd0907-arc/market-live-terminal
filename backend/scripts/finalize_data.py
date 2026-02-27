@@ -5,7 +5,8 @@ from datetime import datetime
 import logging
 
 # Ensure backend module is found
-sys.path.append(os.getcwd())
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(ROOT_DIR)
 
 from backend.app.services.collector import collector
 from backend.app.services.analysis import perform_aggregation

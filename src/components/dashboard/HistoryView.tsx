@@ -211,7 +211,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
             {!historyLoading && !historyError && (
                 <>
                     {/* Intraday Trend Chart */}
-                    {viewMode === 'intraday' && trendData.length > 0 && (
+                    {viewMode === 'intraday' && (
                         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
                             <div className="mb-2 flex justify-between items-center">
                                 <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -241,7 +241,17 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                             </div>
 
                             <div className="h-[400px]">
-                                <HistoryCandleChart data={trendData} height={400} priceRange={priceRange} />
+                                {trendData.length > 0 ? (
+                                    <HistoryCandleChart data={trendData} height={400} priceRange={priceRange} />
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-950/30 rounded-lg border border-slate-800/50">
+                                        <Database className="w-12 h-12 mb-4 opacity-20" />
+                                        <p>暂无 30 分钟历史数据，或所选日期范围内无数据记录</p>
+                                        <p className="text-xs mt-2 opacity-60">
+                                            此图表依赖本地 SQLite 中的历史数据，可执行 ./sync_cloud_db.sh 从生产环境同步
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

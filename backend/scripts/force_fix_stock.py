@@ -6,14 +6,15 @@ import sys
 import os
 
 # Ensure we can import from backend
-sys.path.append(os.getcwd())
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(ROOT_DIR)
 
 # Force ignore system proxies that might interrupt EastMoney API
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
     if k in os.environ:
         del os.environ[k]
 
-DB_PATH = 'data/market_data.db'
+from backend.app.core.config import DB_FILE as DB_PATH
 
 async def diagnose_and_fix(symbol):
     print(f"\n{'='*20} 诊断与修复: {symbol} {'='*20}")

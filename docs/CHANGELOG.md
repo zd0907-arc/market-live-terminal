@@ -1,5 +1,20 @@
 # 更新日志 (Changelog)
 
+## [v4.0.0] - 2026-02-28 (Milestone: 分布式 ETL 与 AI 防御性架构)
+**这是一个具有里程碑意义的重构版本，系统架构从“云端单体”正式演进为“云地协同”的分布式网络，并首次确立了面向大模型的《AI 开发铁律》。**
+
+### Architecture (架构大改)
+- **Windows 离线算力网关 (Distributed ETL)**: 引入独立的 Windows 节点作为“离线算力提纯机”。将繁重的历史海量数据解压、遍历、清洗及聚合运算全部下放到 Windows 端执行，彻底解决腾讯云端直接高频拉取历史数据导致的 IP 永久封禁危机。
+- **本地开发同步机制 (Data Snapshot Sync)**: 建立“本地共享云端快照”原则。新增 `sync_cloud_db.sh` 一键同步脚本，确保 Mac 本地写代码时 100% 消费云端真实数据，根除开发数据孤岛。
+- **架构决策记录 (ADR)**: 全新引入 `docs/ARCHITECTURE_HISTORY.md`，对项目的所有物理节点变迁进行持久化记录，强制要求未来所有 AI 贡献者在变更架构前先行记录动机 (Why)。
+
+### Stability & Fixes (稳健性重构)
+- **真假美猴王 Bug (Split-Brain DB)**: 彻底盘查并移除了整个后端 Python 体系 (`crud.py`, `scripts/` 等) 中所有的危险相对路径 (`os.getcwd()`) 和硬编码文件指向。
+- 改为使用强绝对路径的模块变量 `ROOT_DIR = os.path.dirname(...)`，确保任何位置调用的脚本都唯一打入项目根目录的核心 SQLite 数据库。
+- **Error Boundaries (空数据防御)**: 修复由于本地测试库 30 分钟数据真空导致前端组件直接隐形崩溃的问题。加入健壮的 Empty State Placeholder，明确提示开发者“暂无数据，请拉取快照”。
+
+### Documentation (AI 协作规范)
+- **AI Co-pilot Rules**: 在 `docs/DEV_GUIDE.md` 颁布【代码质量三不准】铁律，用严厉的红线限制未来的 AI 助手禁止使用魔术数字、禁止使用相对路径、禁止吞没无声报错，全方位提升后续迭代的“防呆”免疫力。
 ## [v3.0.11] - 2026-02-26
 ### Fixed
 - **Anti-Scraping Bypass (架构调整)**: 根据用户要求坚守东方财富数据源的统一性，**移除**了前一版本的新浪财经回退机制。

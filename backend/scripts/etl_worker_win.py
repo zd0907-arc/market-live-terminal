@@ -17,7 +17,7 @@ def init_db(db_path):
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.executescript('''
-        CREATE TABLE IF NOT MAIN.history_daily (
+        CREATE TABLE IF NOT EXISTS history_daily (
             symbol TEXT,
             date TEXT,
             name TEXT,
@@ -31,7 +31,7 @@ def init_db(db_path):
             PRIMARY KEY (symbol, date)
         );
 
-        CREATE TABLE IF NOT MAIN.history_30m (
+        CREATE TABLE IF NOT EXISTS history_30m (
             symbol TEXT,
             start_time TEXT,
             net_inflow REAL,
@@ -50,9 +50,15 @@ def init_db(db_path):
     conn.commit()
     return conn
 
-def is_valid_a_share(filename):
+def is_valid_a_share(filename, test_symbols=None):
     """过滤杂鱼：仅保留沪深A股 60(沪主), 68(科创), 00(深主), 30(创业)"""
     base = os.path.basename(filename).lower().replace('.csv', '')
+    
+    # If a specific test symbol list is provided, filter against it first
+    if test_symbols:
+        if base not in test_symbols and base.replace('sh', '').replace('sz', '') not in test_symbols:
+            return None
+            
     # 如果纯数字
     if re.match(r'^(60|68|00|30)\d{4}$', base):
         return ('sh' if base.startswith('6') else 'sz') + base
@@ -171,8 +177,9 @@ def main():
     parser = argparse.ArgumentParser(description="L2 Tick Offline ETL Toolkit")
     parser.add_argument('src_folder', help='Directory containing the L2 history files (Folders by Date, CSVs, or ZIPs)')
     parser.add_argument('output_db', help='Path to output SQLite database')
-    parser.add_argument('--large', type=int, default=500000, help='Large Order Threshold')
+    parser.add_argument('--large', type=int, default=200000, help='Large Order Threshold')
     parser.add_argument('--super', type=int, default=1000000, help='Super Large Threshold')
+    parser.add_argument('--test-symbols', nargs='+', help='Test mode: only process these specific symbols (e.g. 600519 000001)')
     args = parser.parse_args()
 
     if not os.path.exists(args.src_folder):
@@ -197,7 +204,7 @@ def main():
             with zipfile.ZipFile(fpath, 'r') as zf:
                 csv_members = [m for m in zf.infolist() if m.filename.endswith('.csv')]
                 for member in csv_members:
-                    symbol = is_valid_a_share(member.filename)
+                    symbol = is_valid_a_share(member.filename, args.test_symbols)
                     if not symbol: continue # Skip bonds/options
                     
                     with zf.open(member) as f:
@@ -207,7 +214,7 @@ def main():
                         except Exception as e:
                             pass
         else:
-            symbol = is_valid_a_share(fpath)
+            symbol = is_valid_a_share(fpath, args.test_symbols)
             if not symbol: continue
             try:
                 df = pd.read_csv(fpath, engine='python', on_bad_lines='skip')

@@ -3,7 +3,8 @@ import sys
 import os
 
 # Add project root to path
-sys.path.append(os.getcwd())
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(ROOT_DIR)
 
 # Force ignore system proxies that might interrupt EastMoney API
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
