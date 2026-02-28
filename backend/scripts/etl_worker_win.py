@@ -19,18 +19,28 @@ def init_db(db_path):
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     c.executescript('''
-        CREATE TABLE IF NOT EXISTS history_daily (
+        CREATE TABLE IF NOT EXISTS trade_ticks (
+            symbol TEXT,
+            time TEXT,
+            price REAL,
+            volume INTEGER,
+            amount REAL,
+            type TEXT,
+            date TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON trade_ticks (symbol, date);
+
+        CREATE TABLE IF NOT EXISTS local_history (
             symbol TEXT,
             date TEXT,
-            name TEXT,
             net_inflow REAL,
-            main_buy REAL,
-            main_sell REAL,
-            super_buy REAL,
-            super_sell REAL,
+            main_buy_amount REAL,
+            main_sell_amount REAL,
             close REAL,
-            turnover_rate REAL,
-            PRIMARY KEY (symbol, date)
+            change_pct REAL,
+            activity_ratio REAL,
+            config_signature TEXT,
+            UNIQUE(symbol, date, config_signature)
         );
 
         CREATE TABLE IF NOT EXISTS history_30m (
@@ -90,7 +100,7 @@ def process_dataframe(df, symbol, date_str, large_th, super_th):
         return [], []
 
     # --- 1. Compute Daily Flows ---
-    df['amount'] = df['Price'] * df['Volume']
+    df['amount'] = df['Price'] * df['Volume'] * 100  # volume is lots(一手), must multiply 100
     df['buy_order_total_val'] = df['BuyOrderVolume'] * df['Price']
     df['sell_order_total_val'] = df['SaleOrderVolume'] * df['Price']
 
@@ -113,8 +123,14 @@ def process_dataframe(df, symbol, date_str, large_th, super_th):
 
     net_inflow = (super_buy + main_buy) - (super_sell + main_sell)
     close_price = df['Price'].iloc[-1] if not df.empty else 0.0
+    change_pct = 0.0 # TODO: compute from pre-close if available
+    activity_ratio = 0.0 # TODO: compute if market total volume is given
 
-    daily_tuple = (symbol, date_str, '', float(net_inflow), float(main_buy), float(main_sell), float(super_buy), float(super_sell), float(close_price), 0.0)
+    # Tuple mapped to local_history schema (symbol, date, net_inflow, main_buy_amount, main_sell_amount, close, change_pct, activity_ratio, config_signature)
+    daily_tuple = (
+        symbol, date_str, float(net_inflow), float(main_buy + super_buy), float(main_sell + super_sell), 
+        float(close_price), change_pct, activity_ratio, "fixed_200k_1m_v1"
+    )
 
     # --- 2. Compute 30-Min K-Lines ---
     df['datetime'] = pd.to_datetime(f"{date_str} " + df['Time'])
@@ -252,9 +268,9 @@ def main():
             # Batch Insert inside Main Thread to avoid SQLite Lock
             if daily_tups:
                 cursor.executemany('''
-                    INSERT OR REPLACE INTO history_daily 
-                    (symbol, date, name, net_inflow, main_buy, main_sell, super_buy, super_sell, close, turnover_rate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO local_history 
+                    (symbol, date, net_inflow, main_buy_amount, main_sell_amount, close, change_pct, activity_ratio, config_signature)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', daily_tups)
                 total_daily += len(daily_tups)
                 
