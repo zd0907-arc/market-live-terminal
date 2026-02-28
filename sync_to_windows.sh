@@ -6,7 +6,7 @@
 # 目标：将 Mac 上的最新清洗脚本和开机自启程序，一键静默安装到 Windows 系统中
 # ==============================================================================
 
-WIN_IP="192.168.3.108"
+WIN_IP="100.115.228.56" # Tailscale 内网穿透 IP (Windows端)
 WIN_USER="laqiyuan"
 WIN_BASE_DIR="D:\market-live-terminal"
 
