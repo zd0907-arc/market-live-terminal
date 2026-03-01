@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, Pause, Play, BookOpen, Star, Server } from 'lucide-react';
+import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server } from 'lucide-react';
 import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
@@ -19,8 +19,8 @@ const App: React.FC = () => {
   const [searchHistory, setSearchHistory] = useState<SearchResult[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // View Mode
-  const [viewMode, setViewMode] = useState<'realtime' | 'history'>('realtime');
+  // View Mode: 三Tab合一
+  const [viewMode, setViewMode] = useState<'intraday_live' | 'intraday_30m' | 'daily'>('intraday_live');
 
   // Shared Data
   const [quote, setQuote] = useState<RealTimeQuote | null>(null);
@@ -251,21 +251,7 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* View Toggle (Mobile - Compact, Desktop - Normal) */}
-              <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 shrink-0">
-                <button
-                  onClick={() => setViewMode('realtime')}
-                  className={`flex items-center gap-1 md:gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-md text-xs md:text-sm font-medium transition-all ${viewMode === 'realtime' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <Activity className="w-3 h-3 md:w-4 md:h-4" /> <span className="hidden sm:inline">实时</span>
-                </button>
-                <button
-                  onClick={() => setViewMode('history')}
-                  className={`flex items-center gap-1 md:gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-md text-xs md:text-sm font-medium transition-all ${viewMode === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <BarChart3 className="w-3 h-3 md:w-4 md:h-4" /> <span className="hidden sm:inline">历史</span>
-                </button>
-              </div>
+              {/* Config Button (Mobile) */}
             </div>
 
             {/* Spacer for centering */}
@@ -426,8 +412,35 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* Three-Tab Switcher */}
+        {quote && (
+          <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+            <button
+              onClick={() => setViewMode('intraday_live')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              当日分时
+            </button>
+            <button
+              onClick={() => setViewMode('intraday_30m')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'intraday_30m' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              30分钟线
+            </button>
+            <button
+              onClick={() => setViewMode('daily')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'daily' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              日线
+            </button>
+          </div>
+        )}
+
         {/* Content Views */}
-        {quote && viewMode === 'realtime' && (
+        {quote && viewMode === 'intraday_live' && (
           <RealtimeView
             activeStock={activeStock}
             quote={quote}
@@ -436,11 +449,21 @@ const App: React.FC = () => {
           />
         )}
 
-        {quote && viewMode === 'history' && (
+        {quote && viewMode === 'intraday_30m' && (
           <HistoryView
             activeStock={activeStock}
             backendStatus={backendStatus}
             configVersion={configVersion}
+            forceViewMode="intraday"
+          />
+        )}
+
+        {quote && viewMode === 'daily' && (
+          <HistoryView
+            activeStock={activeStock}
+            backendStatus={backendStatus}
+            configVersion={configVersion}
+            forceViewMode="daily"
           />
         )}
 

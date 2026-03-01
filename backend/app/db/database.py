@@ -129,9 +129,14 @@ def init_db():
                  value TEXT
                  )''')
                  
-    # 插入默认配置
+    # 插入默认配置（INSERT OR IGNORE 保证已有值不被覆盖）
+    # 阈值 (V4.0 已写死，仅保持兼容)
     c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '500000')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
+    # LLM 配置默认值（防止数据库整库替换后丢失）
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_base_url', 'https://api.deepseek.com/v1')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_api_key', '')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', 'deepseek-chat')")
     
     conn.commit()
     conn.close()

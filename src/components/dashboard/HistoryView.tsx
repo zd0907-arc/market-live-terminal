@@ -11,9 +11,10 @@ interface HistoryViewProps {
     activeStock: SearchResult | null;
     backendStatus: boolean;
     configVersion?: number;
+    forceViewMode?: 'daily' | 'intraday';
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, configVersion }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, configVersion, forceViewMode }) => {
     // History State
     const [historySource, setHistorySource] = useState('sina');
     const [historyCompareMode, setHistoryCompareMode] = useState(false);
@@ -21,8 +22,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     const [historyCompareData, setHistoryCompareData] = useState<HistoryAnalysisData[]>([]);
 
     // Intraday Trend State (New)
-    const [viewMode, setViewMode] = useState<'daily' | 'intraday'>('daily');
-    const [trendDays, setTrendDays] = useState(60);
+    const [internalViewMode, setInternalViewMode] = useState<'daily' | 'intraday'>('daily');
+    const viewMode = forceViewMode || internalViewMode;
+    const trendDays_default = 60;
+    const [trendDays, setTrendDays] = useState(trendDays_default);
     const [trendData, setTrendData] = useState<HistoryTrendData[]>([]);
     const [trendRefreshKey, setTrendRefreshKey] = useState(0);
 
@@ -145,21 +148,23 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
             {/* Config Button Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
-                {/* View Mode Toggle */}
-                <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 w-full md:w-auto overflow-x-auto">
-                    <button
-                        onClick={() => setViewMode('daily')}
-                        className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        日线统计
-                    </button>
-                    <button
-                        onClick={() => setViewMode('intraday')}
-                        className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                    >
-                        30分钟趋势
-                    </button>
-                </div>
+                {/* View Mode Toggle (only show when not controlled by parent) */}
+                {!forceViewMode && (
+                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 w-full md:w-auto overflow-x-auto">
+                        <button
+                            onClick={() => setInternalViewMode('daily')}
+                            className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            日线统计
+                        </button>
+                        <button
+                            onClick={() => setInternalViewMode('intraday')}
+                            className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            30分钟趋势
+                        </button>
+                    </div>
+                )}
 
                 <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
                     {(historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && viewMode === 'daily' && (

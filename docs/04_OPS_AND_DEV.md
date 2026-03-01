@@ -89,7 +89,36 @@ ssh ubuntu@111.229.144.202 "sqlite3 ~/market-live-terminal/data/market_data.db '
 
 ---
 
-## 五、 AI 协作与测试闭环铁则 (E2E Testing Protocol)
+## 五、 版本号管理与 Git 分支规范
+
+### 5.1 版本号格式 (Semantic Versioning)
+```
+格式: MAJOR.MINOR.PATCH （如 4.1.0）
+- MAJOR: 架构级变更（v3→v4 分布式重构）
+- MINOR: 功能新增或 UI 重大改版
+- PATCH: Bug 修复、文档更新
+```
+
+### 5.2 版本号更新流程
+1. 修改 `package.json` → `version` 字段
+2. 修改 `src/version.ts` → `APP_VERSION` 常量 + `RELEASE_NOTES` 首位添加说明
+3. `git commit -m "release: vX.Y.Z"`
+4. `git tag vX.Y.Z && git push origin main --tags`
+
+### 5.3 Git 分支命名规范
+```
+main                    # 唯一主干，始终可部署到云端
+feature/v4.x-描述       # 功能开发分支，完成后合并删除
+hotfix/简短描述         # 紧急修复
+release/vX.Y.Z         # 发版准备（如需要冻结测试）
+```
+
+> **红线**：GitHub 上只保留 `main` + 版本 Tag。功能分支合并后必须删除。
+
+---
+
+## 六、 AI 协作与测试闭环铁则 (E2E Testing Protocol)
+
 
 为了杜绝“脚本跑通即宣布胜利”引发的**假性成功**（如：脚本无报错但数据未合入库，导致前端图表依旧无数据），所有协助本项目的 AI 必须将以下测试思想刻入底层：
 
