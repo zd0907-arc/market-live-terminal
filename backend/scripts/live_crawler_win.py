@@ -34,6 +34,17 @@ def get_watchlist():
         logger.error(f"Failed to fetch watchlist from {CLOUD_URL}: {e}")
     return []
 
+def get_active_symbols():
+    """V4: 从云端拉取当前有前端心跳的活跃股票"""
+    try:
+        resp = requests.get(f"{CLOUD_URL}/api/monitor/active_symbols", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get('data', [])
+    except Exception as e:
+        logger.error(f"Failed to fetch active_symbols from {CLOUD_URL}: {e}")
+    return []
+
 def is_trading_time():
     now = datetime.now()
     current_time = now.time()
@@ -76,10 +87,17 @@ def fetch_tencent_snapshot(symbol):
         
         oib = bid1_v - ask1_v
         
+        # Extract date precisely from parts[30] if available (Tencent snapshot usually has YYYYMMDDHHMMSS)
+        dt_str = parts[30] if len(parts) > 30 and len(parts[30]) >= 14 else ""
+        if dt_str:
+            target_date = f"{dt_str[:4]}-{dt_str[4:6]}-{dt_str[6:8]}"
+        else:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+            
         return {
             "symbol": symbol,
             "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "date": datetime.now().strftime("%Y-%m-%d"),
+            "date": target_date,
             "cvd": 0.0, # Will need full order book for real CVD, simplify for now
             "oib": float(oib),
             "signals": "[]",
@@ -92,15 +110,23 @@ def fetch_tencent_snapshot(symbol):
         return None
 
 async def poll_snapshots_loop():
-    logger.info("Started Snapshot Poller (3s interval)")
+    logger.info("Started Snapshot Poller (Dynamic 3s/10s interval)")
     while True:
         if not is_trading_time():
             await asyncio.sleep(60)
             continue
             
-        watchlist = get_watchlist()
+        active_targets = get_active_symbols()
+        
+        if not active_targets:
+            # Cold state: No active viewers, sleep and skip snapshot fetching
+            logger.debug("No active viewers. Sleeping 10s...")
+            await asyncio.sleep(10)
+            continue
+            
+        # Hot state: Fast 3s fetching for active symbols ONLY
         snapshots = []
-        for sym in watchlist:
+        for sym in active_targets:
             s_data = fetch_tencent_snapshot(sym)
             if s_data:
                 snapshots.append(s_data)
@@ -121,14 +147,39 @@ async def poll_snapshots_loop():
 # ==========================================
 # Task: 3-Minute Trade Ticks (AkShare JS TX)
 # ==========================================
-def fetch_and_post_ticks():
-    watchlist = get_watchlist()
-    today_str = datetime.now().strftime("%Y-%m-%d")
+def get_trading_date(symbol="sh600000"):
+    """Get the true latest trading date from a Tencent snapshot to avoid weekend mismatch."""
+    try:
+        snap = fetch_tencent_snapshot(symbol)
+        if snap and snap.get('date'):
+            return snap['date']
+    except Exception as e:
+        pass
     
-    for symbol in watchlist:
+    # Fallback to simple weekday offset if Tencent fails
+    now = datetime.now()
+    if now.weekday() == 5: # Saturday
+        return (now.replace(day=now.day-1)).strftime("%Y-%m-%d")
+    elif now.weekday() == 6: # Sunday
+        from datetime import timedelta
+        return (now - timedelta(days=2)).strftime("%Y-%m-%d")
+        
+    return now.strftime("%Y-%m-%d")
+
+def fetch_and_post_ticks(target_symbols=None):
+    if target_symbols is None:
+        watchlist = get_watchlist()
+        if not watchlist: return
+        target_symbols = [item['symbol'] if isinstance(item, dict) else item for item in watchlist]
+    
+    if not target_symbols: return
+    
+    today_str = get_trading_date(target_symbols[0])
+    
+    for sym in target_symbols:
         try:
-            logger.info(f"Fetching Ticks: {symbol}")
-            df = ak.stock_zh_a_tick_tx_js(symbol)
+            logger.info(f"Fetching Ticks: {sym}")
+            df = ak.stock_zh_a_tick_tx_js(sym)
             if df is None or df.empty:
                 continue
                 
@@ -140,10 +191,11 @@ def fetch_and_post_ticks():
             ticks_list = []
             for _, row in df.iterrows():
                 t_time = row['成交时间']
-                if t_time > "15:00:05": continue
+                # Accept ticks up to 15:05:05 as auction data might trickle in
+                if t_time > "15:06:00": continue
                 
                 ticks_list.append({
-                    "symbol": symbol,
+                    "symbol": sym,
                     "time": t_time,
                     "price": float(row['成交价格']),
                     "volume": int(row[vol_col]),
@@ -164,19 +216,55 @@ def fetch_and_post_ticks():
                     logger.error(f" -> Push failed: {res.status_code} {res.text}")
                     
         except Exception as e:
-            logger.error(f"Tick task failed for {symbol}: {e}")
+            logger.error(f"Tick task failed for {sym}: {e}")
 
 async def poll_ticks_loop():
-    logger.info("Started Trade Ticks Poller (3min interval)")
-    # Trigger an immediate run
-    if is_trading_time():
-        fetch_and_post_ticks()
-        
+    logger.info("Started Trade Ticks Poller (Dynamic interval)")
+    
+    has_done_final_sweep = False
+    last_tick_fetch_time = {} # Track last fetch time per active symbol
+    
     while True:
-        await asyncio.sleep(180) # 3 minutes
-        if not is_trading_time():
+        now = datetime.now()
+        current_time = now.strftime("%H:%M:%S")
+        
+        # --- Step 5: 终极收网：收盘后强制全量覆盖一次 (Fallback Sweep) ---
+        if "15:01:00" <= current_time <= "15:10:00":
+            if not has_done_final_sweep:
+                logger.info(">>> Executing 15:05 FINAL SWEEP FOR ALL WATCHLIST STOCKS <<<")
+                # None param forces it to fetch the entire watchlist
+                fetch_and_post_ticks(None)
+                has_done_final_sweep = True
+                await asyncio.sleep(60)
             continue
-        fetch_and_post_ticks()
+            
+        if "09:00:00" <= current_time <= "09:15:00":
+            has_done_final_sweep = False
+            
+        if not is_trading_time():
+            await asyncio.sleep(60)
+            continue
+            
+        # --- Step 4: 仅对活跃股票拉取高频 Tick ---
+        active_targets = get_active_symbols()
+        if not active_targets:
+            # Cold state: Sleep 10s
+            await asyncio.sleep(10)
+            continue
+            
+        # For active stocks, fetch ticks roughly every 10-30 seconds instead of 3 mins
+        # to ensure the realtime chart is extremely smooth
+        symbols_to_fetch = []
+        for sym in active_targets:
+            last_fetch = last_tick_fetch_time.get(sym, 0)
+            if now.timestamp() - last_fetch >= 20: # Fetch active ticks every 20 seconds
+                symbols_to_fetch.append(sym)
+                last_tick_fetch_time[sym] = now.timestamp()
+                
+        if symbols_to_fetch:
+            fetch_and_post_ticks(symbols_to_fetch)
+            
+        await asyncio.sleep(5)
 
 async def main_loop():
     logger.info(f"Windows Live Crawler Agent Initialized. Targeting Cloud: {CLOUD_URL}")

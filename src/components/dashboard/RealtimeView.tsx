@@ -44,8 +44,11 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     useEffect(() => {
         if (!activeStock) return;
 
-        // Notify backend to focus on this stock (High Freq Mode)
-        StockService.focusSymbol(activeStock.symbol);
+        // 策略A：前端发送心跳，激活后端注册表的追踪
+        StockService.sendHeartbeat(activeStock.symbol);
+        const heartbeatInterval = setInterval(() => {
+            if (isMounted) StockService.sendHeartbeat(activeStock.symbol);
+        }, 10000); // Send heartbeat every 10 seconds
 
         // Reset data on stock change
         setDisplayTicks([]);
@@ -86,7 +89,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     }
 
                     const now = new Date();
-                    setLastUpdated(now.toLocaleTimeString());
+                    setLastUpdated(now.toTimeString().split(' ')[0]); // 24-hour format HH:MM:SS
                     if (data.display_date) {
                         setDisplayDate(data.display_date);
                     }
@@ -105,8 +108,8 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
 
         return () => {
             isMounted = false;
-            // Notify backend to stop high freq polling
-            StockService.unfocusSymbol();
+            // 心跳随组件卸载自动停止
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
             if (intervalId) clearInterval(intervalId);
         };
     }, [activeStock, forceRefresh]);
@@ -171,8 +174,12 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
 
                     <div className="flex items-center gap-4">
                         {/* Status Indicator */}
-                        {isBackfillMode() ? (
-                            <span className="text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded animate-pulse border border-yellow-500/20">
+                        {!displayDate ? (
+                            <span className="text-[11px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                                ⚪ 状态检测中...
+                            </span>
+                        ) : isBackfillMode() ? (
+                            <span className="text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
                                 🟡 回溯模式: {displayDate} ({getWeekDay(displayDate)})
                             </span>
                         ) : (
@@ -268,9 +275,14 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                                     <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500} />
                                 </ComposedChart>
                             </ResponsiveContainer>
+                        ) : displayDate ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
+                                <span>{isBackfillMode() ? '当前回溯日期无本地 Tick 数据' : '暂无交易数据'}</span>
+                                {isBackfillMode() && <span className="text-xs text-slate-600">本地数据库未在此日期保存该股票的明细记录</span>}
+                            </div>
                         ) : (
                             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                                等待数据...
+                                加载中...
                             </div>
                         )}
                     </div>

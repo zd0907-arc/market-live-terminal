@@ -9,6 +9,36 @@ from backend.app.services.market import fetch_live_ticks
 
 logger = logging.getLogger(__name__)
 
+class HeartbeatRegistry:
+    def __init__(self):
+        # Dictionary mapping symbol to last heartbeat timestamp
+        self.active_watchers: Dict[str, datetime] = {}
+        self.timeout_seconds = 30
+
+    def register_heartbeat(self, symbol: str):
+        self.active_watchers[symbol] = datetime.now()
+        logger.debug(f"Heartbeat registered for {symbol}")
+
+    def get_active_symbols(self) -> List[str]:
+        now = datetime.now()
+        active = []
+        # Evict stale entries while collecting active ones
+        stale_symbols = []
+        for symbol, last_seen in self.active_watchers.items():
+            if (now - last_seen).total_seconds() <= self.timeout_seconds:
+                active.append(symbol)
+            else:
+                stale_symbols.append(symbol)
+                
+        for symbol in stale_symbols:
+            del self.active_watchers[symbol]
+            logger.info(f"Evicted {symbol} from ActiveWatchers due to timeout")
+            
+        return active
+
+heartbeat_registry = HeartbeatRegistry()
+
+
 class TencentSource:
     """Constants for Tencent Market Data API (qt.gtimg.cn)"""
     PRICE = 3

@@ -16,13 +16,13 @@ const loadScript = (url: string): Promise<void> => {
       reject(new Error(`Script load failed: ${url}`));
       cleanup();
     };
-    
+
     const cleanup = () => {
       if (document.body.contains(script)) {
         document.body.removeChild(script);
       }
     };
-    
+
     document.body.appendChild(script);
   });
 };
@@ -31,7 +31,7 @@ const jsonp = (url: string, callbackName: string, timeout = 5000): Promise<any> 
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = url;
-    
+
     const timeoutId = setTimeout(() => {
       cleanup();
       reject(new Error(`Request timeout: ${url}`));
@@ -70,9 +70,9 @@ export const checkBackendHealth = async (): Promise<boolean> => {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
-    
+
     // 使用新的 /api/health 接口
-    const response = await fetch(`${API_BASE_URL}/health`, { 
+    const response = await fetch(`${API_BASE_URL}/health`, {
       method: 'GET',
       signal: controller.signal
     });
@@ -89,46 +89,46 @@ export const checkBackendHealth = async (): Promise<boolean> => {
 export const searchStock = (query: string): Promise<SearchResult[]> => {
   return new Promise((resolve) => {
     if (!query) return resolve([]);
-    
+
     const varName = `suggestdata_${Date.now()}`;
     const url = `https://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}&name=${varName}`;
-    
+
     const script = document.createElement('script');
     script.src = url;
-    
+
     script.onload = () => {
       const raw = (window as any)[varName];
       if (!raw) {
-        resolve([]); 
+        resolve([]);
         return;
       }
-      
+
       const lines = raw.split(';');
       const results: SearchResult[] = [];
-      
+
       lines.forEach((line: string) => {
         const parts = line.split(',');
         if (parts.length > 4) {
-           const code = parts[2];
-           const symbol = parts[3]; 
-           if (/^(sh|sz|bj)\d{6}$/.test(symbol)) {
-             results.push({
-               name: parts[4],
-               code: code,
-               symbol: symbol,
-               market: parts[3].substring(0, 2)
-             });
-           }
+          const code = parts[2];
+          const symbol = parts[3];
+          if (/^(sh|sz|bj)\d{6}$/.test(symbol)) {
+            results.push({
+              name: parts[4],
+              code: code,
+              symbol: symbol,
+              market: parts[3].substring(0, 2)
+            });
+          }
         }
       });
       resolve(results);
-      try { delete (window as any)[varName]; } catch(e){}
-      if(document.body.contains(script)) document.body.removeChild(script);
+      try { delete (window as any)[varName]; } catch (e) { }
+      if (document.body.contains(script)) document.body.removeChild(script);
     };
-    
+
     script.onerror = () => {
-        if(document.body.contains(script)) document.body.removeChild(script);
-        resolve([]);
+      if (document.body.contains(script)) document.body.removeChild(script);
+      resolve([]);
     };
     document.body.appendChild(script);
   });
@@ -144,7 +144,7 @@ export const fetchQuote = async (symbol: string): Promise<RealTimeQuote> => {
   try {
     await loadScript(url);
     const dataStr = (window as any)[varName];
-    
+
     if (!dataStr) {
       throw new Error("No data received from Tencent API");
     }
@@ -161,13 +161,13 @@ export const fetchQuote = async (symbol: string): Promise<RealTimeQuote> => {
       price: parseFloat(parts[3]),
       lastClose: parseFloat(parts[4]),
       open: parseFloat(parts[5]),
-      high: parseFloat(parts[33]), 
-      low: parseFloat(parts[34]),  
-      volume: parseFloat(parts[6]) * 100, 
-      amount: parseFloat(parts[37]) * 10000, 
-      time: parts[30].substring(8, 14).replace(/(..)(..)(..)/, '$1:$2:$3'), 
+      high: parseFloat(parts[33]),
+      low: parseFloat(parts[34]),
+      volume: parseFloat(parts[6]) * 100,
+      amount: parseFloat(parts[37]) * 10000,
+      time: parts[30].substring(8, 14).replace(/(..)(..)(..)/, '$1:$2:$3'),
       date: parts[30].substring(0, 8).replace(/(....)(..)(..)/, '$1-$2-$3'),
-      
+
       bids: [
         { price: parseFloat(parts[9]), volume: parseInt(parts[10]) },
         { price: parseFloat(parts[11]), volume: parseInt(parts[12]) },
@@ -184,7 +184,7 @@ export const fetchQuote = async (symbol: string): Promise<RealTimeQuote> => {
       ]
     };
 
-    try { delete (window as any)[varName]; } catch(e){}
+    try { delete (window as any)[varName]; } catch (e) { }
     return quote;
 
   } catch (error) {
@@ -199,28 +199,28 @@ export const fetchQuote = async (symbol: string): Promise<RealTimeQuote> => {
 // 旧版前端直连 Eastmoney (仅用于备用或实时性极高的场景)
 export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
   // ... (保留原有的 Eastmoney 逻辑作为 fetchTicksLive)
-  const marketCode = symbol.substring(0, 2); 
+  const marketCode = symbol.substring(0, 2);
   const code = symbol.substring(2);
   const marketId = marketCode === 'sh' ? '1' : '0';
 
-  const cb = `cb_ticks_${Date.now()}_${Math.floor(Math.random()*10000)}`;
+  const cb = `cb_ticks_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const url = `https://push2.eastmoney.com/api/qt/stock/details/get?secid=${marketId}.${code}&fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54,f55&pos=-50&iscca=1&invt=2&cb=${cb}`;
 
   try {
     const res = await jsonp(url, cb, 3000);
     const data = res?.data?.details;
-    
+
     if (!data || !Array.isArray(data)) return [];
 
     return data.map((itemStr: string) => {
       const parts = itemStr.split(',');
-      if(parts.length < 5) return null;
+      if (parts.length < 5) return null;
 
       const time = parts[0];
       const price = parseFloat(parts[1]);
-      const volume = parseInt(parts[2]); 
-      const typeCode = parseInt(parts[4]); 
-      
+      const volume = parseInt(parts[2]);
+      const typeCode = parseInt(parts[4]);
+
       const amount = price * volume * 100;
 
       let type: 'buy' | 'sell' | 'neutral' = 'neutral';
@@ -235,7 +235,7 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
         type: type,
         color: type === 'buy' ? 'text-red-500' : (type === 'sell' ? 'text-green-500' : 'text-slate-400')
       };
-    }).filter((item: any) => item !== null).reverse(); 
+    }).filter((item: any) => item !== null).reverse();
   } catch (e) {
     console.warn("Live tick fetch error:", e);
     return [];
@@ -243,38 +243,38 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
 };
 
 export const fetchRealtimeDashboard = async (symbol: string) => {
-    // URL 中已经包含了 /api，所以这里去掉多余的 api 路径拼接，或者调整 API_BASE_URL
-    // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里应该是 `/api/realtime/dashboard`
-    // 但原来的路径是 /api/realtime/dashboard，所以直接拼
-    const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}`;
-    try {
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        const json = await response.json();
-        if (json.code === 200) {
-            return json.data; // { chart_data, cumulative_data, latest_ticks }
-        }
-        return null;
-    } catch (e) {
-        console.error("Realtime dashboard fetch error:", e);
-        return null;
+  // URL 中已经包含了 /api，所以这里去掉多余的 api 路径拼接，或者调整 API_BASE_URL
+  // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里应该是 `/api/realtime/dashboard`
+  // 但原来的路径是 /api/realtime/dashboard，所以直接拼
+  const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const json = await response.json();
+    if (json.code === 200) {
+      return json.data; // { chart_data, cumulative_data, latest_ticks }
     }
+    return null;
+  } catch (e) {
+    console.error("Realtime dashboard fetch error:", e);
+    return null;
+  }
 };
 
 // ==========================================
 // Watchlist API
 // ==========================================
 export const addToWatchlist = async (symbol: string, name: string) => {
-    await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
 };
 
 export const removeFromWatchlist = async (symbol: string) => {
-    await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, { method: 'DELETE' });
 };
 
 export const getWatchlist = async (): Promise<any[]> => {
-    const res = await fetch(`${API_BASE_URL}/watchlist`);
-    return await res.json();
+  const res = await fetch(`${API_BASE_URL}/watchlist`);
+  return await res.json();
 };
 
 // ==========================================
@@ -287,7 +287,7 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
     const json = await res.json();
     // 统一处理后端返回的 {code: 200, data: [...]} 格式
     if (json && json.data && Array.isArray(json.data)) {
-        return json.data;
+      return json.data;
     }
     return [];
   } catch (e) {
@@ -302,7 +302,7 @@ export const fetchHistoryTrend = async (symbol: string, days: number = 20): Prom
     const res = await fetch(url);
     const json = await res.json();
     if (json.code === 200 && Array.isArray(json.data)) {
-        return json.data;
+      return json.data;
     }
     return [];
   } catch (e) {
@@ -312,71 +312,79 @@ export const fetchHistoryTrend = async (symbol: string, days: number = 20): Prom
 };
 
 export const aggregateLocalHistory = async (symbol: string, date?: string) => {
-    const url = `${API_BASE_URL}/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
-    await fetch(url, { method: 'POST' });
+  const url = `${API_BASE_URL}/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
+  await fetch(url, { method: 'POST' });
 };
 
 export const getAppConfig = async () => {
-    const res = await fetch(`${API_BASE_URL}/config`);
-    return await res.json();
+  const res = await fetch(`${API_BASE_URL}/config`);
+  return await res.json();
 };
 
 export const updateAppConfig = async (key: string, value: string) => {
-    await fetch(`${API_BASE_URL}/config`, { 
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ key, value })
-    });
+  await fetch(`${API_BASE_URL}/config`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ key, value })
+  });
 };
 
 export const testLLMConnection = async (config: {
-    base_url: string;
-    api_key: string;
-    model: string;
-    proxy?: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  proxy?: string;
 }) => {
-    const res = await fetch(`${API_BASE_URL}/config/test-llm`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(config)
-    });
-    return await res.json();
+  const res = await fetch(`${API_BASE_URL}/config/test-llm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(config)
+  });
+  return await res.json();
 };
 
 export const verifyRealtime = async (symbol: string) => {
-    const res = await fetch(`${API_BASE_URL}/verify_realtime?symbol=${symbol}`);
-    return await res.json();
+  const res = await fetch(`${API_BASE_URL}/verify_realtime?symbol=${symbol}`);
+  return await res.json();
 };
 
 export const fetchSentimentData = async (symbol: string) => {
-    const res = await fetch(`${API_BASE_URL}/sentiment?symbol=${symbol}`);
-    const json = await res.json();
-    return json.data;
+  const res = await fetch(`${API_BASE_URL}/sentiment?symbol=${symbol}`);
+  const json = await res.json();
+  return json.data;
 };
 
 // ==========================================
 // Focus Management (Hot/Cold Queue)
 // ==========================================
 export const focusSymbol = async (symbol: string) => {
-    try {
-        await fetch(`${API_BASE_URL}/focus`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol })
-        });
-    } catch (e) {
-        console.error("Focus error:", e);
-    }
+  try {
+    await fetch(`${API_BASE_URL}/focus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol })
+    });
+  } catch (e) {
+    console.error("Focus error:", e);
+  }
+};
+
+export const sendHeartbeat = async (symbol: string) => {
+  try {
+    await fetch(`${API_BASE_URL}/heartbeat?symbol=${symbol}`, { method: 'POST' });
+  } catch (e) {
+    console.error("Heartbeat error:", e);
+  }
 };
 
 export const unfocusSymbol = async () => {
-    try {
-        await fetch(`${API_BASE_URL}/unfocus`, { method: 'POST' });
-    } catch (e) {
-        console.error("Unfocus error:", e);
-    }
+  try {
+    await fetch(`${API_BASE_URL}/unfocus`, { method: 'POST' });
+  } catch (e) {
+    console.error("Unfocus error:", e);
+  }
 };

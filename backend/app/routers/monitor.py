@@ -12,8 +12,7 @@ router = APIRouter()
 @router.post("/focus", response_model=APIResponse)
 def focus_symbol(symbol: str = Body(..., embed=True)):
     """
-    Tell the backend that the user is currently viewing this symbol.
-    The monitor service will promote this symbol to the HOT queue (high freq).
+    [Legacy] Tell the backend that the user is currently viewing this symbol.
     """
     monitor.set_active_symbol(symbol)
     return APIResponse(code=200, message=f"Focus set to {symbol}")
@@ -21,11 +20,30 @@ def focus_symbol(symbol: str = Body(..., embed=True)):
 @router.post("/unfocus", response_model=APIResponse)
 def unfocus_symbol():
     """
-    Tell the backend that the user left the detail view.
-    The monitor service will stop high freq polling for the active symbol.
+    [Legacy] Tell the backend that the user left the detail view.
     """
     monitor.set_active_symbol(None)
     return APIResponse(code=200, message="Focus cleared")
+
+@router.post("/heartbeat", response_model=APIResponse)
+def register_heartbeat(symbol: str = Query(...)):
+    """
+    [V4] Register a frontend heartbeat for a symbol.
+    Indicates that the user is actively watching this stock.
+    """
+    from backend.app.services.monitor import heartbeat_registry
+    heartbeat_registry.register_heartbeat(symbol)
+    return APIResponse(code=200, message=f"Heartbeat registered for {symbol}")
+
+@router.get("/active_symbols", response_model=APIResponse)
+def get_active_symbols():
+    """
+    [V4] Get the list of currently active symbols (having recent heartbeats).
+    Used by the Windows Crawler to determine which stocks to fetch in high frequency.
+    """
+    from backend.app.services.monitor import heartbeat_registry
+    active_symbols = heartbeat_registry.get_active_symbols()
+    return APIResponse(code=200, data=active_symbols)
 
 @router.get("/history")
 def get_history(symbol: str = Query(...)):
