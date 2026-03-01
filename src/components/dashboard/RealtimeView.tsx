@@ -94,6 +94,12 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     if (data.display_date) {
                         setDisplayDate(data.display_date);
                     }
+                } else if (isMounted && !data && selectedDate) {
+                    // If no data found for a selected historical date, clear the chart to show empty state
+                    setChartData([]);
+                    setCumulativeData([]);
+                    setDisplayTicks([]);
+                    setDisplayDate(selectedDate);
                 }
             } catch (err) {
                 console.warn("Dashboard update failed", err);

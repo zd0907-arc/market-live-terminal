@@ -33,7 +33,7 @@ def get_dashboard_data(symbol: str):
     # 1. 获取最近 24 小时的统计
     # 截止时间
     now = datetime.now()
-    cutoff_time = (now - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
+    cutoff_time = (now - timedelta(hours=96)).strftime('%Y-%m-%d %H:%M:%S')
     
     query = f"""
     SELECT sentiment_score, heat_score, content, read_count 
@@ -50,7 +50,7 @@ def get_dashboard_data(symbol: str):
             "score": 0,
             "status": "暂无数据",
             "bull_bear_ratio": 0,
-            "summary": "过去24小时未监测到有效评论，请点击抓取按钮更新数据。",
+            "summary": "近期未监测到有效评论，请点击抓取按钮更新数据。",
             "risk_warning": "无",
             "details": {"bull_count": 0, "bear_count": 0, "total_count": 0}
         }
@@ -133,8 +133,8 @@ def generate_summary(symbol: str):
     """
     conn = get_db_connection()
     try:
-        # 1. 获取最近 24h 统计数据
-        cutoff_time = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        # 1. 获取最近 96h 统计数据
+        cutoff_time = (datetime.now() - timedelta(hours=96)).strftime("%Y-%m-%d %H:%M:%S")
         df = pd.read_sql("""
             SELECT content, sentiment_score, heat_score, pub_time 
             FROM sentiment_comments 
