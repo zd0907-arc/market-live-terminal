@@ -6,8 +6,12 @@ import os
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 
-# Local Mac or Cloud paths
-LIVE_DB_PATH = os.path.join(ROOT_DIR, "market_data.db")
+# DB paths: Support env var override, default to data/ subdirectory (matches Docker mount)
+# Docker mount: ../data:/app/data, so DB_PATH=/app/data/market_data.db
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+LIVE_DB_PATH = os.environ.get("DB_PATH", os.path.join(DATA_DIR, "market_data.db"))
 HISTORY_DB_PATH = os.path.join(ROOT_DIR, "market_data_history.db")
 
 def merge_databases():
