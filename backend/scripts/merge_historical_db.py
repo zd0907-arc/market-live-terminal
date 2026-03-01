@@ -2,9 +2,13 @@ import sqlite3
 import sys
 import os
 
-# Cloud production DB paths (Absolute)
-LIVE_DB_PATH = "/home/ubuntu/market-live-terminal/market_data.db"
-HISTORY_DB_PATH = "/home/ubuntu/market_data_history.db"
+# Dynamically resolve root project directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+
+# Local Mac or Cloud paths
+LIVE_DB_PATH = os.path.join(ROOT_DIR, "market_data.db")
+HISTORY_DB_PATH = os.path.join(ROOT_DIR, "market_data_history.db")
 
 def merge_databases():
     if not os.path.exists(HISTORY_DB_PATH):
@@ -20,20 +24,19 @@ def merge_databases():
     # Crucial: Enable WAL mode for high concurrency
     conn.execute("PRAGMA journal_mode=WAL;")
     
-    # Ensure live tables exist (in case it's a completely fresh start)
+    # Ensure live tables exist
     conn.executescript('''
-        CREATE TABLE IF NOT EXISTS history_daily (
+        CREATE TABLE IF NOT EXISTS local_history (
             symbol TEXT,
             date TEXT,
-            name TEXT,
             net_inflow REAL,
-            main_buy REAL,
-            main_sell REAL,
-            super_buy REAL,
-            super_sell REAL,
+            main_buy_amount REAL,
+            main_sell_amount REAL,
             close REAL,
-            turnover_rate REAL,
-            PRIMARY KEY (symbol, date)
+            change_pct REAL,
+            activity_ratio REAL,
+            config_signature TEXT,
+            UNIQUE(symbol, date, config_signature)
         );
 
         CREATE TABLE IF NOT EXISTS history_30m (
@@ -59,59 +62,77 @@ def merge_databases():
 
         # Begin transaction
         conn.execute("BEGIN TRANSACTION")
-
-        # Merge history_daily (Ignore on conflict to keep live data if it exists)
-        print("Merging history_daily...")
-        conn.execute('''
-            INSERT OR IGNORE INTO main.history_daily 
-            SELECT * FROM history_db.history_daily
-        ''')
-        daily_changes = conn.execute("SELECT changes()").fetchone()[0]
+        
+        # ---------------------------------------------------------
+        # V2: Delete-then-Insert Strategy to prevent write-amplification
+        # ---------------------------------------------------------
+        # We find the distinct dates from the history db and clear them from live db
+        cursor = conn.cursor()
+        
+        # Merge local_history
+        print("Merging local_history...")
+        try:
+            cursor.execute("SELECT DISTINCT date FROM history_db.local_history")
+            target_dates = [row[0] for row in cursor.fetchall()]
+            
+            if target_dates:
+                placeholders = ','.join(['?'] * len(target_dates))
+                # Delete existing data for those dates
+                conn.execute(f"DELETE FROM main.local_history WHERE date IN ({placeholders})", target_dates)
+                deleted_daily = conn.execute("SELECT changes()").fetchone()[0]
+                print(f"Cleared {deleted_daily} overlapping records from local_history.")
+                
+                # Insert the new batch
+                conn.execute('''
+                    INSERT INTO main.local_history 
+                    SELECT * FROM history_db.local_history
+                ''')
+                daily_inserted = conn.execute("SELECT changes()").fetchone()[0]
+            else:
+                daily_inserted = 0
+                
+        except sqlite3.OperationalError as e:
+            print(f"Skipping local_history due to error: {e}")
+            daily_inserted = 0
 
         # Merge history_30m
         print("Merging history_30m...")
-        conn.execute('''
-            INSERT OR IGNORE INTO main.history_30m 
-            SELECT * FROM history_db.history_30m
-        ''')
-        m30_changes = conn.execute("SELECT changes()").fetchone()[0]
+        try:
+            # For 30m we need to extract date from start_time (YYYY-MM-DD HH:MM:SS)
+            cursor.execute("SELECT DISTINCT substr(start_time, 1, 10) FROM history_db.history_30m")
+            target_dates_30m = [row[0] for row in cursor.fetchall()]
+            
+            if target_dates_30m:
+                # SQLite doesn't have a clean startswith IN, so we build an OR clause or use LIKE
+                # DELETE FROM main.history_30m WHERE start_time LIKE '2025-01-01%' OR start_time LIKE ...
+                like_clauses = " OR ".join(["start_time LIKE ?" for _ in target_dates_30m])
+                like_params = [f"{date}%" for date in target_dates_30m]
+                
+                if like_clauses:
+                    conn.execute(f"DELETE FROM main.history_30m WHERE {like_clauses}", like_params)
+                    deleted_30m = conn.execute("SELECT changes()").fetchone()[0]
+                    print(f"Cleared {deleted_30m} overlapping records from history_30m.")
+                
+                conn.execute('''
+                    INSERT INTO main.history_30m 
+                    SELECT * FROM history_db.history_30m
+                ''')
+                m30_inserted = conn.execute("SELECT changes()").fetchone()[0]
+            else:
+                m30_inserted = 0
+                
+        except sqlite3.OperationalError as e:
+            print(f"Skipping history_30m due to error: {e}")
+            m30_inserted = 0
         
         # Merge trade_ticks if it exists in historical db
-        # Note: Depending on your ETL script, trade ticks might be huge.
-        cursor = conn.cursor()
         cursor.execute("SELECT name FROM history_db.sqlite_master WHERE type='table' AND name='trade_ticks'")
         if cursor.fetchone():
-            print("Merging trade_ticks... (This may take a while)")
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS main.trade_ticks (
-                    symbol TEXT,
-                    time TEXT,
-                    price REAL,
-                    volume INTEGER,
-                    amount REAL,
-                    type TEXT,
-                    date TEXT
-                )
-            ''')
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON main.trade_ticks(symbol, date)')
-
-            # For ticks, we might not have a strict primary key, so we'll just insert everything.
-            # To avoid duplicate ticks if rerun, we'll only insert ticks for dates that don't already exist in main db for that symbol.
-            # simpler approach for now:
-            conn.execute('''
-                INSERT INTO main.trade_ticks
-                SELECT * FROM history_db.trade_ticks h
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM main.trade_ticks m 
-                    WHERE m.symbol = h.symbol AND m.date = h.date
-                )
-            ''')
-            ticks_changes = conn.execute("SELECT changes()").fetchone()[0]
-            print(f"Merged {ticks_changes} rows into trade_ticks.")
+            print("trade_ticks found in history but skipping based on V2 separation principle.")
 
         # Commit transaction
         conn.commit()
-        print(f"Merge successful! Inserted {daily_changes} daily records and {m30_changes} 30m records.")
+        print(f"Merge successful! Inserted {daily_inserted} local_history records and {m30_inserted} 30m records.")
         
     except sqlite3.Error as e:
         print(f"SQLite Error during merge: {e}")
