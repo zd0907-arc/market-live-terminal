@@ -360,7 +360,7 @@ export const fetchSentimentData = async (symbol: string) => {
 // ==========================================
 export const focusSymbol = async (symbol: string) => {
   try {
-    await fetch(`${API_BASE_URL}/focus`, {
+    await fetch(`${API_BASE_URL}/monitor/focus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ symbol })
@@ -372,7 +372,7 @@ export const focusSymbol = async (symbol: string) => {
 
 export const sendHeartbeat = async (symbol: string) => {
   try {
-    await fetch(`${API_BASE_URL}/heartbeat?symbol=${symbol}`, { method: 'POST' });
+    await fetch(`${API_BASE_URL}/monitor/heartbeat?symbol=${symbol}`, { method: 'POST' });
   } catch (e) {
     console.error("Heartbeat error:", e);
   }
@@ -380,7 +380,7 @@ export const sendHeartbeat = async (symbol: string) => {
 
 export const unfocusSymbol = async () => {
   try {
-    await fetch(`${API_BASE_URL}/unfocus`, { method: 'POST' });
+    await fetch(`${API_BASE_URL}/monitor/unfocus`, { method: 'POST' });
   } catch (e) {
     console.error("Unfocus error:", e);
   }

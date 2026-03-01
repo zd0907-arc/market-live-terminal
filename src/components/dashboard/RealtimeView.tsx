@@ -165,12 +165,14 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             {/* Top Row: Main Chart (Full Width) */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
                 <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-bold text-white flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-blue-400" />
-                        主力动态 (实时)
-                        <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
-                            Source: Local DB
-                        </span>
+                    <div className="flex items-center">
+                        <h3 className="text-base font-bold text-white flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-blue-400" />
+                            主力动态 (实时)
+                            <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
+                                Source: Local DB
+                            </span>
+                        </h3>
 
                         {/* History Date Selector & Back Button */}
                         <div className="flex items-center gap-2 ml-4">
@@ -189,7 +191,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                                 </button>
                             )}
                         </div>
-                    </h3>
+                    </div>
 
                     <div className="flex items-center gap-4">
                         {/* Status Indicator */}
