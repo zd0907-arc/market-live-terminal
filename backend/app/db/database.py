@@ -1,11 +1,15 @@
 import sqlite3
 import logging
-from backend.app.core.config import DB_FILE
+from backend.app.core.config import DB_FILE, USER_DB_FILE
 
 logger = logging.getLogger(__name__)
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
+    return conn
+
+def get_user_db_connection():
+    conn = sqlite3.connect(USER_DB_FILE)
     return conn
 
 def ensure_wal_mode():
@@ -28,15 +32,17 @@ def ensure_wal_mode():
 
 def init_db():
     ensure_wal_mode()
-    conn = get_db_connection()
-
-    c = conn.cursor()
-    # 监控列表表
-    c.execute('''CREATE TABLE IF NOT EXISTS watchlist (
+    user_conn = get_user_db_connection()
+    c_user = user_conn.cursor()
+    # 监控列表表 (in USER DB)
+    c_user.execute('''CREATE TABLE IF NOT EXISTS watchlist (
                  symbol TEXT PRIMARY KEY,
                  name TEXT,
                  added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                  )''')
+
+    conn = get_db_connection()
+    c = conn.cursor()
     # 逐笔交易数据表 (全量存储)
     c.execute('''CREATE TABLE IF NOT EXISTS trade_ticks (
                  symbol TEXT,
@@ -51,6 +57,24 @@ def init_db():
     # 创建索引加速按天删除
     c.execute("CREATE INDEX IF NOT EXISTS idx_ticks_symbol_date ON trade_ticks (symbol, date)")
                  
+    # 1分钟历史K线表 (History 1m - 用于历史分时图秒切)
+    c.execute('''CREATE TABLE IF NOT EXISTS history_1m (
+                 symbol TEXT,
+                 time TEXT,
+                 total_amount REAL,
+                 net_inflow REAL,
+                 main_buy REAL,
+                 main_sell REAL,
+                 super_net REAL,
+                 super_buy REAL,
+                 super_sell REAL,
+                 close REAL,
+                 open REAL,
+                 high REAL,
+                 low REAL,
+                 UNIQUE(symbol, time)
+                 )''')
+
     # 30分钟历史K线表 (History 30m)
     c.execute('''CREATE TABLE IF NOT EXISTS history_30m (
                  symbol TEXT,
@@ -123,20 +147,24 @@ def init_db():
                  )''')
 
                  
-    # 配置表 (Config)
-    c.execute('''CREATE TABLE IF NOT EXISTS app_config (
+    # 配置部分
+    c_user.execute('''CREATE TABLE IF NOT EXISTS app_config (
                  key TEXT PRIMARY KEY,
-                 value TEXT
+                 value TEXT,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                  )''')
                  
     # 插入默认配置（INSERT OR IGNORE 保证已有值不被覆盖）
     # 阈值 (V4.0 已写死，仅保持兼容)
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
     # LLM 配置默认值（防止数据库整库替换后丢失）
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_base_url', 'https://api.deepseek.com/v1')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_api_key', '')")
-    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', 'deepseek-chat')")
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_base_url', 'https://api.deepseek.com/v1')")
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_api_key', '')")
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', 'deepseek-chat')")
     
+    user_conn.commit()
+    user_conn.close()
+
     conn.commit()
     conn.close()

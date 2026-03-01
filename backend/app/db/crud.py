@@ -1,7 +1,7 @@
 import sqlite3
 import os
 from dotenv import dotenv_values, set_key
-from backend.app.core.config import DB_FILE
+from backend.app.core.config import DB_FILE, USER_DB_FILE
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 ENV_PATH = os.path.join(ROOT_DIR, ".env.local")
@@ -10,8 +10,12 @@ def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     return conn
 
+def get_user_db_connection():
+    conn = sqlite3.connect(USER_DB_FILE)
+    return conn
+
 def get_watchlist_items():
-    conn = get_db_connection()
+    conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM watchlist ORDER BY added_at DESC")
     rows = c.fetchall()
@@ -19,14 +23,14 @@ def get_watchlist_items():
     return [{"symbol": r[0], "name": r[1], "added_at": r[2]} for r in rows]
 
 def add_watchlist_item(symbol: str, name: str):
-    conn = get_db_connection()
+    conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO watchlist (symbol, name) VALUES (?, ?)", (symbol, name))
     conn.commit()
     conn.close()
 
 def get_all_symbols():
-    conn = get_db_connection()
+    conn = get_user_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT symbol FROM watchlist")
     symbols = [row[0] for row in cursor.fetchall()]
@@ -54,7 +58,7 @@ def save_trade_ticks(data_list):
     c = conn.cursor()
     c.executemany('''
         INSERT INTO trade_ticks 
-        (symbol, date, time, price, volume, amount, type)
+        (symbol, time, price, volume, amount, type, date)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', data_list)
     conn.commit()
@@ -78,7 +82,7 @@ def get_ticks_for_aggregation(symbol: str, date: str):
 
 def get_app_config():
     # 1. DB Config
-    conn = get_db_connection()
+    conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("SELECT key, value FROM app_config")
     db_rows = c.fetchall()
@@ -99,7 +103,7 @@ def get_app_config():
 
 def update_app_config(key: str, value: str):
     # 1. Update DB
-    conn = get_db_connection()
+    conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
@@ -206,6 +210,55 @@ def get_history_30m(symbol: str, limit_days: int = 20):
             "open": r[8] if len(r) > 8 else 0.0,
             "high": r[9] if len(r) > 9 else 0.0,
             "low": r[10] if len(r) > 10 else 0.0
+        }
+        for r in rows
+    ]
+
+def save_history_1m_batch(data_list):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.executemany('''
+        INSERT OR REPLACE INTO history_1m 
+        (symbol, time, total_amount, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data_list)
+    conn.commit()
+    conn.close()
+
+def get_history_1m(symbol: str, date: str):
+    """
+    Get 1-minute historical bars for a specific date.
+    Returns the exact same structure as the real-time calculated chart_data/cumulative_data logic.
+    """
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    # query all minutes for that specific date (time starts with YYYY-MM-DD or time is HH:MM and we filter by date)
+    # `database.py` schema for history_1m: `time TEXT` (expecting 'YYYY-MM-DD HH:MM:00')
+    prefix = f"{date} "
+    c.execute('''
+        SELECT time, total_amount, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low
+        FROM history_1m 
+        WHERE symbol=? AND time LIKE ?
+        ORDER BY time ASC
+    ''', (symbol, f"{prefix}%"))
+    rows = c.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "time": r[0][11:16], # Extract HH:MM 
+            "total_amount": r[1],
+            "net_inflow": r[2],
+            "main_buy": r[3],
+            "main_sell": r[4],
+            "super_net": r[5],
+            "super_buy": r[6],
+            "super_sell": r[7],
+            "close": r[8],
+            "open": r[9],
+            "high": r[10],
+            "low": r[11]
         }
         for r in rows
     ]

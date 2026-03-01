@@ -20,6 +20,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     const isFetchingRef = useRef(false);
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [displayDate, setDisplayDate] = useState<string>('');
+    const [selectedDate, setSelectedDate] = useState<string>('');
 
     // Thresholds (Loaded from Backend)
     const [thresholds, setThresholds] = useState({ large: 200000, superLarge: 1000000 });
@@ -64,7 +65,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             isFetchingRef.current = true;
             try {
                 // Fetch pre-calculated dashboard data from backend
-                const data = await StockService.fetchRealtimeDashboard(activeStock.symbol);
+                const data = await StockService.fetchRealtimeDashboard(activeStock.symbol, selectedDate);
 
                 if (isMounted && data) {
                     // Update Chart Data (Full Series)
@@ -112,7 +113,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             if (intervalId) clearInterval(intervalId);
         };
-    }, [activeStock, forceRefresh]);
+    }, [activeStock, forceRefresh, selectedDate]);
 
     // Callback when config is updated
     useEffect(() => {
@@ -170,6 +171,24 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                         <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
                             Source: Local DB
                         </span>
+
+                        {/* History Date Selector & Back Button */}
+                        <div className="flex items-center gap-2 ml-4">
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="bg-slate-800 text-slate-200 border border-slate-700 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                            />
+                            {selectedDate && (
+                                <button
+                                    onClick={() => setSelectedDate('')}
+                                    className="bg-blue-600/20 text-blue-400 hover:bg-blue-600/40 border border-blue-600/30 rounded px-2 py-1 text-xs transition-colors"
+                                >
+                                    返回今日
+                                </button>
+                            )}
+                        </div>
                     </h3>
 
                     <div className="flex items-center gap-4">

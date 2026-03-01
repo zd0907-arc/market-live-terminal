@@ -242,11 +242,8 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
   }
 };
 
-export const fetchRealtimeDashboard = async (symbol: string) => {
-  // URL 中已经包含了 /api，所以这里去掉多余的 api 路径拼接，或者调整 API_BASE_URL
-  // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里应该是 `/api/realtime/dashboard`
-  // 但原来的路径是 /api/realtime/dashboard，所以直接拼
-  const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}`;
+export const fetchRealtimeDashboard = async (symbol: string, date?: string) => {
+  const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}${date ? `&date=${date}` : ''}`;
   try {
     const response = await fetch(url);
     if (!response.ok) return null;

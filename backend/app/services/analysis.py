@@ -338,3 +338,167 @@ def perform_aggregation(symbol: str, date: str = None):
         }
     }
 
+def get_history_1m_dashboard(symbol: str, date_str: str):
+    """
+    Format 1m historical bars into the exact same API response as real-time dashboard.
+    """
+    from backend.app.db.crud import get_history_1m
+    
+    bars = get_history_1m(symbol, date_str)
+    
+    if not bars:
+        return None
+        
+    chart_data = []
+    cumulative_data = []
+    
+    running_main_buy = 0.0
+    running_main_sell = 0.0
+    running_super_buy = 0.0
+    running_super_sell = 0.0
+    
+    for b in bars:
+        t = b['time'] # HH:MM
+        total_amt = b['total_amount']
+        main_buy = b['main_buy']
+        main_sell = b['main_sell']
+        super_buy = b['super_buy']
+        super_sell = b['super_sell']
+        close_price = b['close']
+        
+        main_buy_ratio = (main_buy / total_amt) * 100 if total_amt > 0 else 0
+        main_sell_ratio = (main_sell / total_amt) * 100 if total_amt > 0 else 0
+        participation_ratio = ((main_buy + main_sell) / total_amt) * 100 if total_amt > 0 else 0
+        super_participation_ratio = ((super_buy + super_sell) / total_amt) * 100 if total_amt > 0 else 0
+        
+        chart_data.append({
+            "time": t,
+            "mainBuyRatio": round(main_buy_ratio, 1),
+            "mainSellRatio": round(main_sell_ratio, 1),
+            "mainParticipationRatio": round(participation_ratio, 1),
+            "mainBuyAmount": float(main_buy),
+            "mainSellAmount": float(main_sell),
+            "superBuyAmount": float(super_buy),
+            "superSellAmount": float(super_sell),
+            "superParticipationRatio": round(super_participation_ratio, 1),
+            "closePrice": float(close_price)
+        })
+        
+        running_main_buy += main_buy
+        running_main_sell += main_sell
+        running_super_buy += super_buy
+        running_super_sell += super_sell
+        
+        cumulative_data.append({
+            "time": t,
+            "cumMainBuy": running_main_buy,
+            "cumMainSell": running_main_sell,
+            "cumNetInflow": running_main_buy - running_main_sell,
+            "cumSuperBuy": running_super_buy,
+            "cumSuperSell": running_super_sell,
+            "cumSuperNetInflow": running_super_buy - running_super_sell
+        })
+        
+    return {
+        "chart_data": chart_data,
+        "cumulative_data": cumulative_data,
+        "latest_ticks": [] # History view doesn't render latest ticks
+    }
+
+def aggregate_intraday_1m(symbol: str, date_str: str = None):
+    """
+    Aggregate ticks into 1-minute bars for historical playback.
+    """
+    from backend.app.db.crud import get_ticks_by_date, save_history_1m_batch
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+
+    # 1. Fetch raw ticks
+    ticks = get_ticks_by_date(symbol, date_str)
+    if not ticks:
+        return {"code": 404, "message": "No ticks found"}
+
+    try:
+        df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
+        df['time_str'] = df['time']
+        # Extract Minute HH:MM and form Datetime
+        df['minute'] = df['time'].str.slice(0, 5)
+        df['datetime'] = pd.to_datetime(date_str + ' ' + df['minute'] + ':00')
+        df = df.set_index('datetime').sort_index()
+    except Exception as e:
+        logger.error(f"DataFrame creation failed: {e}")
+        return {"code": 500, "message": str(e)}
+
+    # Filter invalid times (post 15:00:05)
+    df = df[df['time_str'] <= '15:05:00']
+
+    # 2. Config
+    config = get_app_config()
+    large_th = float(config.get('large_threshold', 200000))
+    super_th = float(config.get('super_large_threshold', 1000000))
+
+    df['is_main'] = df['amount'] >= large_th
+    df['is_super'] = df['amount'] >= super_th
+    
+    # 4. Define aggregation logic
+    def calc_stats_1m(sub_df):
+        if sub_df.empty:
+            return pd.Series({
+                'total_amount': 0, 'net_inflow': 0, 'main_buy': 0, 'main_sell': 0,
+                'super_net': 0, 'super_buy': 0, 'super_sell': 0
+            })
+            
+        is_buy = sub_df['type'].isin(['买盘', 'buy'])
+        is_sell = sub_df['type'].isin(['卖盘', 'sell'])
+            
+        main_buys = sub_df[(sub_df['is_main']) & is_buy]['amount'].sum()
+        main_sells = sub_df[(sub_df['is_main']) & is_sell]['amount'].sum()
+        
+        super_buys = sub_df[(sub_df['is_super']) & is_buy]['amount'].sum()
+        super_sells = sub_df[(sub_df['is_super']) & is_sell]['amount'].sum()
+        
+        return pd.Series({
+            'total_amount': sub_df['amount'].sum(),
+            'net_inflow': main_buys - main_sells,
+            'main_buy': main_buys,
+            'main_sell': main_sells,
+            'super_net': super_buys - super_sells,
+            'super_buy': super_buys,
+            'super_sell': super_sells,
+            'close': sub_df['price'].iloc[-1] if not sub_df.empty else 0.0,
+            'open': sub_df['price'].iloc[0] if not sub_df.empty else 0.0,
+            'high': sub_df['price'].max() if not sub_df.empty else 0.0,
+            'low': sub_df['price'].min() if not sub_df.empty else 0.0
+        })
+
+    # Resample per minute
+    resampled = df.groupby(df.index).apply(calc_stats_1m)
+    
+    # 6. Filter & Save
+    data_list = []
+    for dt, row in resampled.iterrows():
+        if row['total_amount'] == 0:
+            continue
+            
+        data_list.append((
+            symbol,
+            dt.strftime("%Y-%m-%d %H:%M:%S"),
+            float(row['total_amount']),
+            float(row['net_inflow']),
+            float(row['main_buy']),
+            float(row['main_sell']),
+            float(row['super_net']),
+            float(row['super_buy']),
+            float(row['super_sell']),
+            float(row['close']),
+            float(row['open']),
+            float(row['high']),
+            float(row['low'])
+        ))
+        
+    if data_list:
+        save_history_1m_batch(data_list)
+        logger.info(f"[{symbol}] Saved {len(data_list)} history bars (1m) for {date_str}")
+    
+    return {"code": 200, "count": len(data_list)}
+
