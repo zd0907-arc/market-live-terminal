@@ -7,8 +7,11 @@
 set -e
 
 CLOUD_HOST="ubuntu@111.229.144.202"
-CLOUD_PATH="~/market-live-terminal/market_data.db"
-LOCAL_PATH="./market_data.db"
+CLOUD_PATH="~/market-live-terminal/data/market_data.db"
+LOCAL_PATH="./data/market_data.db"
+
+# 确保 data 目录存在
+mkdir -p ./data
 
 echo "============================================="
 echo "🔄 Synchronizing Cloud Database to Local..."
@@ -20,8 +23,10 @@ if [ -f "$LOCAL_PATH" ]; then
     cp "$LOCAL_PATH" "${LOCAL_PATH}.bak"
 fi
 
-# 2. Use SCP to fetch the database
-echo "🌐 Downloading from $CLOUD_HOST..."
-scp -o StrictHostKeyChecking=no "$CLOUD_HOST:$CLOUD_PATH" "$LOCAL_PATH"
+# 2. Use rsync for incremental sync (only transfers changed blocks)
+echo "🌐 Syncing from $CLOUD_HOST (rsync incremental)..."
+rsync -avz --progress --partial \
+    -e "ssh -o StrictHostKeyChecking=no" \
+    "$CLOUD_HOST:$CLOUD_PATH" "$LOCAL_PATH"
 
 echo "✅ Sync complete! You can now restart your local server to use the production data."

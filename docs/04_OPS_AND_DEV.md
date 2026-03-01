@@ -56,15 +56,49 @@ ssh laqiyuan@100.115.228.56
 
 ---
 
-## 三、 SQLite 数据库安全覆盖
+## 三、 架构变动与 ADR (Architecture Decision Records) 记录法则
 
-由于我们历史数据非常珍贵且极大。很多时候我们的云端机器是一具空壳。需要把 Windows 苦力长年累月洗好的 GB 级别的历史数据库传上去供 Web 显示。
+如果你（AI 或人类研发）在开发或诊断问题时认为需要**改变系统组件物理位置、改变大纲数据流向**（如：提出要在前端直连某新 API、或提出更换数据库引擎）：
+1. 必须查阅 `01_SYSTEM_ARCHITECTURE.md` 确认是否触碰物理红线。
+2. 在获得批准变更后，**强制要求你主动在项目根目录 / 文档库中新增或修改架构记录**，清晰写明：`变更前 -> 变更后 -> 变更原因 (Why)`。不能让未来的接替者去猜你的修改动机！
 
-**历史复活注射 SOP**：
-1. SSH 到 Windows，或者通过 SCP 把大数据库下载到本地。
-2. 用类似下面这样的超级命令，把清洗好的包强行挤换掉腾讯云那瘸腿的空 DB 文件：
+---
+
+## 四、 SQLite 数据库同步与覆盖
+
+### 4.1 云端→本地同步（日常开发用）
+本地开发前，使用 `sync_cloud_db.sh` 从云端拉取生产库的只读副本：
 ```bash
-scp data/market_data_history.db ubuntu@111.229.144.202:~/market_data_history.db
-ssh ubuntu@111.229.144.202 "sudo mv ~/market_data_history.db ~/market-live-termial/deploy/data/market_data.db && sudo docker compose restart backend"
+./sync_cloud_db.sh
 ```
-完成以上替换，前端图表立刻拥有数年的回溯能力。
+> 底层使用 **rsync 增量同步**（`-avz --progress --partial`）。首次拉取 ~1.67GB 需要较长时间，后续只传差异块，通常 **几十秒** 完成。
+
+### 4.2 历史 ETL 数据合并上云
+Windows ETL 产出的 `market_data_history.db` 需要合并到云端生产库：
+```bash
+# 1. 从 Windows 拉取 ETL 产出库
+scp laqiyuan@100.115.228.56:D:/market-live-terminal/market_data_history.db ./data/
+
+# 2. 上传到云端并执行 merge
+scp data/market_data_history.db ubuntu@111.229.144.202:~/market-live-terminal/data/
+ssh ubuntu@111.229.144.202 "cd ~/market-live-terminal && python3 backend/scripts/merge_historical_db.py"
+
+# 3. 验证合并结果
+ssh ubuntu@111.229.144.202 "sqlite3 ~/market-live-terminal/data/market_data.db 'SELECT count(DISTINCT date) FROM local_history'"
+```
+
+---
+
+## 五、 AI 协作与测试闭环铁则 (E2E Testing Protocol)
+
+为了杜绝“脚本跑通即宣布胜利”引发的**假性成功**（如：脚本无报错但数据未合入库，导致前端图表依旧无数据），所有协助本项目的 AI 必须将以下测试思想刻入底层：
+
+1. **终端受控目标验证 (End-to-End Objective Verification)**
+   - 任何涉及功能变更或 Bug 修复的任务，其验收红线绝不仅是“中间产物（如某个 DB 或 JSON 文件）生成成功”。
+   - 验收红线必须是：**系统最末端（通常是 Web UI 或 API 最终 JSON 响应）能够完美展现预期的形态**。例如：修了后端数据处理，就必须模拟发送 HTTP 请求，肉眼/脚本核对返回的图表数值是否符合商业逻辑。
+2. **禁止依赖运行日志 (No Logs as Proof)**
+   - `[+] SUCCESS`，`Merged 11072 rows` 此类日志不代表最终胜利。你必须**主动执行交叉验证**。
+   - 数据入库后，必须针对数据库的极限时间戳、零值、边界条件写一条额外的 `SELECT` 验证语料；API 修改后，必须利用 `curl` 针对端点跑一发探查。
+3. **每次研发强制带测 (Test-Driven Mindset)**
+   - **以后每一项新功能开发工作流中，最后一步都被强制绑定为“测试（Testing）阶段”**。
+   - 在向用户请求 Check/Review 前，必须主动出示一条客观的验证数据链（例如，“我刚获取了前端索要该股票 K 线图的 API 接口数据，截取了最新的收盘价，确认数据已经连贯”）。

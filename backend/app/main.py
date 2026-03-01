@@ -28,7 +28,7 @@ except Exception as e:
     logging.error(f"Trade Calendar init failed: {e}")
 
 # 3. Now import routers
-from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment
+from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest
 from backend.app.services.collector import collector
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler

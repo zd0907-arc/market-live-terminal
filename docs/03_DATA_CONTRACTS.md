@@ -4,9 +4,23 @@
 
 ---
 
+## 零、 数据分层契约 (Data Layer Contract)
+
+所有表按职责分为三层，写入规则严格遵守：
+
+| 层级 | 表 | 写入规则 | 说明 |
+|------|-----|---------|------|
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | **只追加，永不 UPDATE/DELETE** | 逐笔/盘口/评论源数据 |
+| **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
+| **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等 |
+
+> **数据一致性原则**：云端 `data/market_data.db` 是唯一权威源（Single Source of Truth）。Mac 本地通过 `sync_cloud_db.sh` 整库下载保持一致。Windows 只负责向云端写入，不保留服务副本。
+
+---
+
 ## 一、 核心存储引擎 (SQLite 3) Schema
 
-数据库路径：项目根目录下的 `market_data.db`。采用 `WAL` (Write-Ahead Logging) 模式开启高并发。
+数据库路径：`data/market_data.db`（本地和 Docker 容器内均统一到 `data/` 子目录）。采用 `WAL` (Write-Ahead Logging) 模式开启高并发。
 
 ### 1. `local_history` (日级主力沉淀大表 / 历史核心表)
 定义该股票在某日的主力增量资金结算数据。
@@ -73,9 +87,29 @@
 *   `成交额(元)`: (Float) 已经算好的这笔金额，直接用。
 *   `性质`: (String) 枚举值：买盘、卖盘、中性盘。（不要把它和上述库里的 `B`, `S` 搞混，业务上需做条件替换 `['买盘'=>'B', '卖盘'=>'S']`）。
 
-### 2. 东财股吧原始评论接口 `stock_zh_a_code_pinglun_em`
+### 3. 东财股吧原始评论接口 `stock_zh_a_code_pinglun_em`
 获取股民发帖流。
 **典型的 DataFrame 返回形态**：
 *   待充实（目前尚未在高频系统中实现基于此源的大规模入库，预留待系统后续补齐）。
+
+---
+
+## 三、 内部与前端 API 契约 (Internal APIs)
+
+前后端联调必须遵循以下接口路径与结构：
+
+### 1. 市场数据类 (Market Data)
+*   **`GET /api/ticks_full?symbol=sh600519`**: 返回该股票当日全量逐笔交易。
+*   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
+
+### 2. 散户情绪类 (Retail Sentiment)
+*   **`POST /api/sentiment/crawl/{symbol}`**: 触发云端无头请求，抓取股吧增量数据。返回 `{"code": 200, "data": {"new_count": 50}}`。
+*   **`GET /api/sentiment/dashboard/{symbol}`**: 返回情绪全息版。结构: `{"score": 8, "bull_bear_ratio": 2.5, "risk_warning": "高"}`
+*   **`POST /api/sentiment/summary/{symbol}`**: 召唤 LLM 生成摘要。
+
+### 3. 空状态法则 (No Silent Empty States)
+**绝对执行命令**：如果后端查询数据库得到空数组 `[]`，严禁直接 `return []` 让前端去猜！必须标准化返回：
+`{"code": 200, "data": [], "message": "No data found"}`。并在后端打印 `logger.warning` 说明。前端必须展示“空状态占位图”。
+
 ---
 如果有以上任何未被定义边界的字段，请抛错并拦截，拒绝脏数据入库！

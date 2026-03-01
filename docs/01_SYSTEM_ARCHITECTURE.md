@@ -1,6 +1,6 @@
 # 01_SYSTEM_ARCHITECTURE (系统与架构基石)
 
-> **核心定位**：定义系统的物理边界、数据流向大图、以及那些绝对不能触碰的“架构红线”。所有 AI 在编写网络请求、部署脚本、架构决策前**必读**。
+> **核心定位**：定义系统的物理边界、数据流向大图、数据存储分层、以及那些绝对不能触碰的"架构红线"。所有 AI 在编写网络请求、部署脚本、架构决策前**必读**。
 
 ## 一、 系统角色与物理边界
 
@@ -8,34 +8,56 @@
 
 1. **司令部 (Mac 终端)**
    * **职责**：代码库的唯一修改地 (Push 节点)。开发前端页面、后端接口、调试爬虫都在此进行。
+   * **数据**：通过 `sync_cloud_db.sh` 从云端整库下载 `data/market_data.db`，**只读不写**。
    * **红线**：决不允许长期后台跑爬虫任务，仅用作开发机和 SSH 主控机。
    
 2. **侦察机 / 算力节点 (家庭 Windows - 内网 IP: 100.115.228.56)**
    * **职责**：唯一具备从外部（东方财富/AkShare）高频抓取数据资格的节点。负责实时数据抓取（白天的雷达）、历史海量数据 ETL 清洗，并负责将洗净的数据 **单向 POST/SCP 发送** 到云端。
+   * **产出物**：`market_data_history.db`（ETL 历史聚合库，仅含 `local_history` + `history_30m`）
    * **红线**：**不要在 Windows 节点配置完整的 Git 仓库环境去执行 Pull**。它的代码完全是由 Mac 节点通过 `sync_to_windows.sh` 覆写进去的。
 
 3. **指挥中心 (腾讯云 Ubuntu - 公网 IP: 111.229.144.202)**
-   * **职责**：运行 FastAPI 后端和 SQLite 数据库，承担前端界面的数据下发（`npm run build` 资产和 API 服务）。
+   * **职责**：运行 FastAPI 后端和 SQLite 数据库，承担前端界面的数据下发（`npm run build` 资产和 API 服务）。是所有数据的 **唯一权威源 (Single Source of Truth)**。
+   * **数据库**：`data/market_data.db`（Docker 挂载 `../data:/app/data`），包含全量生产数据。
    * **致命红线**：**云端绝对禁止向东方财富、AkShare 等外部行情接口发出一丝一毫的 HTTP 请求**。它的 IP 已被东财永久封禁，一旦代码让云端去外网拉数据，系统直接罢工。云端只能被动提供 `/api/internal/ingest` 高清接口供 Windows 喂养数据。
 
 ## 二、 核心数据流转架构 (Data Flow)
 
-整个项目的数据是单向流动的（从外网 -> Windows -> 腾讯云 -> 前端视图）。
+整个项目的数据是**单向流动**的（从外网 -> Windows -> 腾讯云 -> 前端视图）。
 
 ### 流水线 A：盘中实时流 (The Live Pipeline)
 1. **获取源头**：Windows `live_crawler_win.py` 每 3 秒从 AkShare 拉取一次盘口快照，每 3 分钟拉取一次最新交易逐笔。
 2. **射向云端**：Windows 把原始的 List/Dict 转为 JSON，通过 HTTP POST 传给腾讯云服务器 (`/api/internal/ingest/*` 接口，带 `INGEST_TOKEN` 鉴权)。
-3. **入库展示**：腾讯云 FastAPI 接到数据，验证 Token 后直接 Insert/Replace 到云端的 `market_data.db` 中。前端用户刷手机，瞬间看到最新 K 线。
+3. **入库展示**：腾讯云 FastAPI 接到数据，验证 Token 后直接 Insert/Replace 到云端的 `data/market_data.db` 中。前端用户刷手机，瞬间看到最新 K 线。
 
 ### 流水线 B：历史数据的离线大一统 (The Historical ETL)
 1. **下载与解压**：人工在 Windows 上下载并解压几十上百 G 的 L2 CSV/ZIP 包到 `D:\MarketData`。
-2. **多核聚合清洗**：Windows `etl_worker_win.py` 利用多核计算，把 GB 级别的大单数据过滤求和，仅抽取出包含“大单、超大单买卖金额”的高浓度 SQLite 数据表。
-3. **隔空注射**：Mac 作为总控，通过 SCP 把洗完的超大 `.db` 文件传到腾讯云，并使用 `merge_historical_db.py` 强行合并覆盖云端现有的空缺记录。
+2. **多核聚合清洗**：Windows `etl_worker_win.py` 利用多核计算，把 GB 级别的大单数据过滤求和，仅抽取出包含"大单、超大单买卖金额"的高浓度 SQLite 数据表，产出 `market_data_history.db`。
+3. **隔空注射**：Mac 作为总控，通过 SCP 把洗完的 `.db` 文件传到腾讯云，并使用 `merge_historical_db.py`（delete-then-insert 策略）合并到云端生产库。
 
-## 三、 环境变量与配置依赖 (.env Blueprint)
+### 流水线 C：本地开发同步 (Dev Sync)
+1. Mac 执行 `sync_cloud_db.sh`，通过 SCP 将云端 `data/market_data.db` 完整下载到本地 `data/` 目录。
+2. 本地 backend 启动后自动读取 `data/market_data.db`，获得与云端一致的完整数据。
+
+## 三、 数据存储层级 (Data Storage Hierarchy)
+
+所有数据存储在单一 SQLite 数据库 `data/market_data.db` 中，按职责分为三层（详见 `03_DATA_CONTRACTS.md`）：
+
+| 层级 | 表 | 特征 |
+|------|-----|------|
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 只追加永不删，源数据 |
+| **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 可重算可覆写，带版本号 |
+| **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 |
+
+### 数据一致性原则
+* **云端**：唯一权威源。Windows 实时 POST + ETL merge 写入。
+* **Mac 本地**：`sync_cloud_db.sh` 整库下载的只读副本。
+* **Windows**：只产出 `market_data_history.db`，不持有完整服务库。
+
+## 四、 环境变量与配置依赖 (.env Blueprint)
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：
 
-*   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认为项目根目录的 `market_data.db`。
+*   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认为 `data/market_data.db`。
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。
 *   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202:8000`)。
 *   `INGEST_TOKEN`: 控制云端高速穿透接口权限的秘钥，云端和 Windows 节点必须完全对齐。

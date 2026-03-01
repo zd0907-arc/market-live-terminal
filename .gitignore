@@ -24,12 +24,20 @@ dist-ssr
 *.sw?
 
 # Database & Local Data
-market_data.db
-market_data.db-shm
-market_data.db-wal
+*.db
+*.db-shm
+*.db-wal
 __pycache__/
 .trae/
 .pytest_cache/
-backend/app/db/*.db
-*.db
 
+# Temp / Debug scripts
+*.exp
+launch_bg.py
+win_*.py
+win_*.txt
+check_win_status.py
+win_cloud_autobot.py
+win_to_cloud_autobot.py
+kill_result.txt
+perf_out.txt
