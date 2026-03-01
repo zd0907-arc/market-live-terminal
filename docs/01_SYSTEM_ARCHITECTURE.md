@@ -30,12 +30,20 @@
 2. **射向云端**：Windows 把原始的 List/Dict 转为 JSON，通过 HTTP POST 传给腾讯云服务器 (`/api/internal/ingest/*` 接口，带 `INGEST_TOKEN` 鉴权)。
 3. **入库展示**：腾讯云 FastAPI 接到数据，验证 Token 后直接 Insert/Replace 到云端的 `data/market_data.db` 中。前端用户刷手机，瞬间看到最新 K 线。
 
+> **[架构澄清] 本地 Tick 存储与容量**：
+> 系统作为“精细化 Watchlist”（约 50 只核心股票）而非全市场雷达。每天产生的有效 Tick 约 20万-40万行，落入 SQLite 仅 20MB-30MB。存满一年不到 10GB。
+> 因此，**将明细 Ticks 作为 ODS（贴源层）直接存入云端 SQLite 是完全健康且绰绰有余的**，无需引入 ClickHouse 等大数据引擎。
+
 ### 流水线 B：历史数据的离线大一统 (The Historical ETL)
 1. **下载与解压**：人工在 Windows 上下载并解压几十上百 G 的 L2 CSV/ZIP 包到 `D:\MarketData`。
 2. **多核聚合清洗**：Windows `etl_worker_win.py` 利用多核计算，把 GB 级别的大单数据过滤求和，仅抽取出包含"大单、超大单买卖金额"的高浓度 SQLite 数据表，产出 `market_data_history.db`。
 3. **隔空注射**：Mac 作为总控，通过 SCP 把洗完的 `.db` 文件传到腾讯云，并使用 `merge_historical_db.py`（delete-then-insert 策略）合并到云端生产库。
 
-### 流水线 C：本地开发同步 (Dev Sync)
+### 流水线 C：历史日线聚合与无级拼接 (The Historical & Realtime Splicing)
+1. **历史回补能力**：当一档新股票加入星标时，**不需要**从零补齐它过去几个月的全量 Ticks。后端 (`get_sina_money_flow`) 直接调用新浪隐藏 API (`MoneyFlow.ssl_qsfx_lscjfb`)，瞬间获取过去 100 个交易日已算好的全套资金流向指标 (大单/超大单/净流入等)。
+2. **今日数据热插拔拼接**：新浪历史接口在盘中是**滞后**的（不含“今天”）。因此，在 `/api/analysis/history_analysis` 中，系统会先拉取 100 天历史底表，然后**当场从云端 `trade_ticks` (ODS) 将今日已发生的 Ticks 聚合为一根完整日线**，硬接在 100 天最后面，实现对前端的“无缝拼接”。
+
+### 流水线 D：本地开发同步 (Dev Sync)
 1. Mac 执行 `sync_cloud_db.sh`，通过 SCP 将云端 `data/market_data.db` 完整下载到本地 `data/` 目录。
 2. 本地 backend 启动后自动读取 `data/market_data.db`，获得与云端一致的完整数据。
 
