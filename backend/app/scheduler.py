@@ -71,8 +71,8 @@ def run_daily_calendar_sync():
 def init_scheduler():
     scheduler = BackgroundScheduler()
     
-    # 1. 每日盘后聚合 (15:05)
-    trigger_finalization = CronTrigger(hour=15, minute=5)
+    # 1. 每日盘后聚合 (15:20) - 预留10-15分钟给 Windows 爬虫做 FINAL SWEEP
+    trigger_finalization = CronTrigger(hour=15, minute=20)
     scheduler.add_job(run_daily_finalization, trigger_finalization)
     
     # 2. 每日情绪抓取 (08:30) - 盘前预热全量

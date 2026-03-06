@@ -10,14 +10,16 @@ interface RealtimeViewProps {
     quote: RealTimeQuote | null;
     isTradingHours: () => boolean;
     configVersion?: number;
+    focusMode?: 'normal' | 'observe' | 'focus';
 }
 
-const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configVersion }) => {
+const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configVersion, focusMode = 'normal' }) => {
     // State
     const [displayTicks, setDisplayTicks] = useState<TickData[]>([]);
     const [chartData, setChartData] = useState<CapitalRatioData[]>([]);
     const [cumulativeData, setCumulativeData] = useState<CumulativeCapitalData[]>([]);
     const isFetchingRef = useRef(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [displayDate, setDisplayDate] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<string>('');
@@ -42,8 +44,18 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     // Data Polling
     const [forceRefresh, setForceRefresh] = useState(0);
 
+    // Reset data on stock change or date change
+    useEffect(() => {
+        setDisplayTicks([]);
+        setChartData([]);
+        setCumulativeData([]);
+        setLastUpdated('');
+    }, [activeStock, selectedDate]);
+
     useEffect(() => {
         if (!activeStock) return;
+
+        let isMounted = true;
 
         // 策略A：前端发送心跳，激活后端注册表的追踪
         StockService.sendHeartbeat(activeStock.symbol);
@@ -51,18 +63,12 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             if (isMounted) StockService.sendHeartbeat(activeStock.symbol);
         }, 10000); // Send heartbeat every 10 seconds
 
-        // Reset data on stock change
-        setDisplayTicks([]);
-        setChartData([]);
-        setCumulativeData([]);
-        setLastUpdated('');
-
-        let isMounted = true;
         let intervalId: any = null;
 
         const fetchData = async () => {
             if (!isMounted || isFetchingRef.current) return;
             isFetchingRef.current = true;
+            if (chartData.length > 0) setIsRefreshing(true); // Only show breathing text if we already have data
             try {
                 // Fetch pre-calculated dashboard data from backend
                 const data = await StockService.fetchRealtimeDashboard(activeStock.symbol, selectedDate);
@@ -105,13 +111,15 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                 console.warn("Dashboard update failed", err);
             } finally {
                 isFetchingRef.current = false;
+                if (isMounted) setIsRefreshing(false);
             }
         };
 
         fetchData();
 
-        // Polling every 3 seconds (to match Hot Queue)
-        intervalId = setInterval(fetchData, 3000);
+        // Polling interval based on focus mode
+        const intervalMs = focusMode === 'focus' ? 15000 : (focusMode === 'observe' ? 60000 : 5000);
+        intervalId = setInterval(fetchData, intervalMs);
 
         return () => {
             isMounted = false;
@@ -119,7 +127,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             if (intervalId) clearInterval(intervalId);
         };
-    }, [activeStock, forceRefresh, selectedDate]);
+    }, [activeStock, forceRefresh, selectedDate, focusMode]);
 
     // Callback when config is updated
     useEffect(() => {
@@ -175,6 +183,11 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                         <h3 className="text-base font-bold text-white flex items-center gap-2">
                             <TrendingUp className="w-4 h-4 text-blue-400" />
                             主力动态 (实时)
+                            {isRefreshing && (
+                                <span className={`text-[10px] font-normal ml-1 animate-pulse ${focusMode === 'focus' ? 'text-red-400' : 'text-blue-400'}`}>
+                                    更新中...
+                                </span>
+                            )}
                             <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
                                 Source: Local DB
                             </span>
@@ -415,7 +428,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                         资金博弈分析
                     </h3>
                     <div className="flex-1 min-h-[350px]">
-                        {activeStock && <SentimentTrend symbol={activeStock.symbol} />}
+                        {activeStock && <SentimentTrend symbol={activeStock.symbol} date={selectedDate} />}
                     </div>
                 </div>
             </div>

@@ -355,6 +355,15 @@ export const fetchSentimentData = async (symbol: string) => {
   return json.data;
 };
 
+export const fetchSentimentHistory = async (symbol: string, date?: string) => {
+  const url = date
+    ? `${API_BASE_URL}/sentiment/history?symbol=${symbol}&date=${date}`
+    : `${API_BASE_URL}/sentiment/history?symbol=${symbol}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  return json.data;
+};
+
 // ==========================================
 // Focus Management (Hot/Cold Queue)
 // ==========================================

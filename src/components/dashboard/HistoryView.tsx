@@ -24,7 +24,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     // Intraday Trend State (New)
     const [internalViewMode, setInternalViewMode] = useState<'daily' | 'intraday'>('daily');
     const viewMode = forceViewMode || internalViewMode;
-    const trendDays_default = 60;
+    const trendDays_default = 10;
     const [trendDays, setTrendDays] = useState(trendDays_default);
     const [trendData, setTrendData] = useState<HistoryTrendData[]>([]);
     const [trendRefreshKey, setTrendRefreshKey] = useState(0);
@@ -38,15 +38,15 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     // Config
     const [showConfig, setShowConfig] = useState(false);
 
-    const loadHistoryData = async (symbol: string, source: 'sina' | 'local' = 'sina') => {
+    const loadHistoryData = async (symbol: string, source: 'sina' | 'local' = 'sina', isCompare: boolean = false) => {
         setHistoryLoading(true);
         setHistoryError('');
         try {
             const data = await StockService.fetchHistoryAnalysis(symbol, source);
-            if (source === 'sina') {
-                setHistoryData(data);
-            } else {
+            if (isCompare) {
                 setHistoryCompareData(data);
+            } else {
+                setHistoryData(data);
             }
         } catch (e: any) {
             setHistoryError(e.message || '获取历史数据失败');
@@ -92,9 +92,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
     // Initial Load & Source Change (Daily Mode)
     useEffect(() => {
         if (activeStock && viewMode === 'daily') {
-            loadHistoryData(activeStock.symbol, historySource);
+            loadHistoryData(activeStock.symbol, historySource as 'sina' | 'local', false);
             if (historyCompareMode) {
-                loadHistoryData(activeStock.symbol, historyCompareSource);
+                loadHistoryData(activeStock.symbol, historyCompareSource as 'sina' | 'local', true);
             }
         }
     }, [activeStock, historySource, historyCompareMode, historyCompareSource, viewMode, configVersion, historyRefreshKey]);
@@ -141,52 +141,45 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                 isOpen={showConfig}
                 onClose={() => setShowConfig(false)}
                 onSave={() => {
-                    if (historySource === 'local') loadHistoryData(activeStock.symbol, 'local');
-                    if (historyCompareMode && historyCompareSource === 'local') loadHistoryData(activeStock.symbol, 'local');
+                    if (historySource === 'local') loadHistoryData(activeStock.symbol, 'local', false);
+                    if (historyCompareMode && historyCompareSource === 'local') loadHistoryData(activeStock.symbol, 'local', true);
                 }}
             />
 
             {/* Config Button Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
-                {/* View Mode Toggle (only show when not controlled by parent) */}
-                {!forceViewMode && (
-                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 w-full md:w-auto overflow-x-auto">
-                        <button
-                            onClick={() => setInternalViewMode('daily')}
-                            className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                            日线统计
-                        </button>
-                        <button
-                            onClick={() => setInternalViewMode('intraday')}
-                            className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                            30分钟趋势
-                        </button>
+            {(!forceViewMode || viewMode === 'daily') && (
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-lg mb-4">
+                    {/* View Mode Toggle (only show when not controlled by parent) */}
+                    {!forceViewMode && (
+                        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 w-full md:w-auto overflow-x-auto">
+                            <button
+                                onClick={() => setInternalViewMode('daily')}
+                                className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'daily' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                            >
+                                日线统计
+                            </button>
+                            <button
+                                onClick={() => setInternalViewMode('intraday')}
+                                className={`px-4 py-1.5 whitespace-nowrap rounded-md text-xs transition-colors flex-1 md:flex-none text-center ${viewMode === 'intraday' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                            >
+                                30分钟趋势
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                        {viewMode === 'daily' && (
+                            <DataSourceControl
+                                mode="history"
+                                source={historySource}
+                                setSource={setHistorySource}
+                                compareMode={historyCompareMode}
+                                setCompareMode={setHistoryCompareMode}
+                            />
+                        )}
                     </div>
-                )}
-
-                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-                    {(historySource === 'local' || (historyCompareMode && historyCompareSource === 'local')) && viewMode === 'daily' && (
-                        <button
-                            onClick={() => setShowConfig(true)}
-                            className="flex items-center whitespace-nowrap gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 hover:text-white hover:border-slate-600 transition-colors text-xs"
-                        >
-                            <Settings className="w-3.5 h-3.5" /> 规则设置
-                        </button>
-                    )}
-
-                    {viewMode === 'daily' && (
-                        <DataSourceControl
-                            mode="history"
-                            source={historySource}
-                            setSource={setHistorySource}
-                            compareMode={historyCompareMode}
-                            setCompareMode={setHistoryCompareMode}
-                        />
-                    )}
                 </div>
-            </div>
+            )}
 
             {/* Backend Status Warning */}
             {!backendStatus && (
@@ -261,161 +254,71 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                         </div>
                     )}
 
-                    {viewMode === 'daily' && historyData.length > 0 && (
-                        <div className={`grid ${historyCompareMode ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-                            {/* Left Side (Main) */}
-                            <div className="space-y-2">
-                                {/* 1. Main Net Inflow */}
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
-                                    <div className="mb-2 flex justify-between items-center">
-                                        <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                            主力净流入
-                                        </h3>
-                                        <button
-                                            onClick={() => setHistoryRefreshKey(prev => prev + 1)}
-                                            className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                                            title="刷新本地融合数据"
-                                        >
-                                            <RefreshCw className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                    <div className="h-[300px]">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={historyData} syncId="historyGraph">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
-
-                                                <Tooltip
-                                                    position={{ y: 0 }}
-                                                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                                                    formatter={(val: number, name: string) => {
-                                                        if (name === '收盘价') return val.toFixed(2);
-                                                        return (val / 100000000).toFixed(2) + '亿';
-                                                    }}
-                                                />
-                                                <Legend wrapperStyle={{ fontSize: 12 }} />
-                                                <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
-                                                <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
-                                                    {historyData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
-                                                    ))}
-                                                </Bar>
-                                                <Line yAxisId="right" type="monotone" dataKey="close" name="收盘价" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                {/* 2. Buying/Selling Power */}
-                                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
-                                    <div className="mb-2 flex items-center gap-2">
-                                        <h3 className="text-base font-bold text-white">买卖力度分离监控</h3>
-                                        <div className="group relative">
-                                            <Info className="w-3.5 h-3.5 text-slate-500 cursor-help hover:text-blue-400" />
-                                            <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl text-xs text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                                分析：当买入额（红）持续高于卖出额（绿）时，即便股价不涨，也可能是吸筹信号。<br />
-                                                <span className="text-yellow-400">主力交易占比</span>：反映主力资金在当天的统治力，占比越高说明散户越少。
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="h-[300px]">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={historyData} syncId="historyGraph">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
-                                                <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
-                                                <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
-                                                <Tooltip
-                                                    position={{ y: 0 }}
-                                                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                                                    formatter={(val: number, name: string, props: any) => {
-                                                        if (name === '主力交易占比') return val.toFixed(1) + '%';
-                                                        if (name === '超大单占比') return val.toFixed(1) + '%';
-                                                        let amount = 0;
-                                                        if (name === '主力买入占比') amount = props.payload.main_buy_amount;
-                                                        if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
-                                                        return `${val.toFixed(1)}% (${(amount / 100000000).toFixed(2)}亿)`;
-                                                    }}
-                                                />
-                                                <Legend wrapperStyle={{ fontSize: 12 }} />
-                                                <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
-                                                <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
-                                                <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                                                <Line yAxisId="right" type="monotone" dataKey="super_large_ratio" name="超大单占比" stroke="#a855f7" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Right Side (Compare) */}
-                            {historyCompareMode && (
-                                <div className="space-y-2 border-l border-slate-800 pl-2 border-dashed relative">
-                                    <div className="absolute top-0 right-0 z-20">
-                                        <div className="flex items-center gap-3 bg-slate-950/50 p-1 rounded-lg border border-slate-800/50">
-                                            <span className="text-[10px] text-slate-400">对比源:</span>
-                                            <select
-                                                value={historyCompareSource}
-                                                onChange={(e) => setHistoryCompareSource(e.target.value)}
-                                                className="bg-transparent text-xs font-medium text-blue-400 focus:outline-none cursor-pointer"
-                                            >
-                                                <option value="sina">🔴 新浪 (Sina)</option>
-                                                <option value="local">🟣 本地自算 (Local)</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Compare 1 */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90 mt-8 relative">
-                                        <div className="mb-2">
-                                            <h3 className="text-base font-bold text-slate-300 flex items-center gap-2">
-                                                {historyCompareSource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
+                    {viewMode === 'daily' && (
+                        historyData.length > 0 ? (
+                            <div className={`grid ${historyCompareMode ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                                {/* Left Side (Main) */}
+                                <div className="space-y-2">
+                                    {/* 1. Main Net Inflow */}
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
+                                        <div className="mb-2 flex justify-between items-center">
+                                            <h3 className="text-base font-bold text-white flex items-center gap-2">
                                                 主力净流入
                                             </h3>
-                                        </div>
-                                        <div className="h-[300px]">
-                                            {historyCompareSource === 'local' && historyCompareData.length === 0 ? (
-                                                <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                                                    <Database className="w-12 h-12 mb-4 opacity-20" />
-                                                    <p>暂无本地数据</p>
-                                                    <p className="text-xs mt-2 opacity-60">请先加关注并等待收盘计算</p>
-                                                </div>
-                                            ) : (
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <ComposedChart data={historyCompareData} syncId="historyGraph">
-                                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                                        <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
-                                                        <YAxis stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
-                                                        <Tooltip
-                                                            position={{ y: 0 }}
-                                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                                                            formatter={(val: number) => (val / 100000000).toFixed(2) + '亿'}
-                                                        />
-                                                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                                                        <ReferenceLine y={0} stroke="#334155" />
-                                                        <Bar dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
-                                                            {historyCompareData.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
-                                                            ))}
-                                                        </Bar>
-                                                    </ComposedChart>
-                                                </ResponsiveContainer>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Compare 2 */}
-                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90">
-                                        <div className="mb-2">
-                                            <h3 className="text-base font-bold text-slate-300">买卖力度分离监控</h3>
+                                            <button
+                                                onClick={() => setHistoryRefreshKey(prev => prev + 1)}
+                                                className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                                title="刷新本地融合数据"
+                                            >
+                                                <RefreshCw className="w-3.5 h-3.5" />
+                                            </button>
                                         </div>
                                         <div className="h-[300px]">
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <ComposedChart data={historyCompareData} syncId="historyGraph">
+                                                <ComposedChart data={historyData} syncId="historyGraph">
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                                    <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
+                                                    <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
+                                                    <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+
+                                                    <Tooltip
+                                                        position={{ y: 0 }}
+                                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                                        formatter={(val: number, name: string) => {
+                                                            if (name === '收盘价') return val.toFixed(2);
+                                                            return (val / 100000000).toFixed(2) + '亿';
+                                                        }}
+                                                    />
+                                                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                                                    <ReferenceLine y={0} yAxisId="left" stroke="#334155" />
+                                                    <Bar yAxisId="left" dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
+                                                        {historyData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
+                                                        ))}
+                                                    </Bar>
+                                                    <Line yAxisId="right" type="monotone" dataKey="close" name="收盘价" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                                                </ComposedChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Buying/Selling Power */}
+                                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
+                                        <div className="mb-2 flex items-center gap-2">
+                                            <h3 className="text-base font-bold text-white">买卖力度分离监控</h3>
+                                            <div className="group relative">
+                                                <Info className="w-3.5 h-3.5 text-slate-500 cursor-help hover:text-blue-400" />
+                                                <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl text-xs text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                                    分析：当买入额（红）持续高于卖出额（绿）时，即便股价不涨，也可能是吸筹信号。<br />
+                                                    <span className="text-yellow-400">主力交易占比</span>：反映主力资金在当天的统治力，占比越高说明散户越少。
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="h-[300px]">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <ComposedChart data={historyData} syncId="historyGraph">
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                                    <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                    <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => val.substring(5)} minTickGap={20} />
                                                     <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
                                                     <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
                                                     <Tooltip
@@ -423,6 +326,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                         contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
                                                         formatter={(val: number, name: string, props: any) => {
                                                             if (name === '主力交易占比') return val.toFixed(1) + '%';
+                                                            if (name === '超大单占比') return val.toFixed(1) + '%';
                                                             let amount = 0;
                                                             if (name === '主力买入占比') amount = props.payload.main_buy_amount;
                                                             if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
@@ -433,13 +337,120 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                                     <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
                                                     <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
                                                     <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                                                    <Line yAxisId="right" type="monotone" dataKey="super_large_ratio" name="超大单占比" stroke="#a855f7" strokeWidth={2} dot={false} strokeDasharray="5 5" />
                                                 </ComposedChart>
                                             </ResponsiveContainer>
                                         </div>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+
+                                {/* Right Side (Compare) */}
+                                {historyCompareMode && (
+                                    <div className="space-y-2 border-l border-slate-800 pl-2 border-dashed relative">
+                                        <div className="absolute top-0 right-0 z-20">
+                                            <div className="flex items-center gap-3 bg-slate-950/50 p-1 rounded-lg border border-slate-800/50">
+                                                <span className="text-[10px] text-slate-400">对比源:</span>
+                                                <select
+                                                    value={historyCompareSource}
+                                                    onChange={(e) => setHistoryCompareSource(e.target.value)}
+                                                    className="bg-transparent text-xs font-medium text-blue-400 focus:outline-none cursor-pointer"
+                                                >
+                                                    <option value="sina">🔴 新浪 (Sina)</option>
+                                                    <option value="local">🟣 本地自算 (Local)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Compare 1 */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90 mt-8 relative">
+                                            <div className="mb-2">
+                                                <h3 className="text-base font-bold text-slate-300 flex items-center gap-2">
+                                                    {historyCompareSource === 'sina' ? <span className="text-red-500">🔴 新浪数据</span> : <span className="text-purple-500">🟣 本地自算</span>}
+                                                    主力净流入
+                                                </h3>
+                                            </div>
+                                            <div className="h-[300px]">
+                                                {historyCompareSource === 'local' && historyCompareData.length === 0 ? (
+                                                    <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                                                        <Database className="w-12 h-12 mb-4 opacity-20" />
+                                                        <p>暂无本地数据</p>
+                                                        <p className="text-xs mt-2 opacity-60">请先加关注并等待收盘计算</p>
+                                                    </div>
+                                                ) : (
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <ComposedChart data={historyCompareData} syncId="historyGraph">
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                                            <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                            <YAxis stroke="#64748b" tick={{ fontSize: 10 }} tickFormatter={(val) => (val / 100000000).toFixed(0)} />
+                                                            <Tooltip
+                                                                position={{ y: 0 }}
+                                                                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                                                formatter={(val: number) => (val / 100000000).toFixed(2) + '亿'}
+                                                            />
+                                                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                                                            <ReferenceLine y={0} stroke="#334155" />
+                                                            <Bar dataKey="net_inflow" name="主力净流入" fill="#60a5fa">
+                                                                {historyCompareData.map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={entry.net_inflow > 0 ? '#ef4444' : '#22c55e'} />
+                                                                ))}
+                                                            </Bar>
+                                                        </ComposedChart>
+                                                    </ResponsiveContainer>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Compare 2 */}
+                                        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg opacity-90">
+                                            <div className="mb-2">
+                                                <h3 className="text-base font-bold text-slate-300">买卖力度分离监控</h3>
+                                            </div>
+                                            <div className="h-[300px]">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <ComposedChart data={historyCompareData} syncId="historyGraph">
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                                        <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                                        <YAxis yAxisId="left" stroke="#64748b" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                        <YAxis yAxisId="right" orientation="right" stroke="#fbbf24" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} />
+                                                        <Tooltip
+                                                            position={{ y: 0 }}
+                                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                                            formatter={(val: number, name: string, props: any) => {
+                                                                if (name === '主力交易占比') return val.toFixed(1) + '%';
+                                                                let amount = 0;
+                                                                if (name === '主力买入占比') amount = props.payload.main_buy_amount;
+                                                                if (name === '主力卖出占比') amount = props.payload.main_sell_amount;
+                                                                return `${val.toFixed(1)}% (${(amount / 100000000).toFixed(2)}亿)`;
+                                                            }}
+                                                        />
+                                                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                                                        <Area yAxisId="left" type="monotone" dataKey="buyRatio" name="主力买入占比" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} />
+                                                        <Area yAxisId="left" type="monotone" dataKey="sellRatio" name="主力卖出占比" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} />
+                                                        <Line yAxisId="right" type="monotone" dataKey="activityRatio" name="主力交易占比" stroke="#fbbf24" strokeWidth={2} dot={false} />
+                                                    </ComposedChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-lg flex flex-col items-center justify-center min-h-[400px]">
+                                <Database className="w-16 h-16 text-slate-700 mb-4" />
+                                <h3 className="text-lg font-bold text-slate-300 mb-2">
+                                    暂无{historySource === 'local' ? '本地主力' : '历史'}数据
+                                </h3>
+                                {historySource === 'local' ? (
+                                    <p className="text-slate-500 text-sm text-center max-w-md">
+                                        该股票暂未加入星标。由于没有本地爬虫实时介入，无法运算本地主力资金，请点击右上角<span className="text-yellow-500 font-bold mx-1">「星标」</span>加入后再试。
+                                    </p>
+                                ) : (
+                                    <p className="text-slate-500 text-sm text-center max-w-md">
+                                        无法获取该股票的数据，可能是新股或已退市。
+                                    </p>
+                                )}
+                            </div>
+                        )
                     )}
                 </>
             )}

@@ -27,9 +27,10 @@ interface SentimentPoint {
 
 interface SentimentTrendProps {
     symbol: string;
+    date?: string; // Optional: for backfill/history mode
 }
 
-const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol }) => {
+const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
     const [historyData, setHistoryData] = useState<SentimentPoint[]>([]);
     const [liveData, setLiveData] = useState<SentimentPoint | null>(null);
 
@@ -37,7 +38,10 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol }) => {
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/sentiment/history?symbol=${symbol}`);
+                const url = date
+                    ? `${API_BASE_URL}/sentiment/history?symbol=${symbol}&date=${date}`
+                    : `${API_BASE_URL}/sentiment/history?symbol=${symbol}`;
+                const res = await fetch(url);
                 const json = await res.json();
                 if (json.code === 200) {
                     // Ensure signals are parsed
@@ -52,10 +56,12 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol }) => {
             }
         };
         fetchHistory();
-    }, [symbol]);
+    }, [symbol, date]);
 
-    // 2. Polling: Realtime (3s)
+    // 2. Polling: Realtime (Only if NO historical date provided)
     useEffect(() => {
+        if (date) return; // Disable polling in history mode
+
         let isMounted = true;
         let isFetching = false;
         let timeoutId: NodeJS.Timeout;
@@ -74,14 +80,12 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol }) => {
                         oib: raw.oib,
                         price: raw.price,
                         signals: typeof raw.signals === 'string' ? JSON.parse(raw.signals) : (raw.signals || []),
-                        // Fix: Assign missing fields
                         bid1_vol: raw.bid1_vol,
                         ask1_vol: raw.ask1_vol,
                         tick_vol: raw.tick_vol
                     };
 
                     setLiveData(prev => {
-                        // If minute changed, we should probably re-fetch history or commit prev to history
                         if (prev && prev.timestamp.substring(0, 5) !== livePoint.timestamp.substring(0, 5)) {
                             // Minute changed, trigger history refresh
                             fetch(`${API_BASE_URL}/sentiment/history?symbol=${symbol}`)
@@ -112,7 +116,7 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol }) => {
             isMounted = false;
             clearTimeout(timeoutId);
         };
-    }, [symbol]);
+    }, [symbol, date]);
 
     // Merge Data
     const chartData = useMemo(() => {

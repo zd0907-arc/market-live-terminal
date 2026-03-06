@@ -63,6 +63,7 @@ app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(config.router, prefix="/api", tags=["Config"])
 app.include_router(monitor.router, prefix="/api/monitor", tags=["Monitor"])
 app.include_router(sentiment.router, prefix="/api", tags=["Retail Sentiment"])
+app.include_router(ingest.router, prefix="/api/internal/ingest", tags=["Ingest"])
 
 @app.get("/api/health")
 def api_health_check():

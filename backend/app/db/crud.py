@@ -127,10 +127,15 @@ def save_local_history(symbol, date, net_inflow, main_buy, main_sell, close, cha
     conn.commit()
     conn.close()
 
-def get_local_history_data(symbol: str, config_sig: str):
+def get_local_history_data(symbol: str, config_sig: str = None):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("SELECT * FROM local_history WHERE symbol=? AND config_signature=? ORDER BY date ASC", (symbol, config_sig))
+    if config_sig:
+        c.execute("SELECT * FROM local_history WHERE symbol=? AND config_signature=? ORDER BY date ASC", (symbol, config_sig))
+    else:
+        # Fallback: get all history for this symbol, ordered by date
+        # Useful when configuration signature has changed but we still want to see data
+        c.execute("SELECT * FROM local_history WHERE symbol=? ORDER BY date ASC", (symbol,))
     rows = c.fetchall()
     conn.close()
     return rows

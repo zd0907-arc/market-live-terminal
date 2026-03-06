@@ -139,12 +139,9 @@ def aggregate_history(symbol: str, date: str = None):
 
 @router.get("/history/local")
 def get_local_history(symbol: str):
-    config = get_app_config()
-    super_threshold = float(config.get('super_large_threshold', 1000000))
-    large_threshold = float(config.get('large_threshold', 200000))
-    config_sig = f"{int(super_threshold)}_{int(large_threshold)}"
-    
-    rows = get_local_history_data(symbol, config_sig)
+    # Fetch all history for this symbol regardless of signature
+    # This ensures users can see older data even if the configuration changed.
+    rows = get_local_history_data(symbol, None)
     
     data = []
     for r in rows:
@@ -157,7 +154,8 @@ def get_local_history(symbol: str):
             "change_pct": r[6],
             "activityRatio": r[7],
             "buyRatio": (r[3] / (r[3]+r[4]+1) * 100) if (r[3]+r[4]) > 0 else 0,
-            "sellRatio": (r[4] / (r[3]+r[4]+1) * 100) if (r[3]+r[4]) > 0 else 0
+            "sellRatio": (r[4] / (r[3]+r[4]+1) * 100) if (r[3]+r[4]) > 0 else 0,
+            "config_sig": r[8] if len(r) > 8 else "unknown"
         })
     return data
 

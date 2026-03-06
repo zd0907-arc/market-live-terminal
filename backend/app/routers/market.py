@@ -22,16 +22,20 @@ async def get_sentiment_dashboard(symbol: str):
     return APIResponse(code=500, message="Failed to fetch sentiment data", data=None)
 
 @router.get("/sentiment/history", response_model=APIResponse)
-async def get_sentiment_history_api(symbol: str):
+async def get_sentiment_history_api(symbol: str, date: str = Query(None)):
     """
     V3.0: 获取分钟级聚合的历史资金博弈数据
+    支持可选的 date 参数用于回溯历史数据。
     """
-    today = MarketClock.get_display_date()
-    # For testing, if MOCK_DATA_DATE is set, use it?
-    if MOCK_DATA_DATE:
-        today = MOCK_DATA_DATE
+    if date:
+        query_date = date
+    else:
+        query_date = MarketClock.get_display_date()
+        # For testing, if MOCK_DATA_DATE is set, use it?
+        if MOCK_DATA_DATE:
+            query_date = MOCK_DATA_DATE
         
-    data = await asyncio.to_thread(get_sentiment_history_aggregated, symbol, today)
+    data = await asyncio.to_thread(get_sentiment_history_aggregated, symbol, query_date)
     return APIResponse(code=200, data=data)
 
 @router.get("/verify_realtime", response_model=VerifyResult)

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server } from 'lucide-react';
+import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server, Eye, Target } from 'lucide-react';
 import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import RealtimeView from './components/dashboard/RealtimeView';
@@ -33,6 +33,10 @@ const App: React.FC = () => {
   // System Status
   const [backendStatus, setBackendStatus] = useState<boolean>(false);
   const [configVersion, setConfigVersion] = useState(0);
+
+  // Focus Mode (盯盘)
+  const [focusMode, setFocusMode] = useState<'normal' | 'observe' | 'focus'>('normal');
+  const lastActiveTimeRef = React.useRef<number>(Date.now());
 
   const handleConfigUpdate = () => {
     setConfigVersion(prev => prev + 1);
@@ -77,6 +81,41 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Idle Timer & Auto-Cancel Focus Mode
+  useEffect(() => {
+    const handleActivity = () => {
+      lastActiveTimeRef.current = Date.now();
+    };
+
+    const handleBlur = () => {
+      if (focusMode === 'focus' || focusMode === 'observe') {
+        console.log("Window lost focus. Auto-canceling focus mode.");
+        setFocusMode('normal');
+      }
+    };
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('blur', handleBlur);
+
+    const idleCheckInterval = setInterval(() => {
+      if (focusMode === 'focus' || focusMode === 'observe') {
+        const idleTime = Date.now() - lastActiveTimeRef.current;
+        if (idleTime > 3 * 60 * 1000) { // 3 minutes idle
+          console.log("User idle for 3 minutes. Auto-canceling focus mode.");
+          setFocusMode('normal');
+        }
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('blur', handleBlur);
+      clearInterval(idleCheckInterval);
+    };
+  }, [focusMode]);
+
   // Select Stock
   const handleSelectStock = (stock: SearchResult) => {
     setActiveStock(stock);
@@ -86,6 +125,7 @@ const App: React.FC = () => {
     setError('');
     setIsSearchFocused(false);
     setIsWatchlisted(false);
+    setFocusMode('normal'); // Auto-cancel on stock switch
 
     // Check watchlist
     StockService.getWatchlist().then(list => {
@@ -139,14 +179,15 @@ const App: React.FC = () => {
     };
 
     fetchQuote(true);
-    // Refresh quote every 5s regardless of view mode (to keep header updated)
-    intervalId = setInterval(() => fetchQuote(false), 5000);
+    // Refresh quote based on focus mode (15s for focus, 60s for observe, 5s for normal)
+    const intervalMs = focusMode === 'focus' ? 15000 : (focusMode === 'observe' ? 60000 : 5000);
+    intervalId = setInterval(() => fetchQuote(false), intervalMs);
 
     return () => {
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [activeStock]);
+  }, [activeStock, focusMode]);
 
   // Scroll State for Sticky Header
   const [isScrolled, setIsScrolled] = useState(false);
@@ -350,9 +391,34 @@ const App: React.FC = () => {
                     <button
                       onClick={toggleWatchlist}
                       className={`p-1 md:p-1.5 rounded-full transition-colors ${isWatchlisted ? 'text-yellow-400 bg-yellow-400/10' : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800'}`}
+                      title={isWatchlisted ? '取消收藏' : '加入自选'}
                     >
                       <Star className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isWatchlisted ? 'fill-yellow-400' : ''}`} />
                     </button>
+
+                    <button
+                      onClick={() => setFocusMode(prev => prev === 'normal' ? 'observe' : (prev === 'observe' ? 'focus' : 'normal'))}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] md:text-xs transition-colors border ${focusMode === 'focus' ? 'text-red-400 bg-red-400/10 border-red-500/30' : focusMode === 'observe' ? 'text-blue-400 bg-blue-400/10 border-blue-500/30' : 'text-slate-400 bg-slate-800 border-slate-700 hover:text-slate-300'}`}
+                      title="切换刷新模式：标准(5s) / 观望(60s) / 盯盘(15s)"
+                    >
+                      {focusMode === 'focus' ? (
+                        <>
+                          <Target className="w-3.5 h-3.5 animate-pulse" />
+                          <span className="font-bold">盯盘 15s</span>
+                        </>
+                      ) : focusMode === 'observe' ? (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="font-bold">观望 60s</span>
+                        </>
+                      ) : (
+                        <>
+                          <Activity className="w-3.5 h-3.5" />
+                          <span>标准 5s</span>
+                        </>
+                      )}
+                    </button>
+
                     <RealTimeClock />
                     <span className={`flex items-center gap-1 ${backendStatus ? 'text-green-500/80' : 'text-red-500/80'}`}>
                       <Server className="w-2.5 h-2.5 md:w-3 md:h-3" />
@@ -446,6 +512,7 @@ const App: React.FC = () => {
             quote={quote}
             isTradingHours={isTradingHours}
             configVersion={configVersion}
+            focusMode={focusMode}
           />
         )}
 
