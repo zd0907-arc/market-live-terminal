@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Data
+data/
+*.db
+*.db-wal
+*.db-shm
+market_data_history.db
+
+# Dev and local config
+.env*
+.cursorignore
+scripts/
+
+# Node
+node_modules
+dist
+.npm
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
