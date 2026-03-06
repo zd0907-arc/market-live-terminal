@@ -328,18 +328,23 @@ export const updateAppConfig = async (key: string, value: string) => {
   });
 };
 
-export const testLLMConnection = async (config: {
-  base_url: string;
-  api_key: string;
-  model: string;
-  proxy?: string;
-}) => {
+export const getLLMInfo = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/config/llm-info`);
+    const json = await res.json();
+    return json.data || { model: '未配置', base_url: '未配置', key_configured: false };
+  } catch (e) {
+    return { model: '未配置', base_url: '未配置', key_configured: false };
+  }
+};
+
+export const testLLMConnection = async () => {
   const res = await fetch(`${API_BASE_URL}/config/test-llm`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(config)
+    body: JSON.stringify({})
   });
   return await res.json();
 };

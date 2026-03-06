@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, MessageSquare, Cpu } from 'lucide-react';
+import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield } from 'lucide-react';
 import * as StockService from '../../services/stockService';
 
 interface ConfigModalProps {
@@ -15,22 +15,26 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     const [bullWords, setBullWords] = useState('');
     const [bearWords, setBearWords] = useState('');
 
-    // AI Config
-    const [llmBaseUrl, setLlmBaseUrl] = useState('https://api.deepseek.com/v1');
-    const [llmApiKey, setLlmApiKey] = useState('');
-    const [llmModel, setLlmModel] = useState('deepseek-chat');
+    // AI Config (只读)
+    const [llmModel, setLlmModel] = useState('');
+    const [llmBaseUrl, setLlmBaseUrl] = useState('');
+    const [llmKeyConfigured, setLlmKeyConfigured] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean, message: string } | null>(null);
 
     useEffect(() => {
         if (isOpen) {
+            // 加载情绪关键词配置
             StockService.getAppConfig().then(cfg => {
                 if (cfg.sentiment_bull_words) setBullWords(cfg.sentiment_bull_words);
                 if (cfg.sentiment_bear_words) setBearWords(cfg.sentiment_bear_words);
+            });
 
-                if (cfg.llm_base_url) setLlmBaseUrl(cfg.llm_base_url);
-                if (cfg.llm_api_key) setLlmApiKey(cfg.llm_api_key);
-                if (cfg.llm_model) setLlmModel(cfg.llm_model);
+            // 加载 LLM 脱敏信息
+            StockService.getLLMInfo().then(info => {
+                setLlmModel(info.model || '未配置');
+                setLlmBaseUrl(info.base_url || '未配置');
+                setLlmKeyConfigured(info.key_configured || false);
             });
         }
     }, [isOpen]);
@@ -39,12 +43,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
         setIsTesting(true);
         setTestResult(null);
         try {
-            const res = await StockService.testLLMConnection({
-                base_url: llmBaseUrl,
-                api_key: llmApiKey,
-                model: llmModel
-            });
-
+            const res = await StockService.testLLMConnection();
             if (res.code === 200) {
                 setTestResult({ success: true, message: '连接成功' });
             } else {
@@ -58,15 +57,9 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     };
 
     const handleSave = async () => {
-        // Sentiment
+        // 只保存情绪关键词配置，LLM 配置不再通过前端修改
         await StockService.updateAppConfig('sentiment_bull_words', bullWords);
         await StockService.updateAppConfig('sentiment_bear_words', bearWords);
-
-        // AI
-        await StockService.updateAppConfig('llm_base_url', llmBaseUrl);
-        await StockService.updateAppConfig('llm_api_key', llmApiKey);
-        await StockService.updateAppConfig('llm_model', llmModel);
-
         onSave();
         onClose();
     };
@@ -129,47 +122,57 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
 
                     {activeTab === 'ai' && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div>
-                                <label className="block text-xs text-slate-400 mb-1">API Base URL</label>
-                                <input
-                                    type="text"
-                                    value={llmBaseUrl}
-                                    onChange={e => setLlmBaseUrl(e.target.value)}
-                                    placeholder="https://api.deepseek.com/v1"
-                                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-green-500 focus:outline-none"
-                                />
+                            {/* 安全提示 */}
+                            <div className="flex items-start gap-2 p-3 bg-slate-800/60 border border-slate-700 rounded-lg">
+                                <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                    AI 配置已由服务端环境变量安全管理，无法通过前端修改。如需更换模型或 Key，请联系管理员在服务器端配置。
+                                </p>
                             </div>
-                            <div>
-                                <label className="block text-xs text-slate-400 mb-1">API Key</label>
-                                <input
-                                    type="password"
-                                    value={llmApiKey}
-                                    onChange={e => setLlmApiKey(e.target.value)}
-                                    placeholder="sk-..."
-                                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-green-500 focus:outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-400 mb-1">Model Name</label>
-                                <input
-                                    type="text"
-                                    value={llmModel}
-                                    onChange={e => setLlmModel(e.target.value)}
-                                    placeholder="deepseek-chat"
-                                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-green-500 focus:outline-none"
-                                />
-                                <div className="pt-2 flex items-center gap-3">
+
+                            {/* 只读信息卡片 */}
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">模型</label>
+                                    <div className="w-full bg-slate-800/40 border border-slate-700 rounded px-3 py-2 text-slate-300 text-sm">
+                                        {llmModel}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">API Base URL</label>
+                                    <div className="w-full bg-slate-800/40 border border-slate-700 rounded px-3 py-2 text-slate-300 text-sm truncate">
+                                        {llmBaseUrl}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">API Key 状态</label>
+                                    <div className="flex items-center gap-2 px-3 py-2">
+                                        {llmKeyConfigured ? (
+                                            <>
+                                                <CheckCircle className="w-4 h-4 text-green-400" />
+                                                <span className="text-green-400 text-sm">已配置</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <XCircle className="w-4 h-4 text-red-400" />
+                                                <span className="text-red-400 text-sm">未配置</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 测试连接按钮 */}
+                                <div className="pt-1 flex items-center gap-3">
                                     <button
                                         onClick={handleTestConnection}
-                                        disabled={isTesting}
-                                        className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${isTesting
-                                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                        disabled={isTesting || !llmKeyConfigured}
+                                        className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${isTesting || !llmKeyConfigured
+                                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                                                 : 'bg-slate-700 hover:bg-slate-600 text-white'
                                             }`}
                                     >
                                         {isTesting ? '测试中...' : '测试连接'}
                                     </button>
-
                                     {testResult && (
                                         <span className={`text-xs ${testResult.success ? 'text-green-400' : 'text-red-400'}`}>
                                             {testResult.message}

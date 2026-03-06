@@ -1,0 +1,23 @@
+# ==============================================
+# Cursor / AI 工具屏蔽配置
+# 防止本地 AI 辅助编程工具扫描敏感文件
+# ==============================================
+
+# 环境变量文件（包含 API Key 等机密）
+.env
+.env.local
+.env.production
+
+# 数据库文件（体积大且无需 AI 分析）
+*.db
+*.db-shm
+*.db-wal
+data/
+market_data.db
+market_data_history.db
+
+# Node 依赖
+node_modules/
+
+# 构建产物
+dist/

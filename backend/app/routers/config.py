@@ -1,11 +1,13 @@
+import os
 from fastapi import APIRouter
-from backend.app.models.schemas import APIResponse, AppConfig, ConfigUpdate
+from backend.app.models.schemas import APIResponse, ConfigUpdate
 from backend.app.db.crud import get_app_config, update_app_config
 
 router = APIRouter()
 
 @router.get("/config", response_model=dict)
 def get_config():
+    """返回业务配置（阈值、情绪关键词等），不包含任何 LLM 敏感信息"""
     return get_app_config()
 
 @router.get("/config/public", response_model=APIResponse)
@@ -22,13 +24,27 @@ def get_public_config():
         }
     )
 
-from pydantic import BaseModel
+@router.get("/config/llm-info", response_model=APIResponse)
+def get_llm_info():
+    """
+    返回 LLM 的脱敏信息（仅模型名称和 Base URL），不返回 API Key
+    供前端 AI 设置面板只读展示
+    """
+    return APIResponse(
+        code=200,
+        data={
+            "model": os.getenv("LLM_MODEL", "未配置"),
+            "base_url": os.getenv("LLM_BASE_URL", "未配置"),
+            "key_configured": bool(os.getenv("LLM_API_KEY", ""))
+        }
+    )
 
 @router.post("/config", response_model=APIResponse)
 def update_config(config: ConfigUpdate):
-    # Support both single key update (legacy) and bulk update logic if needed
-    # But schema defines key/value
-    update_app_config(config.key, config.value)
+    try:
+        update_app_config(config.key, config.value)
+    except ValueError as e:
+        return APIResponse(code=403, message=str(e))
     
     # Reload sentiment analyzer keywords if relevant
     if config.key in ['sentiment_bull_words', 'sentiment_bear_words']:
@@ -37,18 +53,13 @@ def update_config(config: ConfigUpdate):
         
     return APIResponse(code=200, message="Config updated")
 
-class LLMConfig(BaseModel):
-    base_url: str
-    api_key: str
-    model: str
-    proxy: str = ""
-
 @router.post("/config/test-llm", response_model=APIResponse)
-def test_llm_connection(config: LLMConfig):
+def test_llm_connection():
+    """使用服务端环境变量中的 LLM 配置进行连通性测试，前端不需要传入任何 Key"""
     from backend.app.services.llm_service import llm_service
     try:
-        # 使用传入的配置进行测试，而不是已保存的配置
-        llm_service.test_connection(config.dict())
+        llm_service.reload_config()
+        llm_service.test_connection(llm_service.config)
         return APIResponse(code=200, message="连接测试成功")
     except Exception as e:
         return APIResponse(code=500, message=f"连接失败: {str(e)}")

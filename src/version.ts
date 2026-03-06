@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.1.0';
+export const APP_VERSION = '4.2.0';
 export const RELEASE_NOTES = [
+    'v4.2.0: API Key安全隔离（纯环境变量+前端只读），星标DELETE接口修复，.cursorignore防AI偷窥',
     'v4.1.0: 前端单页三Tab合并（当日分时/30分钟线/日线），删除主力阈值前端配置，修复LLM API配置持久化',
     'v4.0.0: 分布式架构重生 — 三节点部署（Mac开发+Windows算力+云端服务），完成278个全市场L2历史数据ETL，数据路径统一到data/，rsync增量同步',
     'v3.1.0: 口径冻结（大单20万/超大单100万写死），表名对齐至local_history，空态不静默规范',

@@ -1,7 +1,7 @@
+import os
 import requests
 import logging
 from typing import Dict, Any, List
-from backend.app.db.crud import get_app_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,12 +11,12 @@ class LLMService:
         self.reload_config()
 
     def reload_config(self):
-        raw_config = get_app_config()
+        """从环境变量读取 LLM 配置，彻底不读数据库"""
         self.config = {
-            "base_url": raw_config.get("llm_base_url", "https://api.openai.com/v1"),
-            "api_key": raw_config.get("llm_api_key", ""),
-            "model": raw_config.get("llm_model", "gpt-3.5-turbo"),
-            "proxy": raw_config.get("llm_proxy", "")  # Add proxy support
+            "base_url": os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+            "api_key": os.getenv("LLM_API_KEY", ""),
+            "model": os.getenv("LLM_MODEL", "gpt-3.5-turbo"),
+            "proxy": os.getenv("LLM_PROXY", "")
         }
 
     def generate_sentiment_summary(self, symbol: str, metrics: Dict[str, Any], comments: List[Dict[str, Any]]) -> str:

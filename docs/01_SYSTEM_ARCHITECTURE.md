@@ -65,7 +65,17 @@
 ## 四、 环境变量与配置依赖 (.env Blueprint)
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：
 
+### 基础配置
 *   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认为 `data/market_data.db`。
+*   `USER_DB_PATH`: 用户配置数据库路径。默认 `data/user_data.db`。
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。
 *   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202:8000`)。
 *   `INGEST_TOKEN`: 控制云端高速穿透接口权限的秘钥，云端和 Windows 节点必须完全对齐。
+
+### LLM 大模型配置（🔴 仅通过服务端环境变量）
+> **安全红线**：以下配置**绝对禁止**存入数据库、前端代码或 Git 仓库。云端通过宿主机环境变量 → Docker Compose 透传。本地通过 `.env.local` 文件（已被 `.gitignore` 和 `.cursorignore` 隔离）。
+
+*   `LLM_BASE_URL`: 大模型 API 基地址（如 `https://dashscope.aliyuncs.com/compatible-mode/v1`）。
+*   `LLM_API_KEY`: 大模型 API Key（如通义千问的 `sk-xxx`）。**绝不出现在任何代码或数据库中。**
+*   `LLM_MODEL`: 模型名称（如 `qwen3-max`）。
+*   `LLM_PROXY`: 代理地址，留空则直连。

@@ -71,7 +71,7 @@ block-beta
         columns 2
         c["⚙️ Config 配置层 — 用户直接操作"]
         watchlist["watchlist<br/>自选股列表"]
-        app_config["app_config<br/>阈值配置"]
+        app_config["app_config<br/>阈值配置<br/>(LLM配置已迁至环境变量)"]
     end
 ```
 
@@ -149,4 +149,16 @@ sequenceDiagram
 
 ---
 
-*最后更新：2026-03-01*
+## 🔐 安全配置
+
+| 文件 | 用途 | 注意事项 |
+|------|------|----------|
+| `deploy/.env` | 云端 LLM Key | 手动创建，不入 Git |
+| `.env.local` | 本地开发 Key | `.gitignore` + `.cursorignore` 双重屏蔽 |
+| `.cursorignore` | AI 工具屏蔽 | 阻止 Cursor 等扫描敏感文件 |
+
+> 详细 Key 维护指南见 `docs/05_LLM_KEY_SECURITY.md`
+
+---
+
+*最后更新：2026-03-06*

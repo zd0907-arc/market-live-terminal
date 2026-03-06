@@ -1,10 +1,6 @@
 import sqlite3
 import os
-from dotenv import dotenv_values, set_key
 from backend.app.core.config import DB_FILE, USER_DB_FILE
-
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-ENV_PATH = os.path.join(ROOT_DIR, ".env.local")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -26,6 +22,14 @@ def add_watchlist_item(symbol: str, name: str):
     conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO watchlist (symbol, name) VALUES (?, ?)", (symbol, name))
+    conn.commit()
+    conn.close()
+
+def remove_watchlist_item(symbol: str):
+    """从星标列表中删除指定股票"""
+    conn = get_user_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM watchlist WHERE symbol = ?", (symbol,))
     conn.commit()
     conn.close()
 
@@ -81,40 +85,25 @@ def get_ticks_for_aggregation(symbol: str, date: str):
     return ticks
 
 def get_app_config():
-    # 1. DB Config
+    """读取业务配置（阈值、情绪关键词等），不包含 LLM 敏感信息"""
     conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("SELECT key, value FROM app_config")
     db_rows = c.fetchall()
     conn.close()
-    config = {k: v for k, v in db_rows}
-
-    # 2. Env Config (Overwrite DB)
-    if os.path.exists(ENV_PATH):
-        env_config = dotenv_values(ENV_PATH)
-        for k, v in env_config.items():
-            # Convert keys to lowercase to match app_config conventions
-            # e.g. LLM_API_KEY -> llm_api_key
-            lower_k = k.lower()
-            if lower_k.startswith("llm_") or "threshold" in lower_k or "sentiment_" in lower_k:
-                config[lower_k] = v
-    
+    # 过滤掉 LLM 相关的敏感 Key，只返回业务配置
+    config = {k: v for k, v in db_rows if not k.startswith('llm_')}
     return config
 
 def update_app_config(key: str, value: str):
-    # 1. Update DB
+    """更新业务配置，禁止通过此接口写入 LLM Key"""
+    if key.startswith('llm_'):
+        raise ValueError(f"LLM 配置 '{key}' 不可通过 API 修改，请使用服务端环境变量")
     conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
-
-    # 2. Update .env.local for specific keys
-    if key.startswith("llm_") or "threshold" in key or key.startswith("sentiment_"):
-        if not os.path.exists(ENV_PATH):
-            open(ENV_PATH, 'w').close()
-        # Convert to UPPERCASE for env standard
-        set_key(ENV_PATH, key.upper(), str(value))
 
 def save_local_history(symbol, date, net_inflow, main_buy, main_sell, close, change_pct, activity_ratio, config_sig):
     conn = get_db_connection()

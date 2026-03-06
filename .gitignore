@@ -27,9 +27,15 @@ dist-ssr
 *.db
 *.db-shm
 *.db-wal
+data/
 __pycache__/
 .trae/
 .pytest_cache/
+
+# Environment Variables (绝对禁止提交)
+.env
+.env.local
+.env.production
 
 # Temp / Debug scripts
 *.exp

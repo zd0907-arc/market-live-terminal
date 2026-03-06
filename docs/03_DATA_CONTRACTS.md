@@ -12,7 +12,7 @@
 |------|-----|---------|------|
 | **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | **只追加，永不 UPDATE/DELETE** | 逐笔/盘口/评论源数据 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
-| **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等 |
+| **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等（⚠️ v4.0 起 LLM 配置已迁移至环境变量） |
 
 > **数据一致性原则**：云端 `data/market_data.db` 是唯一权威源（Single Source of Truth）。Mac 本地通过 `sync_cloud_db.sh` 整库下载保持一致。Windows 只负责向云端写入，不保留服务副本。
 
@@ -113,3 +113,18 @@
 
 ---
 如果有以上任何未被定义边界的字段，请抛错并拦截，拒绝脏数据入库！
+
+---
+
+## 四、 v4.0 新增/变更接口
+
+### 1. 星标管理（Watchlist）— 新增 DELETE
+*   **`GET /api/watchlist`**: 返回全部自选股列表。
+*   **`POST /api/watchlist?symbol=sh600519&name=贵州茅台`**: 添加自选股，后台自动触发历史回填和情绪爬取。
+*   **`DELETE /api/watchlist?symbol=sh600519`**: 移除自选股。
+
+### 2. LLM 配置（Security-First）
+*   **`GET /api/config/llm-info`**: 返回 LLM 脱敏信息（模型名、Base URL、Key 是否已配置），**不返回 API Key 明文**。
+*   **`POST /api/config/test-llm`**: 使用服务端环境变量中的 Key 测试 LLM 连通性，前端无需传参。
+
+> ⚠️ **v4.0 破坏性变更**：`POST /api/config` 不再接受 `llm_` 前缀的 Key 写入，会返回 403。LLM 配置改由服务端环境变量管理。详见 `docs/05_LLM_KEY_SECURITY.md`。

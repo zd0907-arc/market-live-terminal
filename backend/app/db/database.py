@@ -158,10 +158,7 @@ def init_db():
     # 阈值 (V4.0 已写死，仅保持兼容)
     c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
     c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
-    # LLM 配置默认值（防止数据库整库替换后丢失）
-    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_base_url', 'https://api.deepseek.com/v1')")
-    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_api_key', '')")
-    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', 'deepseek-chat')")
+    # LLM 配置已迁移至服务端环境变量，不再存储在数据库中
     
     user_conn.commit()
     user_conn.close()

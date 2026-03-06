@@ -35,7 +35,7 @@ ssh laqiyuan@100.115.228.56
 如果您在 Windows 上跑完了几千万行的超级数据库 `market_data_history.db`，需要传回 Mac：
 ```bash
 # 在 Mac 的终端执行 (非 ssh 状态下)：
-scp laqiyuan@192.168.3.108:D:/market_data_history.db ./data/
+scp laqiyuan@100.115.228.56:D:/market_data_history.db ./data/
 ```
 
 ---
@@ -64,6 +64,6 @@ git push origin main
 当 Windows 把一年的历史数据洗完后，最终要部署到云端取代云端的瘸腿数据库：
 ```bash
 # 在 Mac 终端执行：
-scp data/market_data_history.db ubuntu@111.229.144.202:~/market_data_history.db
-ssh ubuntu@111.229.144.202 "sudo mv ~/market_data_history.db ~/market-live-termial/deploy/data/market_data.db && sudo docker compose restart backend"
+scp data/market_data_history.db ubuntu@111.229.144.202:~/market-live-terminal/data/
+ssh ubuntu@111.229.144.202 "cd ~/market-live-terminal && python3 backend/scripts/merge_historical_db.py"
 ```

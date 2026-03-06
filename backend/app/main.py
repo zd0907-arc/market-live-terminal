@@ -1,12 +1,18 @@
+import os
+
+# 🔑 最先加载 .env.local 环境变量（本地开发用，Docker 环境中此文件不存在不影响）
+# 必须在所有 import 之前执行，确保 LLM_API_KEY 等变量在模块初始化时已经可用
+from dotenv import load_dotenv
+_root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+load_dotenv(os.path.join(_root_dir, ".env.local"), override=False)
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.db.database import init_db
 from backend.app.core.calendar import TradeCalendar
 import logging
-import uvicorn
 import urllib3
-import os
 
 # Disable unstable system proxies that hang AkShare requests to EastMoney
 for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY']:
@@ -44,7 +50,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AlphaData Local Server", 
     description="本地金融数据服务 - 为前端提供历史资金流向与博弈分析数据",
-    version="3.0.4"
+    version="4.2.0"
 )
 
 # CORS 配置
