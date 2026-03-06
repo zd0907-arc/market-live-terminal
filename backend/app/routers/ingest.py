@@ -1,9 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from fastapi import APIRouter, HTTPException
 import os
 import logging
+from collections import defaultdict
 from backend.app.models.ingest_models import IngestTicksRequest, IngestSnapshotsRequest
-from backend.app.db.crud import save_trade_ticks, save_sentiment_snapshot, save_history_30m_batch
+from backend.app.db.crud import (
+    save_sentiment_snapshot,
+    save_history_30m_batch,
+    save_ticks_daily_overwrite,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -21,15 +25,21 @@ async def ingest_ticks(request: IngestTicksRequest):
     verify_token(request.token)
     
     try:
-        # 转换 Pydantic model 到 Tuple 列表，适配 CRUD 函数
-        # save_trade_ticks expects list of tuples: (symbol, time, price, volume, amount, type, date)
+        # Windows 节点上传的是“当日全量 tick 快照”，按 symbol+date 覆盖写可避免重复累加
         if request.ticks:
-            ticks_data = [
-                (t.symbol, t.time, t.price, t.volume, t.amount, t.type, t.date)
-                for t in request.ticks
-            ]
-            save_trade_ticks(ticks_data)
-            logger.info(f"[Ingest] Saved {len(ticks_data)} ticks.")
+            grouped_ticks = defaultdict(list)
+            for t in request.ticks:
+                grouped_ticks[(t.symbol, t.date)].append(
+                    (t.symbol, t.time, t.price, t.volume, t.amount, t.type, t.date)
+                )
+
+            total_saved = 0
+            for (symbol, date_str), rows in grouped_ticks.items():
+                save_ticks_daily_overwrite(symbol, date_str, rows)
+                total_saved += len(rows)
+            logger.info(
+                f"[Ingest] Overwrote ticks: payload={len(request.ticks)}, saved={total_saved}, groups={len(grouped_ticks)}."
+            )
             
         if request.history_30m:
             # save_history_30m_batch expects list of dicts directly
@@ -51,25 +61,30 @@ async def ingest_snapshots(request: IngestSnapshotsRequest):
     verify_token(request.token)
     
     try:
-        # save_sentiment_snapshot 内部有容错与 ignore，因此可以并发插入
-        inserted = 0
-        for s in request.snapshots:
-            try:
-                save_sentiment_snapshot(
-                    symbol=s.symbol,
-                    cvd=s.cvd,
-                    oib=s.oib,
-                    signals_json=s.signals,
-                    bid_vol=s.bid1_vol,
-                    ask_vol=s.ask1_vol,
-                    tick_vol=s.tick_vol
-                )
-                inserted += 1
-            except Exception as e:
-                logger.warning(f"Ingest snapshot ignore DB conflict: {e}")
-                
-        logger.info(f"[Ingest] Processed {len(request.snapshots)} snapshots.")
-        return {"status": "success", "message": f"Ingested {inserted} snapshots"}
+        if not request.snapshots:
+            return {"status": "success", "message": "Ingested 0 snapshots"}
+
+        rows = [
+            (
+                s.symbol,
+                s.timestamp,
+                s.date,
+                s.cvd,
+                s.oib,
+                0.0,   # price: ingest payload未包含，保留默认值
+                0,     # outer_vol
+                0,     # inner_vol
+                s.signals,
+                s.bid1_vol,
+                s.ask1_vol,
+                s.tick_vol
+            )
+            for s in request.snapshots
+        ]
+        save_sentiment_snapshot(rows)
+        
+        logger.info(f"[Ingest] Saved {len(rows)} snapshots.")
+        return {"status": "success", "message": f"Ingested {len(rows)} snapshots"}
         
     except Exception as e:
         logger.error(f"[Ingest Snapshots Error]: {e}")

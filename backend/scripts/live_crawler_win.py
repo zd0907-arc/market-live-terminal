@@ -4,7 +4,7 @@ import time
 import requests
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import akshare as ak
 
 # Disable unstable system proxies
@@ -23,6 +23,11 @@ INGEST_TOKEN = os.getenv("INGEST_TOKEN", "zhangdata-secret-token")
 # 1. 业务逻辑复用的极简阈值判断 (用于 30m K线前摄计算)
 LARGE_TH = 200000
 SUPER_TH = 1000000
+
+# Tick 拉取策略（可通过环境变量调整）
+ACTIVE_TICK_INTERVAL_SECONDS = int(os.getenv("ACTIVE_TICK_INTERVAL_SECONDS", "20"))
+FULL_SWEEP_INTERVAL_SECONDS = int(os.getenv("FULL_SWEEP_INTERVAL_SECONDS", "900"))  # 默认15分钟
+FINAL_SWEEP_RETRY_INTERVAL_SECONDS = int(os.getenv("FINAL_SWEEP_RETRY_INTERVAL_SECONDS", "90"))
 
 def get_watchlist():
     """从云端拉取当前的自选股列表"""
@@ -159,97 +164,144 @@ def get_trading_date(symbol="sh600000"):
     # Fallback to simple weekday offset if Tencent fails
     now = datetime.now()
     if now.weekday() == 5: # Saturday
-        return (now.replace(day=now.day-1)).strftime("%Y-%m-%d")
+        return (now - timedelta(days=1)).strftime("%Y-%m-%d")
     elif now.weekday() == 6: # Sunday
-        from datetime import timedelta
         return (now - timedelta(days=2)).strftime("%Y-%m-%d")
         
     return now.strftime("%Y-%m-%d")
 
-def fetch_and_post_ticks(target_symbols=None):
+def fetch_and_post_ticks(target_symbols=None, max_retries=1):
+    stats = {"attempted": 0, "succeeded": 0, "failed": [], "rows": 0}
+
     if target_symbols is None:
         watchlist = get_watchlist()
-        if not watchlist: return
+        if not watchlist:
+            return stats
         target_symbols = [item['symbol'] if isinstance(item, dict) else item for item in watchlist]
     
-    if not target_symbols: return
+    if not target_symbols:
+        return stats
     
     today_str = get_trading_date(target_symbols[0])
     
     for sym in target_symbols:
-        try:
-            logger.info(f"Fetching Ticks: {sym}")
-            df = ak.stock_zh_a_tick_tx_js(sym)
-            if df is None or df.empty:
-                continue
-                
-            cols = df.columns.tolist()
-            vol_col = next((c for c in cols if '成交量' in c), None)
-            amt_col = next((c for c in cols if '成交额' in c or '成交金额' in c), None)
-            if not vol_col or not amt_col: continue
+        stats["attempted"] += 1
+        pushed = False
+        last_err = None
 
-            ticks_list = []
-            for _, row in df.iterrows():
-                t_time = row['成交时间']
-                # Accept ticks up to 15:05:05 as auction data might trickle in
-                if t_time > "15:06:00": continue
-                
-                ticks_list.append({
-                    "symbol": sym,
-                    "time": t_time,
-                    "price": float(row['成交价格']),
-                    "volume": int(row[vol_col]),
-                    "amount": float(row[amt_col]),
-                    "type": row['性质'],
-                    "date": today_str
-                })
-                
-            if ticks_list:
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"Fetching Ticks: {sym} (attempt {attempt + 1}/{max_retries + 1})")
+                df = ak.stock_zh_a_tick_tx_js(sym)
+                if df is None or df.empty:
+                    raise RuntimeError("empty dataframe")
+
+                cols = df.columns.tolist()
+                vol_col = next((c for c in cols if '成交量' in c), None)
+                amt_col = next((c for c in cols if '成交额' in c or '成交金额' in c), None)
+                if not vol_col or not amt_col:
+                    raise RuntimeError(f"missing volume/amount columns: {cols}")
+
+                ticks_list = []
+                for _, row in df.iterrows():
+                    t_time = row['成交时间']
+                    # Accept ticks up to 15:06:00 as auction data might trickle in
+                    if t_time > "15:06:00":
+                        continue
+
+                    ticks_list.append({
+                        "symbol": sym,
+                        "time": t_time,
+                        "price": float(row['成交价格']),
+                        "volume": int(row[vol_col]),
+                        "amount": float(row[amt_col]),
+                        "type": row['性质'],
+                        "date": today_str
+                    })
+
+                if not ticks_list:
+                    raise RuntimeError("no valid ticks after time filter")
+
                 payload = {
                     "token": INGEST_TOKEN,
                     "ticks": ticks_list
                 }
                 res = requests.post(f"{CLOUD_URL}/api/internal/ingest/ticks", json=payload, timeout=10)
-                if res.status_code == 200:
-                    logger.info(f" -> Pushed {len(ticks_list)} ticks to Cloud")
-                else:
-                    logger.error(f" -> Push failed: {res.status_code} {res.text}")
-                    
-        except Exception as e:
-            logger.error(f"Tick task failed for {sym}: {e}")
+                if res.status_code != 200:
+                    raise RuntimeError(f"push failed: {res.status_code} {res.text}")
+
+                logger.info(f" -> Pushed {len(ticks_list)} ticks to Cloud")
+                stats["succeeded"] += 1
+                stats["rows"] += len(ticks_list)
+                pushed = True
+                break
+
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries:
+                    logger.warning(f"[{sym}] tick fetch/push failed, retrying: {e}")
+                    time.sleep(1)
+
+        if not pushed:
+            stats["failed"].append(sym)
+            logger.error(f"Tick task failed for {sym}: {last_err}")
+
+    logger.info(
+        "Tick batch done: attempted=%s, succeeded=%s, failed=%s, rows=%s",
+        stats["attempted"], stats["succeeded"], len(stats["failed"]), stats["rows"]
+    )
+    return stats
 
 async def poll_ticks_loop():
     logger.info("Started Trade Ticks Poller (Dynamic interval)")
     
     has_done_final_sweep = False
+    last_final_sweep_attempt_ts = 0.0
+    last_full_sweep_ts = 0.0
     last_tick_fetch_time = {} # Track last fetch time per active symbol
     
     while True:
         now = datetime.now()
+        now_ts = now.timestamp()
         current_time = now.strftime("%H:%M:%S")
         
         # --- Step 5: 终极收网：收盘后强制全量覆盖一次 (Fallback Sweep) ---
         if "15:01:00" <= current_time <= "15:10:00":
-            if not has_done_final_sweep:
-                logger.info(">>> Executing 15:05 FINAL SWEEP FOR ALL WATCHLIST STOCKS <<<")
-                # None param forces it to fetch the entire watchlist
-                fetch_and_post_ticks(None)
-                has_done_final_sweep = True
-                await asyncio.sleep(60)
+            if (not has_done_final_sweep) and (now_ts - last_final_sweep_attempt_ts >= FINAL_SWEEP_RETRY_INTERVAL_SECONDS):
+                logger.info(">>> Executing FINAL SWEEP FOR ALL WATCHLIST STOCKS <<<")
+                stats = fetch_and_post_ticks(None, max_retries=2)
+                last_final_sweep_attempt_ts = now_ts
+                if stats["attempted"] > 0 and not stats["failed"]:
+                    has_done_final_sweep = True
+                    logger.info("Final sweep succeeded for all watchlist symbols.")
+                else:
+                    logger.warning(
+                        "Final sweep incomplete. attempted=%s failed=%s. will retry in-window.",
+                        stats["attempted"], len(stats["failed"])
+                    )
+            await asyncio.sleep(10)
             continue
             
         if "09:00:00" <= current_time <= "09:15:00":
             has_done_final_sweep = False
+            last_final_sweep_attempt_ts = 0.0
+            last_full_sweep_ts = 0.0
             
         if not is_trading_time():
             await asyncio.sleep(60)
             continue
+
+        # --- Baseline保障: 交易时段每15分钟全量轮扫一次，保证无人查看也会落数 ---
+        if now_ts - last_full_sweep_ts >= FULL_SWEEP_INTERVAL_SECONDS:
+            logger.info(">>> Executing PERIODIC FULL WATCHLIST SWEEP <<<")
+            fetch_and_post_ticks(None, max_retries=1)
+            last_full_sweep_ts = now_ts
             
         # --- Step 4: 仅对活跃股票拉取高频 Tick ---
         active_targets = get_active_symbols()
         if not active_targets:
-            # Cold state: Sleep 10s
-            await asyncio.sleep(10)
+            # Cold state: baseline sweep already保障，低频休眠
+            await asyncio.sleep(5)
             continue
             
         # For active stocks, fetch ticks roughly every 10-30 seconds instead of 3 mins
@@ -257,12 +309,12 @@ async def poll_ticks_loop():
         symbols_to_fetch = []
         for sym in active_targets:
             last_fetch = last_tick_fetch_time.get(sym, 0)
-            if now.timestamp() - last_fetch >= 20: # Fetch active ticks every 20 seconds
+            if now_ts - last_fetch >= ACTIVE_TICK_INTERVAL_SECONDS:
                 symbols_to_fetch.append(sym)
-                last_tick_fetch_time[sym] = now.timestamp()
+                last_tick_fetch_time[sym] = now_ts
                 
         if symbols_to_fetch:
-            fetch_and_post_ticks(symbols_to_fetch)
+            fetch_and_post_ticks(symbols_to_fetch, max_retries=1)
             
         await asyncio.sleep(5)
 

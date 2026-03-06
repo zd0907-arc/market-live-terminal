@@ -1,9 +1,9 @@
 import threading
 import time
 import logging
-from datetime import datetime
 import akshare as ak
 from backend.app.db.crud import get_all_symbols, save_ticks_daily_overwrite
+from backend.app.core.http_client import MarketClock
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +23,18 @@ class DataCollector:
         self.running = False
 
     def _is_trading_time(self):
-        """Check if current time is within trading hours (with buffer)"""
-        now = datetime.now()
-        current_time = now.time()
-        
-        # Hard Stop at 15:05:00
-        # Anything after 15:05 is definitely closed, even for closing auction (14:57-15:00)
-        hard_stop = datetime.strptime("15:05:00", "%H:%M:%S").time()
-        if current_time > hard_stop:
-            return False
-
-        # 09:15 - 11:35 (Morning + Buffer)
-        # 12:55 - 15:05 (Afternoon + Buffer)
-        morning_start = datetime.strptime("09:15", "%H:%M").time()
-        morning_end = datetime.strptime("11:35", "%H:%M").time()
-        afternoon_start = datetime.strptime("12:55", "%H:%M").time()
-        afternoon_end = hard_stop # 15:05
-        
-        return (morning_start <= current_time <= morning_end) or \
-               (afternoon_start <= current_time <= afternoon_end)
+        return MarketClock.is_trading_time()
 
     def _loop(self):
-        # 立即执行一次
-        logger.info("Executing initial fetch...")
-        try:
-            self._poll_watchlist()
-        except Exception as e:
-            logger.error(f"Initial Fetch Error: {e}")
+        # 初次启动只在交易时段拉取，避免凌晨/周末误把上一交易日写成“今天”
+        if self._is_trading_time():
+            logger.info("Executing initial fetch (trading hours)...")
+            try:
+                self._poll_watchlist()
+            except Exception as e:
+                logger.error(f"Initial Fetch Error: {e}")
+        else:
+            logger.info("Skipping initial fetch: not in trading hours.")
 
         while self.running:
             time.sleep(180) # 每3分钟轮询一次
@@ -65,8 +50,12 @@ class DataCollector:
                 logger.error(f"Data Collector Error: {e}")
 
     def _poll_watchlist(self):
+        if not self._is_trading_time():
+            logger.info("Skip watchlist polling outside trading hours.")
+            return
+
         symbols = get_all_symbols()
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_str = MarketClock.get_display_date()
         
         for symbol in symbols:
             logger.info(f"Auto-fetching ticks for {symbol}...")

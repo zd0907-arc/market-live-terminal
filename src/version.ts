@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.1';
+export const APP_VERSION = '4.2.2';
 export const RELEASE_NOTES = [
+    'v4.2.2: 30分钟线跨日错标修复，强化Windows爬虫无人值守保障机制（周期轮扫与收盘重试），优化云端覆盖写入',
     'v4.2.1: 文档矩阵梳理归档，新增前后端双核AI自动化交接白皮书(AI Handoff Protocol)，星标无损热迁移完成',
     'v4.2.0: API Key安全隔离（纯环境变量+前端只读），星标DELETE接口修复，.cursorignore防AI偷窥',
     'v4.1.0: 前端单页三Tab合并（当日分时/30分钟线/日线），删除主力阈值前端配置，修复LLM API配置持久化',

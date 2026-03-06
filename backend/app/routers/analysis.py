@@ -14,8 +14,8 @@ def get_history_trend(symbol: str, days: int = 20):
     Get intraday history bars (30m granularity) for the last N days.
     Dynamically appends today's real-time aggregated data if available.
     """
-    from datetime import datetime
     from backend.app.services.analysis import calculate_realtime_aggregation
+    from backend.app.core.http_client import MarketClock
     import pandas as pd
     
     # 1. Get history data from DB
@@ -23,7 +23,7 @@ def get_history_trend(symbol: str, days: int = 20):
     
     # 2. Get today's real-time ticks
     # Since today's ticks might not be fully closed into 30m bars yet, we calculate on the fly
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = MarketClock.get_display_date()
     
     config = get_app_config()
     large_th = float(config.get('large_threshold', 200000))
