@@ -54,7 +54,7 @@
 | 字段名 | 数据类型 | 约束 / 备注 |
 | :--- | :--- | :--- |
 | `symbol` | `TEXT` | `NOT NULL` |
-| `start_time` | `TEXT` | `NOT NULL`。格式 `%Y-%m-%d %H:%M:%S`，代表这 30 分钟 K 线的整点起始。 |
+| `start_time` | `TEXT` | `NOT NULL`。格式 `%Y-%m-%d %H:%M:%S`，只允许 8 个标准桶起点：`09:30/10:00/10:30/11:00/13:00/13:30/14:00/14:30`。 |
 | `net_inflow` | `REAL` | `NOT NULL` 净流入 |
 | `main_buy` / `main_sell` | `REAL` | 主力(不含超大单) |
 | `super_net` | `REAL` | 纯粹超大单流入差额 |

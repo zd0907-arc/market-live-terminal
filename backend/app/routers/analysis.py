@@ -3,6 +3,7 @@ from backend.app.models.schemas import APIResponse, AggregateResult
 from backend.app.services.market import get_sina_money_flow, get_sina_kline
 from backend.app.services.analysis import perform_aggregation
 from backend.app.db.crud import get_local_history_data, get_app_config, get_history_30m
+from backend.app.core.time_buckets import map_to_30m_bucket_start
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,26 +43,7 @@ def get_history_trend(symbol: str, days: int = 20):
         is_buy = df['type'].isin(['买盘', 'buy'])
         is_sell = df['type'].isin(['卖盘', 'sell'])
 
-        def map_to_standard_bar(dt):
-            h = dt.hour
-            m = dt.minute
-            
-            if h == 9: return pd.Timestamp(f"{today_str} 10:00:00")
-            if h == 10:
-                if m < 30: return pd.Timestamp(f"{today_str} 10:30:00")
-                else: return pd.Timestamp(f"{today_str} 11:00:00")
-            if h == 11 and m < 30: return pd.Timestamp(f"{today_str} 11:30:00")
-                
-            if h == 13:
-                if m < 30: return pd.Timestamp(f"{today_str} 13:30:00")
-                else: return pd.Timestamp(f"{today_str} 14:00:00")
-            if h == 14:
-                if m < 30: return pd.Timestamp(f"{today_str} 14:30:00")
-                else: return pd.Timestamp(f"{today_str} 15:00:00")
-            if h >= 15: return pd.Timestamp(f"{today_str} 15:00:00")
-            return None
-
-        df['bar_time'] = df.index.map(map_to_standard_bar)
+        df['bar_time'] = df.index.map(map_to_30m_bucket_start)
         df_filtered = df.dropna(subset=['bar_time'])
         
         if not df_filtered.empty:

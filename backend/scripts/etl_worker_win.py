@@ -16,6 +16,7 @@ import re
 import traceback
 import concurrent.futures
 from tqdm import tqdm
+from backend.app.core.time_buckets import map_to_30m_bucket_start
 
 def init_db(db_path, enable_ticks=False):
     conn = sqlite3.connect(db_path)
@@ -175,48 +176,44 @@ def process_dataframe(df, symbol, date_str, large_th, super_th):
         float(close_price), change_pct, activity_ratio, "fixed_200k_1m_v1"
     )
 
-    # --- 2. Compute 30-Min K-Lines ---
+    # --- 2. Compute 30-Min K-Lines (canonical 8 buckets) ---
     df['datetime'] = pd.to_datetime(f"{date_str} " + df['Time'])
-    df.set_index('datetime', inplace=True)
+    df['bar_time'] = df['datetime'].map(map_to_30m_bucket_start)
+    df = df.dropna(subset=['bar_time'])
 
-    ohlc = df['Price'].resample('30min', label='left', closed='left').ohlc()
-    
+    if df.empty:
+        return [daily_tuple], []
+
     df['is_super_buy'] = (df['Type'] == 'B') & (df['buy_order_total_val'] >= super_th)
     df['is_super_sell'] = (df['Type'] == 'S') & (df['sell_order_total_val'] >= super_th)
     df['is_main_buy'] = (df['Type'] == 'B') & (df['buy_order_total_val'] >= large_th) & (~df['is_super_buy'])
     df['is_main_sell'] = (df['Type'] == 'S') & (df['sell_order_total_val'] >= large_th) & (~df['is_super_sell'])
-    
-    sb_30 = df.loc[df['is_super_buy'], 'amount'].resample('30min', label='left', closed='left').sum()
-    ss_30 = df.loc[df['is_super_sell'], 'amount'].resample('30min', label='left', closed='left').sum()
-    mb_30 = df.loc[df['is_main_buy'], 'amount'].resample('30min', label='left', closed='left').sum()
-    ms_30 = df.loc[df['is_main_sell'], 'amount'].resample('30min', label='left', closed='left').sum()
+
+    ohlc = df.groupby('bar_time')['Price'].agg(open='first', high='max', low='min', close='last')
+    sb_30 = df.loc[df['is_super_buy']].groupby('bar_time')['amount'].sum()
+    ss_30 = df.loc[df['is_super_sell']].groupby('bar_time')['amount'].sum()
+    mb_30 = df.loc[df['is_main_buy']].groupby('bar_time')['amount'].sum()
+    ms_30 = df.loc[df['is_main_sell']].groupby('bar_time')['amount'].sum()
 
     ohlc['super_buy'] = sb_30
     ohlc['super_sell'] = ss_30
     ohlc['main_buy'] = mb_30
     ohlc['main_sell'] = ms_30
-
-    ohlc.dropna(subset=['open', 'close', 'high', 'low'], inplace=True) 
+    ohlc.fillna(0, inplace=True)
 
     h30_tuples = []
-    for start_time, row in ohlc.iterrows():
-        # filter valid trade hours
-        h = start_time.hour
-        m = start_time.minute
-        if (h == 9 and m < 30) or (h == 11 and m >= 30) or (h == 12) or (h >= 15):
-            continue
-            
+    for start_time, row in ohlc.sort_index().iterrows():
         st_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
         s_buy = float(row.get('super_buy', 0) or 0)
         s_sell = float(row.get('super_sell', 0) or 0)
         m_buy = float(row.get('main_buy', 0) or 0)
         m_sell = float(row.get('main_sell', 0) or 0)
-        
+
         super_net = s_buy - s_sell
         net = (s_buy + m_buy) - (s_sell + m_sell)
 
         h30_tuples.append((
-            symbol, st_str, net, m_buy, m_sell, super_net, s_buy, s_sell, 
+            symbol, st_str, net, m_buy, m_sell, super_net, s_buy, s_sell,
             float(row['close']), float(row['open']), float(row['high']), float(row['low'])
         ))
 

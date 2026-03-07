@@ -3,8 +3,10 @@ import logging
 import akshare as ak
 import pandas as pd
 from typing import List
+from datetime import datetime
 
 from backend.app.core.calendar import TradeCalendar
+from backend.app.core.time_buckets import map_to_30m_bucket_start
 from backend.app.db.crud import save_trade_ticks, save_sentiment_snapshot, save_history_30m_batch
 from backend.app.services.analysis import aggregate_intraday_30m
 
@@ -17,14 +19,16 @@ class BackfillService:
         Backfill stock data for the last N trading days.
         Strategy:
         - Latest 1 Day: High-precision Ticks (AkShare tick_tx_js) -> Synthetic Snapshots -> 30m Aggregation
-        - Past 2-N Days: 30m K-Line (AkShare hist_min_em) -> Direct History Insert (Approximation)
         """
         logger.info(f"[Backfill] Starting backfill for {symbol} (Last {days} days)")
-        
-        # 1. Backfill History K-Line (Days 2-5)
-        # We do this first as it's faster and covers the baseline
+
+        # NOTE:
+        # We intentionally disable the old "kline -> zero-flow history_30m" fallback.
+        # It can pollute 30m capital-flow charts with placeholder bars.
         if days > 1:
-            await BackfillService._backfill_history_kline(symbol, days)
+            logger.info(
+                "[Backfill] Skip K-Line placeholder backfill to avoid zero-flow pollution in history_30m"
+            )
         
         # 2. Backfill Latest Ticks (Day 1)
         # This overwrites the latest day with higher precision data if available
@@ -76,39 +80,53 @@ class BackfillService:
             limit = days * 8
             df = df.tail(limit)
             
-            data_list = []
+            # Canonicalize API bars into 8 trade buckets/day.
+            # Some providers return 10 bars with 11:30 / 15:00 close markers.
+            data_by_bucket = {}
             for _, row in df.iterrows():
-                ts = row['时间'] # YYYY-MM-DD HH:MM:SS
-                vol = float(row['成交量'])
-                amount = float(row['成交额'])
-                
-                # Approximation: Net Inflow ~ 0 (Neutral), Main ~ 0
-                # Or we could use a random ratio or simple heuristic (e.g. Price Up = Inflow)
-                # For now, keep it honest: 0 flow, but valid K-line points
-                
-                # Fix: history_30m table expects (net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close)
-                # Since we don't have flow data, we fill 0 to at least show the timeline.
-                # Frontend might show 0 bars, but the time axis will be correct.
-                # And now we have 'close' price!
-                
-                close_price = float(row['收盘'])
+                ts = row['时间']  # YYYY-MM-DD HH:MM:SS
+                try:
+                    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    continue
+                bucket = map_to_30m_bucket_start(dt)
+                if bucket is None:
+                    continue
+
+                key = bucket.strftime("%Y-%m-%d %H:%M:%S")
                 open_price = float(row['开盘'])
+                close_price = float(row['收盘'])
                 high_price = float(row['最高'])
                 low_price = float(row['最低'])
 
+                if key not in data_by_bucket:
+                    data_by_bucket[key] = {
+                        "open": open_price,
+                        "close": close_price,
+                        "high": high_price,
+                        "low": low_price,
+                    }
+                else:
+                    data_by_bucket[key]["close"] = close_price
+                    data_by_bucket[key]["high"] = max(data_by_bucket[key]["high"], high_price)
+                    data_by_bucket[key]["low"] = min(data_by_bucket[key]["low"], low_price)
+
+            data_list = []
+            for ts in sorted(data_by_bucket.keys()):
+                item = data_by_bucket[ts]
                 data_list.append((
                     symbol,
                     ts,
-                    0.0, # net_inflow
-                    0.0, # main_buy
-                    0.0, # main_sell
-                    0.0, # super_net
-                    0.0, # super_buy
-                    0.0, # super_sell
-                    close_price, # close
-                    open_price, # open
-                    high_price, # high
-                    low_price # low
+                    0.0,  # net_inflow (placeholder)
+                    0.0,  # main_buy
+                    0.0,  # main_sell
+                    0.0,  # super_net
+                    0.0,  # super_buy
+                    0.0,  # super_sell
+                    item["close"],
+                    item["open"],
+                    item["high"],
+                    item["low"]
                 ))
                 
             if data_list:

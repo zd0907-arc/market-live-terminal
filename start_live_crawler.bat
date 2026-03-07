@@ -9,7 +9,7 @@ echo [Cloud Node] Targeting 111.229.144.202
 echo.
 
 :: Modify the path below if your python environment or project lives elsewhere
-cd /d "D:\AIGC\market-live-terminal"
+cd /d "D:\market-live-terminal"
 
 :: Set environment variables required for Cloud Ingestion
 set CLOUD_API_URL=http://111.229.144.202:8000

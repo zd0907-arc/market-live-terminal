@@ -3,6 +3,42 @@
 
 ---
 
+## 2026-03-07 13:20 - [后端 AI] - 30m口径收敛补丁（8桶标准化）+ Windows自动执行阻塞更新
+
+**1. 完成了什么？**
+- 新增统一时间桶工具 `backend/app/core/time_buckets.py`，固定 30m 为 8 个标准桶。
+- 聚合链路统一到同一桶逻辑：
+  - `backend/app/services/analysis.py::aggregate_intraday_30m`
+  - `backend/app/routers/analysis.py` 实时拼接分支
+  - `backend/scripts/etl_worker_win.py` 离线 ETL 30m 聚合
+- `backend/app/db/crud.py::get_history_30m` 增加标准时间过滤，API 层不再返回 `11:30/15:00` 非标准桶数据。
+- `backend/app/services/backfill.py` 禁用“历史K线占位0流入写入 history_30m”的默认行为，避免继续污染。
+- `backend/scripts/fetch_local_data.py` 补 canonical 映射，兼容 10bar 源转 8bar。
+- 新增测试 `backend/tests/test_time_buckets.py`；全量后端测试通过 `14 passed`，前端构建通过。
+- 契约文档补充 `history_30m.start_time` 的 8 桶约束。(`docs/03_DATA_CONTRACTS.md`)
+
+**2. 当前阻塞**
+- 用户已反馈 Windows 可操作，但当前 Agent 到 `100.115.228.56` 仍无法免密登录（`Permission denied`），导致无法在本会话内直接自动执行 Windows ETL 重建。
+- 已确认这不影响云端代码发布；但会影响“历史污染窗口数据重建”最后一步。
+
+**3. 接下来动作**
+- 等 Windows SSH 免密真正生效后，立即执行：Windows ETL 重建 -> 上传 history DB -> 云端 merge -> 生产复核。
+
+## 2026-03-07 12:55 - [后端 AI] - 30分钟线专项诊断（粤桂股份）+ 修复方案出具（待确认执行）
+
+**1. 完成了什么？**
+- 对生产环境 `sz000833`（粤桂股份）执行了“日线 vs 30m”核查：`2026-02-13` 确认存在显著偏差（用户反馈成立）。
+- 扩展核查 watchlist 后确认该问题并非单票，而是特定日期窗口的系统性问题：出现 `10 bars/day` + 大量“资金流=0但OHLC非0”的占位bar。
+- 输出专项文档 `09_30M_DIAGNOSIS_PLAN_2026-03-07.md`，包含事实证据、根因判断、分阶段修复方案（Phase A~D）和验收标准。
+- 文档治理补充：将 Windows 统一运行路径 `D:\market-live-terminal` 写入 `04_OPS_AND_DEV.md` 与 `REMOTE_CONTROL_GUIDE.md`。
+
+**2. 阻塞与说明**
+- 当前 Agent 无法代输 Windows SSH 密码（非免密），全自动远程执行仍受限。
+- 已给出两种解除方式：手动执行一次 `./sync_to_windows.sh` 或配置 Windows SSH 公钥。
+
+**3. 接下来需要另一个 AI（前端）做什么？**
+- 暂无前端改动要求；等待后端完成数据重建后再联调 30m 展示。
+
 ## 2026-03-07 12:10 - [后端 AI] - 审计文档回填 + 全局文档治理 + 版本管理（v4.2.7）
 
 **1. 完成了什么？**

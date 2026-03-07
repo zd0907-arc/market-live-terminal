@@ -2,6 +2,9 @@ import os
 import sys
 import asyncio
 import akshare as ak
+from datetime import datetime
+
+from backend.app.core.time_buckets import map_to_30m_bucket_start
 
 async def fetch_and_generate_sql(symbols, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
@@ -28,14 +31,41 @@ async def fetch_and_generate_sql(symbols, output_file):
                 df = await asyncio.to_thread(ak.stock_zh_a_hist_min_em, symbol=pure_code, period='30', adjust='qfq')
                 if df is not None and not df.empty:
                     print(f"    -> 成功！获取到 {len(df)} 条记录。正在生成 SQL 语句包...")
+                    canonical = {}
                     for _, row in df.iterrows():
-                        time_str = row['时间']
+                        try:
+                            dt = datetime.strptime(row['时间'], "%Y-%m-%d %H:%M:%S")
+                        except Exception:
+                            continue
+                        bucket = map_to_30m_bucket_start(dt)
+                        if bucket is None:
+                            continue
+
+                        time_str = bucket.strftime("%Y-%m-%d %H:%M:%S")
                         close = float(row['收盘'])
                         open_p = float(row['开盘'])
                         high = float(row['最高'])
                         low = float(row['最低'])
-                        
-                        f.write(f"INSERT OR REPLACE INTO history_30m (symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low) VALUES ('{symbol}', '{time_str}', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, {close}, {open_p}, {high}, {low});\n")
+
+                        if time_str not in canonical:
+                            canonical[time_str] = {
+                                "open": open_p,
+                                "close": close,
+                                "high": high,
+                                "low": low,
+                            }
+                        else:
+                            canonical[time_str]["close"] = close
+                            canonical[time_str]["high"] = max(canonical[time_str]["high"], high)
+                            canonical[time_str]["low"] = min(canonical[time_str]["low"], low)
+
+                    for time_str in sorted(canonical.keys()):
+                        item = canonical[time_str]
+                        f.write(
+                            "INSERT OR REPLACE INTO history_30m "
+                            "(symbol, start_time, net_inflow, main_buy, main_sell, super_net, super_buy, super_sell, close, open, high, low) "
+                            f"VALUES ('{symbol}', '{time_str}', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, {item['close']}, {item['open']}, {item['high']}, {item['low']});\n"
+                        )
                 else:
                     print(f"    -> 警告：{symbol} 无有效数据返回。")
             except Exception as e:

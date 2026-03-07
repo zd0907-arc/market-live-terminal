@@ -201,6 +201,7 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
 from backend.app.db.crud import get_app_config, get_ticks_for_aggregation, save_local_history, save_history_30m_batch
 from datetime import datetime
 import logging
+from backend.app.core.time_buckets import map_to_30m_bucket_start
 
 logger = logging.getLogger(__name__)
 
@@ -267,35 +268,7 @@ def aggregate_intraday_30m(symbol: str, date_str: str = None):
             'low': sub_df['price'].min() if not sub_df.empty else 0.0
         })
 
-    # 5. Resample (30T = 30 Minutes) -> Standard 8 Bars Logic
-    def map_to_standard_bar(dt):
-        h = dt.hour
-        m = dt.minute
-        
-        # 1. Morning Session
-        if h == 9: 
-            return pd.Timestamp(f"{date_str} 10:00:00")
-        if h == 10:
-            if m < 30: return pd.Timestamp(f"{date_str} 10:30:00")
-            else: return pd.Timestamp(f"{date_str} 11:00:00")
-        if h == 11:
-            if m < 30: return pd.Timestamp(f"{date_str} 11:30:00")
-            return None
-            
-        # 2. Afternoon Session
-        if h == 12: return None 
-        if h == 13:
-            if m < 30: return pd.Timestamp(f"{date_str} 13:30:00")
-            else: return pd.Timestamp(f"{date_str} 14:00:00")
-        if h == 14:
-            if m < 30: return pd.Timestamp(f"{date_str} 14:30:00")
-            else: return pd.Timestamp(f"{date_str} 15:00:00")
-        if h >= 15:
-            return pd.Timestamp(f"{date_str} 15:00:00")
-            
-        return None
-
-    df['bar_time'] = df.index.map(map_to_standard_bar)
+    df['bar_time'] = df.index.map(map_to_30m_bucket_start)
     df_filtered = df.dropna(subset=['bar_time'])
     
     if df_filtered.empty:

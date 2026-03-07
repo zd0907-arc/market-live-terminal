@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from backend.app.core.config import DB_FILE, USER_DB_FILE
+from backend.app.core.time_buckets import is_canonical_30m_start
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -206,6 +207,7 @@ def get_history_30m(symbol: str, limit_days: int = 20):
             "low": r[10] if len(r) > 10 else 0.0
         }
         for r in rows
+        if is_canonical_30m_start(r[0])
     ]
 
 def save_history_1m_batch(data_list):
