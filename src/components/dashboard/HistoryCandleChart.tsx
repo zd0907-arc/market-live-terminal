@@ -1,5 +1,9 @@
 import React, { useMemo } from 'react';
-import ReactECharts from 'echarts-for-react';
+import ReactEChartsCore from 'echarts-for-react/lib/core';
+import * as echarts from 'echarts/core';
+import { LineChart, CandlestickChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import { HistoryTrendData } from '../../types';
 
 interface HistoryCandleChartProps {
@@ -7,6 +11,15 @@ interface HistoryCandleChartProps {
     height?: number;
     priceRange?: [number | 'auto', number | 'auto'];
 }
+
+echarts.use([
+    LineChart,
+    CandlestickChart,
+    GridComponent,
+    TooltipComponent,
+    LegendComponent,
+    CanvasRenderer,
+]);
 
 const HistoryCandleChart: React.FC<HistoryCandleChartProps> = ({ data, height = 400, priceRange = ['dataMin', 'dataMax'] }) => {
 
@@ -199,7 +212,8 @@ const HistoryCandleChart: React.FC<HistoryCandleChartProps> = ({ data, height = 
     }, [data]);
 
     return (
-        <ReactECharts
+        <ReactEChartsCore
+            echarts={echarts}
             option={option}
             style={{ height: height, width: '100%' }}
             theme="dark" // Optional: built-in dark theme often looks good, but we customized colors above

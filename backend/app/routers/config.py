@@ -1,7 +1,8 @@
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from backend.app.models.schemas import APIResponse, ConfigUpdate
 from backend.app.db.crud import get_app_config, update_app_config
+from backend.app.core.security import require_write_access
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ def get_llm_info():
         }
     )
 
-@router.post("/config", response_model=APIResponse)
+@router.post("/config", response_model=APIResponse, dependencies=[Depends(require_write_access)])
 def update_config(config: ConfigUpdate):
     try:
         update_app_config(config.key, config.value)
@@ -53,7 +54,7 @@ def update_config(config: ConfigUpdate):
         
     return APIResponse(code=200, message="Config updated")
 
-@router.post("/config/test-llm", response_model=APIResponse)
+@router.post("/config/test-llm", response_model=APIResponse, dependencies=[Depends(require_write_access)])
 def test_llm_connection():
     """使用服务端环境变量中的 LLM 配置进行连通性测试，前端不需要传入任何 Key"""
     from backend.app.services.llm_service import llm_service

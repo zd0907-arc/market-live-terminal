@@ -1,5 +1,5 @@
 import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData } from '../types';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, getWriteHeaders } from '../config';
 
 // ==========================================
 // 基础网络层：JSONP / Script Injection
@@ -262,11 +262,17 @@ export const fetchRealtimeDashboard = async (symbol: string, date?: string) => {
 // Watchlist API
 // ==========================================
 export const addToWatchlist = async (symbol: string, name: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, { method: 'POST' });
+  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: getWriteHeaders()
+  });
 };
 
 export const removeFromWatchlist = async (symbol: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, {
+    method: 'DELETE',
+    headers: getWriteHeaders()
+  });
 };
 
 export const getWatchlist = async (): Promise<any[]> => {
@@ -321,9 +327,7 @@ export const getAppConfig = async () => {
 export const updateAppConfig = async (key: string, value: string) => {
   await fetch(`${API_BASE_URL}/config`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: getWriteHeaders(true),
     body: JSON.stringify({ key, value })
   });
 };
@@ -341,9 +345,7 @@ export const getLLMInfo = async () => {
 export const testLLMConnection = async () => {
   const res = await fetch(`${API_BASE_URL}/config/test-llm`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: getWriteHeaders(true),
     body: JSON.stringify({})
   });
   return await res.json();

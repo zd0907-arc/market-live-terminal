@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server, Eye, Target } from 'lucide-react';
 import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
-import RealtimeView from './components/dashboard/RealtimeView';
-import HistoryView from './components/dashboard/HistoryView';
-import SentimentDashboard from './components/sentiment/SentimentDashboard';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
 import RealTimeClock from './components/common/RealTimeClock';
 import { APP_VERSION } from './version';
+
+const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
+const HistoryView = lazy(() => import('./components/dashboard/HistoryView'));
+const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 
 const App: React.FC = () => {
   // State
@@ -219,6 +220,12 @@ const App: React.FC = () => {
     if (num > 10000) return (num / 10000).toFixed(0) + '万';
     return num.toFixed(0);
   };
+
+  const sectionLoading = (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs text-slate-500">
+      组件加载中...
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-20 overflow-x-hidden">
@@ -507,36 +514,44 @@ const App: React.FC = () => {
 
         {/* Content Views */}
         {quote && viewMode === 'intraday_live' && (
-          <RealtimeView
-            activeStock={activeStock}
-            quote={quote}
-            isTradingHours={isTradingHours}
-            configVersion={configVersion}
-            focusMode={focusMode}
-          />
+          <Suspense fallback={sectionLoading}>
+            <RealtimeView
+              activeStock={activeStock}
+              quote={quote}
+              isTradingHours={isTradingHours}
+              configVersion={configVersion}
+              focusMode={focusMode}
+            />
+          </Suspense>
         )}
 
         {quote && viewMode === 'intraday_30m' && (
-          <HistoryView
-            activeStock={activeStock}
-            backendStatus={backendStatus}
-            configVersion={configVersion}
-            forceViewMode="intraday"
-          />
+          <Suspense fallback={sectionLoading}>
+            <HistoryView
+              activeStock={activeStock}
+              backendStatus={backendStatus}
+              configVersion={configVersion}
+              forceViewMode="intraday"
+            />
+          </Suspense>
         )}
 
         {quote && viewMode === 'daily' && (
-          <HistoryView
-            activeStock={activeStock}
-            backendStatus={backendStatus}
-            configVersion={configVersion}
-            forceViewMode="daily"
-          />
+          <Suspense fallback={sectionLoading}>
+            <HistoryView
+              activeStock={activeStock}
+              backendStatus={backendStatus}
+              configVersion={configVersion}
+              forceViewMode="daily"
+            />
+          </Suspense>
         )}
 
         {/* Retail Sentiment Dashboard (Moved to Bottom) */}
         {activeStock && (
-          <SentimentDashboard symbol={activeStock.code} />
+          <Suspense fallback={sectionLoading}>
+            <SentimentDashboard symbol={activeStock.code} />
+          </Suspense>
         )}
 
       </main>

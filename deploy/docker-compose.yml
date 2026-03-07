@@ -20,12 +20,17 @@ services:
       - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
       - LLM_PROXY=${LLM_PROXY:-}
+      - INGEST_TOKEN=${INGEST_TOKEN}
+      - WRITE_API_TOKEN=${WRITE_API_TOKEN}
+      - ENABLE_CLOUD_COLLECTOR=${ENABLE_CLOUD_COLLECTOR:-false}
     restart: always
 
   frontend:
     build:
       context: ..
       dockerfile: deploy/frontend.Dockerfile
+      args:
+        - VITE_WRITE_API_TOKEN=${WRITE_API_TOKEN}
     container_name: market-frontend
     ports:
       # 映射 80 端口到宿主机

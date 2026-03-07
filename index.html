@@ -6,6 +6,7 @@
     <meta name="referrer" content="no-referrer" />
     <title>ZhangData</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 暂保留 CDN Tailwind，后续再迁移到本地构建链路 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
@@ -28,21 +29,9 @@
         background: #64748b; 
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "recharts": "https://esm.sh/recharts@^3.7.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+  </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/src/index.tsx"></script>
-</body>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
 </html>

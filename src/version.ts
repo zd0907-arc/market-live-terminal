@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.2';
+export const APP_VERSION = '4.2.7';
 export const RELEASE_NOTES = [
+    'v4.2.7: 完成P1/P2收口（交易日历fail-closed、后台任务并发治理、情绪接口统一APIResponse、文档治理与构建瘦身）',
     'v4.2.2: 30分钟线跨日错标修复，强化Windows爬虫无人值守保障机制（周期轮扫与收盘重试），优化云端覆盖写入',
     'v4.2.1: 文档矩阵梳理归档，新增前后端双核AI自动化交接白皮书(AI Handoff Protocol)，星标无损热迁移完成',
     'v4.2.0: API Key安全隔离（纯环境变量+前端只读），星标DELETE接口修复，.cursorignore防AI偷窥',

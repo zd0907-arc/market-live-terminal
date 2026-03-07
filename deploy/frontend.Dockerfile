@@ -13,6 +13,10 @@ RUN npm install
 # 复制前端源码
 COPY . .
 
+# Inject write token at build time so frontend mutating requests can pass auth header
+ARG VITE_WRITE_API_TOKEN=""
+ENV VITE_WRITE_API_TOKEN=${VITE_WRITE_API_TOKEN}
+
 # 编译生产环境代码 (输出到 /app/dist)
 RUN npm run build
 

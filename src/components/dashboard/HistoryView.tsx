@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AlertCircle, RefreshCw, Database, Settings, Info } from 'lucide-react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, Cell, Area } from 'recharts';
 import { SearchResult, HistoryAnalysisData, HistoryTrendData } from '../../types';
 import * as StockService from '../../services/stockService';
 import DataSourceControl from '../common/DataSourceControl';
 import ConfigModal from '../common/ConfigModal';
-import HistoryCandleChart from './HistoryCandleChart';
+const HistoryCandleChart = lazy(() => import('./HistoryCandleChart'));
 
 interface HistoryViewProps {
     activeStock: SearchResult | null;
@@ -135,6 +135,12 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
     if (!activeStock) return null;
 
+    const chartLoading = (
+        <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+            图表加载中...
+        </div>
+    );
+
     return (
         <div className="space-y-4">
             <ConfigModal
@@ -240,7 +246,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
                             <div className="h-[400px]">
                                 {trendData.length > 0 ? (
-                                    <HistoryCandleChart data={trendData} height={400} priceRange={priceRange} />
+                                    <Suspense fallback={chartLoading}>
+                                        <HistoryCandleChart data={trendData} height={400} priceRange={priceRange} />
+                                    </Suspense>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-950/30 rounded-lg border border-slate-800/50">
                                         <Database className="w-12 h-12 mb-4 opacity-20" />

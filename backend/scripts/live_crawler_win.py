@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # Allow testing against local dev server by default, or cloud via env var
 CLOUD_URL = os.getenv("CLOUD_API_URL", "http://127.0.0.1:8000")
-INGEST_TOKEN = os.getenv("INGEST_TOKEN", "zhangdata-secret-token")
+INGEST_TOKEN = os.getenv("INGEST_TOKEN", "").strip()
 
 # 1. 业务逻辑复用的极简阈值判断 (用于 30m K线前摄计算)
 LARGE_TH = 200000
@@ -319,6 +319,8 @@ async def poll_ticks_loop():
         await asyncio.sleep(5)
 
 async def main_loop():
+    if not INGEST_TOKEN:
+        raise RuntimeError("INGEST_TOKEN is required. Please set it in environment variables.")
     logger.info(f"Windows Live Crawler Agent Initialized. Targeting Cloud: {CLOUD_URL}")
     await asyncio.gather(
         poll_snapshots_loop(),

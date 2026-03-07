@@ -2,6 +2,43 @@ import pandas as pd
 from typing import List, Dict
 from backend.app.models.schemas import TickData
 from backend.app.db.crud import get_ticks_by_date, get_app_config
+import copy
+import threading
+import time
+
+_REALTIME_CACHE = {}
+_REALTIME_CACHE_LOCK = threading.Lock()
+_REALTIME_CACHE_TTL_SECONDS = 2.0
+
+
+def _build_realtime_signature(raw_rows, large_threshold: float, super_threshold: float):
+    latest = raw_rows[0] if raw_rows else None
+    earliest = raw_rows[-1] if raw_rows else None
+    return (len(raw_rows), latest, earliest, large_threshold, super_threshold)
+
+
+def _get_cached_realtime(symbol: str, date_str: str, signature):
+    cache_key = (symbol, date_str)
+    now = time.time()
+    with _REALTIME_CACHE_LOCK:
+        cache = _REALTIME_CACHE.get(cache_key)
+        if not cache:
+            return None
+        if cache["signature"] != signature:
+            return None
+        if now - cache["ts"] > _REALTIME_CACHE_TTL_SECONDS:
+            return None
+        return copy.deepcopy(cache["data"])
+
+
+def _set_cached_realtime(symbol: str, date_str: str, signature, data: Dict):
+    cache_key = (symbol, date_str)
+    with _REALTIME_CACHE_LOCK:
+        _REALTIME_CACHE[cache_key] = {
+            "signature": signature,
+            "data": copy.deepcopy(data),
+            "ts": time.time(),
+        }
 
 def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     """
@@ -46,13 +83,11 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     # Default to 500k if not set, as per user request
     LARGE_THRESHOLD = float(config.get('large_threshold', 500000))     
     SUPER_THRESHOLD = float(config.get('super_large_threshold', 1000000))
-    
-    # DEBUG: Inspect Data Types and Values
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"DEBUG: Thresholds -> Large={LARGE_THRESHOLD}, Super={SUPER_THRESHOLD}")
-    logger.info(f"DEBUG: DataFrame dtypes -> \n{df.dtypes}")
-    logger.info(f"DEBUG: Amount Sample -> {df['amount'].head().tolist()}")
+
+    signature = _build_realtime_signature(raw_rows, LARGE_THRESHOLD, SUPER_THRESHOLD)
+    cached = _get_cached_realtime(symbol, date_str, signature)
+    if cached is not None:
+        return cached
 
     # 5. Group by Minute (HH:MM)
     df['minute'] = df['time'].str.slice(0, 5)
@@ -142,8 +177,10 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     latest_ticks = []
     for _, row in latest_df.iterrows():
         t_type = 'neutral'
-        if row['type'] == '买盘': t_type = 'buy'
-        elif row['type'] == '卖盘': t_type = 'sell'
+        if row['type'] in ['买盘', 'buy']:
+            t_type = 'buy'
+        elif row['type'] in ['卖盘', 'sell']:
+            t_type = 'sell'
         
         latest_ticks.append({
             "time": row['time'],
@@ -153,11 +190,13 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
             "type": t_type
         })
 
-    return {
+    result = {
         "chart_data": chart_data,
         "cumulative_data": cumulative_data,
         "latest_ticks": latest_ticks
     }
+    _set_cached_realtime(symbol, date_str, signature, result)
+    return result
 
 from backend.app.db.crud import get_app_config, get_ticks_for_aggregation, save_local_history, save_history_30m_batch
 from datetime import datetime
@@ -501,4 +540,3 @@ def aggregate_intraday_1m(symbol: str, date_str: str = None):
         logger.info(f"[{symbol}] Saved {len(data_list)} history bars (1m) for {date_str}")
     
     return {"code": 200, "count": len(data_list)}
-

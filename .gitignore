@@ -47,3 +47,6 @@ win_cloud_autobot.py
 win_to_cloud_autobot.py
 kill_result.txt
 perf_out.txt
+
+# Legacy nested repo copy (do not develop here)
+market-live-terminal/

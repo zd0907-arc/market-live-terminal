@@ -13,7 +13,11 @@ cd /d "D:\AIGC\market-live-terminal"
 
 :: Set environment variables required for Cloud Ingestion
 set CLOUD_API_URL=http://111.229.144.202:8000
-set INGEST_TOKEN=zhangdata-secret-token
+
+if "%INGEST_TOKEN%"=="" (
+    echo [ERROR] INGEST_TOKEN is not set. Please configure it in system environment variables.
+    exit /b 1
+)
 
 :: Run the crawler. It will safely idle if outside trading hours.
 :: To keep the window open for debugging, remove the 'pythonw' and use 'python'

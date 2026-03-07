@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from typing import List
 from backend.app.models.schemas import WatchlistItem, APIResponse
 from backend.app.db.crud import get_watchlist_items, add_watchlist_item, remove_watchlist_item
 from backend.app.services.collector import collector
-import threading
+from backend.app.core.security import require_write_access
+from backend.app.core.task_runner import submit_background
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,13 +15,13 @@ router = APIRouter()
 def get_watchlist():
     return get_watchlist_items()
 
-@router.post("/watchlist", response_model=APIResponse)
+@router.post("/watchlist", response_model=APIResponse, dependencies=[Depends(require_write_access)])
 def add_watchlist(symbol: str, name: str):
     try:
         add_watchlist_item(symbol, name)
         
         # 立即触发实时行情快照池拉取
-        threading.Thread(target=lambda: collector._poll_watchlist()).start()
+        submit_background("watchlist_poll_once", collector._poll_watchlist)
         
         # 并发触发：历史K线回落与散户情绪爬虫（独立线程防阻塞）
         try:
@@ -28,8 +29,8 @@ def add_watchlist(symbol: str, name: str):
             from backend.app.services.backfill import perform_historical_fetch
             
             # 手动模式调度，优先取最近几天快速出图
-            threading.Thread(target=lambda: sentiment_crawler.run_crawl(symbol, mode="scheduler")).start()
-            threading.Thread(target=lambda: perform_historical_fetch(symbol)).start()
+            submit_background("sentiment_crawl_scheduler", sentiment_crawler.run_crawl, symbol, "scheduler")
+            submit_background("watchlist_backfill", perform_historical_fetch, symbol)
         except Exception as bg_err:
             logger.error(f"Failed to trigger background workers for {symbol}: {bg_err}")
 
@@ -37,7 +38,7 @@ def add_watchlist(symbol: str, name: str):
     except Exception as e:
         return APIResponse(code=500, message=str(e))
 
-@router.delete("/watchlist", response_model=APIResponse)
+@router.delete("/watchlist", response_model=APIResponse, dependencies=[Depends(require_write_access)])
 def delete_watchlist(symbol: str):
     """从星标列表中移除指定股票"""
     try:

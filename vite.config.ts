@@ -25,6 +25,26 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, 'src'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (id.includes('/node_modules/echarts/')) {
+                return 'vendor-echarts';
+              }
+              if (id.includes('/node_modules/zrender/')) {
+                return 'vendor-zrender';
+              }
+              if (id.includes('/node_modules/recharts/')) {
+                return 'vendor-recharts';
+              }
+              if (id.includes('/node_modules/lucide-react/')) {
+                return 'vendor-ui';
+              }
+            },
+          },
+        },
       }
     };
 });

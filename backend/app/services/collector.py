@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import logging
@@ -7,6 +8,11 @@ from backend.app.core.http_client import MarketClock
 
 logger = logging.getLogger(__name__)
 
+
+def is_cloud_collector_enabled() -> bool:
+    return os.getenv("ENABLE_CLOUD_COLLECTOR", "false").lower() == "true"
+
+
 class DataCollector:
     def __init__(self):
         self.running = False
@@ -14,6 +20,9 @@ class DataCollector:
 
     def start(self):
         if self.running: return
+        if not is_cloud_collector_enabled():
+            logger.info("Cloud collector is disabled by ENABLE_CLOUD_COLLECTOR=false")
+            return
         self.running = True
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
@@ -50,6 +59,10 @@ class DataCollector:
                 logger.error(f"Data Collector Error: {e}")
 
     def _poll_watchlist(self):
+        if not is_cloud_collector_enabled():
+            logger.info("Skip watchlist polling: cloud collector is disabled.")
+            return
+
         if not self._is_trading_time():
             logger.info("Skip watchlist polling outside trading hours.")
             return

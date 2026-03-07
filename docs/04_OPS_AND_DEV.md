@@ -28,6 +28,33 @@ ssh laqiyuan@100.115.228.56
 
 所有的后端业务核心逻辑（包括 Web 服务 `app`、爬虫调度 `scripts`）都会在 Mac 司令部被研发完毕。完成修改后，你面对两个目的地：【腾讯云】和【Windows 雷达站】。
 
+### 发版前强制变量检查（v4.2.3+）
+
+在云端 `deploy/.env` 中，以下变量必须完成配置：
+
+```env
+# 内部 ingest 鉴权（云端 + Windows 必须一致）
+INGEST_TOKEN=replace-with-strong-token
+
+# 业务写接口鉴权（前端构建和后端校验共用）
+WRITE_API_TOKEN=replace-with-strong-token
+
+# 架构护栏：云端默认只被动 ingest
+ENABLE_CLOUD_COLLECTOR=false
+```
+
+云端快速核验：
+```bash
+cd ~/market-live-terminal/deploy
+sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|ENABLE_CLOUD_COLLECTOR"
+```
+
+Windows 节点核验：
+```bat
+echo %INGEST_TOKEN%
+```
+如果为空，`start_live_crawler.bat` 会直接退出。
+
 ### 目的 A：发版到云端 (腾讯云 FastAPI + Web)
 腾讯云运行的主程序通过 Docker 承载。为了避免手工敲一大堆 Docker 构建命令，我们已经封装了完全的流水线。
 
@@ -41,6 +68,27 @@ ssh laqiyuan@100.115.228.56
    在 Mac 根目录下执行即可。底层会自动通过 SSH 登入并触发拉取和 Docker 重建。
    ```bash
    ./deploy_to_cloud.sh
+   ```
+3. **上线后 3 分钟冒烟验证（强制）**：
+   ```bash
+   # 1) 云端健康检查
+   curl -s http://111.229.144.202/api/health
+
+   # 2) 写接口未带 token 必须拒绝（401/503 任一即为护栏生效）
+   curl -s -o /tmp/w_no_token.json -w "%{http_code}\n" -X POST "http://111.229.144.202/api/config" \
+     -H "Content-Type: application/json" \
+     -d '{"key":"large_threshold","value":"200000"}'
+
+   # 3) 写接口带 token 必须成功（200）
+   curl -s -o /tmp/w_with_token.json -w "%{http_code}\n" -X POST "http://111.229.144.202/api/config" \
+     -H "Content-Type: application/json" \
+     -H "X-Write-Token: ${WRITE_API_TOKEN}" \
+     -d '{"key":"large_threshold","value":"200000"}'
+
+   # 4) ingest token 错误必须拒绝（401）
+   curl -s -o /tmp/i_bad.json -w "%{http_code}\n" -X POST "http://111.229.144.202/api/internal/ingest/ticks" \
+     -H "Content-Type: application/json" \
+     -d '{"token":"bad-token","ticks":[]}'
    ```
 
 ### 目的 B：隔空装填 Windows 洗地/抓取节点

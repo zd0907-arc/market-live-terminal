@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 class TradeCalendar:
     _trade_days: Set[str] = set()
     _initialized = False
+    _last_refresh_at: datetime = None
+    _refresh_interval = timedelta(hours=6)
 
     @classmethod
     def init(cls, force: bool = False):
@@ -30,21 +32,12 @@ class TradeCalendar:
                     day = item.get('day')
                     if day:
                         new_trade_days.add(day)
-                
-                # Workaround for VM having a future date: Fill in missing weekdays up to today
-                if new_trade_days:
-                    max_d_str = max(new_trade_days)
-                    max_d = datetime.strptime(max_d_str, "%Y-%m-%d")
-                    now = datetime.now()
-                    while max_d.date() < now.date():
-                        max_d += timedelta(days=1)
-                        if max_d.weekday() < 5:  # Weekday
-                            new_trade_days.add(max_d.strftime("%Y-%m-%d"))
 
                 # 只有成功获取并解析后，才真正覆盖旧缓存 (无损刷新机制)
                 cls._trade_days = new_trade_days
                 logger.info(f"TradeCalendar initialized with {len(cls._trade_days)} trading days (force={force}).")
                 cls._initialized = True
+                cls._last_refresh_at = datetime.now()
             else:
                 logger.warning("Failed to fetch trade calendar: invalid response format")
                 
@@ -58,6 +51,9 @@ class TradeCalendar:
         判断是否为交易日 (YYYY-MM-DD)
         """
         if not cls._initialized:
+            cls.init()
+
+        if not cls._initialized:
             # Fallback: simple weekend check
             try:
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
@@ -68,16 +64,25 @@ class TradeCalendar:
         if date_str in cls._trade_days:
             return True
             
-        # Server might have been running for days without re-init.
-        # If date_str is newer than max cached date, fallback to weekday check.
+        # If date is newer than cached calendar, refresh once then fail-closed.
         if cls._trade_days:
             max_d_str = max(cls._trade_days)
             if date_str > max_d_str:
-                try:
-                    dt = datetime.strptime(date_str, "%Y-%m-%d")
-                    return dt.weekday() < 5
-                except:
-                    return False
+                now = datetime.now()
+                should_refresh = (
+                    cls._last_refresh_at is None
+                    or now - cls._last_refresh_at >= cls._refresh_interval
+                )
+                if should_refresh:
+                    cls.init(force=True)
+                    if date_str in cls._trade_days:
+                        return True
+                logger.warning(
+                    "Date %s is newer than cached trade calendar max %s; treat as non-trading day.",
+                    date_str,
+                    max_d_str,
+                )
+                return False
                     
         return False
 

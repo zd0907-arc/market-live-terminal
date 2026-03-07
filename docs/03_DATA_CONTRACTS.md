@@ -10,7 +10,7 @@
 
 | 层级 | 表 | 写入规则 | 说明 |
 |------|-----|---------|------|
-| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | **只追加，永不 UPDATE/DELETE** | 逐笔/盘口/评论源数据 |
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/评论源数据 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
 | **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等（⚠️ v4.0 起 LLM 配置已迁移至环境变量） |
 
@@ -46,7 +46,7 @@
 | `price` | `REAL` | `NOT NULL` | 当前成交实价。 |
 | `volume` | `INTEGER` | `NOT NULL` | 当前成交手数（注意不同数据源的转化）。 |
 | `amount` | `REAL` | Allow `NULL` | 当前明细产生的资金额 (`price * volume * 100` 或源提供)。 |
-| `type` | `TEXT` | `NOT NULL` | 严格界定：主动买入=`B`，主动卖出=`S`，平盘=`M`。不可传别的字符！ |
+| `type` | `TEXT` | `NOT NULL` | 当前实现兼容：`买盘/卖盘/中性盘` 或 `buy/sell/neutral`。建议统一落库为 `buy/sell/neutral`。 |
 | `date` | `TEXT` | `NOT NULL` | 关联查询用的主键前缀：%Y-%m-%d |
 **索引**: 必须有联合索引 `idx_ticks_symbol_date (symbol, date)`。
 
@@ -99,13 +99,21 @@
 前后端联调必须遵循以下接口路径与结构：
 
 ### 1. 市场数据类 (Market Data)
-*   **`GET /api/ticks_full?symbol=sh600519`**: 返回该股票当日全量逐笔交易。
 *   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
+*   **`GET /api/history/trend?symbol=sh600519&days=20`**: 返回 30 分钟级资金趋势（历史 + 当天动态拼接）。
+*   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
+
+> 写接口鉴权约束（v4.2.3+）：
+> - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
+> - 内部高速 ingest 接口继续使用 `INGEST_TOKEN`，且服务端不再提供默认 token。
 
 ### 2. 散户情绪类 (Retail Sentiment)
 *   **`POST /api/sentiment/crawl/{symbol}`**: 触发云端无头请求，抓取股吧增量数据。返回 `{"code": 200, "data": {"new_count": 50}}`。
 *   **`GET /api/sentiment/dashboard/{symbol}`**: 返回情绪全息版。结构: `{"score": 8, "bull_bear_ratio": 2.5, "risk_warning": "高"}`
 *   **`POST /api/sentiment/summary/{symbol}`**: 召唤 LLM 生成摘要。
+*   **`GET /api/sentiment/summary/history/{symbol}`**: 返回 `APIResponse`，`data` 为摘要数组。
+*   **`GET /api/sentiment/trend/{symbol}?interval=72h|14d`**: 返回 `APIResponse`，`data` 为趋势数组。
+*   **`GET /api/sentiment/comments/{symbol}`**: 返回 `APIResponse`，`data` 为评论数组。
 
 ### 3. 空状态法则 (No Silent Empty States)
 **绝对执行命令**：如果后端查询数据库得到空数组 `[]`，严禁直接 `return []` 让前端去猜！必须标准化返回：

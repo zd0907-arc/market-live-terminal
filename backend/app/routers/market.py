@@ -45,7 +45,7 @@ async def verify_realtime(symbol: str):
     (Temporarily disabled due to refactor)
     """
     # return await verify_realtime_data(symbol)
-    return VerifyResult(sina_price=0, tencent_price=0, diff=0, status="disabled")
+    return VerifyResult(tencent=None, eastmoney=None)
 
 @router.get("/realtime/dashboard", response_model=APIResponse)
 async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
@@ -78,4 +78,3 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         data['display_date'] = query_date
     
     return APIResponse(code=200, data=data)
-

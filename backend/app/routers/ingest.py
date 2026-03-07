@@ -3,6 +3,8 @@ import os
 import logging
 from collections import defaultdict
 from backend.app.models.ingest_models import IngestTicksRequest, IngestSnapshotsRequest
+from backend.app.core.calendar import TradeCalendar
+from backend.app.core.http_client import MarketClock
 from backend.app.db.crud import (
     save_sentiment_snapshot,
     save_history_30m_batch,
@@ -13,9 +15,21 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 def verify_token(token: str):
-    expected_token = os.getenv("INGEST_TOKEN", "zhangdata-secret-token")
+    expected_token = os.getenv("INGEST_TOKEN", "").strip()
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="INGEST_TOKEN is not configured on server")
     if token != expected_token:
         raise HTTPException(status_code=401, detail="Invalid ingestion token")
+
+
+def normalize_ingest_date(raw_date: str) -> str:
+    """
+    Guard against crawler sending non-trading natural date (e.g. weekend midnight).
+    """
+    date_str = (raw_date or "").strip()
+    if date_str and TradeCalendar.is_trade_day(date_str):
+        return date_str
+    return MarketClock.get_display_date()
 
 @router.post("/ticks")
 async def ingest_ticks(request: IngestTicksRequest):
@@ -29,8 +43,9 @@ async def ingest_ticks(request: IngestTicksRequest):
         if request.ticks:
             grouped_ticks = defaultdict(list)
             for t in request.ticks:
-                grouped_ticks[(t.symbol, t.date)].append(
-                    (t.symbol, t.time, t.price, t.volume, t.amount, t.type, t.date)
+                date_str = normalize_ingest_date(t.date)
+                grouped_ticks[(t.symbol, date_str)].append(
+                    (t.symbol, t.time, t.price, t.volume, t.amount, t.type, date_str)
                 )
 
             total_saved = 0
@@ -68,7 +83,7 @@ async def ingest_snapshots(request: IngestSnapshotsRequest):
             (
                 s.symbol,
                 s.timestamp,
-                s.date,
+                normalize_ingest_date(s.date),
                 s.cvd,
                 s.oib,
                 0.0,   # price: ingest payload未包含，保留默认值

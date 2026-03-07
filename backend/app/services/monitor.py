@@ -245,6 +245,23 @@ class SentimentMonitor:
              return True
         return False
 
+    def check_spoof_buy(self, prev, curr):
+        """
+        Detect fake buy-wall withdrawal:
+        - little real selling happened
+        - bid1 volume drops sharply
+        """
+        delta_active_sell = curr['inner_vol'] - prev['inner_vol']
+        delta_bid1 = curr['bid1_vol'] - prev['bid1_vol']
+        if delta_active_sell < 100 and delta_bid1 < -1000:
+            return {
+                "type": "SPOOFING",
+                "signal": "⚠️ 主力撤托",
+                "level": "Medium",
+                "detail": f"卖盘仅增加{int(delta_active_sell)}手，买一却骤降{int(-delta_bid1)}手"
+            }
+        return None
+
     def check_v3_signals(self, prev, curr):
         signals = []
         delta_outer = curr['outer_vol'] - prev['outer_vol']

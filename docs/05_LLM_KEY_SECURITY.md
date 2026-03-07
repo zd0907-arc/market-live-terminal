@@ -46,6 +46,11 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_API_KEY=sk-你的真实API密钥
 LLM_MODEL=qwen3-max
 LLM_PROXY=
+
+# === v4.2.3+ 生产运行必需 ===
+INGEST_TOKEN=replace-with-strong-token
+WRITE_API_TOKEN=replace-with-strong-token
+ENABLE_CLOUD_COLLECTOR=false
 ```
 
 保存并退出 (`Ctrl+X` → `Y` → `Enter`)。

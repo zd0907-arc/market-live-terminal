@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends
 from starlette.concurrency import run_in_threadpool
 from backend.app.services.sentiment_crawler import sentiment_crawler
 from backend.app.db.database import get_db_connection
 from backend.app.models.schemas import APIResponse
+from backend.app.core.security import require_write_access
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
@@ -10,7 +11,7 @@ import logging
 router = APIRouter(prefix="/sentiment", tags=["Retail Sentiment"])
 logger = logging.getLogger(__name__)
 
-@router.post("/crawl/{symbol}")
+@router.post("/crawl/{symbol}", dependencies=[Depends(require_write_access)], response_model=APIResponse)
 async def trigger_crawl(symbol: str):
     """
     触发抓取任务 (同步等待模式)
@@ -18,10 +19,14 @@ async def trigger_crawl(symbol: str):
     try:
         # 在线程池中运行以避免阻塞事件循环
         new_count = await run_in_threadpool(sentiment_crawler.run_crawl, symbol, mode="manual")
-        return {"status": "success", "message": f"Crawled {new_count} new comments", "new_count": new_count}
+        return APIResponse(
+            code=200,
+            message="Crawl completed",
+            data={"new_count": new_count}
+        )
     except Exception as e:
         logger.error(f"Crawl failed for {symbol}: {e}")
-        return {"status": "error", "message": str(e)}
+        return APIResponse(code=500, message=str(e), data={"new_count": 0})
 
 @router.get("/dashboard/{symbol}")
 def get_dashboard_data(symbol: str):
@@ -126,7 +131,7 @@ def get_dashboard_data(symbol: str):
         }
     }
 
-@router.post("/summary/{symbol}")
+@router.post("/summary/{symbol}", dependencies=[Depends(require_write_access)], response_model=APIResponse)
 def generate_summary(symbol: str):
     """
     手动触发 AI 摘要生成并保存
@@ -184,7 +189,7 @@ def generate_summary(symbol: str):
     finally:
         conn.close()
 
-@router.get("/summary/history/{symbol}")
+@router.get("/summary/history/{symbol}", response_model=APIResponse)
 def get_summary_history(symbol: str):
     """
     获取历史 AI 摘要
@@ -201,11 +206,13 @@ def get_summary_history(symbol: str):
             {"id": r[0], "content": r[1], "created_at": r[2], "model": r[3]} 
             for r in rows
         ]
-        return result
+        if not result:
+            return APIResponse(code=200, message="No data found", data=[])
+        return APIResponse(code=200, data=result)
     finally:
         conn.close()
 
-@router.get("/trend/{symbol}")
+@router.get("/trend/{symbol}", response_model=APIResponse)
 def get_sentiment_trend(symbol: str, interval: str = "72h"):
     """
     获取情绪趋势数据
@@ -254,9 +261,10 @@ def get_sentiment_trend(symbol: str, interval: str = "72h"):
             full_df = pd.DataFrame({'time_bucket': date_range.strftime('%Y-%m-%d')})
         else:
             end_time = now.replace(minute=0, second=0, microsecond=0)
-            date_range = pd.date_range(end=end_time, periods=72, freq='H')
+            date_range = pd.date_range(end=end_time, periods=72, freq='h')
             full_df = pd.DataFrame({'time_bucket': date_range.strftime('%Y-%m-%d %H:00')})
 
+        no_data = df.empty
         if not df.empty:
             df = pd.merge(full_df, df, on='time_bucket', how='left')
             df.fillna(0, inplace=True)
@@ -272,14 +280,15 @@ def get_sentiment_trend(symbol: str, interval: str = "72h"):
 
         # 计算多空比
         df['bull_bear_ratio'] = df.apply(lambda row: round(row['bull_vol'] / (row['bear_vol'] + 1), 2), axis=1)
-        return df.to_dict(orient='records')
+        message = "No data found" if no_data else None
+        return APIResponse(code=200, message=message, data=df.to_dict(orient='records'))
     except Exception as e:
         logger.error(f"Trend query error: {e}")
-        return []
+        return APIResponse(code=500, message=f"Trend query failed: {e}", data=[])
     finally:
         conn.close()
 
-@router.get("/comments/{symbol}")
+@router.get("/comments/{symbol}", response_model=APIResponse)
 def get_recent_comments(symbol: str, limit: int = 50):
     """
     获取最近的评论列表 (原始数据)
@@ -298,9 +307,12 @@ def get_recent_comments(symbol: str, limit: int = 50):
         # 使用 pandas 读取或者直接 cursor fetchall
         # 这里用 pandas 方便转 dict
         df = pd.read_sql(query, conn, params=(symbol, limit))
-        return df.to_dict(orient='records')
+        data = df.to_dict(orient='records')
+        if not data:
+            return APIResponse(code=200, message="No data found", data=[])
+        return APIResponse(code=200, data=data)
     except Exception as e:
         logger.error(f"Comments query error: {e}")
-        return []
+        return APIResponse(code=500, message=f"Comments query failed: {e}", data=[])
     finally:
         conn.close()

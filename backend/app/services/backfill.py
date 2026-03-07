@@ -1,14 +1,12 @@
 import asyncio
 import logging
-import random
 import akshare as ak
 import pandas as pd
-from datetime import datetime
 from typing import List
 
 from backend.app.core.calendar import TradeCalendar
 from backend.app.db.crud import save_trade_ticks, save_sentiment_snapshot, save_history_30m_batch
-from backend.app.services.analysis import calculate_realtime_aggregation, aggregate_intraday_30m
+from backend.app.services.analysis import aggregate_intraday_30m
 
 logger = logging.getLogger(__name__)
 
@@ -212,14 +210,16 @@ class BackfillService:
             
             type_map = {'买盘': 'buy', '卖盘': 'sell', '中性盘': 'neutral'}
             
+            # save_trade_ticks expects:
+            # (symbol, time, price, volume, amount, type, date)
             records.append((
                 symbol,
-                date_str,
                 time_str,
                 price,
                 vol,
                 amount,
-                type_map.get(kind, 'neutral')
+                type_map.get(kind, 'neutral'),
+                date_str
             ))
             
         # Save to DB
@@ -248,9 +248,9 @@ class BackfillService:
         
         logger.info(f"[Backfill] Generating synthetic snapshots for {symbol}...")
         
-        # ticks structure: (symbol, date, time, price, volume, amount, type)
+        # ticks structure: (symbol, time, price, volume, amount, type, date)
         # Sort by time just in case
-        sorted_ticks = sorted(ticks, key=lambda x: x[2]) # x[2] is time HH:MM:SS
+        sorted_ticks = sorted(ticks, key=lambda x: x[1]) # x[1] is time HH:MM:SS
         
         snapshots = []
         
@@ -265,11 +265,11 @@ class BackfillService:
         last_price = 0
         
         for t in sorted_ticks:
-            # t: (symbol, date, time, price, vol, amt, type)
-            time_str = t[2]
-            price = t[3]
-            vol = t[4]
-            typ = t[6] # buy/sell/neutral
+            # t: (symbol, time, price, vol, amt, type, date)
+            time_str = t[1]
+            price = t[2]
+            vol = t[3]
+            typ = t[5] # buy/sell/neutral
             
             last_price = price
             
@@ -301,8 +301,41 @@ class BackfillService:
                         0  # tick_vol (diff, can be calc if needed but optional for history)
                     ))
                 current_minute = minute
+
+        # Flush the last minute bucket
+        if current_minute is not None:
+            snapshots.append((
+                symbol,
+                f"{current_minute}:00",
+                date_str,
+                float(cum_outer - cum_inner),
+                0.0,
+                float(last_price),
+                int(cum_outer),
+                int(cum_inner),
+                None,
+                0,
+                0,
+                0
+            ))
                 
         # Save aggregated snapshots
         if snapshots:
             await asyncio.to_thread(save_sentiment_snapshot, snapshots)
             logger.info(f"[Backfill] Generated {len(snapshots)} synthetic snapshots for {symbol}")
+
+
+def perform_historical_fetch(symbol: str, days: int = 5):
+    """
+    Synchronous wrapper used by routers/background threads.
+    """
+    logger.info(f"[Backfill] Triggered historical fetch for {symbol}, days={days}")
+    try:
+        asyncio.run(BackfillService.backfill_stock(symbol, days=days))
+    except RuntimeError:
+        # Safety fallback when called from a context with an existing event loop.
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(BackfillService.backfill_stock(symbol, days=days))
+        finally:
+            loop.close()
