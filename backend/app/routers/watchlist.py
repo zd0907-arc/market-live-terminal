@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends
 from typing import List
 from backend.app.models.schemas import WatchlistItem, APIResponse
 from backend.app.db.crud import get_watchlist_items, add_watchlist_item, remove_watchlist_item
-from backend.app.services.collector import collector
 from backend.app.core.security import require_write_access
 from backend.app.core.task_runner import submit_background
 import logging
@@ -21,7 +20,12 @@ def add_watchlist(symbol: str, name: str):
         add_watchlist_item(symbol, name)
         
         # 立即触发实时行情快照池拉取
-        submit_background("watchlist_poll_once", collector._poll_watchlist)
+        try:
+            from backend.app.services.collector import collector
+            if collector:
+                submit_background("watchlist_poll_once", collector._poll_watchlist)
+        except Exception as e:
+            logger.warning(f"Could not trigger immediate collector poll: {e}")
         
         # 并发触发：历史K线回落与散户情绪爬虫（独立线程防阻塞）
         try:

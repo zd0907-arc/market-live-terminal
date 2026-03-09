@@ -15,31 +15,29 @@ class TradeCalendar:
     def init(cls, force: bool = False):
         """
         初始化交易日历
-        从新浪财经获取上证指数(sh000001)的日K线日期，作为权威的交易日列表。
+        从 AkShare 获取新浪财经的历史交易日列表。
         """
         if cls._initialized and not force:
             return
 
         try:
-            # 获取最近365天的日K线日期
-            url = "https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=sh000001&scale=240&ma=no&datalen=365"
-            resp = requests.get(url, timeout=5)
-            data = resp.json()
+            import akshare as ak
+            df = ak.tool_trade_date_hist_sina()
             
-            if isinstance(data, list):
-                new_trade_days = set()
-                for item in data:
-                    day = item.get('day')
-                    if day:
-                        new_trade_days.add(day)
+            if not df.empty and "trade_date" in df.columns:
+                # akshare 返回的是 date 类型，直接转 string 即可 (YYYY-MM-DD)
+                new_trade_days = set(str(d) for d in df["trade_date"])
 
                 # 只有成功获取并解析后，才真正覆盖旧缓存 (无损刷新机制)
-                cls._trade_days = new_trade_days
-                logger.info(f"TradeCalendar initialized with {len(cls._trade_days)} trading days (force={force}).")
-                cls._initialized = True
-                cls._last_refresh_at = datetime.now()
+                if new_trade_days:
+                    cls._trade_days = new_trade_days
+                    logger.info(f"TradeCalendar initialized with {len(cls._trade_days)} trading days (force={force}).")
+                    cls._initialized = True
+                    cls._last_refresh_at = datetime.now()
+                else:
+                    logger.warning("Failed to fetch trade calendar: parsed set is empty")
             else:
-                logger.warning("Failed to fetch trade calendar: invalid response format")
+                logger.warning("Failed to fetch trade calendar: invalid response format from akshare")
                 
         except Exception as e:
             logger.error(f"Failed to init TradeCalendar (force={force}): {e}")

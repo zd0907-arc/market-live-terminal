@@ -1,6 +1,10 @@
-# 04_OPS_AND_DEV (开发与运维 SOP)
+# 04_OPS_AND_DEV (开发与运维 SOP / 远程控制唯一来源)
 
 > **核心定位**：当准备进行系统的架构升级、代码上线部署或本地调试时所需的标准操作流程（SOP）。在动用 `ssh`、`git push` 前，需要严格参考此文档。
+>
+> **文档边界**：从 2026-03-09 起，Mac/Windows/Cloud 远程控制步骤统一收敛到本文件。`REMOTE_CONTROL_GUIDE.md` 仅保留索引说明，不再维护独立步骤。
+>
+> **边界提醒**：交易时段判定、回溯展示等业务语义不在本文件裁决，统一以 `docs/02_BUSINESS_DOMAIN.md`（尤其 `CAP-MKT-TIME`）为准。
 
 ## 一、 网络联通测试规范 (The Tailscale Gate)
 
@@ -14,6 +18,15 @@
 ```bash
 ping -c 4 100.115.228.56
 ```
+
+### 1.1 连接抖动快速判定（必做）
+当 `tailscale status` 显示 `active/idle` 但任务依然失败时，先执行：
+```bash
+tailscale ping -c 2 100.115.228.56
+ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "echo ok"
+```
+- 两条都成功：可继续执行同步/回传/ETL。
+- 任一失败：进入 `07_PENDING_TODO.md` 阻塞流程，不要盲目重试大文件传输。
 ### 2. 登陆检查与状态恢复 (SSH)
 如果需要手动连进家里机器看清洗日志或重启进程：
 ```bash
@@ -183,3 +196,26 @@ release/vX.Y.Z         # 发版准备（如需要冻结测试）
 3. **每次研发强制带测 (Test-Driven Mindset)**
    - **以后每一项新功能开发工作流中，最后一步都被强制绑定为“测试（Testing）阶段”**。
    - 在向用户请求 Check/Review 前，必须主动出示一条客观的验证数据链（例如，“我刚获取了前端索要该股票 K 线图的 API 接口数据，截取了最新的收盘价，确认数据已经连贯”）。
+
+---
+
+## 七、 Bug 修复验证流程（推荐默认流程）
+
+用于后续“先修 bug，再验证流程”的统一执行顺序：
+
+1. **建任务与需求定位**  
+   - 先在 `docs/changes/` 建立变更卡（遵循 `06_CHANGE_MANAGEMENT.md`）。  
+   - 登记 `Task ID`（`CHG-YYYYMMDD-序号`），在 `02_BUSINESS_DOMAIN.md` 对应 CAP 卡写“拟变更点”。
+2. **做最小改动并本地验证**  
+   - 后端：至少覆盖 1 条目标接口 `curl` 或测试用例。  
+   - 前端：至少覆盖 1 条目标视图状态（正常/边界/异常其一）。
+3. **Windows 依赖判定**  
+   - 若变更涉及 ETL/回传/Windows 采集，先执行“一.1 连接抖动快速判定”。  
+   - 任一失败直接转 `07_PENDING_TODO.md`，不得继续大文件回传或 merge。
+4. **发布与冒烟**  
+   - 按“二、发版与一键装填协议”上线。  
+   - 执行“目的 A”中的 4 条强制冒烟检查。
+5. **文档回填与交接**  
+   - 更新 `02/03/04`（按是否涉及业务/契约/SOP）。  
+   - 在 `AI_HANDOFF_LOG.md` 记录短日志；有阻塞则同步 `07_PENDING_TODO.md`。
+   - 将完成的变更卡归档到 `docs/archive/changes/`（命名遵循 `ARCHIVE_NAMING_STANDARD`）。

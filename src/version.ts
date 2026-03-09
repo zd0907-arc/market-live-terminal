@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.8';
+export const APP_VERSION = '4.2.9';
 export const RELEASE_NOTES = [
+    'v4.2.9: 修复当日分时主力资金线缺失（统一成交方向枚举 B/S/M + 中文 + 英文），完成文档治理主册化与变更归档流程收口',
     'v4.2.8: 30分钟线8桶口径统一（过滤11:30/15:00异常桶），禁用历史K线零流入占位写入，Windows ETL同口径收敛',
     'v4.2.7: 完成P1/P2收口（交易日历fail-closed、后台任务并发治理、情绪接口统一APIResponse、文档治理与构建瘦身）',
     'v4.2.2: 30分钟线跨日错标修复，强化Windows爬虫无人值守保障机制（周期轮扫与收盘重试），优化云端覆盖写入',

@@ -1,11 +1,12 @@
 import logging
 import asyncio
 import httpx
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from fake_useragent import UserAgent
 from backend.app.core.calendar import TradeCalendar
 
 logger = logging.getLogger(__name__)
+CHINA_TZ = timezone(timedelta(hours=8))
 
 class MarketClock:
     """
@@ -15,8 +16,12 @@ class MarketClock:
     2. 交易日 09:15-11:30, 13:00-15:05 允许运行
     """
     @staticmethod
+    def _now_china() -> datetime:
+        return datetime.now(timezone.utc).astimezone(CHINA_TZ)
+
+    @staticmethod
     def is_trading_time() -> bool:
-        now = datetime.now()
+        now = MarketClock._now_china()
         today_str = now.strftime("%Y-%m-%d")
         
         # 1. 交易日检查 (使用 TradeCalendar)
@@ -37,7 +42,11 @@ class MarketClock:
         is_morning = morning_start <= current_time <= morning_end
         is_afternoon = afternoon_start <= current_time <= afternoon_end
         
-        return is_morning or is_afternoon
+        result = is_morning or is_afternoon
+        if not result:
+            logger.info(f"MarketClock.is_trading_time: False | Now={current_time} | Morn=[{morning_start}-{morning_end}] | Aft=[{afternoon_start}-{afternoon_end}]")
+            
+        return result
 
     @staticmethod
     def get_display_date() -> str:
@@ -46,7 +55,7 @@ class MarketClock:
         - 如果是交易中: 返回今日
         - 如果是休市(晚上/周末/节假日): 返回最近的一个有效交易日
         """
-        now = datetime.now()
+        now = MarketClock._now_china()
         today_str = now.strftime("%Y-%m-%d")
         
         logger.info(f"DEBUG: Checking display date. Today={today_str}, Weekday={now.weekday()}, IsTradeDay={TradeCalendar.is_trade_day(today_str)}")
@@ -78,7 +87,7 @@ class HTTPClient:
             "Connection": "keep-alive"
         }
         
-        async with httpx.AsyncClient(headers=headers, timeout=timeout) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=timeout, follow_redirects=True) as client:
             try:
                 response = await client.get(url, params=params)
                 response.raise_for_status()

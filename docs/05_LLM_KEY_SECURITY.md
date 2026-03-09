@@ -1,6 +1,8 @@
-# LLM API Key 安全管理运维指南
+# 05_LLM_KEY_SECURITY（LLM API Key 安全管理运维指南）
 
 > 本文档说明如何在**云端生产环境**和**本地开发环境**安全地配置大模型 API Key，确保 Key 永远不会出现在代码仓库、数据库和 AI 工具的扫描范围中。
+>
+> **边界提醒**：本文件只定义密钥与安全注入规范；业务规则以 `docs/02_BUSINESS_DOMAIN.md` 为准，接口字段以 `docs/03_DATA_CONTRACTS.md` 为准，发布/远控步骤以 `docs/04_OPS_AND_DEV.md` 为准。
 
 ---
 
@@ -123,17 +125,12 @@ git check-ignore .env.local
 ### 步骤 3：启动本地后端
 
 ```bash
-# 方法一：直接利用 dotenv 包加载（推荐）
-cd backend
-pip install python-dotenv  # 如果没装的话
-python -c "from dotenv import load_dotenv; load_dotenv('../.env.local'); import os; print(os.getenv('LLM_MODEL'))"
-
-# 方法二：手动 export 后启动
-export $(cat .env.local | grep -v '^#' | xargs)
-uvicorn backend.app.main:app --reload
+# 推荐：从项目根目录直接启动（main.py 已自动加载 .env.local）
+cd ~/Desktop/AIGC/market-live-terminal
+python -m backend.app.main
 ```
 
-> 💡 **建议**：可以在 `backend/app/main.py` 的启动逻辑中加载 `.env.local`，这样本地启动时无需手动 export。
+> 如需热重载调试，可在项目根目录使用：`uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000`
 
 ---
 

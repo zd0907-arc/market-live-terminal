@@ -1,38 +1,54 @@
-# 08_DOCS_GOVERNANCE（文档治理与目录索引）
+# 08_DOCS_GOVERNANCE（文档治理规范）
 
 ## 1. 目标
-- 建立“单一可查”的文档入口，降低多 AI / 多终端协作时的认知错位。
-- 约束文档更新触发条件，避免“代码已变更，文档未同步”。
+- 固定核心文档编号，防止编号膨胀。
+- 将“核心规则”与“动态变更过程”分层管理。
+- 保证从需求到归档的流程可复制、可交接、可追溯。
 
-## 2. 在用文档总览（Active Set）
+## 2. 核心文档编号冻结（仅此 9 份）
+> 自 2026-03-09 起，核心编号固定为 `00~08`，不得新增/改号/挪号。
 
-| 文档 | 角色 | 何时必须更新 |
+| 编号 | 文档 | 角色 |
 |---|---|---|
-| `00_AI_HANDOFF_PROTOCOL.md` | AI 协作协议 | 协作流程、边界、交接机制变更 |
-| `01_SYSTEM_ARCHITECTURE.md` | 架构红线与部署拓扑 | 组件位置/数据流/部署拓扑变更 |
-| `02_BUSINESS_DOMAIN.md` | 业务定义与指标口径 | 指标定义或业务规则变更 |
-| `03_DATA_CONTRACTS.md` | 前后端/数据契约唯一源 | 接口入参出参、存储字段约束变更 |
-| `04_OPS_AND_DEV.md` | 运维、发布、SOP | 发版流程、脚本、环境变量要求变更 |
-| `05_LLM_KEY_SECURITY.md` | 密钥与安全规范 | 鉴权机制、密钥注入策略变更 |
-| `06_TECH_AUDIT_2026-03-07.md` | 技术审计与问题清单 | 审计项状态变更（完成/阻塞/延期） |
-| `07_PENDING_TODO.md` | 人工阻塞待办 | 外部依赖阻塞出现/解除 |
-| `AI_HANDOFF_LOG.md` | 日常交接日志 | 每次阶段性改造完成后追加 |
-| `REMOTE_CONTROL_GUIDE.md` | 远控说明（人工使用） | 远控入口和操作步骤变化 |
+| `00` | `00_AI_HANDOFF_PROTOCOL.md` | 多 AI 协作协议 |
+| `01` | `01_SYSTEM_ARCHITECTURE.md` | 架构边界与红线 |
+| `02` | `02_BUSINESS_DOMAIN.md` | 需求总册（唯一业务真相源） |
+| `03` | `03_DATA_CONTRACTS.md` | 接口与字段契约 |
+| `04` | `04_OPS_AND_DEV.md` | 运维发布与远程控制 SOP |
+| `05` | `05_LLM_KEY_SECURITY.md` | 密钥与安全规范 |
+| `06` | `06_CHANGE_MANAGEMENT.md` | 动态变更与阶段目标流程 |
+| `07` | `07_PENDING_TODO.md` | 阻塞与待办板 |
+| `08` | `08_DOCS_GOVERNANCE.md` | 文档治理规则 |
 
-## 3. 归档规则（Archive Policy）
-- `docs/archive/` 仅保留“历史决策、旧版本说明、过期路线图”，不作为当前开发依据。
-- 当新文档替代旧文档时，旧文档移入 `docs/archive/`，并在新文档首段注明替代关系。
-- README 与协作文档只引用 Active Set，避免把归档文档当现行标准。
+## 3. 非核心文档规则
+- 非核心文档不得使用 `NN_*.md` 命名。
+- 动态变更文档统一放 `docs/changes/`，命名见 `06`。
+- 交接日志固定为 `AI_HANDOFF_LOG.md`（短日志）。
+- `REMOTE_CONTROL_GUIDE.md` 仅索引，不承载流程正文。
 
-## 4. 文档更新最小闭环（执行清单）
-每次完成改造后按以下顺序执行：
-1. 更新契约：先改 `03_DATA_CONTRACTS.md`（若涉及接口或字段）。
-2. 更新 SOP：改 `04_OPS_AND_DEV.md` / `05_LLM_KEY_SECURITY.md`（若影响发布与安全）。
-3. 更新审计状态：改 `06_TECH_AUDIT_2026-03-07.md` 末尾执行状态。
-4. 记录交接：追加 `AI_HANDOFF_LOG.md`（新记录置顶）。
-5. 更新 README：只保留当前可执行入口与 Active 文档链接。
+## 4. 归档规则（标准化）
+- 归档目录：`docs/archive/`
+- 变更卡归档目录：`docs/archive/changes/`
+- 事件/事故归档目录：`docs/archive/incidents/`
+- 新归档文件命名：`ARC-<TYPE>-<YYYYMMDD>-<slug>.md`
+  - `TYPE` 推荐：`INC`(事件), `RET`(复盘), `REL`(发布), `ADR`(架构), `OPS`(运维), `LEG`(历史导入)
+- 归档正文建议添加 `Archive-Meta` 信息块（见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
 
-## 5. 当前治理结论（2026-03-07）
-- Active Set 已与当前代码状态对齐。
-- 审计规划项已在 `06_TECH_AUDIT_2026-03-07.md` 追加“实际执行结果回填”。
-- Windows 离线阻塞已单独登记在 `07_PENDING_TODO.md`，不再散落于多份文档。
+## 5. 线性执行流程（必须按序）
+1. 新建变更卡（`docs/changes/`）。
+2. 在 `02` 对应 CAP 卡登记拟变更点。
+3. 实施改动并验证。
+4. 如需上线，按 `04` 发布与冒烟。
+5. 回填 `02` + `AI_HANDOFF_LOG`；有阻塞更新 `07`。
+6. 变更卡归档到 `docs/archive/changes/` 并记录 Archive ID。
+
+## 6. Release Gate（含前序动作）
+- 前序动作 A：Task ID 与 CAP 回填完成。
+- 前序动作 B：若依赖 Windows，先通过 `04` 的连通性 gate。
+- 核查项：
+  - `README.md` 入口与端口正确；
+  - `02` 验收案例含绝对时间；
+  - 变更涉及接口时已更新 `03`；
+  - 变更涉及 SOP/安全时已更新 `04/05`；
+  - `AI_HANDOFF_LOG` 已登记；
+  - 阻塞项已同步到 `07`。

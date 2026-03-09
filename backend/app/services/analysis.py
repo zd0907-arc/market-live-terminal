@@ -2,6 +2,11 @@ import pandas as pd
 from typing import List, Dict
 from backend.app.models.schemas import TickData
 from backend.app.db.crud import get_ticks_by_date, get_app_config
+from backend.app.core.trade_side import (
+    is_buy_series,
+    is_sell_series,
+    normalize_trade_side,
+)
 import copy
 import threading
 import time
@@ -93,9 +98,9 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     df['minute'] = df['time'].str.slice(0, 5)
     
     # Pre-calculate flags
-    # V3.2 Fix: Handle both Chinese ('买盘') and English ('buy') types from different data sources
-    df['is_buy'] = df['type'].isin(['买盘', 'buy'])
-    df['is_sell'] = df['type'].isin(['卖盘', 'sell'])
+    # Support Chinese/English/single-letter sides (买盘/buy/B etc.)
+    df['is_buy'] = is_buy_series(df['type'])
+    df['is_sell'] = is_sell_series(df['type'])
     df['is_main'] = df['amount'] >= LARGE_THRESHOLD
     df['is_super'] = df['amount'] >= SUPER_THRESHOLD
 
@@ -176,11 +181,7 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     latest_df = df.tail(50).iloc[::-1]
     latest_ticks = []
     for _, row in latest_df.iterrows():
-        t_type = 'neutral'
-        if row['type'] in ['买盘', 'buy']:
-            t_type = 'buy'
-        elif row['type'] in ['卖盘', 'sell']:
-            t_type = 'sell'
+        t_type = normalize_trade_side(row['type'])
         
         latest_ticks.append({
             "time": row['time'],
@@ -245,9 +246,9 @@ def aggregate_intraday_30m(symbol: str, date_str: str = None):
                 'super_net': 0, 'super_buy': 0, 'super_sell': 0
             })
             
-        # V3.2 Fix: Compatible with 'buy'/'sell'
-        is_buy = sub_df['type'].isin(['买盘', 'buy'])
-        is_sell = sub_df['type'].isin(['卖盘', 'sell'])
+        # Compatible with Chinese/English/single-letter sides.
+        is_buy = is_buy_series(sub_df['type'])
+        is_sell = is_sell_series(sub_df['type'])
             
         main_buys = sub_df[(sub_df['is_main']) & is_buy]['amount'].sum()
         main_sells = sub_df[(sub_df['is_main']) & is_sell]['amount'].sum()
@@ -330,9 +331,10 @@ def perform_aggregation(symbol: str, date: str = None):
         is_main = amount >= large_threshold 
         
         if is_main:
-            if t_type == '买盘':
+            side = normalize_trade_side(t_type)
+            if side == 'buy':
                 main_buy += amount
-            elif t_type == '卖盘':
+            elif side == 'sell':
                 main_sell += amount
                 
     net_inflow = main_buy - main_sell
@@ -460,8 +462,8 @@ def aggregate_intraday_1m(symbol: str, date_str: str = None):
                 'super_net': 0, 'super_buy': 0, 'super_sell': 0
             })
             
-        is_buy = sub_df['type'].isin(['买盘', 'buy'])
-        is_sell = sub_df['type'].isin(['卖盘', 'sell'])
+        is_buy = is_buy_series(sub_df['type'])
+        is_sell = is_sell_series(sub_df['type'])
             
         main_buys = sub_df[(sub_df['is_main']) & is_buy]['amount'].sum()
         main_sells = sub_df[(sub_df['is_main']) & is_sell]['amount'].sum()

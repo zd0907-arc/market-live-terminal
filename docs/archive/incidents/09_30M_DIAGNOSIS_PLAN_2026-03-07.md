@@ -1,5 +1,15 @@
 # 09_30M_DIAGNOSIS_PLAN_2026-03-07（30分钟线问题诊断与修复方案）
 
+> Archive-Meta
+- Archive-ID: `ARC-INC-20260307-09-30m-diagnosis-plan-2026-03-07`
+- Archive-Type: `INC`
+- Archived-At: `2026-03-09`
+- Source-Path: `docs/archive/incidents/09_30M_DIAGNOSIS_PLAN_2026-03-07.md`
+- Former-Path: docs/09_30M_DIAGNOSIS_PLAN_2026-03-07.md（已迁出核心区）
+- Status: `FROZEN`
+
+> 文档属性：事件类诊断方案（历史专项）。当前 30m 业务口径与验收请以 `docs/02_BUSINESS_DOMAIN.md` 的 `CAP-HISTORY-30M` 为准。
+
 ## 1) 结论摘要
 - 用户反馈成立：`sz000833`（粤桂股份）在 `2026-02-13` 存在日线与30分钟线明显不一致。
 - 问题不是单票：watchlist 抽样显示同批日期窗口存在系统性偏差。
@@ -62,10 +72,14 @@
 - 运行目录统一：`D:\market-live-terminal`
 - 该路径已写入：
   - `docs/04_OPS_AND_DEV.md`
-  - `docs/REMOTE_CONTROL_GUIDE.md`
+  - `docs/REMOTE_CONTROL_GUIDE.md`（索引页，实际步骤已并入 `04`）
 
 ## 6) 当前阻塞
-- 远程自动化到 Windows 仍缺免密/交互凭据（当前 SSH 为密码认证，Agent 无法代输密码）。
-- 可选处理：
-  1. 用户在本机终端手动执行一次 `./sync_to_windows.sh`（输入密码）；
-  2. 或配置 Windows SSH 公钥，后续全自动执行。
+- Windows 免密 SSH 已打通，但节点连接稳定性抖动（active 但 ping/ssh 超时）导致大文件回传不稳定。
+- 当前卡点：`market_data_history_202602_fix.db` 完整回传与云端 merge 未完成。
+
+## 7) 实施进度回填（更新至 2026-03-09）
+- Phase A（审计基线）：✅ 已完成（问题窗口和污染模式已确认）。
+- Phase B（代码收敛）：✅ 已完成并上线 `v4.2.8`（8桶统一 + 占位写入默认禁用 + API读路径过滤）。
+- Phase C（Windows历史重建）：🟡 已完成重建，⏳ 卡在产物回传与云端 merge。
+- Phase D（验收门禁）：⏳ 待 merge 完成后执行。

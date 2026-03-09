@@ -1,6 +1,8 @@
 # 03_DATA_CONTRACTS (数据与接口契约)
 
 > **核心定位**：这是消除 AI (LLM) “幻觉补全”的最核心武器。所有后端脚本对 SQLite 数据库的 CRUD 读写、第三方爬虫的原始响应 (Payload) 都有着极端死板且严酷的结构约束。**不要盲猜，查阅本文档。**
+>
+> **边界提醒**：本文件只定义“数据与接口契约”，不承载业务规则裁决。业务目标/时序规则/验收案例统一在 `docs/02_BUSINESS_DOMAIN.md`。
 
 ---
 
@@ -46,7 +48,7 @@
 | `price` | `REAL` | `NOT NULL` | 当前成交实价。 |
 | `volume` | `INTEGER` | `NOT NULL` | 当前成交手数（注意不同数据源的转化）。 |
 | `amount` | `REAL` | Allow `NULL` | 当前明细产生的资金额 (`price * volume * 100` 或源提供)。 |
-| `type` | `TEXT` | `NOT NULL` | 当前实现兼容：`买盘/卖盘/中性盘` 或 `buy/sell/neutral`。建议统一落库为 `buy/sell/neutral`。 |
+| `type` | `TEXT` | `NOT NULL` | 当前实现兼容：`买盘/卖盘/中性盘`、`buy/sell/neutral`、`B/S/M`。API 对外返回前必须归一化为 `buy/sell/neutral`。 |
 | `date` | `TEXT` | `NOT NULL` | 关联查询用的主键前缀：%Y-%m-%d |
 **索引**: 必须有联合索引 `idx_ticks_symbol_date (symbol, date)`。
 
@@ -85,7 +87,7 @@
 *   `价格变动`: (Float) 与上一笔的波动，可正可负可为 0。
 *   `成交量(手)`: (Int) **这是手数！！！不要当成股数！！！1手=100股。算资金流入时必须 x100！**
 *   `成交额(元)`: (Float) 已经算好的这笔金额，直接用。
-*   `性质`: (String) 枚举值：买盘、卖盘、中性盘。（不要把它和上述库里的 `B`, `S` 搞混，业务上需做条件替换 `['买盘'=>'B', '卖盘'=>'S']`）。
+*   `性质`: (String) 枚举值：买盘、卖盘、中性盘。（入库可保留原值；聚合/接口输出阶段统一归一化为 `buy/sell/neutral`，并兼容历史 `B/S/M` 记录。）
 
 ### 3. 东财股吧原始评论接口 `stock_zh_a_code_pinglun_em`
 获取股民发帖流。

@@ -35,7 +35,7 @@ except Exception as e:
 
 # 3. Now import routers
 from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest
-from backend.app.services.collector import collector
+# Import removed
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
 from datetime import datetime
@@ -79,10 +79,14 @@ def api_health_check():
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
+from backend.app.services.collector import collector
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    
     collector.start()
+    
     sentiment_monitor.start()
     init_scheduler()
     for route in app.routes:
@@ -90,7 +94,8 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    collector.stop()
+    if collector:
+        collector.stop()
     sentiment_monitor.stop()
 
 @app.get("/")

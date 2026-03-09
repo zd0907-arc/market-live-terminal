@@ -4,6 +4,7 @@ from backend.app.services.market import get_sina_money_flow, get_sina_kline
 from backend.app.services.analysis import perform_aggregation
 from backend.app.db.crud import get_local_history_data, get_app_config, get_history_30m
 from backend.app.core.time_buckets import map_to_30m_bucket_start
+from backend.app.core.trade_side import is_buy_series, is_sell_series
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,8 +41,8 @@ def get_history_trend(symbol: str, days: int = 20):
 
         df['is_main'] = df['amount'] >= large_th
         df['is_super'] = df['amount'] >= super_th
-        is_buy = df['type'].isin(['买盘', 'buy'])
-        is_sell = df['type'].isin(['卖盘', 'sell'])
+        is_buy = is_buy_series(df['type'])
+        is_sell = is_sell_series(df['type'])
 
         df['bar_time'] = df.index.map(map_to_30m_bucket_start)
         df_filtered = df.dropna(subset=['bar_time'])
@@ -49,8 +50,8 @@ def get_history_trend(symbol: str, days: int = 20):
         if not df_filtered.empty:
             def calc_stats(sub_df):
                 if sub_df.empty: return pd.Series()
-                b = sub_df['type'].isin(['买盘', 'buy'])
-                s = sub_df['type'].isin(['卖盘', 'sell'])
+                b = is_buy_series(sub_df['type'])
+                s = is_sell_series(sub_df['type'])
                 main_buys = sub_df[(sub_df['is_main']) & b]['amount'].sum()
                 main_sells = sub_df[(sub_df['is_main']) & s]['amount'].sum()
                 super_buys = sub_df[(sub_df['is_super']) & b]['amount'].sum()
@@ -241,8 +242,8 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
             df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
             df['is_main'] = df['amount'] >= large_th
             df['is_super'] = df['amount'] >= super_th
-            b = df['type'].isin(['买盘', 'buy'])
-            s = df['type'].isin(['卖盘', 'sell'])
+            b = is_buy_series(df['type'])
+            s = is_sell_series(df['type'])
             
             main_buys = df[(df['is_main']) & b]['amount'].sum()
             main_sells = df[(df['is_main']) & s]['amount'].sum()

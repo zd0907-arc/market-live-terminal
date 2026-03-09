@@ -1,6 +1,8 @@
 # 01_SYSTEM_ARCHITECTURE (系统与架构基石)
 
 > **核心定位**：定义系统的物理边界、数据流向大图、数据存储分层、以及那些绝对不能触碰的"架构红线"。所有 AI 在编写网络请求、部署脚本、架构决策前**必读**。
+>
+> **边界提醒**：本文件只裁决“组件职责/数据流/部署边界”；业务规则与验收标准统一在 `docs/02_BUSINESS_DOMAIN.md`，接口字段约束统一在 `docs/03_DATA_CONTRACTS.md`，执行步骤统一在 `docs/04_OPS_AND_DEV.md`。
 
 ## 一、 系统角色与物理边界
 
@@ -13,6 +15,7 @@
    
 2. **侦察机 / 算力节点 (家庭 Windows - 内网 IP: 100.115.228.56)**
    * **职责**：唯一具备从外部（东方财富/AkShare）高频抓取数据资格的节点。负责实时数据抓取（白天的雷达）、历史海量数据 ETL 清洗，并负责将洗净的数据 **单向 POST/SCP 发送** 到云端。
+   * **路径约定**：统一运行目录 `D:\market-live-terminal`。
    * **产出物**：`market_data_history.db`（ETL 历史聚合库，仅含 `local_history` + `history_30m`）
    * **红线**：**不要在 Windows 节点配置完整的 Git 仓库环境去执行 Pull**。它的代码完全是由 Mac 节点通过 `sync_to_windows.sh` 覆写进去的。
 
@@ -53,7 +56,7 @@
 
 | 层级 | 表 | 特征 |
 |------|-----|------|
-| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 只追加永不删，源数据 |
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 覆盖写入 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 可重算可覆写，带版本号 |
 | **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 |
 
