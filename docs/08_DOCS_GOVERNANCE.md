@@ -38,15 +38,16 @@
 1. 新建变更卡（`docs/changes/`）。
 2. 在 `02` 对应 CAP 卡登记拟变更点。
 3. 实施改动并验证。
-4. 如需上线，按 `04` 发布与冒烟。
+4. 如需上线，按 `04` 发布；生产冒烟由你手动执行，AI 提供清单与结果模板。
 5. 回填 `02` + `AI_HANDOFF_LOG`；有阻塞更新 `07`。
-6. 变更卡归档到 `docs/archive/changes/` 并记录 Archive ID。
+6. 变更卡归档到 `docs/archive/changes/` 并记录 Archive ID（可在用户确认“业务冒烟通过”后单独执行，且不触发再次部署）。
 
 ## 6. Release Gate（含前序动作）
 - 前序动作 A：Task ID 与 CAP 回填完成。
 - 前序动作 B：若依赖 Windows，先通过 `04` 的连通性 gate。
 - 核查项：
   - `README.md` 入口与端口正确；
+  - 发版版本一致：`package.json` = `src/version.ts` = `README.md` 标题版本；
   - `02` 验收案例含绝对时间；
   - 变更涉及接口时已更新 `03`；
   - 变更涉及 SOP/安全时已更新 `04/05`；

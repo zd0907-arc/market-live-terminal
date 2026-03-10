@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：
-- 状态：DRAFT
+- 状态：DRAFT（可用：DRAFT/RELEASE_READY/RELEASED_PENDING_SMOKE/DONE）
 - 负责人：
 - 关联 Task ID：
 - 关联 CAP：

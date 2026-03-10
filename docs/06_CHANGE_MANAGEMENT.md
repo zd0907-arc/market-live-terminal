@@ -39,10 +39,20 @@
 1. 在 `docs/changes/` 新建变更卡。
 2. 在 `02` 对应 CAP 卡登记“拟变更点”。
 3. 实施代码/配置改动并本地验证。
-4. 如需发布，按 `04` 执行发布与冒烟。
-5. 回填 `02`（实现摘要+验收）与 `AI_HANDOFF_LOG`（短日志）。
-6. 如有阻塞，更新 `07`。
-7. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
+4. 如需发布，按 `04` 执行发布；生产冒烟由你手动执行，AI 负责给出清单与回填模板。
+5. 发版任务必须执行版本一致性核对（`package.json`、`src/version.ts`、`README.md`）。
+6. 回填 `02`（实现摘要+验收）与 `AI_HANDOFF_LOG`（短日志）。
+7. 如有阻塞，更新 `07`。
+8. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
+
+## 4.1 两步快路径（默认推荐）
+- **Step 1：文档管理**（`$governance-doc-keeper` AFTER）
+  - 建/更变更卡 + 回填 `02` + 更新 `AI_HANDOFF_LOG`，状态置为 `RELEASE_READY`。
+- **Step 2：发布执行**（`$release-ops-commander`）
+  - 完成版本同步、部署、给出“业务冒烟清单（用户手动）”。
+  - 发布后状态置为 `RELEASED_PENDING_SMOKE`，本轮到此结束，不再额外触发“二次发布”。
+- **归档收口**
+  - 你回传“业务冒烟通过”后，AI 仅做文档归档（`ARCHIVE`），**不触发再次部署**。
 
 ## 5. 与版本阶段目标的关系
 - 每个版本阶段至少有一张 `STG-*` 卡，描述目标、范围、里程碑和退出条件。
