@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：生产环境当日分时无数据（实时状态可见但曲线为空）
-- 状态：IN_PROGRESS
+- 状态：RELEASED_PENDING_SMOKE
 - 负责人：后端 AI
 - 关联 Task ID：CHG-20260310-01
 - 关联 CAP：CAP-REALTIME-FLOW, CAP-WIN-PIPELINE
@@ -32,11 +32,20 @@
 - 回滚：回滚到上一版本 Tag，并按 `04_OPS_AND_DEV` 使用手动探测脚本恢复一次全量回填。
 
 ## 7. 结果回填
-- 实际改动：待发布完成后回填。
-- 验证结果：待发布完成后回填。
-- 遗留问题：待发布完成后回填。
+- 实际改动：
+  - 修复 Windows 侧采集依赖缺失：安装 `akshare`。
+  - 修复 ingest 目标地址：`CLOUD_API_URL` 改为 `http://111.229.144.202`（不再使用 `:8000`）。
+  - 加固脚本：`live_crawler_win.py` 对 `CLOUD_API_URL` 增加 `.strip().rstrip('/')` 防尾随空格污染。
+  - 加固启动：更新 `start_live_crawler.bat` 默认地址与提示；创建登录触发任务 `ZhangDataLiveCrawler`。
+  - 发布版本：`v4.2.10`（`package.json` / `src/version.ts` / `README.md` 已同步）。
+- 验证结果：
+  - 发布前后核验到生产 `trade_ticks` 已恢复当日写入：`MAX(date)=2026-03-10`。
+  - 线上接口抽查：`/api/realtime/dashboard?symbol=sz000833` 返回非空分时与最新 ticks。
+  - 生产冒烟四项（health/write token/ingest token）按流程由用户手动执行，当前待回填。
+- 遗留问题：
+  - 需等待用户完成生产冒烟并回填结果；若任一失败，按 `04_OPS_AND_DEV` 回滚流程处理。
 
 ## 8. 归档信息
-- 归档时间：待定
+- 归档时间：待定（待用户冒烟通过后归档）
 - Archive ID：待定
 - 归档路径：待定

@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-10 14:10 | 后端 AI
+- Task ID: `CHG-20260310-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 完成生产断链修复并发布 `v4.2.10`（Windows 依赖补齐 + ingest 地址修正 + 启动链路加固），当日分时恢复。
+- 风险: 生产冒烟按流程需由你手动执行；若任一失败需立即回滚并登记阻塞。
+- 链接: `backend/scripts/live_crawler_win.py`, `start_live_crawler.bat`, `docs/changes/INV-20260310-01-prod-intraday-no-data.md`, `src/version.ts`
+
 ## 2026-03-09 23:40 | 后端 AI
 - Task ID: `CHG-20260309-09`
 - CAP: `CAP-REALTIME-FLOW`
