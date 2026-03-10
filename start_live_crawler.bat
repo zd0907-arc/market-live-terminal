@@ -5,14 +5,15 @@
 :: =========================================================
 
 echo [ZhangData] Starting Live Market Crawler...
-echo [Cloud Node] Targeting 111.229.144.202
 echo.
 
 :: Modify the path below if your python environment or project lives elsewhere
 cd /d "D:\market-live-terminal"
 
 :: Set environment variables required for Cloud Ingestion
-set CLOUD_API_URL=http://111.229.144.202:8000
+:: NOTE: backend container is only exposed via nginx(80); do not use :8000 externally.
+if "%CLOUD_API_URL%"=="" set "CLOUD_API_URL=http://111.229.144.202"
+echo [Cloud Node] Targeting %CLOUD_API_URL%
 
 if "%INGEST_TOKEN%"=="" (
     echo [ERROR] INGEST_TOKEN is not set. Please configure it in system environment variables.

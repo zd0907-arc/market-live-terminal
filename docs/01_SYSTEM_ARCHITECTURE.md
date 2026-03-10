@@ -72,7 +72,7 @@
 *   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认为 `data/market_data.db`。
 *   `USER_DB_PATH`: 用户配置数据库路径。默认 `data/user_data.db`。
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。
-*   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202:8000`)。
+*   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202`，由 Nginx 反代到后端)。
 *   `INGEST_TOKEN`: 控制云端高速穿透接口权限的秘钥，云端和 Windows 节点必须完全对齐（无默认值，未配置即拒绝写入）。
 *   `WRITE_API_TOKEN`: 保护业务写接口（如 watchlist/config/sentiment 手动触发）的共享秘钥；前端请求需带 `X-Write-Token`。
 *   `ENABLE_CLOUD_COLLECTOR`: 是否允许云端主动外采（默认 `false`，用于遵守“云端只被动 ingest”红线）。

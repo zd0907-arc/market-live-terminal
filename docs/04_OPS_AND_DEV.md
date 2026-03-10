@@ -69,8 +69,10 @@ sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|ENAB
 Windows 节点核验：
 ```bat
 echo %INGEST_TOKEN%
+echo %CLOUD_API_URL%
 ```
-如果为空，`start_live_crawler.bat` 会直接退出。
+如果为空，`start_live_crawler.bat` 会直接退出。  
+`CLOUD_API_URL` 生产推荐值：`http://111.229.144.202`（由 Nginx 80 端口反代到 backend），不要写成 `:8000`。
 
 ### 目的 A：发版到云端 (腾讯云 FastAPI + Web)
 腾讯云运行的主程序通过 Docker 承载。为了避免手工敲一大堆 Docker 构建命令，我们已经封装了完全的流水线。
@@ -86,7 +88,7 @@ echo %INGEST_TOKEN%
    ```bash
    ./deploy_to_cloud.sh
    ```
-3. **上线后 3 分钟冒烟验证（强制）**：
+3. **上线后冒烟验证（强制，默认由你手动执行）**：
    ```bash
    # 1) 云端健康检查
    curl -s http://111.229.144.202/api/health
@@ -107,6 +109,10 @@ echo %INGEST_TOKEN%
      -H "Content-Type: application/json" \
      -d '{"token":"bad-token","ticks":[]}'
    ```
+- **执行边界（2026-03-10 生效）**：
+  - 生产环境冒烟默认由你手动执行；
+  - AI 只提供“检查清单 + 预期结果 + 结果模板”，不主动直连生产执行；
+  - 仅当你明确要求“代测生产”时，AI 才执行线上冒烟命令。
 
 ### 目的 B：隔空装填 Windows 洗地/抓取节点
 **红线**：Windows 不受 Git 控制。绝不允许手动通过 RDP 等工具拷贝文件过去拖拽！它是一个被物理封印的黑盒主机。
@@ -167,8 +173,13 @@ ssh ubuntu@111.229.144.202 "sqlite3 ~/market-live-terminal/data/market_data.db '
 ### 5.2 版本号更新流程
 1. 修改 `package.json` → `version` 字段
 2. 修改 `src/version.ts` → `APP_VERSION` 常量 + `RELEASE_NOTES` 首位添加说明
-3. `git commit -m "release: vX.Y.Z"`
-4. `git tag vX.Y.Z && git push origin main --tags`
+3. 修改 `README.md` 标题版本（如 `# ...（vX.Y.Z）`）
+4. 执行版本一致性核对（至少核对下列 3 处完全一致）：
+   - `package.json` `version`
+   - `src/version.ts` `APP_VERSION`
+   - `README.md` 标题版本
+5. `git commit -m "release: vX.Y.Z"`
+6. `git tag vX.Y.Z && git push origin main --tags`
 
 ### 5.3 Git 分支命名规范
 ```
@@ -214,7 +225,7 @@ release/vX.Y.Z         # 发版准备（如需要冻结测试）
    - 任一失败直接转 `07_PENDING_TODO.md`，不得继续大文件回传或 merge。
 4. **发布与冒烟**  
    - 按“二、发版与一键装填协议”上线。  
-   - 执行“目的 A”中的 4 条强制冒烟检查。
+   - 由你手动执行“目的 A”中的 4 条强制冒烟检查（AI 仅提供清单模板与结果汇总）。
 5. **文档回填与交接**  
    - 更新 `02/03/04`（按是否涉及业务/契约/SOP）。  
    - 在 `AI_HANDOFF_LOG.md` 记录短日志；有阻塞则同步 `07_PENDING_TODO.md`。
