@@ -9,8 +9,18 @@ import { APP_VERSION } from './version';
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryView = lazy(() => import('./components/dashboard/HistoryView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
+const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 
 const App: React.FC = () => {
+  const isSandboxRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/sandbox-review');
+  if (isSandboxRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">复盘页面加载中...</div>}>
+        <SandboxReviewPage />
+      </Suspense>
+    );
+  }
+
   // State
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -239,6 +249,13 @@ const App: React.FC = () => {
               <Activity className="w-6 h-6" />
               <span className="hidden sm:inline">ZhangData</span>
               <span className="text-[10px] md:text-xs text-slate-500 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">v{APP_VERSION}</span>
+              <a
+                href="/sandbox-review"
+                className="text-[10px] md:text-xs text-cyan-300 bg-cyan-900/30 border border-cyan-700/50 px-1.5 py-0.5 rounded hover:bg-cyan-800/40 transition-colors"
+                title="打开沙盒复盘页面"
+              >
+                复盘
+              </a>
             </div>
 
             <div className="relative flex-1 max-w-3xl flex items-center gap-2 md:gap-4">

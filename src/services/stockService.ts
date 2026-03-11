@@ -1,4 +1,4 @@
-import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData } from '../types';
+import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData, SandboxReviewBar } from '../types';
 import { API_BASE_URL, getWriteHeaders } from '../config';
 
 // ==========================================
@@ -317,6 +317,99 @@ export const fetchHistoryTrend = async (symbol: string, days: number = 20): Prom
 export const aggregateLocalHistory = async (symbol: string, date?: string) => {
   const url = `${API_BASE_URL}/aggregate?symbol=${symbol}${date ? `&date=${date}` : ''}`;
   await fetch(url, { method: 'POST' });
+};
+
+export const fetchSandboxReviewData = async (
+  symbol: string,
+  startDate: string,
+  endDate: string
+): Promise<SandboxReviewBar[]> => {
+  const params = new URLSearchParams({
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+  });
+
+  // 兼容不同部署版本的路由前缀，优先新路由。
+  const candidates = [
+    `${API_BASE_URL}/sandbox/review_data?${params.toString()}`,
+    `${API_BASE_URL}/review_data?${params.toString()}`,
+    `/sandbox/review_data?${params.toString()}`,
+  ];
+
+  let lastError: Error | null = null;
+  let saw404 = false;
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+      if (res.status === 404) {
+        saw404 = true;
+        continue;
+      }
+      if (!res.ok) {
+        throw new Error(json?.message || `沙盒接口请求失败（HTTP ${res.status}）`);
+      }
+      if (json?.code === 200 && Array.isArray(json.data)) {
+        return json.data as SandboxReviewBar[];
+      }
+      throw new Error(json?.message || '沙盒接口返回异常');
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error('沙盒数据查询失败');
+    }
+  }
+
+  const routeHint = saw404
+    ? `（候选路由均返回404，请确认后端已部署 sandbox 路由并重启：${candidates.join(' / ')}）`
+    : '';
+  const errorMessage = lastError?.message || '沙盒数据查询失败';
+  console.error('Fetch sandbox review data error:', errorMessage, routeHint);
+  throw new Error(`${errorMessage}${routeHint}`);
+};
+
+export interface SandboxEtlStatus {
+  running: boolean;
+  mode: string;
+  symbol: string;
+  start_date: string;
+  end_date: string;
+  src_root: string;
+  output_db: string;
+  started_at: string;
+  finished_at: string;
+  exit_code: number | null;
+  message: string;
+  log_tail: string[];
+}
+
+export const runSandboxReviewEtl = async (payload: {
+  mode: 'pilot' | 'full';
+  symbol: string;
+  start_date: string;
+  end_date: string;
+  src_root?: string;
+  output_db?: string;
+}): Promise<{ code: number; message?: string; data?: SandboxEtlStatus }> => {
+  const res = await fetch(`${API_BASE_URL}/sandbox/run_etl`, {
+    method: 'POST',
+    headers: getWriteHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
+};
+
+export const fetchSandboxReviewEtlStatus = async (): Promise<SandboxEtlStatus | null> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/sandbox/etl_status`);
+    const json = await res.json();
+    if (json?.code === 200 && json?.data) {
+      return json.data;
+    }
+    return null;
+  } catch (e) {
+    console.error('Fetch sandbox etl status error:', e);
+    return null;
+  }
 };
 
 export const getAppConfig = async () => {

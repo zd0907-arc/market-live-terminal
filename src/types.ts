@@ -98,6 +98,30 @@ export interface HistoryTrendData {
   low?: number;
 }
 
+export interface SandboxReviewBar {
+  symbol: string;
+  datetime: string;
+  bucket_granularity?: '5m' | '15m' | '30m' | '60m' | '1d';
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  total_amount: number;
+  l1_main_buy: number;
+  l1_main_sell: number;
+  l1_main_net: number;
+  l1_super_buy: number;
+  l1_super_sell: number;
+  l1_super_net: number;
+  l2_main_buy: number;
+  l2_main_sell: number;
+  l2_main_net: number;
+  l2_super_buy: number;
+  l2_super_sell: number;
+  l2_super_net: number;
+  source_date: string;
+}
+
 export interface SentimentData {
   symbol: string;
   name: string;
