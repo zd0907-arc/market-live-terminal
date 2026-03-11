@@ -73,6 +73,22 @@
 | `signals` | `TEXT` | **重点：只允许存 JSON Array** | 比如 `'["Iceberg Allowed"]'`。哪怕没信号也要存 `'[]'` 字符串，绝不可以存 `NULL`。读取时必须 `json.loads`！ |
 | `bid1_vol` / `ask1_vol` | `INTEGER` | 买一卖一挂单量 | 用于冰山探测 |
 
+### 5. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产)
+> **隔离红线**：该表位于独立数据库 `data/sandbox_review.db`，禁止写入 `data/market_data.db`。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL`，标准代码（如 `sh603629`） |
+| `datetime` | `TEXT` | `NOT NULL`，5分钟桶起点 `%Y-%m-%d %H:%M:%S` |
+| `open/high/low/close` | `REAL` | `NOT NULL`，5分钟 OHLC |
+| `total_amount` | `REAL` | `NOT NULL`，该股票该5分钟切片总成交额（分母口径） |
+| `l1_main_buy/sell/net` | `REAL` | `NOT NULL`，L1 主力绝对买卖与净流入 |
+| `l1_super_buy/sell/net` | `REAL` | `NOT NULL`，L1 超大单绝对买卖与净流入 |
+| `l2_main_buy/sell/net` | `REAL` | `NOT NULL`，L2 主力绝对买卖与净流入 |
+| `l2_super_buy/sell/net` | `REAL` | `NOT NULL`，L2 超大单绝对买卖与净流入 |
+| `source_date` | `TEXT` | `NOT NULL`，源交易日 `%Y-%m-%d` |
+**主键**: `PRIMARY KEY(symbol, datetime)`
+
 ---
 
 ## 二、 业务外部 API 的真实 Payload 契约
@@ -119,7 +135,7 @@
 
 ### 3. 空状态法则 (No Silent Empty States)
 **绝对执行命令**：如果后端查询数据库得到空数组 `[]`，严禁直接 `return []` 让前端去猜！必须标准化返回：
-`{"code": 200, "data": [], "message": "No data found"}`。并在后端打印 `logger.warning` 说明。前端必须展示“空状态占位图”。
+`{"code": 200, "data": [], "message": "无数据"}`。并在后端打印 `logger.warning` 说明。前端必须展示“空状态占位图”。
 
 ---
 如果有以上任何未被定义边界的字段，请抛错并拦截，拒绝脏数据入库！
@@ -138,3 +154,34 @@
 *   **`POST /api/config/test-llm`**: 使用服务端环境变量中的 Key 测试 LLM 连通性，前端无需传参。
 
 > ⚠️ **v4.0 破坏性变更**：`POST /api/config` 不再接受 `llm_` 前缀的 Key 写入，会返回 403。LLM 配置改由服务端环境变量管理。详见 `docs/05_LLM_KEY_SECURITY.md`。
+
+### 3. 沙盒复盘接口（v4.2.11+，非生产主链路）
+* **`GET /api/sandbox/review_data?symbol=sh603629&start_date=2026-01-01&end_date=2026-02-28`**
+  - 描述：查询 sandbox 5m 复盘数据（L1/L2 buy/sell/net + OHLC）。
+  - 返回：`APIResponse`，`data` 为按时间升序数组。
+  - 空状态：返回 `{"code": 200, "data": [], "message": "无数据"}`。
+  - 质量保护：若检测到“整日重复分时”异常，接口会自动剔除重复日，并在 `message` 返回类似 `检测到重复交易日数据并已剔除：2026-02-23≈2026-02-11`。
+  - 红线：仅允许读取 `sandbox_review.db`，不得回退到生产库。
+  - 契约稳定：锚点累计、活跃度、净流比等新增展示均为前端衍生计算，本接口本轮不新增字段。
+* **`POST /api/sandbox/run_etl`**
+  - 描述：一键触发沙盒 ETL（支持 `pilot/full`）。
+  - Body：`{mode,symbol,start_date,end_date,src_root?,output_db?}`。
+  - 返回：`APIResponse`，`data` 为当前 ETL 任务状态快照（含日志尾部）。
+  - 严格口径：默认要求源文件同时存在 `BuyOrderID/SaleOrderID` 列；缺失任一列应直接失败并在 `log_tail` 给出文件路径。
+  - 覆盖策略：每次 ETL 会先清理该 `symbol` 的历史 `review_5m_bars`，避免混入旧月份数据。
+  - 并发约束：同一时刻仅允许 1 个 ETL 任务运行；并发触发返回 `code=409`。
+* **`GET /api/sandbox/etl_status`**
+  - 描述：获取当前/最近一次沙盒 ETL 任务状态与日志尾部。
+  - 返回：`APIResponse`，`data` 包含 `running/started_at/finished_at/exit_code/log_tail`。
+
+> 前端展示补充（v4.2.12+）：
+> - `/sandbox-review` 使用双端时间范围滑块横向拖动；
+> - 可视跨度动态聚合：`1日=5m`、`3/5日=15m`、`20日=60m`、`60日/全部=1d`；
+> - 提供手动粒度覆盖：`自动 | 5m | 15m | 30m | 60m | 1d`；
+> - 前端采用 Fail-Closed：接口失败或空数据时不展示预置回退图，只展示错误/空状态。
+> - （v4.2.13+）主图区升级为 6 图同屏（K线 + 主力绝对 + 超大绝对 + 主力净流 + 超大净流 + 净流比），并保持统一时间轴联动。
+> - （v4.2.13+）主力/超大绝对图新增 L1/L2 活跃度线：`(buy+sell)/total_amount*100`，允许 >100%（理论上限 200%）。
+> - （v4.2.13+）净流比图口径固定：`(main_net + super_net)/total_amount*100`，资金 tooltip 统一 `w`，比例统一 `%`。
+> - （v4.2.14+）新增“锚点累计模式”前端交互：点击 K 线设定锚点时间戳，累计区拆为 `主力L2/主力L1/超大L2/超大L1` 四图独立展示。
+> - （v4.2.14+）累计语义固定为“单曲线累计净流入”：每图仅一条累计曲线，正负通过面积分色表达；累计公式为从锚点开始对对应 `*_net` 的滚动求和（锚点前置空）。
+> - （v4.2.14+）累计终点跟随当前可视窗口右边界；百分比轴展示整数 `%`（无小数）。

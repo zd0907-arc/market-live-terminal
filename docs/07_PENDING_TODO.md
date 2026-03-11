@@ -28,3 +28,14 @@
 ## T-004 协作约定：Windows链路改动前置检查
 - 状态：`ACTIVE`
 - 规则：凡涉及 `live_crawler_win.py`、`start_live_crawler.bat`、Windows ingest 调度改动，必须先检查 Windows 同步状态并记录在 handoff。
+
+## T-005 Sandbox 复盘数据准备就绪（评审阻塞）
+- 状态：`BLOCKED`
+- 当前事实：
+  - 复盘模块代码与文档已完成分支级收口，当前以 Draft PR 方式供评审与联调。
+  - 真实效果验收仍依赖稳定的 sandbox 数据集（`sh603629` 2026-01~02）持续可复现。
+- 解除条件：
+  1. Windows 源目录 `D:\\MarketData` 可稳定重跑并产出一致的 `sandbox_review.db`；
+  2. 本地 `/api/sandbox/review_data` 连续返回真实区间数据（无 404 / 无预置回退）；
+  3. 复盘页主区与累计区在 1-2 月窗口通过一次回归冒烟。
+- 关联任务：`CHG-20260311-08`
