@@ -147,11 +147,12 @@
   - 冻结新版盯盘页的信息架构与数据层方案；
   - 明确 `2026-03` 数据入库后的盯盘/复盘推进顺序；
   - 已完成 Step 1 数据层落地：新增 `realtime_5m_preview / realtime_daily_preview` schema、CRUD 与实时聚合写入链路；
-  - 已完成 Step 2 统一接口层：新增 `/api/history/multiframe`，统一输出 `5m/15m/30m/1h/1d` 的 finalized + today preview 响应，并显式返回 `source/is_finalized/preview_level/fallback_used`。
+  - 已完成 Step 2 统一接口层：新增 `/api/history/multiframe`，统一输出 `5m/15m/30m/1h/1d` 的 finalized + today preview 响应，并显式返回 `source/is_finalized/preview_level/fallback_used`；
+  - 已完成 Step 3 前端 IA 第一版：新版页面已收敛为“当日分时 + 历史多维”，并在历史多维内部支持 `5m / 30m / 1h / 日` 切换，初版已接入统一接口。
 - 遗留问题：
-  1. 新版前端 IA 仍未从“旧 30m/日线结构”切到“当日分时 + 历史多维”；
-  2. `5m/30m/1h/日` 共用图层与日线融合视觉还未切到 `/api/history/multiframe`；
-  3. 复盘页正式并库仍后置。
+  1. 新版 `5m/30m/1h/日` 共用图层当前为第一版，仍需按真实 `2026-03` 正式数据继续校正视窗、空态与交互细节；
+  2. 复盘页正式并库仍后置；
+  3. Windows `2026-03` L2 全月数据清洗入库仍待完成，正式覆盖范围暂有限。
 
 ## 11. 归档信息
 - 归档时间：

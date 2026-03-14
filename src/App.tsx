@@ -8,7 +8,7 @@ import { APP_VERSION } from './version';
 
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryView = lazy(() => import('./components/dashboard/HistoryView'));
-const HistoryDailyFusionView = lazy(() => import('./components/dashboard/HistoryDailyFusionView'));
+const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 
@@ -31,9 +31,11 @@ const App: React.FC = () => {
   const [searchHistory, setSearchHistory] = useState<SearchResult[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // View Mode: 三Tab合一
-  const [viewMode, setViewMode] = useState<'intraday_live' | 'intraday_30m' | 'daily'>('intraday_live');
+  // Legacy View Mode
+  const [legacyViewMode, setLegacyViewMode] = useState<'intraday_live' | 'intraday_30m' | 'daily'>('intraday_live');
   const [pageVersion, setPageVersion] = useState<'legacy' | 'fusion_v1'>('legacy');
+  const [fusionSection, setFusionSection] = useState<'intraday_live' | 'history_multiframe'>('intraday_live');
+  const [fusionGranularity, setFusionGranularity] = useState<'5m' | '30m' | '1h' | '1d'>('1d');
 
   // Shared Data
   const [quote, setQuote] = useState<RealTimeQuote | null>(null);
@@ -499,33 +501,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Three-Tab Switcher */}
+        {/* View Switcher */}
         {quote && (
           <div className="space-y-3">
-            <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
-              <button
-                onClick={() => setViewMode('intraday_live')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              >
-                <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                当日分时
-              </button>
-              <button
-                onClick={() => setViewMode('intraday_30m')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'intraday_30m' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              >
-                <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                30分钟线
-              </button>
-              <button
-                onClick={() => setViewMode('daily')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${viewMode === 'daily' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              >
-                <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                日线
-              </button>
-            </div>
-
             <div className="flex items-center justify-between gap-3 bg-slate-900/70 border border-slate-800 rounded-xl px-3 py-2">
               <div className="flex items-center gap-2">
                 <CandlestickChart className="w-4 h-4 text-slate-400" />
@@ -546,11 +524,81 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {pageVersion === 'legacy' ? (
+              <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+                <button
+                  onClick={() => setLegacyViewMode('intraday_live')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                >
+                  <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  当日分时
+                </button>
+                <button
+                  onClick={() => setLegacyViewMode('intraday_30m')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'intraday_30m' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  30分钟线
+                </button>
+                <button
+                  onClick={() => setLegacyViewMode('daily')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'daily' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  日线
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+                  <button
+                    onClick={() => setFusionSection('intraday_live')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    当日分时
+                  </button>
+                  <button
+                    onClick={() => setFusionSection('history_multiframe')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    历史多维
+                  </button>
+                </div>
+
+                {fusionSection === 'history_multiframe' && (
+                  <div className="flex items-center justify-between gap-3 bg-slate-900/70 border border-slate-800 rounded-xl px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs text-slate-400">时间维度</span>
+                    </div>
+                    <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+                      {([
+                        ['5m', '5m'],
+                        ['30m', '30m'],
+                        ['1h', '1h'],
+                        ['1d', '日'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          onClick={() => setFusionGranularity(value)}
+                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${fusionGranularity === value ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* Content Views */}
-        {activeStock && viewMode === 'intraday_live' && (
+        {activeStock && pageVersion === 'legacy' && legacyViewMode === 'intraday_live' && (
           <Suspense fallback={sectionLoading}>
             <RealtimeView
               activeStock={activeStock}
@@ -561,7 +609,7 @@ const App: React.FC = () => {
           </Suspense>
         )}
 
-        {quote && viewMode === 'intraday_30m' && (
+        {quote && pageVersion === 'legacy' && legacyViewMode === 'intraday_30m' && (
           <Suspense fallback={sectionLoading}>
             <HistoryView
               activeStock={activeStock}
@@ -572,7 +620,7 @@ const App: React.FC = () => {
           </Suspense>
         )}
 
-        {quote && viewMode === 'daily' && pageVersion === 'legacy' && (
+        {quote && pageVersion === 'legacy' && legacyViewMode === 'daily' && (
           <Suspense fallback={sectionLoading}>
             <HistoryView
               activeStock={activeStock}
@@ -583,11 +631,23 @@ const App: React.FC = () => {
           </Suspense>
         )}
 
-        {quote && viewMode === 'daily' && pageVersion === 'fusion_v1' && (
+        {activeStock && pageVersion === 'fusion_v1' && fusionSection === 'intraday_live' && (
           <Suspense fallback={sectionLoading}>
-            <HistoryDailyFusionView
+            <RealtimeView
+              activeStock={activeStock}
+              isTradingHours={isTradingHours}
+              configVersion={configVersion}
+              focusMode={focusMode}
+            />
+          </Suspense>
+        )}
+
+        {quote && pageVersion === 'fusion_v1' && fusionSection === 'history_multiframe' && (
+          <Suspense fallback={sectionLoading}>
+            <HistoryMultiframeFusionView
               activeStock={activeStock}
               backendStatus={backendStatus}
+              granularity={fusionGranularity}
             />
           </Suspense>
         )}

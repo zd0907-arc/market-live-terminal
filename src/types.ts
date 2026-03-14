@@ -135,6 +135,31 @@ export interface HistoryTrendData {
   fallback_used?: boolean;
 }
 
+export type HistoryMultiframeGranularity = '5m' | '15m' | '30m' | '1h' | '1d';
+
+export interface HistoryMultiframeItem {
+  datetime: string;
+  trade_date: string;
+  granularity: HistoryMultiframeGranularity;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  total_amount: number;
+  l1_main_buy: number | null;
+  l1_main_sell: number | null;
+  l1_super_buy: number | null;
+  l1_super_sell: number | null;
+  l2_main_buy: number | null;
+  l2_main_sell: number | null;
+  l2_super_buy: number | null;
+  l2_super_sell: number | null;
+  source?: string;
+  is_finalized?: boolean;
+  preview_level?: string | null;
+  fallback_used?: boolean;
+}
+
 export interface SandboxReviewBar {
   symbol: string;
   datetime: string;

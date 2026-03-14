@@ -19,6 +19,13 @@
 - 风险: 当前仅接口层完成，新版前端还未切到该统一接口；正式 `2026-03` 全月 L2 数据仍待 Windows 下载、清洗并入 `history_5m_l2/history_daily_l2`，否则历史覆盖范围有限。
 - 链接: `backend/app/routers/analysis.py`, `backend/tests/test_history_multiframe_router.py`, `docs/03_DATA_CONTRACTS.md`, `docs/changes/REQ-20260314-08-monitor-history-multiframe-fusion.md`
 
+## 2026-03-15 00:42 | Codex
+- Task ID: `CHG-20260314-08`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成新版前端 IA 第一版接入：页面顶层保持“旧版 / 新版”，新版内部收敛为“当日分时 + 历史多维”，并在历史多维中支持 `5m / 30m / 1h / 日` 切换；历史多维已直接消费 `/api/history/multiframe`，沿用“上 K 下双柱、L2 包 L1”的融合视觉基线。
+- 风险: 当前前端已能构建通过，但尚未等到 Windows `2026-03` 正式 L2 全月数据入库做大样本校正；新版 5m/30m/1h 仍属于第一版交互，后续需继续根据真实数据微调 tooltip、默认视窗与空态策略。
+- 链接: `src/App.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `src/services/stockService.ts`, `src/types.ts`, `docs/changes/REQ-20260314-08-monitor-history-multiframe-fusion.md`
+
 ## 2026-03-14 23:20 | Codex
 - Task ID: `CHG-20260314-08`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`

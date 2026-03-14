@@ -5,6 +5,8 @@ import {
   CapitalFlowTrend,
   HistoryAnalysisData,
   HistoryTrendData,
+  HistoryMultiframeGranularity,
+  HistoryMultiframeItem,
   RealtimeDashboardData,
   SandboxPoolItem,
   SandboxReviewBar,
@@ -324,6 +326,38 @@ export const fetchHistoryTrend = async (
     return [];
   } catch (e) {
     console.error("Fetch history trend error:", e);
+    return [];
+  }
+};
+
+export const fetchHistoryMultiframe = async (
+  symbol: string,
+  options: {
+    days?: number;
+    granularity?: HistoryMultiframeGranularity;
+    startDate?: string;
+    endDate?: string;
+    includeTodayPreview?: boolean;
+  } = {}
+): Promise<HistoryMultiframeItem[]> => {
+  try {
+    const params = new URLSearchParams({
+      symbol,
+      granularity: options.granularity || '30m',
+      days: String(options.days || 20),
+      include_today_preview: options.includeTodayPreview === false ? 'false' : 'true',
+    });
+    if (options.startDate) params.set('start_date', options.startDate);
+    if (options.endDate) params.set('end_date', options.endDate);
+
+    const res = await fetch(`${API_BASE_URL}/history/multiframe?${params.toString()}`);
+    const json = await res.json();
+    if (json?.code === 200 && Array.isArray(json?.data?.items)) {
+      return json.data.items as HistoryMultiframeItem[];
+    }
+    return [];
+  } catch (e) {
+    console.error('Fetch history multiframe error:', e);
     return [];
   }
 };
