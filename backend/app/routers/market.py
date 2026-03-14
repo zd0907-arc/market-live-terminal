@@ -77,12 +77,20 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         from backend.app.services.analysis import calculate_realtime_aggregation
         data = calculate_realtime_aggregation(symbol, natural_today_str)
     else:
-        # 历史日期，强解耦：直接查询预聚合好的 history_1m 静态表
-        from backend.app.services.analysis import get_history_1m_dashboard
+        # 历史/回溯日期：
+        # 1) 优先读预聚合 history_1m；
+        # 2) 若 history_1m 尚未补到该日，但 trade_ticks 已存在，则回退用该日 ticks 现场聚合。
+        from backend.app.services.analysis import (
+            get_history_1m_dashboard,
+            calculate_realtime_aggregation,
+        )
         data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
-        # Handle 404
         if data is None:
-            return APIResponse(code=404, message="No pre-aggregated intraday data for this date", data=None)
+            fallback = calculate_realtime_aggregation(symbol, query_date)
+            if (fallback.get("chart_data") or fallback.get("cumulative_data") or fallback.get("latest_ticks")):
+                data = fallback
+            else:
+                return APIResponse(code=404, message="No pre-aggregated intraday data for this date", data=None)
     
     # Inject display date for frontend awareness
     if data:

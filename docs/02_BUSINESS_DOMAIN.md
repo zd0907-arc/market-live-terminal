@@ -59,7 +59,7 @@
 3. **实现摘要（当前方案）**
 - 后端 `MarketClock` 统一产出 `display_date` 与交易时段判断，前端按 `display_date` 判定是否回溯标签。
 - 交易日历由后端集中维护，失败时走保守策略，避免“假实时”。
-- `/api/realtime/dashboard` 在“自然日当天且为交易日”时才允许走实时 ticks 聚合；若 `display_date` 回溯到上一交易日（周末/节假日/盘前），则必须走 `history_1m` 静态回放，避免周末页面空白。
+- `/api/realtime/dashboard` 在“自然日当天且为交易日”时才允许走实时 ticks 聚合；若 `display_date` 回溯到上一交易日（周末/节假日/盘前），则优先走 `history_1m` 静态回放；若该日 `history_1m` 未准备好但 `trade_ticks` 已存在，则回退为“按该日 ticks 聚合”，避免周末页面空白。
 
 4. **验收案例（Given / When / Then）**
 - **正常**：Given `2026-03-09 10:00`，When 打开实时页，Then `display_date=2026-03-09` 且非回溯模式。

@@ -156,7 +156,7 @@
 *   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
 *   **`GET /api/history/trend?symbol=sh600519&days=20`**: 返回 30 分钟级资金趋势（历史 + 当天动态拼接）。
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
-    - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若 `display_date` 为上一交易日（周末/节假日/盘前），则改走 `history_1m` 静态回放。
+    - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若 `display_date` 为上一交易日（周末/节假日/盘前），则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
 *   **`POST /api/monitor/heartbeat?symbol=sh600519&mode=focus|warm`**:
     - 描述：登记实时页活跃心跳。
     - 规则：`mode` 仅允许 `focus/warm`；非法值按 `warm` 降级。

@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.11';
+export const APP_VERSION = '4.2.12';
 export const RELEASE_NOTES = [
+    'v4.2.12: 修复周末/非交易日“当日分时”回溯兜底链路；优先读 history_1m，缺失时自动回退到该日 trade_ticks 聚合',
     'v4.2.11: 修复周末/非交易日“当日分时”回溯为空，上一交易日改走 history_1m 静态回放；sandbox 复盘模块保持线上沙盒可访问',
     'v4.2.10: 修复生产当日分时断链（Windows 依赖与 ingest 地址校正），新增采集地址空白字符防护并加固自启动流程',
     'v4.2.9: 修复当日分时主力资金线缺失（统一成交方向枚举 B/S/M + 中文 + 英文），完成文档治理主册化与变更归档流程收口',

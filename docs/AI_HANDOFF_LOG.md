@@ -8,8 +8,8 @@
 ## 2026-03-14 13:16 | 后端 AI
 - Task ID: `CHG-20260314-01`
 - CAP: `CAP-MKT-TIME`
-- 结论: 已修复周末/非交易日“当日分时”空白问题；`/api/realtime/dashboard` 现仅在“自然日当天且为交易日”时走实时 ticks 聚合，回溯到上一交易日时改走 `history_1m` 静态回放。
-- 风险: 若指定日期本身无 `history_1m` 预聚合数据，接口仍会按契约返回 404；这属于数据缺失，不再误判为实时路径问题。
+- 结论: 已修复周末/非交易日“当日分时”空白问题；`/api/realtime/dashboard` 现仅在“自然日当天且为交易日”时走实时 ticks 聚合，回溯到上一交易日时优先走 `history_1m`，若缺失再回退到该日 `trade_ticks` 聚合。
+- 风险: 若指定日期既无 `history_1m` 也无 `trade_ticks`，接口仍会按契约返回 404；这属于底座数据缺失，不再误判为日期路径问题。
 - 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/changes/MOD-20260314-01-weekend-intraday-backfill-fix.md`
 
 ## 2026-03-14 13:08 | 后端 AI

@@ -23,10 +23,12 @@
 1. `backend/app/routers/market.py`
    - 新增“自然日 today”与“display_date”分离判断。
    - 仅当 `query_date == natural_today` 且 `natural_today` 为交易日时，才走实时 ticks 聚合。
-   - 周末/节假日/盘前回溯到上一交易日时，统一走 `get_history_1m_dashboard()`。
+   - 周末/节假日/盘前回溯到上一交易日时，优先走 `get_history_1m_dashboard()`。
+   - 若该日 `history_1m` 尚未补齐，但 `trade_ticks` 已存在，则自动回退到“按该日 ticks 现场聚合”，避免回溯页空白。
 2. `backend/tests/test_realtime_dashboard_router.py`
    - 新增周末回溯场景测试；
-   - 新增正常交易日当天仍走实时路径测试。
+  - 新增正常交易日当天仍走实时路径测试；
+  - 新增“周末回溯日无 history_1m 时，自动回退到该日 ticks 聚合”的兜底测试。
 
 ## 5. 验证记录
 - `2026-03-14 13:15`：`PYTHONPATH=/Users/dong/Desktop/AIGC/market-live-terminal ./.venv/bin/pytest -q backend/tests/test_market_clock.py backend/tests/test_realtime_dashboard_router.py backend/tests/test_monitor_heartbeat.py backend/tests/test_sandbox_review_v2.py` 通过（15/15）。
@@ -41,5 +43,5 @@
   3. 同时删除新增测试文件。
 
 ## 7. 结果回填
-- 预期结果：周末/节假日打开“当日分时”时，页面显示回溯模式标签，并正常展示上一交易日分时。
+- 预期结果：周末/节假日打开“当日分时”时，页面显示回溯模式标签，并正常展示上一交易日分时；若该交易日尚未预聚合到 `history_1m`，也不会再空白。
 - 联动说明：该改动不影响 sandbox review 模块；仅修复生产分时主链路的日期判定。
