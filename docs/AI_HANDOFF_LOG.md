@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-14 14:05 | 后端 AI
+- Task ID: `CHG-20260312-02`
+- CAP: `CAP-REALTIME-FLOW`
+- 结论: 已把新版 Windows crawler 同步到 `D:\market-live-terminal` 并重启 `ZhangDataLiveCrawler`；当前线上已形成 `focus=5秒 / warm=30秒 / watchlist=15分钟` 的端到端抓取闭环。
+- 风险: 这一步解决的是“采集频率语义与前端按钮一致”，但“页面刷新是否足够丝滑”仍需要你在真实页面上做主观体验确认，因此 `T-008` 先保留为 ACTIVE。
+- 链接: `backend/scripts/live_crawler_win.py`, `start_live_crawler.bat`, `docs/changes/MOD-20260312-01-realtime-focus-quiet-refresh.md`, `docs/07_PENDING_TODO.md`
+
 ## 2026-03-14 13:47 | 后端 AI
 - Task ID: `CHG-20260314-01`
 - CAP: `CAP-MKT-TIME`

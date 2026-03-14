@@ -54,9 +54,9 @@
 - 验证结果：
   - `2026-03-12 18:26`：`python3 -m pytest backend/tests/test_monitor_heartbeat.py backend/tests/test_sandbox_review.py backend/tests/test_sandbox_review_v2.py -q` 通过（13/13）。
   - `2026-03-12 18:27`：`npm run build` 通过。
+  - `2026-03-14 14:05`（Windows）：已将新版 `backend/scripts/live_crawler_win.py` 与 `start_live_crawler.bat` 同步到 `D:\market-live-terminal\`，并重启计划任务 `ZhangDataLiveCrawler`；任务状态恢复为“正在运行”，脚本头部已可见 `FOCUS_TICK_INTERVAL_SECONDS=5`、`WARM_TICK_INTERVAL_SECONDS=30`。
 - 遗留问题：
-  - 当前按你的要求暂不单独发布，需等待复盘模块数据与联调完成后与 sandbox 相关改动一并发布。
-  - Windows 线上 crawler 参数切换需与云端前后端同批次部署。
+  - 云端与 Windows 已完成同批部署；当前剩余的是前端侧人工体验确认（静默刷新时是否仍足够丝滑）。
 
 ## 8. 归档信息
 - 归档时间：
