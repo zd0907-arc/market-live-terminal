@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-14 23:20 | Codex
+- Task ID: `CHG-20260314-08`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
+- 结论: 已按“先做文档管理再开发”的要求完成本轮范围收口：把前序基础阶段标记为完成，未完成项迁移到 `07_PENDING_TODO`，并新建范围卡冻结新版 IA 为“当日分时 + 历史多维（5m/30m/1h/日）”；同时明确 `2026-03` L2 数据下载完成后的推进顺序为“清洗入库 → 接口 → 盯盘页 → 复盘页并库”。
+- 风险: 当前仅完成文档治理与范围冻结，`2026-03` 日包仍在 Windows 下载中；正式 `realtime_5m_preview / realtime_daily_preview` 与新版历史多维统一接口尚未落代码，复盘页正式并库仍后置。
+- 链接: `docs/changes/REQ-20260314-08-monitor-history-multiframe-fusion.md`, `docs/07_PENDING_TODO.md`, `docs/changes/STG-20260314-01-l2-postclose-history-foundation.md`, `docs/02_BUSINESS_DOMAIN.md`
+
 ## 2026-03-14 21:35 | 前端 AI
 - Task ID: `CHG-20260314-07`
 - CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-REALTIME-FLOW`
