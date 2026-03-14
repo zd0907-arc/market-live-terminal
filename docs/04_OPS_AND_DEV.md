@@ -39,6 +39,26 @@ ssh laqiyuan@100.115.228.56
 - **Windows 统一项目目录**：`D:\market-live-terminal`
 - 凡是脚本同步、自启脚本、ETL 执行路径，均以该目录为准。
 
+### Windows 盘后 L2 日包目录约定（2026-03-14 冻结）
+- **原始数据根目录**：`D:\MarketData`
+- **统一目录结构**：
+```text
+D:\MarketData\
+  └── YYYYMM\
+      └── YYYYMMDD\
+          └── {symbol}.SZ|SH|BJ\
+              ├── 行情.csv
+              ├── 逐笔成交.csv
+              └── 逐笔委托.csv
+```
+- 规则：
+  - 月目录必须存在，如 `202603`；
+  - 单日日包不得长期裸放在 `D:\MarketData\20260311\...` 根下；
+  - 如供应商先给到裸日目录，落盘后第一步应先归档进对应月目录，再允许进入 ETL/回补流程。
+- 运维要求：
+  - 目录扫描、回补、失败重跑均以 `YYYYMM/YYYYMMDD` 为准；
+  - 新日日包上线前必须先通过日包验真脚本，再允许进入正式回补链路。
+
 ### Mac 控 Windows 长任务执行与验真（2026-03-12 新增）
 当任务由 Mac 编写、但必须在 Windows 节点持续运行时，执行前后统一遵循以下规则：
 
@@ -85,6 +105,29 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
   - Windows 总控状态文件 `run_all_months_latest.json` 已到 `status=done`；
   - 通过 `scp -3 -r` 已完成 `data/sandbox/review_v2/symbols` 从 Windows 到云端的首轮全量同步；
   - 若云端 symbol DB 已存在但 `/api/sandbox/review_data` 仍为空，优先排查容器内是否还在运行旧版 `sandbox_review_v2_db.py`（1m 旧逻辑），必要时同步代码并 `sudo docker compose build backend frontend && sudo docker compose up -d backend frontend`。
+
+### 盘后 L2 正式回补 SOP（设计冻结，待实现）
+当每日盘后 L2 日包进入 Windows 后，正式流程应固定为：
+
+1. **先归档目录**
+   - 确认数据已放入 `D:\MarketData\YYYYMM\YYYYMMDD\{symbol}` 结构；
+   - 若供应商只给了裸日目录，先完成归档整理。
+2. **先做日包验真**
+   - 使用 `backend/scripts/inspect_daily_l2_package.py` 检查结构、列名、OrderID、样本可读性；
+   - 验真失败的日包不得进入正式回补。
+3. **执行按日回补**
+   - 从同一份日包同时产出 L1/L2 的 `5m + daily` 正式派生结果；
+   - 写入前按 `symbol + trade_date` 执行整日删后重写。
+4. **记录回补状态**
+   - 必须写 `l2_daily_ingest_runs` / `l2_daily_ingest_failures`；
+   - 失败股票、失败文件、错误信息必须可追溯。
+5. **次日历史验真**
+   - 次日从盯盘页历史模式和日K历史模式抽样确认查询已转为正式值。
+
+> 注意：
+> - 原始 `逐笔成交/逐笔委托/行情` 不上云；
+> - 云端只接收正式派生结果；
+> - `15m/30m/1h` 不单独落库，统一由 `5m` 聚合。
 
 ---
 
@@ -212,6 +255,55 @@ ssh ubuntu@111.229.144.202 "cd ~/market-live-terminal && python3 backend/scripts
 # 3. 验证合并结果
 ssh ubuntu@111.229.144.202 "sqlite3 ~/market-live-terminal/data/market_data.db 'SELECT count(DISTINCT date) FROM local_history'"
 ```
+
+### 4.3 盘后 L2 正式历史上云原则（设计冻结）
+- 云端正式持久化只接收：
+  - `history_5m_l2`
+  - `history_daily_l2`
+  - 回补状态表
+- 云端不接收：
+  - 原始 `逐笔成交.csv`
+  - 原始 `逐笔委托.csv`
+  - 原始 `行情.csv`
+- 写入语义：
+  - 以交易日为单位覆盖写；
+  - 同一 `symbol + trade_date` 重跑必须覆盖旧值，而不是追加。
+
+### 4.4 本地验证盘后 L2 历史切换（Phase 3 smoke）
+```bash
+# 1) 把某一天盘后日包整理成统一结构
+#    D:\\MarketData\\202603\\20260311\\000833.SZ\\{行情.csv,逐笔成交.csv,逐笔委托.csv}
+
+# 2) 执行单日回补（示例：本地 SQLite）
+python3 backend/scripts/l2_daily_backfill.py \
+  "/tmp/manual_l2_day/202603/20260311" \
+  --symbols sz000833 \
+  --db-path /tmp/manual_l2_test.db \
+  --json
+
+# 3) 验证正式表已落库
+sqlite3 /tmp/manual_l2_test.db "select count(*) from history_5m_l2;"
+sqlite3 /tmp/manual_l2_test.db "select count(*) from history_daily_l2;"
+
+# 4) 启动后端并检查接口
+DB_PATH=/tmp/manual_l2_test.db USER_DB_PATH=/tmp/manual_l2_user.db python3 -m backend.app.main
+curl "http://127.0.0.1:8000/api/history/trend?symbol=sz000833&days=5&granularity=30m"
+curl "http://127.0.0.1:8000/api/history_analysis?symbol=sz000833"
+```
+预期：
+- `history/trend` 返回 `source=l2_history` 的历史趋势；
+- `history_analysis` 返回 `date=2026-03-11` 且 `source=l2_history`；
+- 这意味着第二天在本地打开页面时，`2026-03-11` 已能看到基于 L2 派生的正式历史结果。
+
+补充：
+- 若要验证盯盘页“历史分时日期回溯”，可再执行：
+```bash
+curl "http://127.0.0.1:8000/api/realtime/dashboard?symbol=sz000833&date=2026-03-11"
+```
+- 预期返回：
+  - `source=l2_history`
+  - `bucket_granularity=5m`
+  - `chart_data` 非空
 
 ---
 

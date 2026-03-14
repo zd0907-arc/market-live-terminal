@@ -79,12 +79,16 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
     else:
         # 历史/回溯日期：
         # 1) 优先读预聚合 history_1m；
-        # 2) 若 history_1m 尚未补到该日，但 trade_ticks 已存在，则回退用该日 ticks 现场聚合。
+        # 2) 若 history_1m 缺失，则尝试正式 L2 历史 5m；
+        # 3) 若仍缺失，但 trade_ticks 已存在，则回退用该日 ticks 现场聚合。
         from backend.app.services.analysis import (
             get_history_1m_dashboard,
+            get_history_l2_dashboard,
             calculate_realtime_aggregation,
         )
         data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+        if data is None:
+            data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
         if data is None:
             fallback = calculate_realtime_aggregation(symbol, query_date)
             if (fallback.get("chart_data") or fallback.get("cumulative_data") or fallback.get("latest_ticks")):

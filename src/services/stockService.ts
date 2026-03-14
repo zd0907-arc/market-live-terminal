@@ -5,6 +5,7 @@ import {
   CapitalFlowTrend,
   HistoryAnalysisData,
   HistoryTrendData,
+  RealtimeDashboardData,
   SandboxPoolItem,
   SandboxReviewBar,
 } from '../types';
@@ -251,7 +252,7 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
   }
 };
 
-export const fetchRealtimeDashboard = async (symbol: string, date?: string) => {
+export const fetchRealtimeDashboard = async (symbol: string, date?: string): Promise<RealtimeDashboardData | null> => {
   const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}${date ? `&date=${date}` : ''}`;
   try {
     const response = await fetch(url);
@@ -308,9 +309,13 @@ export const fetchHistoryAnalysis = async (symbol: string, source: 'sina' | 'loc
   }
 };
 
-export const fetchHistoryTrend = async (symbol: string, days: number = 20): Promise<HistoryTrendData[]> => {
+export const fetchHistoryTrend = async (
+  symbol: string,
+  days: number = 20,
+  granularity: '5m' | '15m' | '30m' | '1h' | '1d' = '30m'
+): Promise<HistoryTrendData[]> => {
   try {
-    const url = `${API_BASE_URL}/history/trend?symbol=${symbol}&days=${days}`;
+    const url = `${API_BASE_URL}/history/trend?symbol=${symbol}&days=${days}&granularity=${granularity}`;
     const res = await fetch(url);
     const json = await res.json();
     if (json.code === 200 && Array.isArray(json.data)) {

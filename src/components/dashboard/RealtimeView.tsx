@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Layers } from 'lucide-react';
 import { LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
-import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
+import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta } from '../../types';
 import * as StockService from '../../services/stockService';
 import SentimentTrend from './SentimentTrend';
 
@@ -22,6 +22,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [displayDate, setDisplayDate] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<string>('');
+    const [sourceMeta, setSourceMeta] = useState<DashboardSourceMeta>({});
     const requestSeqRef = useRef(0);
 
     // Thresholds (Loaded from Backend)
@@ -50,6 +51,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         setChartData([]);
         setCumulativeData([]);
         setLastUpdated('');
+        setSourceMeta({});
     }, [activeStock, selectedDate]);
 
     useEffect(() => {
@@ -96,6 +98,12 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     }));
                     setChartData(processedChart);
                     setCumulativeData(data.cumulative_data || []);
+                    setSourceMeta({
+                        source: data.source,
+                        is_finalized: data.is_finalized,
+                        bucket_granularity: data.bucket_granularity,
+                        display_date: data.display_date,
+                    });
 
                     // Update Ticks Table (Only latest N)
                     if (data.latest_ticks && Array.isArray(data.latest_ticks)) {
@@ -117,6 +125,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     setCumulativeData([]);
                     setDisplayTicks([]);
                     setDisplayDate(selectedDate);
+                    setSourceMeta({});
                 }
             } catch (err) {
                 console.warn("Dashboard update failed", err);
@@ -196,6 +205,20 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         return days[new Date(dateStr).getDay()];
     };
 
+    const getSourceLabel = () => {
+        if (sourceMeta.source === 'l2_history') {
+            const bucket = sourceMeta.bucket_granularity || '5m';
+            return `Source: 正式L2历史 (${bucket})`;
+        }
+        if (sourceMeta.source === 'history_1m') {
+            return 'Source: 历史1m回放';
+        }
+        if (sourceMeta.source === 'realtime_ticks') {
+            return sourceMeta.is_finalized ? 'Source: 实时 ticks（已结算）' : 'Source: 实时 ticks';
+        }
+        return 'Source: 数据源识别中...';
+    };
+
     return (
         <div className="space-y-2">
             {/* Top Row: Main Chart (Full Width) */}
@@ -211,7 +234,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                                 </span>
                             )}
                             <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">
-                                Source: Local DB
+                                {getSourceLabel()}
                             </span>
                         </h3>
 

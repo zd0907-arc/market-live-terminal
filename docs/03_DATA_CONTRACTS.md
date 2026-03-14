@@ -14,6 +14,7 @@
 |------|-----|---------|------|
 | **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/评论源数据 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
+| **Derived（生产L2历史层）** | `history_5m_l2`, `history_daily_l2`, `l2_daily_ingest_runs`, `l2_daily_ingest_failures` | 仅允许按 `symbol+trade_date` 整日覆盖重写 | 盘后L2正式结算结果（含同源 L1/L2 双派生） |
 | **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等（⚠️ v4.0 起 LLM 配置已迁移至环境变量） |
 
 > **数据一致性原则**：云端 `data/market_data.db` 是唯一权威源（Single Source of Truth）。Mac 本地通过 `sync_cloud_db.sh` 整库下载保持一致。Windows 只负责向云端写入，不保留服务副本。
@@ -73,7 +74,65 @@
 | `signals` | `TEXT` | **重点：只允许存 JSON Array** | 比如 `'["Iceberg Allowed"]'`。哪怕没信号也要存 `'[]'` 字符串，绝不可以存 `NULL`。读取时必须 `json.loads`！ |
 | `bid1_vol` / `ask1_vol` | `INTEGER` | 买一卖一挂单量 | 用于冰山探测 |
 
-### 5. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产，V1兼容)
+### 5. `history_5m_l2`（生产正式 L2 历史 5 分钟底座）
+> **生产正式层**：该表属于 `data/market_data.db`，用于盯盘历史模式、日后复盘页正式查询、多周期聚合源。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL`，标准代码（如 `sz000833`） |
+| `datetime` | `TEXT` | `NOT NULL`，5分钟桶起点 `%Y-%m-%d %H:%M:%S` |
+| `source_date` | `TEXT` | `NOT NULL`，源交易日 `%Y-%m-%d` |
+| `open/high/low/close` | `REAL` | `NOT NULL` |
+| `total_amount` | `REAL` | `NOT NULL`，该股票该5分钟切片总成交额 |
+| `l1_main_buy/sell` | `REAL` | `NOT NULL`，L1 主力绝对买卖（单笔阈值） |
+| `l1_super_buy/sell` | `REAL` | `NOT NULL`，L1 超大单绝对买卖 |
+| `l2_main_buy/sell` | `REAL` | `NOT NULL`，L2 主力绝对买卖（母单聚合） |
+| `l2_super_buy/sell` | `REAL` | `NOT NULL`，L2 超大单绝对买卖 |
+**主键**: `PRIMARY KEY(symbol, datetime)`
+> 说明：
+> - 正式历史最细粒度固定为 `5m`，不额外维护 `1m` 生产持久层；
+> - `net` 字段允许查询时按 `buy-sell` 派生，避免重复存储；
+> - `15m/30m/1h` 统一由本表聚合，不单独落库。
+
+### 6. `history_daily_l2`（生产正式 L2 历史日线底座）
+> **生产正式层**：服务历史日K资金博弈分析，并为后续 L1/L2 对比提供统一日线事实表。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `date` | `TEXT` | `NOT NULL`，交易日 `%Y-%m-%d` |
+| `open/high/low/close` | `REAL` | `NOT NULL` |
+| `total_amount` | `REAL` | `NOT NULL` |
+| `l1_main_buy/sell/net` | `REAL` | `NOT NULL` |
+| `l1_super_buy/sell/net` | `REAL` | `NOT NULL` |
+| `l2_main_buy/sell/net` | `REAL` | `NOT NULL` |
+| `l2_super_buy/sell/net` | `REAL` | `NOT NULL` |
+| `l1_activity_ratio` | `REAL` | `NOT NULL`，L1 `(buy+sell)/total_amount*100` |
+| `l1_super_ratio` | `REAL` | `NOT NULL`，L1 超大单参与度 |
+| `l2_activity_ratio` | `REAL` | `NOT NULL`，L2 `(buy+sell)/total_amount*100` |
+| `l2_super_ratio` | `REAL` | `NOT NULL`，L2 超大单参与度 |
+| `l1_buy_ratio` / `l1_sell_ratio` | `REAL` | `NOT NULL`，供历史日K资金博弈分析 |
+| `l2_buy_ratio` / `l2_sell_ratio` | `REAL` | `NOT NULL`，供未来历史 L1/L2 对比分析 |
+**主键**: `PRIMARY KEY(symbol, date)`
+> 说明：
+> - 当天历史模块仍可临时展示实时值，但次日及以后应以本表为正式值；
+> - 本表是未来历史日K里 L1/L2 对比分析的统一来源。
+
+### 7. `l2_daily_ingest_runs / l2_daily_ingest_failures`（盘后 L2 日级回补状态）
+> **生产运维层**：记录每日盘后 L2 正式结算 / 重跑 / 失败信息。
+
+- `l2_daily_ingest_runs`
+  - 用途：记录某日回补任务开始/结束/状态/覆盖行数/提示信息；
+  - 关键字段建议：`trade_date/status/started_at/finished_at/message/symbol_count/rows_5m/rows_daily/source_root`;
+- `l2_daily_ingest_failures`
+  - 用途：记录具体失败股票、失败源文件、错误原因；
+  - 关键字段建议：`run_id/symbol/trade_date/source_file/error_message/created_at`;
+- 写入规则：
+  - 支持同一天重复回补；
+  - 重跑以覆盖写为准，不允许产生重复正式记录；
+  - 失败记录必须可追溯到文件级。
+
+### 8. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产，V1兼容)
 > **隔离红线**：该表位于独立数据库 `data/sandbox_review.db`，禁止写入 `data/market_data.db`。
 
 | 字段名 | 数据类型 | 约束 / 备注 |
@@ -89,7 +148,7 @@
 | `source_date` | `TEXT` | `NOT NULL`，源交易日 `%Y-%m-%d` |
 **主键**: `PRIMARY KEY(symbol, datetime)`
 
-### 6. `data/sandbox/review_v2/`（沙盒复盘 V2，云端可访问但与生产库隔离）
+### 9. `data/sandbox/review_v2/`（沙盒复盘 V2，云端可访问但与生产库隔离）
 > **隔离红线**：目录级隔离，所有 V2 数据仅允许落在 `data/sandbox/review_v2/`，不得写入 `data/market_data.db`。
 
 #### 6.1 `meta.db::sandbox_stock_pool`
@@ -124,6 +183,7 @@
 | `source_date` | `TEXT` | `NOT NULL`，源交易日 |
 **主键**: `PRIMARY KEY(symbol, datetime)`
 > `net` 字段在查询时按 `buy-sell` 计算，避免重复存储。V2 已收敛为“5m底层 + 上层聚合”，不再维护 1m 持久层。
+> 新决策（2026-03-14）：sandbox V2 继续保留实验用途，但未来生产正式页面不应长期依赖该数据域。
 
 ---
 
@@ -154,9 +214,10 @@
 
 ### 1. 市场数据类 (Market Data)
 *   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
-*   **`GET /api/history/trend?symbol=sh600519&days=20`**: 返回 30 分钟级资金趋势（历史 + 当天动态拼接）。
+*   **`GET /api/history/trend?symbol=sh600519&days=20&granularity=30m`**: 返回历史趋势；当前正式支持 `granularity=5m|15m|30m|1h|1d`，其中 `15m/30m/1h/1d` 一律由 `history_5m_l2` 聚合。
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
-    - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若 `display_date` 为上一交易日（周末/节假日/盘前），则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
+    - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若进入历史/回溯日期，则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失，则继续尝试 `history_5m_l2`；若仍缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
+    - 响应补充字段：`source`、`is_finalized`、`bucket_granularity`，供前端准确标记“实时 / 历史1m / 正式L2历史5m”。
 *   **`POST /api/monitor/heartbeat?symbol=sh600519&mode=focus|warm`**:
     - 描述：登记实时页活跃心跳。
     - 规则：`mode` 仅允许 `focus/warm`；非法值按 `warm` 降级。
@@ -165,6 +226,12 @@
     - 描述：返回 Windows crawler 使用的活跃分层快照。
     - 返回：`APIResponse`，`data={"focus_symbols":[...],"warm_symbols":[...],"all_symbols":[...]}`。
     - 兼容：爬虫端需兼容旧版 flat list 响应，避免云端/Windows 分批发布时断链。
+
+*   **`GET /api/history_analysis?symbol=sh600519`**（正式 L2 历史切换后补充契约）:
+    - 历史日期优先读取 `history_daily_l2`；
+    - 当天继续返回实时口径，且不得覆盖已正式结算的历史日期；
+    - 响应补充 `source`、`is_finalized`、`fallback_used`，明确区分“正式历史值/当日实时值/兜底旧口径”；
+    - 历史正式值当前默认输出 L2 主指标，同时预留同源 `l1_* / l2_*` 扩展字段供后续页面做对比分析。
 
 > 写接口鉴权约束（v4.2.3+）：
 > - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
@@ -187,7 +254,30 @@
 
 ---
 
-## 四、 v4.0 新增/变更接口
+## 五、 Windows 盘后 L2 日包目录契约（vNext 设计冻结）
+
+正式目录规范如下：
+
+```text
+D:\MarketData\
+  └── YYYYMM\
+      └── YYYYMMDD\
+          └── 000833.SZ\
+              ├── 行情.csv
+              ├── 逐笔成交.csv
+              └── 逐笔委托.csv
+```
+
+规则：
+- 月目录必须存在：`YYYYMM`
+- 日目录必须存在：`YYYYMMDD`
+- 股票目录名必须带交易所后缀：`.SZ/.SH/.BJ`
+- 允许存在“旧裸日目录”作为过渡输入，但新下载数据不再允许长期裸放；
+- 新日包 ETL 需优先按此结构做日期识别与归档验真。
+
+---
+
+## 六、 v4.0 新增/变更接口
 
 ### 1. 星标管理（Watchlist）— 新增 DELETE
 *   **`GET /api/watchlist`**: 返回全部自选股列表。

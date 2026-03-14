@@ -68,6 +68,19 @@ export interface CumulativeCapitalData {
   cumSuperSell: number;
 }
 
+export interface DashboardSourceMeta {
+  source?: string;
+  is_finalized?: boolean;
+  bucket_granularity?: string;
+  display_date?: string;
+}
+
+export interface RealtimeDashboardData extends DashboardSourceMeta {
+  chart_data: CapitalRatioData[];
+  cumulative_data: CumulativeCapitalData[];
+  latest_ticks: TickData[];
+}
+
 // 新增：历史分析数据结构
 export interface HistoryAnalysisData {
   date: string;
@@ -82,6 +95,27 @@ export interface HistoryAnalysisData {
   sellRatio?: number;
   activityRatio?: number;
   super_large_ratio?: number;
+  source?: string;
+  is_finalized?: boolean;
+  fallback_used?: boolean;
+  l1_main_buy_amount?: number;
+  l1_main_sell_amount?: number;
+  l1_net_inflow?: number;
+  l1_super_large_in?: number;
+  l1_super_large_out?: number;
+  l1_activityRatio?: number;
+  l1_buyRatio?: number;
+  l1_sellRatio?: number;
+  l1_super_large_ratio?: number;
+  l2_main_buy_amount?: number;
+  l2_main_sell_amount?: number;
+  l2_net_inflow?: number;
+  l2_super_large_in?: number;
+  l2_super_large_out?: number;
+  l2_activityRatio?: number;
+  l2_buyRatio?: number;
+  l2_sellRatio?: number;
+  l2_super_large_ratio?: number;
 }
 
 export interface HistoryTrendData {
@@ -96,6 +130,9 @@ export interface HistoryTrendData {
   open?: number;
   high?: number;
   low?: number;
+  source?: string;
+  is_finalized?: boolean;
+  fallback_used?: boolean;
 }
 
 export interface SandboxReviewBar {

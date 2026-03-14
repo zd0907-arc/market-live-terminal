@@ -5,6 +5,69 @@
 
 ---
 
+## 2026-03-14 21:35 | 前端 AI
+- Task ID: `CHG-20260314-07`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-REALTIME-FLOW`
+- 结论: 已完成盯盘页“旧版 / 新版”整页切换，并新增新版日线融合视图 V1：上方价格区，下方左超大/右主力双柱；正式历史按 L2 包裹 L1 展示，当日未结算仅保留 L1 浅色芯柱。
+- 风险: 新版日线当前仍依赖现有正式日线/日聚合接口；若股票尚无正式 `history_daily_l2` 覆盖，只会显示新版专属空态而不会伪造 L2。新版下的“当日分时 / 30分钟线”本轮仍复用旧组件。
+- 链接: `src/App.tsx`, `src/components/dashboard/HistoryDailyFusionView.tsx`, `src/types.ts`, `docs/changes/REQ-20260314-07-monitor-fusion-daily-v1.md`
+
+## 2026-03-14 20:40 | 后端 AI
+- Task ID: `CHG-20260314-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已按当前时点完成文档治理回填：总方案改为 ACTIVE，Phase 1/2/3/3.5 的已完成项、验证结果和后置项已统一写回变更卡与 core docs；当前对外口径可明确表述为“盘后 L2 历史底座已进入可用状态，复盘页并库为后续阶段”。
+- 风险: 文档已收口到当前状态，但 `docs/changes/` 相关文件尚未做正式归档；待本期整体稳定、并确认是否要继续紧接着做下一阶段功能时再决定归档时点。
+- 链接: `docs/changes/STG-20260314-01-l2-postclose-history-foundation.md`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`, `docs/changes/REQ-20260314-05-l2-history-query-switch.md`, `docs/02_BUSINESS_DOMAIN.md`
+
+## 2026-03-14 20:25 | 后端 AI
+- Task ID: `CHG-20260314-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-MKT-TIME`
+- 结论: 已完成盯盘页历史分时补链与本地验证：`/api/realtime/dashboard` 历史日期现优先读取 `history_5m_l2`；同时将前端来源文案改为动态显示接口真实 `source`。已从 Windows `D:\\MarketData\\20260311\\20260311` 抽取 `000833.SZ/600519.SH` 样本回补到本地，验证 `sz000833` 返回 `49` 条 5m、`sh600519` 返回 `48` 条 5m，且两者历史 30m/历史分时接口均返回 `source=l2_history`。
+- 风险: `sh600519` 存在部分母单号无法在委托文件对齐（buy 缺 `6375` / sell 缺 `6034`），当前已改成“可对齐部分优先用委托母单金额，不可对齐部分回退到成交侧订单号聚合”，能稳定出数，但后续仍建议继续观察上证样本是否需要更细的订单口径兼容。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/app/routers/market.py`, `backend/app/services/analysis.py`, `src/components/dashboard/RealtimeView.tsx`, `src/components/dashboard/HistoryView.tsx`
+
+## 2026-03-14 19:45 | 后端 AI
+- Task ID: `CHG-20260314-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-MKT-TIME`
+- 结论: 已把历史分时日期回溯接入正式 L2 历史：`/api/realtime/dashboard` 在历史日期下现按 `history_1m -> history_5m_l2 -> trade_ticks fallback` 的优先级取数，因此像 `2026-03-11` 这类已完成盘后回补的日期，也能在盯盘页分时模式直接看到 5m 的 L2 派生曲线。
+- 风险: 若某只股票（如 `sh600519`）当天没有执行过盘后日包回补，历史 30m/历史分时仍不会凭空出现；这属于“该 symbol 当天正式 L2 数据未入库”，不是查询链路 bug。复盘页并库已按产品优先级延后。
+- 链接: `backend/app/routers/market.py`, `backend/app/services/analysis.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/changes/REQ-20260314-06-review-page-prod-l2-unification.md`
+
+## 2026-03-14 19:20 | 后端 AI
+- Task ID: `CHG-20260314-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-REALTIME-FLOW`
+- 结论: 已完成 Phase 3 后端查询切换：`/api/history/trend` 现优先读取 `history_5m_l2` 并支持 `5m|15m|30m|1h|1d` 聚合，`/api/history_analysis` 历史日期优先读取 `history_daily_l2`；两接口均补充 `source/is_finalized/fallback_used`，当天仍保留实时 ticks 覆盖能力。
+- 风险: 当前只是后端与契约层切换完成，历史页数据源选择器文案仍沿用旧 `Sina/Local` 语义；复盘页也还未并库到生产 L2 底座，仍属于下一阶段任务。
+- 链接: `backend/app/routers/analysis.py`, `backend/app/db/l2_history_db.py`, `backend/tests/test_l2_history_query_switch.py`, `docs/changes/REQ-20260314-05-l2-history-query-switch.md`
+
+## 2026-03-14 18:25 | 后端 AI
+- Task ID: `CHG-20260314-04`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成 Phase 2 单日回补链路：新增 `l2_daily_backfill.py`，可从 Windows 盘后 L2 日包直接生成 L1/L2 的 `5m + daily` 正式派生，并写入 `history_5m_l2/history_daily_l2` 与回补状态表；对 `2026-03-11 / 000833.SZ` 样本手动冒烟，成功落库 `49` 条 5m + `1` 条 daily，run 状态为 `done`。
+- 风险: 当前回补脚本已兼容旧 `20260311/20260311` 与新 `202603/20260311` 输入，但还没实现“整个月目录自动发现待回补日”与“裸日目录自动迁移”；生产查询接口和页面也还没切到新正式历史表。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/tests/test_l2_daily_backfill.py`, `backend/app/db/l2_history_db.py`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`
+
+## 2026-03-14 18:05 | 后端 AI
+- Task ID: `CHG-20260314-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成 Phase 1 本地代码落地：新增生产 L2 历史 schema/helper（`history_5m_l2/history_daily_l2/l2_daily_ingest_runs/l2_daily_ingest_failures`）、目录规范 helper（兼容旧双层日期目录与新 `YYYYMM/YYYYMMDD` 结构），并把 schema 挂入 `init_db()` 自动初始化。
+- 风险: 当前只完成 schema/helper 与测试，尚未接入正式日包 ETL、正式回补任务和生产查询切换；Windows 现有裸日目录也还没真正迁移到月目录，只是 helper 已支持过渡兼容。
+- 链接: `backend/app/db/l2_history_db.py`, `backend/app/core/l2_package_layout.py`, `backend/app/db/database.py`, `backend/tests/test_l2_history_foundation.py`, `docs/changes/REQ-20260314-03-l2-history-db-and-directory-spec.md`
+
+## 2026-03-14 17:40 | 后端 AI
+- Task ID: `CHG-20260314-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已按“文档先行、数据库先行”要求冻结盘后 L2 历史底座总方案：生产正式层固定为 `history_5m_l2 + history_daily_l2 + 回补状态表`，历史最细粒度只保留 `5m`，`15m/30m/1h` 一律由 `5m` 聚合；同时明确同一份 L2 原始日包必须同步产出 L1 与 L2 双派生，供后续页面对比分析。
+- 风险: 当前仍停留在文档冻结阶段，生产代码尚未实现；另外 Windows 现有 `20260311` 裸日目录仍需在实施阶段迁入 `D:\\MarketData\\202603\\20260311\\...` 规范结构，并完成强回补链路，才能真正切换历史查询。
+- 链接: `docs/changes/STG-20260314-01-l2-postclose-history-foundation.md`, `docs/changes/REQ-20260314-03-l2-history-db-and-directory-spec.md`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`, `docs/03_DATA_CONTRACTS.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-14 16:12 | 后端 AI
+- Task ID: `CHG-20260314-02`
+- CAP: `CAP-WIN-PIPELINE`
+- 结论: 已远程验证 Windows `2026-03-11` 每日盘后 L2 日包格式：目录为 `D:\\MarketData\\20260311\\20260311\\{symbol}`，样本 `000833.SZ` 含 `行情/逐笔成交/逐笔委托` 三类 CSV；`叫买序号/叫卖序号` 可完整对齐 `交易所委托号`，说明新数据具备真实 L2 母单聚合前提。
+- 风险: 当前现有 ETL 对该格式不兼容——既无法从嵌套目录提取交易日，也未识别 `成交数量/叫买序号/叫卖序号` 等中文列名；若不先加适配层，直接接入会误判日期与字段。
+- 链接: `backend/scripts/inspect_daily_l2_package.py`, `backend/scripts/sandbox_review_etl.py`, `docs/changes/REQ-20260314-02-daily-postclose-l2-fusion.md`, `docs/07_PENDING_TODO.md`
+
 ## 2026-03-14 14:05 | 后端 AI
 - Task ID: `CHG-20260312-02`
 - CAP: `CAP-REALTIME-FLOW`

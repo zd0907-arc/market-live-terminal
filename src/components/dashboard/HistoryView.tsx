@@ -133,6 +133,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
         return [minPrice * 0.99, maxPrice * 1.01];
     }, [trendData]);
 
+    const trendSourceLabel = React.useMemo(() => {
+        const source = trendData[0]?.source;
+        if (source === 'l2_history') return 'Source: 正式L2历史 (聚合)';
+        if (source === 'legacy_history_30m') return 'Source: 旧30m历史兜底';
+        if (source === 'realtime_ticks') return 'Source: 实时 ticks';
+        return 'Source: 数据源识别中...';
+    }, [trendData]);
+
+    const historySourceLabel = React.useMemo(() => {
+        const source = historyData[0]?.source;
+        if (source === 'l2_history') return 'Source: 正式L2历史日线';
+        if (source === 'realtime_ticks') return 'Source: 当天实时 ticks';
+        if (source === 'sina') return 'Source: 新浪兜底';
+        return historySource === 'local' ? 'Source: 本地自算' : 'Source: 数据源识别中...';
+    }, [historyData, historySource]);
+
     if (!activeStock) return null;
 
     const chartLoading = (
@@ -221,7 +237,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                                     <span className="text-purple-500">🟣 30分钟资金趋势</span>
                                     <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
-                                        Source: Local DB (30m Bars)
+                                        {trendSourceLabel}
                                     </span>
                                 </h3>
                                 <div className="flex gap-2 items-center">
@@ -272,6 +288,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
                                         <div className="mb-2 flex justify-between items-center">
                                             <h3 className="text-base font-bold text-white flex items-center gap-2">
                                                 主力净流入
+                                                <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded ml-2">
+                                                    {historySourceLabel}
+                                                </span>
                                             </h3>
                                             <button
                                                 onClick={() => setHistoryRefreshKey(prev => prev + 1)}

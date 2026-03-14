@@ -2,6 +2,7 @@ import pandas as pd
 from typing import List, Dict
 from backend.app.models.schemas import TickData
 from backend.app.db.crud import get_ticks_by_date, get_app_config
+from backend.app.db.l2_history_db import query_l2_history_5m_rows
 from backend.app.core.trade_side import (
     is_buy_series,
     is_sell_series,
@@ -416,7 +417,80 @@ def get_history_1m_dashboard(symbol: str, date_str: str):
     return {
         "chart_data": chart_data,
         "cumulative_data": cumulative_data,
-        "latest_ticks": [] # History view doesn't render latest ticks
+        "latest_ticks": [], # History view doesn't render latest ticks
+        "source": "history_1m",
+        "is_finalized": True,
+        "bucket_granularity": "1m",
+    }
+
+
+def get_history_l2_dashboard(symbol: str, date_str: str):
+    """
+    Format 5m L2 historical bars into the dashboard response shape used by realtime view.
+    Historical minimum granularity is 5m, so backfill mode should render 5m buckets.
+    """
+    bars = query_l2_history_5m_rows(symbol, start_date=date_str, end_date=date_str)
+    if not bars:
+        return None
+
+    chart_data = []
+    cumulative_data = []
+
+    running_main_buy = 0.0
+    running_main_sell = 0.0
+    running_super_buy = 0.0
+    running_super_sell = 0.0
+
+    for b in bars:
+        dt = str(b["datetime"])
+        t = dt[11:16]
+        total_amt = float(b["total_amount"])
+        main_buy = float(b["l2_main_buy"])
+        main_sell = float(b["l2_main_sell"])
+        super_buy = float(b["l2_super_buy"])
+        super_sell = float(b["l2_super_sell"])
+        close_price = float(b["close"])
+
+        main_buy_ratio = (main_buy / total_amt) * 100 if total_amt > 0 else 0
+        main_sell_ratio = (main_sell / total_amt) * 100 if total_amt > 0 else 0
+        participation_ratio = ((main_buy + main_sell) / total_amt) * 100 if total_amt > 0 else 0
+        super_participation_ratio = ((super_buy + super_sell) / total_amt) * 100 if total_amt > 0 else 0
+
+        chart_data.append({
+            "time": t,
+            "mainBuyRatio": round(main_buy_ratio, 1),
+            "mainSellRatio": round(main_sell_ratio, 1),
+            "mainParticipationRatio": round(participation_ratio, 1),
+            "mainBuyAmount": main_buy,
+            "mainSellAmount": main_sell,
+            "superBuyAmount": super_buy,
+            "superSellAmount": super_sell,
+            "superParticipationRatio": round(super_participation_ratio, 1),
+            "closePrice": close_price,
+        })
+
+        running_main_buy += main_buy
+        running_main_sell += main_sell
+        running_super_buy += super_buy
+        running_super_sell += super_sell
+
+        cumulative_data.append({
+            "time": t,
+            "cumMainBuy": running_main_buy,
+            "cumMainSell": running_main_sell,
+            "cumNetInflow": running_main_buy - running_main_sell,
+            "cumSuperBuy": running_super_buy,
+            "cumSuperSell": running_super_sell,
+            "cumSuperNetInflow": running_super_buy - running_super_sell,
+        })
+
+    return {
+        "chart_data": chart_data,
+        "cumulative_data": cumulative_data,
+        "latest_ticks": [],
+        "source": "l2_history",
+        "is_finalized": True,
+        "bucket_granularity": "5m",
     }
 
 def aggregate_intraday_1m(symbol: str, date_str: str = None):
