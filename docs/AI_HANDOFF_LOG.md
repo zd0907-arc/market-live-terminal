@@ -26,6 +26,13 @@
 - 风险: 当前前端已能构建通过，但尚未等到 Windows `2026-03` 正式 L2 全月数据入库做大样本校正；新版 5m/30m/1h 仍属于第一版交互，后续需继续根据真实数据微调 tooltip、默认视窗与空态策略。
 - 链接: `src/App.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `src/services/stockService.ts`, `src/types.ts`, `docs/changes/REQ-20260314-08-monitor-history-multiframe-fusion.md`
 
+## 2026-03-15 01:12 | Codex
+- Task ID: `CHG-20260315-01`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已按“先做文档管理”的要求，把 `2026-03` 正式 L2 数据未下载完成回填到待办阻塞，并新增历史多维副图需求卡：冻结“净流入对比 + 买卖力度分离”两张副图的统一设计，明确继续采用 `L1 vs L2`、`主力 vs 超大单` 视角，且首期复用 `/api/history/multiframe` 前端派生，不新增后端接口。
+- 风险: 当前仅完成文档冻结，未进入实现；由于 `2026-03` 全月正式数据尚未入库，副图默认视窗、tooltip 密度与空态策略都还不能做真实样本校正。
+- 链接: `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`, `docs/07_PENDING_TODO.md`, `docs/02_BUSINESS_DOMAIN.md`
+
 ## 2026-03-14 23:20 | Codex
 - Task ID: `CHG-20260314-08`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
