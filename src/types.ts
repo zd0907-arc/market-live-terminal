@@ -122,6 +122,15 @@ export interface SandboxReviewBar {
   source_date: string;
 }
 
+export interface SandboxPoolItem {
+  symbol: string;
+  name: string;
+  market_cap: number;
+  as_of_date: string;
+  source: string;
+  updated_at: string;
+}
+
 export interface SentimentData {
   symbol: string;
   name: string;

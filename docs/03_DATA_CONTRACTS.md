@@ -73,7 +73,7 @@
 | `signals` | `TEXT` | **重点：只允许存 JSON Array** | 比如 `'["Iceberg Allowed"]'`。哪怕没信号也要存 `'[]'` 字符串，绝不可以存 `NULL`。读取时必须 `json.loads`！ |
 | `bid1_vol` / `ask1_vol` | `INTEGER` | 买一卖一挂单量 | 用于冰山探测 |
 
-### 5. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产)
+### 5. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产，V1兼容)
 > **隔离红线**：该表位于独立数据库 `data/sandbox_review.db`，禁止写入 `data/market_data.db`。
 
 | 字段名 | 数据类型 | 约束 / 备注 |
@@ -88,6 +88,42 @@
 | `l2_super_buy/sell/net` | `REAL` | `NOT NULL`，L2 超大单绝对买卖与净流入 |
 | `source_date` | `TEXT` | `NOT NULL`，源交易日 `%Y-%m-%d` |
 **主键**: `PRIMARY KEY(symbol, datetime)`
+
+### 6. `data/sandbox/review_v2/`（沙盒复盘 V2，云端可访问但与生产库隔离）
+> **隔离红线**：目录级隔离，所有 V2 数据仅允许落在 `data/sandbox/review_v2/`，不得写入 `data/market_data.db`。
+
+#### 6.1 `meta.db::sandbox_stock_pool`
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | 主键，`sh/sz` 六位标准代码 |
+| `name` | `TEXT` | `NOT NULL` |
+| `market_cap` | `REAL` | `NOT NULL`，最新总市值（元） |
+| `as_of_date` | `TEXT` | `NOT NULL`，池子快照日期 `%Y-%m-%d` |
+| `source` | `TEXT` | `NOT NULL`，来源（如 `akshare.stock_zh_a_spot_em` 或 `akshare.stock_individual_info_em`） |
+| `updated_at` | `TEXT` | 自动时间戳 |
+> 口径：仅沪深A、排除 ST、总市值 50-300亿，固定池（不日更）。
+
+#### 6.2 `meta.db::sandbox_backfill_runs / sandbox_backfill_month_runs / sandbox_backfill_failures`
+- 用途：记录 V2 批处理 run 状态、月份级 run 状态、失败清单（symbol/date/source/error）。
+- 要求：
+  - `sandbox_backfill_month_runs` 必须能查询某个月份最近一次 run 的 `status/rows/failed_count`，供全月份总控脚本判断是否进入下一月；
+  - 失败记录可追溯到源文件，支持后续重试。
+- 运维约定：全月份总控脚本还会额外写出 `data/sandbox/review_v2/logs/run_all_months_latest.json`，用于查看当前月份、已完成月份、失败月份与最终 `done/failed` 状态。
+
+#### 6.3 `symbols/{symbol}.db::review_5m_bars`
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `datetime` | `TEXT` | `NOT NULL`，5分钟桶起点 `%Y-%m-%d %H:%M:%S` |
+| `open/high/low/close` | `REAL` | `NOT NULL` |
+| `total_amount` | `REAL` | `NOT NULL`，该股票该5分钟总成交额 |
+| `l1_main_buy/sell` | `REAL` | `NOT NULL` |
+| `l1_super_buy/sell` | `REAL` | `NOT NULL` |
+| `l2_main_buy/sell` | `REAL` | `NOT NULL` |
+| `l2_super_buy/sell` | `REAL` | `NOT NULL` |
+| `source_date` | `TEXT` | `NOT NULL`，源交易日 |
+**主键**: `PRIMARY KEY(symbol, datetime)`
+> `net` 字段在查询时按 `buy-sell` 计算，避免重复存储。V2 已收敛为“5m底层 + 上层聚合”，不再维护 1m 持久层。
 
 ---
 
@@ -120,6 +156,15 @@
 *   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
 *   **`GET /api/history/trend?symbol=sh600519&days=20`**: 返回 30 分钟级资金趋势（历史 + 当天动态拼接）。
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
+    - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若 `display_date` 为上一交易日（周末/节假日/盘前），则改走 `history_1m` 静态回放。
+*   **`POST /api/monitor/heartbeat?symbol=sh600519&mode=focus|warm`**:
+    - 描述：登记实时页活跃心跳。
+    - 规则：`mode` 仅允许 `focus/warm`；非法值按 `warm` 降级。
+    - 边界：若实时页正在查看历史日期，则前端不得继续发送 heartbeat。
+*   **`GET /api/monitor/active_symbols`**:
+    - 描述：返回 Windows crawler 使用的活跃分层快照。
+    - 返回：`APIResponse`，`data={"focus_symbols":[...],"warm_symbols":[...],"all_symbols":[...]}`。
+    - 兼容：爬虫端需兼容旧版 flat list 响应，避免云端/Windows 分批发布时断链。
 
 > 写接口鉴权约束（v4.2.3+）：
 > - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
@@ -158,11 +203,17 @@
 ### 3. 沙盒复盘接口（v4.2.11+，非生产主链路）
 * **`GET /api/sandbox/review_data?symbol=sh603629&start_date=2026-01-01&end_date=2026-02-28`**
   - 描述：查询 sandbox 5m 复盘数据（L1/L2 buy/sell/net + OHLC）。
+  - 参数扩展：支持 `granularity=5m|15m|30m|60m|1d`（默认 `5m`）。
   - 返回：`APIResponse`，`data` 为按时间升序数组。
   - 空状态：返回 `{"code": 200, "data": [], "message": "无数据"}`。
   - 质量保护：若检测到“整日重复分时”异常，接口会自动剔除重复日，并在 `message` 返回类似 `检测到重复交易日数据并已剔除：2026-02-23≈2026-02-11`。
-  - 红线：仅允许读取 `sandbox_review.db`，不得回退到生产库。
+  - 红线：仅允许读取 sandbox 数据域（`sandbox_review.db` 或 `data/sandbox/review_v2/*`），不得回退到生产库。
   - 契约稳定：锚点累计、活跃度、净流比等新增展示均为前端衍生计算，本接口本轮不新增字段。
+  - 运维备注：若云端已同步 symbol DB 但接口仍返回空数组，优先检查容器内 `backend/app/db/sandbox_review_v2_db.py` 是否仍是旧版 1m 逻辑，并重建 backend 容器。
+* **`GET /api/sandbox/pool?keyword=&limit=`**
+  - 描述：返回复盘可选股票池（symbol/name/market_cap/as_of_date）。
+  - 返回：`APIResponse`，`data={total,as_of_date,items[]}`。
+  - 空状态：`code=200` + 空数组，`message=股票池为空，请先执行 pool build`。
 * **`POST /api/sandbox/run_etl`**
   - 描述：一键触发沙盒 ETL（支持 `pilot/full`）。
   - Body：`{mode,symbol,start_date,end_date,src_root?,output_db?}`。
@@ -185,3 +236,17 @@
 > - （v4.2.14+）新增“锚点累计模式”前端交互：点击 K 线设定锚点时间戳，累计区拆为 `主力L2/主力L1/超大L2/超大L1` 四图独立展示。
 > - （v4.2.14+）累计语义固定为“单曲线累计净流入”：每图仅一条累计曲线，正负通过面积分色表达；累计公式为从锚点开始对对应 `*_net` 的滚动求和（锚点前置空）。
 > - （v4.2.14+）累计终点跟随当前可视窗口右边界；百分比轴展示整数 `%`（无小数）。
+
+### 4. 实时盯盘二态契约（v4.2.15+）
+- 实时页盯盘仅保留二态：
+  - `focus`：5 秒轮询报价与实时图；
+  - `warm`：30 秒轮询报价与实时图。
+- 静默刷新约束：
+  - 周期刷新失败时，前端必须保留上一版成功 `quote/chart_data/cumulative_data/latest_ticks`；
+  - 仅在切股票或切历史日期时允许清空图表；
+  - UI 可以显示“静默刷新中/连接波动”，但不得整块卸载实时区域。
+- Windows crawler 口径：
+  - `focus_symbols` 使用 5 秒 tick 节奏；
+  - `warm_symbols` 使用 30 秒 tick 节奏；
+  - watchlist 仍按 15 分钟全量兜底轮扫；
+  - 本轮不支持“最近查看股票”额外中频队列。

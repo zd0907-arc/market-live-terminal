@@ -12,10 +12,16 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from backend.app.db.sandbox_review_db import get_review_5m_bars
+from backend.app.db.sandbox_review_v2_db import (
+    get_stock_pool,
+    query_review_bars,
+)
 from backend.app.models.schemas import APIResponse
 
 
 router = APIRouter()
+SANDBOX_MIN_DATE = "2025-01-01"
+SANDBOX_MAX_DATE = "2026-02-28"
 
 
 class SandboxEtlRequest(BaseModel):
@@ -58,6 +64,20 @@ def normalize_review_symbol(symbol: str) -> str:
 
 def _validate_date(date_text: str) -> None:
     datetime.strptime(date_text, "%Y-%m-%d")
+
+
+def _validate_query_window(start_date: str, end_date: str) -> Optional[APIResponse]:
+    if end_date < start_date:
+        return APIResponse(code=400, message="结束日期必须大于等于开始日期", data=[])
+    if start_date < SANDBOX_MIN_DATE or end_date > SANDBOX_MAX_DATE:
+        return APIResponse(
+            code=400,
+            message=(
+                f"查询日期超出沙盒范围：仅支持 {SANDBOX_MIN_DATE} 至 {SANDBOX_MAX_DATE}"
+            ),
+            data=[],
+        )
+    return None
 
 
 def _repo_root() -> str:
@@ -209,18 +229,30 @@ def get_sandbox_review_data(
     symbol: str = Query(..., description="股票代码，例如 sh603629 或 603629"),
     start_date: str = Query(..., description="开始日期，格式 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期，格式 YYYY-MM-DD"),
+    granularity: str = "5m",
 ):
     try:
+        if not isinstance(granularity, str):
+            granularity = "5m"
         normalized_symbol = normalize_review_symbol(symbol)
         if not normalized_symbol.startswith(("sh", "sz", "bj")):
             return APIResponse(code=400, message="股票代码格式错误", data=[])
 
         _validate_date(start_date)
         _validate_date(end_date)
-        if end_date < start_date:
-            return APIResponse(code=400, message="结束日期必须大于等于开始日期", data=[])
+        win_err = _validate_query_window(start_date, end_date)
+        if win_err:
+            return win_err
 
-        rows = get_review_5m_bars(normalized_symbol, start_date, end_date)
+        rows = query_review_bars(
+            normalized_symbol,
+            start_date,
+            end_date,
+            granularity=granularity,
+        )
+        # 过渡兼容：若 V2 未准备完成，5m 查询可回退到既有 5m 沙盒库。
+        if not rows and granularity == "5m":
+            rows = get_review_5m_bars(normalized_symbol, start_date, end_date)
         if not rows:
             return APIResponse(code=200, message="无数据", data=[])
 
@@ -239,6 +271,20 @@ def get_sandbox_review_data(
         return APIResponse(code=500, message=f"沙盒查询失败: {exc}", data=[])
 
 
+@router.get("/pool", response_model=APIResponse)
+def get_sandbox_stock_pool(
+    keyword: str = Query("", description="关键词过滤（symbol/name）"),
+    limit: int = Query(0, ge=0, le=5000, description="返回数量上限，0表示不限制"),
+):
+    try:
+        result = get_stock_pool(keyword=keyword, limit=limit if limit > 0 else None)
+        if result["total"] == 0:
+            return APIResponse(code=200, message="股票池为空，请先执行 pool build", data=result)
+        return APIResponse(code=200, data=result)
+    except Exception as exc:
+        return APIResponse(code=500, message=f"股票池查询失败: {exc}", data=None)
+
+
 @router.post("/run_etl", response_model=APIResponse)
 def run_sandbox_review_etl(payload: SandboxEtlRequest):
     try:
@@ -252,8 +298,9 @@ def run_sandbox_review_etl(payload: SandboxEtlRequest):
 
         _validate_date(payload.start_date)
         _validate_date(payload.end_date)
-        if payload.end_date < payload.start_date:
-            return APIResponse(code=400, message="结束日期必须大于等于开始日期", data=None)
+        win_err = _validate_query_window(payload.start_date, payload.end_date)
+        if win_err:
+            return APIResponse(code=win_err.code, message=win_err.message, data=None)
 
         is_running = False
         with _ETL_LOCK:

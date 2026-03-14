@@ -1,4 +1,13 @@
-import { RealTimeQuote, TickData, SearchResult, CapitalFlowTrend, HistoryAnalysisData, HistoryTrendData, SandboxReviewBar } from '../types';
+import {
+  RealTimeQuote,
+  TickData,
+  SearchResult,
+  CapitalFlowTrend,
+  HistoryAnalysisData,
+  HistoryTrendData,
+  SandboxPoolItem,
+  SandboxReviewBar,
+} from '../types';
 import { API_BASE_URL, getWriteHeaders } from '../config';
 
 // ==========================================
@@ -322,12 +331,14 @@ export const aggregateLocalHistory = async (symbol: string, date?: string) => {
 export const fetchSandboxReviewData = async (
   symbol: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  granularity: '5m' | '15m' | '30m' | '60m' | '1d' = '5m'
 ): Promise<SandboxReviewBar[]> => {
   const params = new URLSearchParams({
     symbol,
     start_date: startDate,
     end_date: endDate,
+    granularity,
   });
 
   // 兼容不同部署版本的路由前缀，优先新路由。
@@ -365,6 +376,48 @@ export const fetchSandboxReviewData = async (
   const errorMessage = lastError?.message || '沙盒数据查询失败';
   console.error('Fetch sandbox review data error:', errorMessage, routeHint);
   throw new Error(`${errorMessage}${routeHint}`);
+};
+
+export const fetchSandboxReviewPool = async (keyword = '', limit = 0): Promise<{
+  total: number;
+  as_of_date: string;
+  items: SandboxPoolItem[];
+}> => {
+  const params = new URLSearchParams();
+  if (keyword) params.set('keyword', keyword);
+  if (limit > 0) params.set('limit', String(limit));
+
+  const candidates = [
+    `${API_BASE_URL}/sandbox/pool?${params.toString()}`,
+    `${API_BASE_URL}/pool?${params.toString()}`,
+    `/sandbox/pool?${params.toString()}`,
+  ];
+
+  let lastError: Error | null = null;
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url);
+      const json = await res.json().catch(() => null);
+      if (res.status === 404) {
+        continue;
+      }
+      if (!res.ok) {
+        throw new Error(json?.message || `股票池请求失败（HTTP ${res.status}）`);
+      }
+      if (json?.code === 200 && json?.data) {
+        return {
+          total: Number(json.data.total || 0),
+          as_of_date: json.data.as_of_date || '',
+          items: Array.isArray(json.data.items) ? (json.data.items as SandboxPoolItem[]) : [],
+        };
+      }
+      throw new Error(json?.message || '股票池返回异常');
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error('股票池查询失败');
+    }
+  }
+
+  throw new Error(lastError?.message || '股票池查询失败');
 };
 
 export interface SandboxEtlStatus {
@@ -479,9 +532,9 @@ export const focusSymbol = async (symbol: string) => {
   }
 };
 
-export const sendHeartbeat = async (symbol: string) => {
+export const sendHeartbeat = async (symbol: string, mode: 'focus' | 'warm' = 'warm') => {
   try {
-    await fetch(`${API_BASE_URL}/monitor/heartbeat?symbol=${symbol}`, { method: 'POST' });
+    await fetch(`${API_BASE_URL}/monitor/heartbeat?symbol=${symbol}&mode=${mode}`, { method: 'POST' });
   } catch (e) {
     console.error("Heartbeat error:", e);
   }

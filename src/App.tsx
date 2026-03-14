@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server, Eye, Target } from 'lucide-react';
+import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server, Target } from 'lucide-react';
 import { RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
@@ -46,7 +46,7 @@ const App: React.FC = () => {
   const [configVersion, setConfigVersion] = useState(0);
 
   // Focus Mode (盯盘)
-  const [focusMode, setFocusMode] = useState<'normal' | 'observe' | 'focus'>('normal');
+  const [focusMode, setFocusMode] = useState<'normal' | 'focus'>('normal');
   const lastActiveTimeRef = React.useRef<number>(Date.now());
 
   const handleConfigUpdate = () => {
@@ -99,7 +99,7 @@ const App: React.FC = () => {
     };
 
     const handleBlur = () => {
-      if (focusMode === 'focus' || focusMode === 'observe') {
+      if (focusMode === 'focus') {
         console.log("Window lost focus. Auto-canceling focus mode.");
         setFocusMode('normal');
       }
@@ -110,7 +110,7 @@ const App: React.FC = () => {
     window.addEventListener('blur', handleBlur);
 
     const idleCheckInterval = setInterval(() => {
-      if (focusMode === 'focus' || focusMode === 'observe') {
+      if (focusMode === 'focus') {
         const idleTime = Date.now() - lastActiveTimeRef.current;
         if (idleTime > 3 * 60 * 1000) { // 3 minutes idle
           console.log("User idle for 3 minutes. Auto-canceling focus mode.");
@@ -190,8 +190,8 @@ const App: React.FC = () => {
     };
 
     fetchQuote(true);
-    // Refresh quote based on focus mode (15s for focus, 60s for observe, 5s for normal)
-    const intervalMs = focusMode === 'focus' ? 15000 : (focusMode === 'observe' ? 60000 : 5000);
+    // Quiet refresh: focus=5s, normal=30s.
+    const intervalMs = focusMode === 'focus' ? 5000 : 30000;
     intervalId = setInterval(() => fetchQuote(false), intervalMs);
 
     return () => {
@@ -421,24 +421,19 @@ const App: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => setFocusMode(prev => prev === 'normal' ? 'observe' : (prev === 'observe' ? 'focus' : 'normal'))}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] md:text-xs transition-colors border ${focusMode === 'focus' ? 'text-red-400 bg-red-400/10 border-red-500/30' : focusMode === 'observe' ? 'text-blue-400 bg-blue-400/10 border-blue-500/30' : 'text-slate-400 bg-slate-800 border-slate-700 hover:text-slate-300'}`}
-                      title="切换刷新模式：标准(5s) / 观望(60s) / 盯盘(15s)"
+                      onClick={() => setFocusMode(prev => prev === 'focus' ? 'normal' : 'focus')}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] md:text-xs transition-colors border ${focusMode === 'focus' ? 'text-red-300 bg-red-400/10 border-red-500/40' : 'text-slate-300 bg-slate-800 border-slate-700 hover:text-white hover:bg-slate-700'}`}
+                      title={focusMode === 'focus' ? '关闭盯盘，恢复 30 秒静默刷新' : '开启盯盘，切换为 5 秒刷新'}
                     >
                       {focusMode === 'focus' ? (
                         <>
                           <Target className="w-3.5 h-3.5 animate-pulse" />
-                          <span className="font-bold">盯盘 15s</span>
-                        </>
-                      ) : focusMode === 'observe' ? (
-                        <>
-                          <Eye className="w-3.5 h-3.5" />
-                          <span className="font-bold">观望 60s</span>
+                          <span className="font-bold">盯盘中 5s</span>
                         </>
                       ) : (
                         <>
                           <Activity className="w-3.5 h-3.5" />
-                          <span>标准 5s</span>
+                          <span>盯盘关闭 30s</span>
                         </>
                       )}
                     </button>
@@ -530,11 +525,10 @@ const App: React.FC = () => {
         )}
 
         {/* Content Views */}
-        {quote && viewMode === 'intraday_live' && (
+        {activeStock && viewMode === 'intraday_live' && (
           <Suspense fallback={sectionLoading}>
             <RealtimeView
               activeStock={activeStock}
-              quote={quote}
               isTradingHours={isTradingHours}
               configVersion={configVersion}
               focusMode={focusMode}

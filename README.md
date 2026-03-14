@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端（v4.2.10）
+# ZhangData 金融实时终端（v4.2.11）
 
 ## 项目定位
 - 云端 FastAPI + 前端 Vite 的 A 股实时资金流终端。

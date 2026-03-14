@@ -8,6 +8,7 @@ from datetime import datetime
 
 from backend.app.core.config import MOCK_DATA_DATE
 from backend.app.core.http_client import MarketClock
+from backend.app.core.calendar import TradeCalendar
 
 router = APIRouter()
 
@@ -55,16 +56,26 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
     """
     if MOCK_DATA_DATE:
         today_str = MOCK_DATA_DATE
+        natural_today_str = MOCK_DATA_DATE
     else:
-        # Use smart date fallback
+        # display_date：前端应展示的交易日期（可能是上一交易日）
         today_str = MarketClock.get_display_date()
-        
+        # natural_today：自然日，用于判断“是否真的应该走实时路径”
+        natural_today_str = MarketClock._now_china().strftime("%Y-%m-%d")
+
     query_date = date if date else today_str
 
-    if query_date == today_str:
-        # 实时当天的盘口博弈，现场从 ticks 合成
+    should_use_realtime = (
+        query_date == natural_today_str
+        and TradeCalendar.is_trade_day(natural_today_str)
+    )
+
+    if should_use_realtime:
+        # 仅在“自然日当天且为交易日”时走实时 ticks 聚合。
+        # 周末/节假日/盘前回溯到上一交易日时，应走 history_1m 静态回放，
+        # 否则会因为当前不在实时采集窗口而出现“当日分时为空”。
         from backend.app.services.analysis import calculate_realtime_aggregation
-        data = calculate_realtime_aggregation(symbol, today_str)
+        data = calculate_realtime_aggregation(symbol, natural_today_str)
     else:
         # 历史日期，强解耦：直接查询预聚合好的 history_1m 静态表
         from backend.app.services.analysis import get_history_1m_dashboard

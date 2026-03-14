@@ -6,7 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } f
 import { CanvasRenderer } from 'echarts/renderers';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 
-import { SandboxReviewBar } from '../../types';
+import { SandboxPoolItem, SandboxReviewBar } from '../../types';
 import * as StockService from '../../services/stockService';
 
 echarts.use([
@@ -26,8 +26,10 @@ type GranularityMode = 'auto' | Granularity;
 type WindowPreset = '1d' | '3d' | '5d' | '20d' | '60d' | 'all';
 
 const DEFAULT_SYMBOL = 'sh603629';
-const DEFAULT_START = '2026-01-01';
+const DEFAULT_START = '2025-01-01';
 const DEFAULT_END = '2026-02-28';
+const SANDBOX_MIN_DATE = '2025-01-01';
+const SANDBOX_MAX_DATE = '2026-02-28';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_VISIBLE_POINTS = 240;
 
@@ -277,6 +279,14 @@ const formatPercentAxis = (value: number): string => {
   return `${Math.round(value)}%`;
 };
 
+const isDateInSandboxWindow = (startDate: string, endDate: string): boolean =>
+  startDate >= SANDBOX_MIN_DATE && endDate <= SANDBOX_MAX_DATE && endDate >= startDate;
+
+const formatMarketCapYi = (marketCap: number): string => {
+  if (!Number.isFinite(marketCap) || marketCap <= 0) return '--';
+  return `${trimTrailingZeros((marketCap / 100000000).toFixed(2))}亿`;
+};
+
 const calcRatioPercent = (numerator: number, denominator: number): number | null => {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
   return (numerator / denominator) * 100;
@@ -296,10 +306,15 @@ const splitSignedSeriesNullable = (
 });
 
 const SandboxReviewPage: React.FC = () => {
-  const symbol = DEFAULT_SYMBOL;
-  const startDate = DEFAULT_START;
-  const endDate = DEFAULT_END;
-
+  const [poolItems, setPoolItems] = useState<SandboxPoolItem[]>([]);
+  const [poolTotal, setPoolTotal] = useState(0);
+  const [poolAsOfDate, setPoolAsOfDate] = useState('');
+  const [symbolInput, setSymbolInput] = useState(DEFAULT_SYMBOL);
+  const [startDateInput, setStartDateInput] = useState(DEFAULT_START);
+  const [endDateInput, setEndDateInput] = useState(DEFAULT_END);
+  const [querySymbol, setQuerySymbol] = useState(DEFAULT_SYMBOL);
+  const [queryStartDate, setQueryStartDate] = useState(DEFAULT_START);
+  const [queryEndDate, setQueryEndDate] = useState(DEFAULT_END);
   const [rawData, setRawData] = useState<SandboxReviewBar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -310,12 +325,12 @@ const SandboxReviewPage: React.FC = () => {
   const [anchorModeEnabled, setAnchorModeEnabled] = useState(false);
   const [anchorTs, setAnchorTs] = useState<number | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (symbol: string, startDate: string, endDate: string) => {
     setLoading(true);
     setError('');
     setEmptyMessage('');
     try {
-      const rows = await StockService.fetchSandboxReviewData(symbol, startDate, endDate);
+      const rows = await StockService.fetchSandboxReviewData(symbol, startDate, endDate, '5m');
       if (!rows.length) {
         setRawData([]);
         setActivePreset('20d');
@@ -328,16 +343,36 @@ const SandboxReviewPage: React.FC = () => {
       setRawData(sortedRows);
       setActivePreset('20d');
       setZoomRange(calcRangeByDays(sortedRows, 20));
+      setQuerySymbol(symbol);
+      setQueryStartDate(startDate);
+      setQueryEndDate(endDate);
     } catch (err: any) {
       setRawData([]);
       setError(err?.message || '查询失败，请检查 sandbox API 与 sandbox_review.db。');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
+    const init = async () => {
+      try {
+        const pool = await StockService.fetchSandboxReviewPool('', 3000);
+        setPoolItems(pool.items);
+        setPoolTotal(pool.total);
+        setPoolAsOfDate(pool.as_of_date || '');
+        if (pool.items.length > 0) {
+          const picked = pool.items.find((item) => item.symbol === DEFAULT_SYMBOL) || pool.items[0];
+          setSymbolInput(picked.symbol);
+          await fetchData(picked.symbol, startDateInput, endDateInput);
+          return;
+        }
+        setError('股票池为空，请先执行 pool build + backfill。');
+      } catch (e: any) {
+        setError(e?.message || '股票池加载失败，请检查 /api/sandbox/pool');
+      }
+    };
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -575,6 +610,25 @@ const SandboxReviewPage: React.FC = () => {
     if (!rawData.length) return '--';
     return `${rawData[0].datetime} ~ ${rawData[rawData.length - 1].datetime}`;
   }, [rawData]);
+
+  const activePoolItem = useMemo(
+    () => poolItems.find((item) => item.symbol === querySymbol) || null,
+    [poolItems, querySymbol]
+  );
+
+  const handleExecuteQuery = useCallback(async () => {
+    const symbol = symbolInput.trim().toLowerCase();
+    if (!symbol) {
+      setError('请先输入股票代码');
+      return;
+    }
+    if (!isDateInSandboxWindow(startDateInput, endDateInput)) {
+      setError(`日期范围仅支持 ${SANDBOX_MIN_DATE} ~ ${SANDBOX_MAX_DATE}`);
+      return;
+    }
+    setAnchorTs(null);
+    await fetchData(symbol, startDateInput, endDateInput);
+  }, [symbolInput, startDateInput, endDateInput]);
 
   const handleSelectPreset = (preset: WindowPreset, days: number | null) => {
     setActivePreset(preset);
@@ -1135,14 +1189,89 @@ const SandboxReviewPage: React.FC = () => {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-wrap items-end gap-3">
+          <div className="w-full grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-400 text-xs">股票代码（股票池内）</span>
+              <input
+                list="sandbox-pool-options"
+                value={symbolInput}
+                onChange={(e) => setSymbolInput(e.target.value)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                placeholder="如 sh603629"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-400 text-xs">开始日期</span>
+              <input
+                type="date"
+                min={SANDBOX_MIN_DATE}
+                max={SANDBOX_MAX_DATE}
+                value={startDateInput}
+                onChange={(e) => setStartDateInput(e.target.value)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-slate-400 text-xs">结束日期</span>
+              <input
+                type="date"
+                min={SANDBOX_MIN_DATE}
+                max={SANDBOX_MAX_DATE}
+                value={endDateInput}
+                onChange={(e) => setEndDateInput(e.target.value)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
+              />
+            </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-slate-400 text-xs">股票池</span>
+              <div className="px-2 py-1 bg-slate-950 border border-slate-700 rounded text-slate-200">
+                {poolTotal > 0 ? `${poolTotal} 只` : '--'}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-slate-400 text-xs">操作</span>
+              <button
+                onClick={handleExecuteQuery}
+                disabled={loading}
+                className={`px-3 py-1 rounded border ${
+                  loading
+                    ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-cyan-700/30 border-cyan-500 text-cyan-200 hover:bg-cyan-700/40'
+                }`}
+              >
+                执行查询
+              </button>
+            </div>
+          </div>
+          <datalist id="sandbox-pool-options">
+            {poolItems.map((item) => (
+              <option key={item.symbol} value={item.symbol}>
+                {item.name}
+              </option>
+            ))}
+          </datalist>
           <div className="w-full flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-slate-300">利通电子真实复盘：</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">股票 {symbol}</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">区间 {startDate} ~ {endDate}</span>
+            <span className="text-slate-300">Sandbox 复盘：</span>
+            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
+              股票 {querySymbol} {activePoolItem ? `(${activePoolItem.name})` : ''}
+            </span>
+            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
+              区间 {queryStartDate} ~ {queryEndDate}
+            </span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-cyan-300">数据源 sandbox API</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-emerald-300">当前粒度 {viewState.granularity}</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-violet-300">当前窗口约 {viewState.visibleDays.toFixed(1)} 天 / {viewState.visibleCount} 点</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300">接口返回 {rawData.length} 条</span>
+            {poolAsOfDate && (
+              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
+                池子快照 {poolAsOfDate}
+              </span>
+            )}
+            {activePoolItem && (
+              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
+                市值 {formatMarketCapYi(activePoolItem.market_cap)}
+              </span>
+            )}
             {loading && (
               <span className="inline-flex items-center gap-1 text-slate-400">
                 <RefreshCw className="w-3 h-3 animate-spin" />
@@ -1151,7 +1280,7 @@ const SandboxReviewPage: React.FC = () => {
             )}
           </div>
           <div className="w-full text-xs text-slate-500">
-            数据范围：{rawRangeText}
+            数据范围：{rawRangeText}（查询窗口仅支持 {SANDBOX_MIN_DATE} ~ {SANDBOX_MAX_DATE}）
           </div>
           <div className="w-full flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-400">窗口快捷：</span>

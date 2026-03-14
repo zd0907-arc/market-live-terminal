@@ -39,6 +39,53 @@ ssh laqiyuan@100.115.228.56
 - **Windows 统一项目目录**：`D:\market-live-terminal`
 - 凡是脚本同步、自启脚本、ETL 执行路径，均以该目录为准。
 
+### Mac 控 Windows 长任务执行与验真（2026-03-12 新增）
+当任务由 Mac 编写、但必须在 Windows 节点持续运行时，执行前后统一遵循以下规则：
+
+1. **先确认真实路径**
+   - `scp` 上传到 Windows 时，文件常先落到 `C:\Users\laqiyuan\`，不要默认它已经在 `D:\market-live-terminal`。
+   - 启动前必须核对 4 个路径：项目根目录、Python 可执行路径、脚本实际落点、日志落点。
+2. **优先使用 `cmd.exe /c` 包一层**
+   - `schtasks /Create /TR` 当前最稳的方式是 `cmd.exe /c <bat>`，或 `cmd.exe /c "<python.exe> <script> <args>"`。
+   - 不要直接把整段 Python 命令裸写进 `/TR`，否则 Windows 可能把它整体当成一个“可执行文件路径”。
+3. **停止任务要双重确认**
+   - `schtasks /End` 只结束计划任务本身，不保证 Python 子进程一起退出。
+   - 停止后必须再查 `tasklist`；若子进程仍在，使用 `taskkill /PID <pid> /F`。
+4. **任务是否真跑，不能只看窗口或任务状态**
+   - 至少同时验证以下三类信号中的两类：
+     - Python 进程存在；
+     - CPU 时间持续增长；
+     - 日志文件大小 / 修改时间持续增长；
+     - 数据库 run 记录或进度记录持续推进。
+   - 特别注意：本项目月批日志的正常进度可能落在 `out.log` 或 `err.log`；排查时两边都要看，以最近一次任务实际写入的文件为准。
+5. **Mac 侧读取 Windows 文本时注意编码**
+   - `cmd` / `schtasks` / `tasklist` 输出在 Mac 侧建议按 `gbk` 解码，避免中文或列宽乱码导致误判。
+6. **推荐配套 Skill**
+   - 若在 Codex 中处理这类跨机任务，优先使用外部 Skill：`mac-windows-ops-bridge`，其中已沉淀本项目实战经验与检查命令。
+
+### Sandbox Review V2 全月份总控启动约定（2026-03-12 新增）
+当需要让 Windows 节点一次性把 `2025-01-01 ~ 2026-02-28` 全段复盘数据跑完时，统一改为启动总控脚本，而不是每月人工拉起一次：
+
+```bat
+C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\scripts\sandbox_review_v2_run_all_months.py D:\MarketData --workers 12 --min-workers 8 --mem-high-watermark 80 --day-symbol-batch-size 240 --resume
+```
+
+- 运行语义：默认按 `2026-02 -> 2025-01` 逐月逆序串行执行。
+- 默认停机策略：
+  - 月份状态为 `done`：自动进下一个月；
+  - 月份状态为 `partial_done` / 子进程失败：默认停机等待人工处理；
+  - 全部月份完成：停在 `done` 态，不自动同步云端、不自动发布版本。
+- 观察入口：
+  - 月份级状态：`data/sandbox/review_v2/meta.db::sandbox_backfill_month_runs`
+  - 总控状态文件：`data/sandbox/review_v2/logs/run_all_months_latest.json`
+  - 单月明细日志：`data/sandbox/review_v2/logs/backfill_month_YYYY_MM.out.log`
+- 切换注意：若当前已有单月任务在运行（例如 `SandboxBackfillMonth202602`），不要并发再起总控任务；应先等旧任务结束，或显式停掉旧任务后再切换。
+- Mac 本地检查脚本：`/Users/dong/Desktop/AIGC/market-live-terminal/check_windows_review_v2_progress.py`。执行示例：`python3 /Users/dong/Desktop/AIGC/market-live-terminal/check_windows_review_v2_progress.py --tail 12`；默认会输出计划任务状态、相关 Python 进程、总控状态文件、月份完成信号以及总控日志尾部。
+- `2026-03-14` 首轮实绩：
+  - Windows 总控状态文件 `run_all_months_latest.json` 已到 `status=done`；
+  - 通过 `scp -3 -r` 已完成 `data/sandbox/review_v2/symbols` 从 Windows 到云端的首轮全量同步；
+  - 若云端 symbol DB 已存在但 `/api/sandbox/review_data` 仍为空，优先排查容器内是否还在运行旧版 `sandbox_review_v2_db.py`（1m 旧逻辑），必要时同步代码并 `sudo docker compose build backend frontend && sudo docker compose up -d backend frontend`。
+
 ---
 
 ## 二、 发版与一键装填协议 (CD/CI Pipeline)
@@ -95,6 +142,7 @@ echo %CLOUD_API_URL%
      3) 观察“最新成交时间”是否随时间推进（建议连续看 1~2 分钟至少推进一次）。
      4) 刷新页面后再次进入“当日分时”，确认不回退为空态。
      5) 若页面显示“交易中”但分时持续空白 > 3 分钟，判定为失败。
+     6) 若当前是周末/节假日/盘前，进入“当日分时”应显示回溯模式标签，且上一交易日分时图非空。
    - **B. 技术冒烟（可选补充）**
    ```bash
    # 1) 云端健康检查

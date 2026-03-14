@@ -26,9 +26,12 @@ LARGE_TH = 200000
 SUPER_TH = 1000000
 
 # Tick 拉取策略（可通过环境变量调整）
-ACTIVE_TICK_INTERVAL_SECONDS = int(os.getenv("ACTIVE_TICK_INTERVAL_SECONDS", "20"))
+FOCUS_TICK_INTERVAL_SECONDS = int(os.getenv("FOCUS_TICK_INTERVAL_SECONDS", "5"))
+WARM_TICK_INTERVAL_SECONDS = int(os.getenv("WARM_TICK_INTERVAL_SECONDS", "30"))
 FULL_SWEEP_INTERVAL_SECONDS = int(os.getenv("FULL_SWEEP_INTERVAL_SECONDS", "900"))  # 默认15分钟
 FINAL_SWEEP_RETRY_INTERVAL_SECONDS = int(os.getenv("FINAL_SWEEP_RETRY_INTERVAL_SECONDS", "90"))
+FOCUS_SNAPSHOT_INTERVAL_SECONDS = int(os.getenv("FOCUS_SNAPSHOT_INTERVAL_SECONDS", "3"))
+WARM_SNAPSHOT_INTERVAL_SECONDS = int(os.getenv("WARM_SNAPSHOT_INTERVAL_SECONDS", "10"))
 
 def get_watchlist():
     """从云端拉取当前的自选股列表"""
@@ -41,15 +44,34 @@ def get_watchlist():
     return []
 
 def get_active_symbols():
-    """V4: 从云端拉取当前有前端心跳的活跃股票"""
+    """V5: 从云端拉取当前活跃股票的 focus/warm 分层快照。"""
     try:
         resp = requests.get(f"{CLOUD_URL}/api/monitor/active_symbols", timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            return data.get('data', [])
+            payload = data.get('data', [])
+            if isinstance(payload, dict):
+                focus_symbols = payload.get('focus_symbols', []) or []
+                warm_symbols = payload.get('warm_symbols', []) or []
+                return {
+                    "focus_symbols": focus_symbols,
+                    "warm_symbols": warm_symbols,
+                    "all_symbols": payload.get('all_symbols', focus_symbols + warm_symbols),
+                }
+            if isinstance(payload, list):
+                # Backward compatibility: treat flat list as focus tier.
+                return {
+                    "focus_symbols": payload,
+                    "warm_symbols": [],
+                    "all_symbols": payload,
+                }
     except Exception as e:
         logger.error(f"Failed to fetch active_symbols from {CLOUD_URL}: {e}")
-    return []
+    return {
+        "focus_symbols": [],
+        "warm_symbols": [],
+        "all_symbols": [],
+    }
 
 def is_trading_time():
     now = datetime.now()
@@ -117,25 +139,39 @@ def fetch_tencent_snapshot(symbol):
 
 async def poll_snapshots_loop():
     logger.info("Started Snapshot Poller (Dynamic 3s/10s interval)")
+    last_snapshot_fetch_time = {}
     while True:
         if not is_trading_time():
             await asyncio.sleep(60)
             continue
             
         active_targets = get_active_symbols()
-        
-        if not active_targets:
+        focus_symbols = active_targets.get("focus_symbols", [])
+        warm_symbols = active_targets.get("warm_symbols", [])
+
+        if not focus_symbols and not warm_symbols:
             # Cold state: No active viewers, sleep and skip snapshot fetching
             logger.debug("No active viewers. Sleeping 10s...")
             await asyncio.sleep(10)
             continue
             
-        # Hot state: Fast 3s fetching for active symbols ONLY
+        # Focus symbols keep 3s cadence; warm symbols slow down to preserve crawler headroom.
         snapshots = []
-        for sym in active_targets:
+        now_ts = time.time()
+        due_focus = [
+            sym for sym in focus_symbols
+            if now_ts - last_snapshot_fetch_time.get(sym, 0) >= FOCUS_SNAPSHOT_INTERVAL_SECONDS
+        ]
+        due_warm = [
+            sym for sym in warm_symbols
+            if now_ts - last_snapshot_fetch_time.get(sym, 0) >= WARM_SNAPSHOT_INTERVAL_SECONDS
+        ]
+
+        for sym in due_focus + due_warm:
             s_data = fetch_tencent_snapshot(sym)
             if s_data:
                 snapshots.append(s_data)
+                last_snapshot_fetch_time[sym] = now_ts
                 
         if snapshots:
             # POST to cloud
@@ -148,7 +184,7 @@ async def poll_snapshots_loop():
             except Exception as e:
                 logger.error(f"Snapshot POST failed: {e}")
                 
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
 
 # ==========================================
 # Task: 3-Minute Trade Ticks (AkShare JS TX)
@@ -300,22 +336,35 @@ async def poll_ticks_loop():
             
         # --- Step 4: 仅对活跃股票拉取高频 Tick ---
         active_targets = get_active_symbols()
-        if not active_targets:
+        focus_symbols = active_targets.get("focus_symbols", [])
+        warm_symbols = active_targets.get("warm_symbols", [])
+
+        if not focus_symbols and not warm_symbols:
             # Cold state: baseline sweep already保障，低频休眠
             await asyncio.sleep(5)
             continue
-            
-        # For active stocks, fetch ticks roughly every 10-30 seconds instead of 3 mins
-        # to ensure the realtime chart is extremely smooth
-        symbols_to_fetch = []
-        for sym in active_targets:
+
+        focus_due = []
+        for sym in focus_symbols:
             last_fetch = last_tick_fetch_time.get(sym, 0)
-            if now_ts - last_fetch >= ACTIVE_TICK_INTERVAL_SECONDS:
-                symbols_to_fetch.append(sym)
+            if now_ts - last_fetch >= FOCUS_TICK_INTERVAL_SECONDS:
+                focus_due.append(sym)
                 last_tick_fetch_time[sym] = now_ts
-                
-        if symbols_to_fetch:
-            fetch_and_post_ticks(symbols_to_fetch, max_retries=1)
+
+        warm_due = []
+        for sym in warm_symbols:
+            last_fetch = last_tick_fetch_time.get(sym, 0)
+            if now_ts - last_fetch >= WARM_TICK_INTERVAL_SECONDS:
+                warm_due.append(sym)
+                last_tick_fetch_time[sym] = now_ts
+
+        if focus_due:
+            logger.info("Tick focus sweep: %s", ",".join(focus_due))
+            fetch_and_post_ticks(focus_due, max_retries=1)
+
+        if warm_due:
+            logger.info("Tick warm sweep: %s", ",".join(warm_due))
+            fetch_and_post_ticks(warm_due, max_retries=1)
             
         await asyncio.sleep(5)
 

@@ -39,3 +39,43 @@
   2. 本地 `/api/sandbox/review_data` 连续返回真实区间数据（无 404 / 无预置回退）；
   3. 复盘页主区与累计区在 1-2 月窗口通过一次回归冒烟。
 - 关联任务：`CHG-20260311-08`
+
+## T-006 Sandbox V2 股票池首构建（数据源短时断连）
+- 状态：`DONE`（2026-03-11）
+- 当前事实：
+  - V2 代码与接口已就绪（`/api/sandbox/pool` + 1m 分库存储）。
+  - 已新增 fallback（`stock_info_a_code_name/stock_zh_a_spot` + `stock_individual_info_em`）并在 Windows 成功落地。
+- 结果回填：
+  1. 股票池数量：`2788`（`as_of_date=2026-03-11`）；
+  2. 冒烟回放：`run_id=1`，`symbol_count=20`，`total_rows=1317759`，`failed_count=0`；
+  3. 当前样本占用：`data/sandbox` 约 `231.25MB`。
+- 关联任务：`CHG-20260311-09`
+
+## T-007 Sandbox V2 全量回放与云端可用打通
+- 状态：`DONE`
+- 当前事实：
+  - Windows 已完成 `2025-01-01 ~ 2026-02-28` 全量 5m 回放，总控状态为 `done`；
+  - 云端已完成 `data/sandbox/review_v2/` 首轮全量同步，`/api/sandbox/pool` 与 `/api/sandbox/review_data` 均可返回真实数据；
+  - 已定位并修复“云端数据文件存在但接口空数组”的根因：容器内仍加载旧版 1m 查询模块，重建前后端容器后恢复正常。
+- 解除条件：
+  1. Windows 完成全量 `sandbox_review_v2_run_all_months.py`（一次启动、逐月逆序、按 `symbol+trade_date` 续跑），失败清单可追溯；
+  2. `data/sandbox/review_v2/` 首轮同步到云端完成；
+  3. 云端部署后 `/api/sandbox/pool` 与 `/api/sandbox/review_data` 可用，复盘页可正常查询。
+- 结果回填：
+  1. 股票池固定为 `2788`（`as_of_date=2026-03-11`），云端 symbol 分库首轮同步数为 `2789`（额外包含人工补跑样本 `sz000759`）；
+  2. 云端目录 `data/sandbox/review_v2/` 占用约 `7.9G`；
+  3. `sz000833/sz000759` 在 `2026-01-01 ~ 2026-02-28` 查询已可正常返回真实 5m 数据（接口层去重后为 `1666` 条）。
+- 关联任务：`CHG-20260311-09`
+
+## T-008 生产盯盘二态发布联动
+- 状态：`BLOCKED`
+- 当前事实：
+  - 本地代码已完成“盯盘二态 + 静默刷新 + focus/warm 心跳分层”改造，并通过 `pytest` / `npm run build`。
+  - 线上 Windows crawler 仍是旧版活跃队列逻辑；若仅单独发布云端后端，需要依赖爬虫兼容逻辑兜底。
+  - sandbox review 模块的数据准备、云端同步与联调已完成；当前阻塞已收敛为“你尚未要求正式发布”，因此继续保持 BLOCKED，不进入生产窗口。
+- 解除条件：
+  1. 云端后端与前端同步部署新版本；
+  2. Windows `live_crawler_win.py` 同批更新为 `focus=5秒 / warm=30秒 / watchlist=15分钟`；
+  3. 明确开启正式发布窗口；
+  4. 生产实测确认实时页在周期刷新时无“先清空后回显”闪烁。
+- 关联任务：`CHG-20260312-02`

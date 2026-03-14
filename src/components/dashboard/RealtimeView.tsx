@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Layers } from 'lucide-react';
 import { LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
-import { RealTimeQuote, TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
+import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData } from '../../types';
 import * as StockService from '../../services/stockService';
 import SentimentTrend from './SentimentTrend';
 
 interface RealtimeViewProps {
     activeStock: SearchResult | null;
-    quote: RealTimeQuote | null;
     isTradingHours: () => boolean;
     configVersion?: number;
-    focusMode?: 'normal' | 'observe' | 'focus';
+    focusMode?: 'normal' | 'focus';
 }
 
-const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configVersion, focusMode = 'normal' }) => {
+const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion, focusMode = 'normal' }) => {
     // State
     const [displayTicks, setDisplayTicks] = useState<TickData[]>([]);
     const [chartData, setChartData] = useState<CapitalRatioData[]>([]);
@@ -23,6 +22,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
     const [lastUpdated, setLastUpdated] = useState<string>('');
     const [displayDate, setDisplayDate] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<string>('');
+    const requestSeqRef = useRef(0);
 
     // Thresholds (Loaded from Backend)
     const [thresholds, setThresholds] = useState({ large: 200000, superLarge: 1000000 });
@@ -57,23 +57,34 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
 
         let isMounted = true;
 
-        // 策略A：前端发送心跳，激活后端注册表的追踪
-        StockService.sendHeartbeat(activeStock.symbol);
-        const heartbeatInterval = setInterval(() => {
-            if (isMounted) StockService.sendHeartbeat(activeStock.symbol);
-        }, 10000); // Send heartbeat every 10 seconds
+        const heartbeatMode = focusMode === 'focus' ? 'focus' : 'warm';
+        const enableRealtimeTracking = !selectedDate;
+
+        let heartbeatInterval: any = null;
+        if (enableRealtimeTracking) {
+            // 策略A：前端发送心跳，激活后端注册表的追踪
+            StockService.sendHeartbeat(activeStock.symbol, heartbeatMode);
+            heartbeatInterval = setInterval(() => {
+                if (isMounted) StockService.sendHeartbeat(activeStock.symbol, heartbeatMode);
+            }, 10000); // Send heartbeat every 10 seconds
+        }
 
         let intervalId: any = null;
 
         const fetchData = async () => {
             if (!isMounted || isFetchingRef.current) return;
+            const requestSeq = ++requestSeqRef.current;
             isFetchingRef.current = true;
             if (chartData.length > 0) setIsRefreshing(true); // Only show breathing text if we already have data
             try {
                 // Fetch pre-calculated dashboard data from backend
                 const data = await StockService.fetchRealtimeDashboard(activeStock.symbol, selectedDate);
 
-                if (isMounted && data) {
+                if (!isMounted || requestSeq !== requestSeqRef.current) {
+                    return;
+                }
+
+                if (data) {
                     // Update Chart Data (Full Series)
                     const processedChart = (data.chart_data || []).map((d: any) => ({
                         ...d,
@@ -100,8 +111,8 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                     if (data.display_date) {
                         setDisplayDate(data.display_date);
                     }
-                } else if (isMounted && !data && selectedDate) {
-                    // If no data found for a selected historical date, clear the chart to show empty state
+                } else if (selectedDate) {
+                    // Historical empty state clears the canvas; realtime polling keeps stale data visible.
                     setChartData([]);
                     setCumulativeData([]);
                     setDisplayTicks([]);
@@ -117,9 +128,11 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
 
         fetchData();
 
-        // Polling interval based on focus mode
-        const intervalMs = focusMode === 'focus' ? 15000 : (focusMode === 'observe' ? 60000 : 5000);
-        intervalId = setInterval(fetchData, intervalMs);
+        if (enableRealtimeTracking) {
+            // Quiet refresh: focus=5s, normal=30s.
+            const intervalMs = focusMode === 'focus' ? 5000 : 30000;
+            intervalId = setInterval(fetchData, intervalMs);
+        }
 
         return () => {
             isMounted = false;
@@ -183,8 +196,6 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
         return days[new Date(dateStr).getDay()];
     };
 
-    if (!quote) return null;
-
     return (
         <div className="space-y-2">
             {/* Top Row: Main Chart (Full Width) */}
@@ -195,8 +206,8 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, quote, configV
                             <TrendingUp className="w-4 h-4 text-blue-400" />
                             主力动态 (实时)
                             {isRefreshing && (
-                                <span className={`text-[10px] font-normal ml-1 animate-pulse ${focusMode === 'focus' ? 'text-red-400' : 'text-blue-400'}`}>
-                                    更新中...
+                                <span className={`text-[10px] font-normal ml-1 animate-pulse ${focusMode === 'focus' ? 'text-red-300' : 'text-sky-300'}`}>
+                                    静默刷新中...
                                 </span>
                             )}
                             <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded ml-2">

@@ -5,6 +5,90 @@
 
 ---
 
+## 2026-03-14 13:16 | 后端 AI
+- Task ID: `CHG-20260314-01`
+- CAP: `CAP-MKT-TIME`
+- 结论: 已修复周末/非交易日“当日分时”空白问题；`/api/realtime/dashboard` 现仅在“自然日当天且为交易日”时走实时 ticks 聚合，回溯到上一交易日时改走 `history_1m` 静态回放。
+- 风险: 若指定日期本身无 `history_1m` 预聚合数据，接口仍会按契约返回 404；这属于数据缺失，不再误判为实时路径问题。
+- 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/changes/MOD-20260314-01-weekend-intraday-backfill-fix.md`
+
+## 2026-03-14 13:08 | 后端 AI
+- Task ID: `CHG-20260311-09`
+- CAP: `CAP-SANDBOX-REVIEW`, `CAP-WIN-PIPELINE`
+- 结论: Windows V2 全月份总控已完成，`data/sandbox/review_v2/` 已全量同步到云端；同时定位并修复云端容器仍使用旧版 1m `sandbox_review_v2_db.py` 的问题，重建前后端后 `/api/sandbox/pool` 与 `/api/sandbox/review_data` 已可返回真实 sandbox 数据。
+- 风险: 少数日期与第三方终端仍可能存在集合竞价口径差异；当前沙盒验收以 `D:\\MarketData` 原始逐笔为准。另有一只人工补跑样本 `sz000759` 在云端可查，但不计入 2788 固定股票池。
+- 链接: `backend/app/db/sandbox_review_v2_db.py`, `backend/app/routers/sandbox_review.py`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/REQ-20260311-02-sandbox-review-v2-production-isolated.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-13 00:12 | 后端 AI
+- Task ID: `CHG-20260312-04`
+- CAP: `CAP-WIN-PIPELINE`
+- 结论: 已新增 Mac 本地检查脚本 `check_windows_review_v2_progress.py`，可一条命令查看 Windows 全月份总控的任务状态、进程、状态文件与日志尾部。
+- 风险: 该脚本依赖 Mac->Windows SSH/Tailscale 联通；若网络不通，会直接在输出中暴露失败信息。
+- 链接: `check_windows_review_v2_progress.py`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-13 00:05 | 后端 AI
+- Task ID: `CHG-20260312-04`
+- CAP: `CAP-SANDBOX-REVIEW`, `CAP-WIN-PIPELINE`
+- 结论: 已在 Windows 完成从 `SandboxBackfillMonth202602` 到 `SandboxBackfillAllMonths` 的无损切换：旧单月任务已停掉并禁用，新总控已启动，当前继续在 `2026-02` 上按 `--resume` 接管，后续会自动推进到 `2025-01`。
+- 风险: 计划任务自身会迅速回到“就绪”态，但总控 Python 进程仍在服务会话中持续运行；后续验真应以 `run_all_months_latest.json`、`run_all_months.out.log` 和 Python PID 为准。
+- 链接: `backend/scripts/sandbox_review_v2_run_all_months.py`, `docs/changes/MOD-20260312-02-sandbox-review-v2-all-months-runner.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-12 23:22 | 后端 AI
+- Task ID: `CHG-20260312-04`
+- CAP: `CAP-SANDBOX-REVIEW`, `CAP-WIN-PIPELINE`
+- 结论: 已新增 V2 全月份总控脚本 `sandbox_review_v2_run_all_months.py`，支持一次启动后自动按 `2026-02 -> 2025-01` 串行回放；默认 `partial_done` 停机，全部完成后仅停在 `done` 态，不自动同步云端或发布。
+- 风险: 当前 Windows 仍在运行 `2026-02` 单月任务；总控脚本已就绪，但应等待现任务结束后再切换，避免并发打架。
+- 链接: `backend/scripts/sandbox_review_v2_run_all_months.py`, `backend/app/db/sandbox_review_v2_db.py`, `docs/changes/MOD-20260312-02-sandbox-review-v2-all-months-runner.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-12 23:05 | 后端 AI
+- Task ID: `CHG-20260312-03`
+- CAP: `CAP-WIN-PIPELINE`
+- 结论: 已新增外部 Skill `mac-windows-ops-bridge`，并将 Mac 控 Windows 长任务执行/验真 SOP 回填到 `04_OPS_AND_DEV`。
+- 风险: Skill 位于本地共享 skills 目录，不受 repo 版本控制；若本机 skill 根目录迁移，需要重新确认可发现性。
+- 链接: `/Users/dong/Desktop/AIGC/skills/mac-windows-ops-bridge/SKILL.md`, `docs/changes/CFG-20260312-03-mac-windows-ops-bridge-skill.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-12 18:30 | 后端 AI
+- Task ID: `CHG-20260312-02`
+- CAP: `CAP-REALTIME-FLOW`
+- 结论: 已完成生产实时页“盯盘二态 + 静默刷新”代码收口：前端改为 `盯盘开=5s / 关闭=30s`，`heartbeat` 升级为 `focus/warm` 分层，Windows crawler 同步升级为 focus/warm 双层 tick 策略。
+- 风险: 当前仅完成本地代码与文档收口，按你的要求暂不单独发布；已登记 `T-008`，等待复盘模块一并进入同一发布窗口。
+- 链接: `src/App.tsx`, `src/components/dashboard/RealtimeView.tsx`, `backend/app/routers/monitor.py`, `backend/app/services/monitor.py`, `backend/scripts/live_crawler_win.py`, `docs/changes/MOD-20260312-01-realtime-focus-quiet-refresh.md`
+
+## 2026-03-12 13:20 | 后端 AI
+- Task ID: `CHG-20260312-01`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已远程在 Windows 以计划任务 `SandboxBackfill5m` 启动全量5m长跑（`workers=8,min-workers=6,mem=75,shard=1000,resume`），任务持续运行中；最新日志进度为 `shard=1/3 2025-02-11`。
+- 风险: 当前仍受 Windows→云端大文件同步超时影响，任务完成后需优先做断点续传/分片同步，否则云端仍可能“接口可用但数据不全”。
+- 链接: `backend/scripts/sandbox_review_v2_backfill.py`, `docs/changes/REQ-20260311-02-sandbox-review-v2-production-isolated.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-12 00:15 | 后端 AI
+- Task ID: `CHG-20260312-01`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 按新决策将 V2 回放收敛为 5m 底层持久化（取消 1m 持久层），并升级回放脚本为“自动分片 + `--resume` 续跑 + Windows 内存阈值动态并发”，默认高压参数 `workers=8/min-workers=6`。
+- 风险: 全量 2788 只长跑耗时仍较长；Windows→云端同步需改为断点续传/分片，否则大文件回传可能超时中断。
+- 链接: `backend/scripts/sandbox_review_v2_backfill.py`, `backend/app/db/sandbox_review_v2_db.py`, `docs/changes/REQ-20260311-02-sandbox-review-v2-production-isolated.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-11 22:35 | 后端 AI
+- Task ID: `CHG-20260311-09`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 云端后端已补齐并生效 sandbox 模块（`main.py` 注册 + `sandbox_review` 路由 + V1/V2 db 模块）；外网验证 `/api/sandbox/pool` 与 `/api/sandbox/review_data` 均返回 `200`，404 已解除。
+- 风险: 云端目前仅“接口可用”，但数据仍为空；Windows 样本包（约57MB）回传中出现超时，需改为分片/断点续传同步。
+- 链接: `backend/app/main.py`, `backend/app/routers/sandbox_review.py`, `backend/app/db/sandbox_review_db.py`, `backend/app/db/sandbox_review_v2_db.py`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-11 22:05 | 后端 AI
+- Task ID: `CHG-20260311-09`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: V2 数据链路已在 Windows 跑通：股票池首快照落地 **2788** 只（50-300亿、沪深A、排除ST），并完成 20 只样本 1m 回放（`run_id=1`，`total_rows=1317759`，`failed=0`）。
+- 风险: 云端当前版本缺少 `sandbox_review` 路由文件，仍会触发 `/api/sandbox/*` 404；全量 2788 只回放尚未完成，仅完成样本批次。
+- 链接: `backend/scripts/sandbox_review_v2_pool.py`, `backend/scripts/sandbox_review_v2_backfill.py`, `docs/changes/REQ-20260311-02-sandbox-review-v2-production-isolated.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-11 20:30 | 后端 AI
+- Task ID: `CHG-20260311-09`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 复盘模块 V2 首轮代码已落地：新增 V2 分库存储（`data/sandbox/review_v2`）、股票池接口 `/api/sandbox/pool`、`review_data` 粒度扩展、前端可选股/可选时间执行查询，以及池子构建/1m回放/容量审计脚本。
+- 风险: 行情源短时断连会导致池子首次构建失败；当前脚本已加重试，但“首次数量”仍待在 Windows 节点成功跑通后回填。
+- 链接: `backend/app/db/sandbox_review_v2_db.py`, `backend/app/routers/sandbox_review.py`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/REQ-20260311-02-sandbox-review-v2-production-isolated.md`
+
 ## 2026-03-11 17:10 | 后端 AI
 - Task ID: `CHG-20260311-08`
 - CAP: `CAP-SANDBOX-REVIEW`

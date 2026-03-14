@@ -2,7 +2,7 @@ import asyncio
 import logging
 import json
 from datetime import datetime
-from typing import List, Set
+from typing import Any, Dict, List, Optional, Set
 from backend.app.db.crud import get_watchlist_items, save_sentiment_snapshot
 from backend.app.core.http_client import HTTPClient, MarketClock
 from backend.app.services.market import fetch_live_ticks
@@ -11,30 +11,56 @@ logger = logging.getLogger(__name__)
 
 class HeartbeatRegistry:
     def __init__(self):
-        # Dictionary mapping symbol to last heartbeat timestamp
-        self.active_watchers: Dict[str, datetime] = {}
+        # Track realtime viewers by symbol, split into focus/warm tiers.
+        self.active_watchers: Dict[str, Dict[str, Any]] = {}
         self.timeout_seconds = 30
 
-    def register_heartbeat(self, symbol: str):
-        self.active_watchers[symbol] = datetime.now()
-        logger.debug(f"Heartbeat registered for {symbol}")
+    def register_heartbeat(self, symbol: str, mode: str = "warm"):
+        normalized_mode = "focus" if mode == "focus" else "warm"
+        self.active_watchers[symbol] = {
+            "last_seen": datetime.now(),
+            "mode": normalized_mode,
+        }
+        logger.debug("Heartbeat registered for %s [%s]", symbol, normalized_mode)
 
-    def get_active_symbols(self) -> List[str]:
+    def _collect_active(self) -> Dict[str, List[str]]:
         now = datetime.now()
-        active = []
-        # Evict stale entries while collecting active ones
-        stale_symbols = []
-        for symbol, last_seen in self.active_watchers.items():
-            if (now - last_seen).total_seconds() <= self.timeout_seconds:
-                active.append(symbol)
-            else:
+        focus_symbols: List[str] = []
+        warm_symbols: List[str] = []
+        stale_symbols: List[str] = []
+
+        for symbol, watcher in self.active_watchers.items():
+            last_seen: Optional[datetime] = watcher.get("last_seen")
+            mode = watcher.get("mode", "warm")
+            if not last_seen or (now - last_seen).total_seconds() > self.timeout_seconds:
                 stale_symbols.append(symbol)
-                
+                continue
+
+            if mode == "focus":
+                focus_symbols.append(symbol)
+            else:
+                warm_symbols.append(symbol)
+
         for symbol in stale_symbols:
             del self.active_watchers[symbol]
-            logger.info(f"Evicted {symbol} from ActiveWatchers due to timeout")
-            
-        return active
+            logger.info("Evicted %s from ActiveWatchers due to timeout", symbol)
+
+        return {
+            "focus_symbols": sorted(focus_symbols),
+            "warm_symbols": sorted(warm_symbols),
+        }
+
+    def get_active_symbols(self) -> List[str]:
+        tiers = self._collect_active()
+        return tiers["focus_symbols"] + tiers["warm_symbols"]
+
+    def get_active_snapshot(self) -> Dict[str, List[str]]:
+        tiers = self._collect_active()
+        return {
+            "focus_symbols": tiers["focus_symbols"],
+            "warm_symbols": tiers["warm_symbols"],
+            "all_symbols": tiers["focus_symbols"] + tiers["warm_symbols"],
+        }
 
 heartbeat_registry = HeartbeatRegistry()
 
