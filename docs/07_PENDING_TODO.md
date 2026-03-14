@@ -70,12 +70,9 @@
 ## T-008 生产盯盘二态发布联动
 - 状态：`BLOCKED`
 - 当前事实：
-  - 本地代码已完成“盯盘二态 + 静默刷新 + focus/warm 心跳分层”改造，并通过 `pytest` / `npm run build`。
-  - 线上 Windows crawler 仍是旧版活跃队列逻辑；若仅单独发布云端后端，需要依赖爬虫兼容逻辑兜底。
-  - sandbox review 模块的数据准备、云端同步与联调已完成；当前阻塞已收敛为“你尚未要求正式发布”，因此继续保持 BLOCKED，不进入生产窗口。
+  - 云端前后端已发布到 `v4.2.12`，其中 sandbox review 模块保持线上沙盒可用，周末“当日分时”回溯空白问题已修复。
+  - 线上 Windows crawler 仍未同步到新的 `focus=5秒 / warm=30秒 / watchlist=15分钟` 逻辑；当前生产能运行，但盯盘二态还未形成完整端到端闭环。
 - 解除条件：
-  1. 云端后端与前端同步部署新版本；
-  2. Windows `live_crawler_win.py` 同批更新为 `focus=5秒 / warm=30秒 / watchlist=15分钟`；
-  3. 明确开启正式发布窗口；
-  4. 生产实测确认实时页在周期刷新时无“先清空后回显”闪烁。
+  1. Windows `live_crawler_win.py` 同步更新为 `focus=5秒 / warm=30秒 / watchlist=15分钟`；
+  2. 生产实测确认实时页在周期刷新时无“先清空后回显”闪烁。
 - 关联任务：`CHG-20260312-02`

@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-14 13:47 | 后端 AI
+- Task ID: `CHG-20260314-01`
+- CAP: `CAP-MKT-TIME`
+- 结论: 已发布 `v4.2.12` 到云端生产；修复周末/非交易日“当日分时”回溯为空的问题，路径改为“优先 history_1m，缺失则回退到该日 trade_ticks 聚合”。线上冒烟：`/api/health` 正常，`/api/realtime/dashboard?symbol=sz000833` 返回 `display_date=2026-03-13` 且 `chart_data=241`。
+- 风险: 当前仅云端前后端已发，Windows crawler 的 focus/warm 新逻辑尚未同步，`T-008` 继续保留为阻塞项。
+- 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/changes/MOD-20260314-01-weekend-intraday-backfill-fix.md`, `src/version.ts`
+
 ## 2026-03-14 13:16 | 后端 AI
 - Task ID: `CHG-20260314-01`
 - CAP: `CAP-MKT-TIME`

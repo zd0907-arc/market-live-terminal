@@ -33,6 +33,8 @@
 ## 5. 验证记录
 - `2026-03-14 13:15`：`PYTHONPATH=/Users/dong/Desktop/AIGC/market-live-terminal ./.venv/bin/pytest -q backend/tests/test_market_clock.py backend/tests/test_realtime_dashboard_router.py backend/tests/test_monitor_heartbeat.py backend/tests/test_sandbox_review_v2.py` 通过（15/15）。
 - `2026-03-14 13:16`：`npm run build` 通过。
+- `2026-03-14 13:46`（云端）：`/api/health` 返回 `{"status":"ok"}`。
+- `2026-03-14 13:47`（云端）：周末回溯冒烟通过：`/api/realtime/dashboard?symbol=sz000833` 返回 `code=200`、`display_date=2026-03-13`、`chart_data=241`、`latest_ticks=50`。
 
 ## 6. 风险与回滚
 - 风险：
@@ -45,3 +47,4 @@
 ## 7. 结果回填
 - 预期结果：周末/节假日打开“当日分时”时，页面显示回溯模式标签，并正常展示上一交易日分时；若该交易日尚未预聚合到 `history_1m`，也不会再空白。
 - 联动说明：该改动不影响 sandbox review 模块；仅修复生产分时主链路的日期判定。
+- 发布结果：已随 `v4.2.12` 发到云端生产；线上 sandbox review 入口与现有功能保持不变。
