@@ -33,6 +33,13 @@
 - 风险: 当前仅完成文档冻结，未进入实现；由于 `2026-03` 全月正式数据尚未入库，副图默认视窗、tooltip 密度与空态策略都还不能做真实样本校正。
 - 链接: `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`, `docs/07_PENDING_TODO.md`, `docs/02_BUSINESS_DOMAIN.md`
 
+## 2026-03-15 01:28 | Codex
+- Task ID: `CHG-20260315-01`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成历史多维副图第一版实现：在现有“价格 + 绝对买卖对比”主图下新增“净流入对比 + 买卖力度分离”两张副图，且四个粒度 `5m/30m/1h/日` 统一复用 `/api/history/multiframe` 前端派生；构建已通过。
+- 风险: 当前实现仍缺 `2026-03` 全月正式 L2 数据做大样本校正，后续需继续微调默认视窗、tooltip 信息密度与空值/未结算提示，避免在高密度样本下可读性下降。
+- 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`, `docs/07_PENDING_TODO.md`
+
 ## 2026-03-14 23:20 | Codex
 - Task ID: `CHG-20260314-08`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
