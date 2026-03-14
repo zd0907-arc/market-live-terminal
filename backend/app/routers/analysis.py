@@ -1,19 +1,215 @@
 from datetime import datetime
+from typing import Dict, List, Optional
 
 import pandas as pd
 from fastapi import APIRouter
 from backend.app.models.schemas import APIResponse, AggregateResult
 from backend.app.services.market import get_sina_money_flow, get_sina_kline
-from backend.app.services.analysis import perform_aggregation
+from backend.app.services.analysis import perform_aggregation, refresh_realtime_preview
 from backend.app.db.crud import get_local_history_data, get_app_config, get_history_30m
 from backend.app.core.time_buckets import map_to_30m_bucket_start
 from backend.app.core.trade_side import is_buy_series, is_sell_series
 from backend.app.core.http_client import MarketClock
-from backend.app.db.l2_history_db import query_l2_history_analysis, query_l2_history_trend
+from backend.app.core.config import MOCK_DATA_DATE
+from backend.app.db.l2_history_db import (
+    ALLOWED_L2_HISTORY_GRANULARITIES,
+    aggregate_l2_history_5m_rows,
+    query_l2_history_5m_rows,
+    query_l2_history_analysis,
+    query_l2_history_daily_rows,
+    query_l2_history_trend,
+)
+from backend.app.db.realtime_preview_db import (
+    aggregate_realtime_5m_preview_rows,
+    query_realtime_5m_preview_rows,
+    query_realtime_daily_preview_row,
+)
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _normalize_multiframe_granularity(granularity: str) -> str:
+    value = str(granularity or "30m").strip().lower()
+    aliases = {
+        "day": "1d",
+        "daily": "1d",
+        "d": "1d",
+        "60m": "1h",
+    }
+    value = aliases.get(value, value)
+    if value not in ALLOWED_L2_HISTORY_GRANULARITIES:
+        raise ValueError(f"granularity 仅支持: {', '.join(sorted(ALLOWED_L2_HISTORY_GRANULARITIES))}")
+    return value
+
+
+def _get_natural_today_str() -> str:
+    if MOCK_DATA_DATE:
+        return MOCK_DATA_DATE
+    return MarketClock._now_china().strftime("%Y-%m-%d")
+
+
+def _map_finalized_intraday_row(row: Dict[str, object], granularity: str) -> Dict[str, object]:
+    return {
+        "datetime": str(row["datetime"]),
+        "trade_date": str(row["source_date"]),
+        "granularity": granularity,
+        "open": float(row["open"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "close": float(row["close"]),
+        "total_amount": float(row["total_amount"]),
+        "l1_main_buy": float(row["l1_main_buy"]),
+        "l1_main_sell": float(row["l1_main_sell"]),
+        "l1_super_buy": float(row["l1_super_buy"]),
+        "l1_super_sell": float(row["l1_super_sell"]),
+        "l2_main_buy": float(row["l2_main_buy"]),
+        "l2_main_sell": float(row["l2_main_sell"]),
+        "l2_super_buy": float(row["l2_super_buy"]),
+        "l2_super_sell": float(row["l2_super_sell"]),
+        "source": "l2_history",
+        "is_finalized": True,
+        "preview_level": None,
+        "fallback_used": False,
+    }
+
+
+def _map_finalized_daily_row(row: Dict[str, object]) -> Dict[str, object]:
+    trade_date = str(row["date"])
+    return {
+        "datetime": f"{trade_date} 15:00:00",
+        "trade_date": trade_date,
+        "granularity": "1d",
+        "open": float(row["open"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "close": float(row["close"]),
+        "total_amount": float(row["total_amount"]),
+        "l1_main_buy": float(row["l1_main_buy"]),
+        "l1_main_sell": float(row["l1_main_sell"]),
+        "l1_super_buy": float(row["l1_super_buy"]),
+        "l1_super_sell": float(row["l1_super_sell"]),
+        "l2_main_buy": float(row["l2_main_buy"]),
+        "l2_main_sell": float(row["l2_main_sell"]),
+        "l2_super_buy": float(row["l2_super_buy"]),
+        "l2_super_sell": float(row["l2_super_sell"]),
+        "source": "l2_history",
+        "is_finalized": True,
+        "preview_level": None,
+        "fallback_used": False,
+    }
+
+
+def _map_preview_intraday_row(row: Dict[str, object], granularity: str) -> Dict[str, object]:
+    return {
+        "datetime": str(row["datetime"]),
+        "trade_date": str(row["trade_date"]),
+        "granularity": granularity,
+        "open": float(row["open"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "close": float(row["close"]),
+        "total_amount": float(row["total_amount"]),
+        "l1_main_buy": float(row["l1_main_buy"]),
+        "l1_main_sell": float(row["l1_main_sell"]),
+        "l1_super_buy": float(row["l1_super_buy"]),
+        "l1_super_sell": float(row["l1_super_sell"]),
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "source": str(row["source"]),
+        "is_finalized": False,
+        "preview_level": str(row["preview_level"]),
+        "fallback_used": False,
+    }
+
+
+def _map_preview_daily_row(row: Dict[str, object]) -> Dict[str, object]:
+    trade_date = str(row["date"])
+    return {
+        "datetime": f"{trade_date} 15:00:00",
+        "trade_date": trade_date,
+        "granularity": "1d",
+        "open": float(row["open"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "close": float(row["close"]),
+        "total_amount": float(row["total_amount"]),
+        "l1_main_buy": float(row["l1_main_buy"]),
+        "l1_main_sell": float(row["l1_main_sell"]),
+        "l1_super_buy": float(row["l1_super_buy"]),
+        "l1_super_sell": float(row["l1_super_sell"]),
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "source": str(row["source"]),
+        "is_finalized": False,
+        "preview_level": str(row["preview_level"]),
+        "fallback_used": False,
+    }
+
+
+def _today_is_in_requested_window(today_str: str, start_date: Optional[str], end_date: Optional[str]) -> bool:
+    if start_date and today_str < start_date:
+        return False
+    if end_date and today_str > end_date:
+        return False
+    return True
+
+
+def _build_multiframe_rows(
+    symbol: str,
+    granularity: str,
+    days: int = 20,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    include_today_preview: bool = True,
+) -> List[Dict[str, object]]:
+    normalized_granularity = _normalize_multiframe_granularity(granularity)
+
+    if normalized_granularity == "1d":
+        finalized_daily_rows = query_l2_history_daily_rows(
+            symbol,
+            start_date=start_date,
+            end_date=end_date,
+            limit_days=None if (start_date or end_date) else days,
+        )
+        rows = [_map_finalized_daily_row(row) for row in finalized_daily_rows]
+    else:
+        finalized_5m_rows = query_l2_history_5m_rows(
+            symbol,
+            start_date=start_date,
+            end_date=end_date,
+            limit_days=None if (start_date or end_date) else days,
+        )
+        finalized_rows = aggregate_l2_history_5m_rows(finalized_5m_rows, normalized_granularity)
+        rows = [_map_finalized_intraday_row(row, normalized_granularity) for row in finalized_rows]
+
+    if include_today_preview:
+        today_str = _get_natural_today_str()
+        if _today_is_in_requested_window(today_str, start_date, end_date):
+            refresh_realtime_preview(symbol, today_str)
+            existing_trade_dates = {str(item["trade_date"]) for item in rows}
+            existing_datetimes = {str(item["datetime"]) for item in rows}
+            if normalized_granularity == "1d":
+                if today_str not in existing_trade_dates:
+                    preview_daily = query_realtime_daily_preview_row(symbol, today_str)
+                    if preview_daily:
+                        rows.append(_map_preview_daily_row(preview_daily))
+            else:
+                preview_5m_rows = query_realtime_5m_preview_rows(symbol, start_date=today_str, end_date=today_str)
+                if preview_5m_rows:
+                    preview_rows = aggregate_realtime_5m_preview_rows(preview_5m_rows, normalized_granularity)
+                    for row in preview_rows:
+                        mapped = _map_preview_intraday_row(row, normalized_granularity)
+                        if mapped["datetime"] not in existing_datetimes:
+                            rows.append(mapped)
+
+    rows.sort(key=lambda item: str(item["datetime"]))
+    return rows
 
 def _merge_realtime_trend_rows(symbol: str, data: list, today_str: str):
     from backend.app.db.crud import get_ticks_by_date
@@ -136,6 +332,52 @@ def _build_realtime_daily_record(symbol: str, today_str: str):
         "fallback_used": False,
         "preview_level": str(preview_row["preview_level"]),
     }
+
+
+@router.get("/history/multiframe")
+def get_history_multiframe(
+    symbol: str,
+    granularity: str = "30m",
+    days: int = 20,
+    start_date: str = None,
+    end_date: str = None,
+    include_today_preview: bool = True,
+):
+    """
+    新版历史多维统一接口：
+    - finalized 历史来自 history_5m_l2 / history_daily_l2
+    - today preview 来自 realtime_5m_preview / realtime_daily_preview
+    - 返回统一字段，供前端按 granularity 直接切换
+    """
+    try:
+        if not symbol or not symbol.startswith(("sh", "sz", "bj")):
+            return APIResponse(code=400, message="Invalid symbol format")
+        normalized_granularity = _normalize_multiframe_granularity(granularity)
+        rows = _build_multiframe_rows(
+            symbol=symbol,
+            granularity=normalized_granularity,
+            days=max(1, int(days)),
+            start_date=start_date,
+            end_date=end_date,
+            include_today_preview=include_today_preview,
+        )
+        return APIResponse(
+            code=200,
+            data={
+                "symbol": symbol,
+                "granularity": normalized_granularity,
+                "days": max(1, int(days)),
+                "start_date": start_date,
+                "end_date": end_date,
+                "count": len(rows),
+                "items": rows,
+            },
+        )
+    except ValueError as exc:
+        return APIResponse(code=400, message=str(exc), data={"items": []})
+    except Exception as exc:
+        logger.error(f"History multiframe endpoint error: {exc}")
+        return APIResponse(code=500, message=str(exc), data={"items": []})
 
 
 async def _build_sina_history_analysis(symbol: str):

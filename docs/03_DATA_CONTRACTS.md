@@ -256,6 +256,20 @@
 ### 1. 市场数据类 (Market Data)
 *   **`GET /api/history_analysis?symbol=sh600519`**: 返回云端蓄水池里的资金流向历史。
 *   **`GET /api/history/trend?symbol=sh600519&days=20&granularity=30m`**: 返回历史趋势；当前正式支持 `granularity=5m|15m|30m|1h|1d`，其中 `15m/30m/1h/1d` 一律由 `history_5m_l2` 聚合。
+*   **`GET /api/history/multiframe?symbol=sh600519&granularity=30m&days=20`**:
+    - 描述：新版“历史多维”统一接口；
+    - 支持参数：`granularity=5m|15m|30m|1h|1d`（兼容 `day/daily/60m` 别名）、`days`、`start_date`、`end_date`、`include_today_preview`；
+    - 数据来源：
+      - 历史 finalized：`history_5m_l2 / history_daily_l2`
+      - 今日 preview：`realtime_5m_preview / realtime_daily_preview`
+    - 返回结构：`APIResponse.data={"symbol","granularity","days","start_date","end_date","count","items":[...]}`；
+    - `items[*]` 统一字段：
+      - `datetime/trade_date/granularity`
+      - `open/high/low/close/total_amount`
+      - `l1_main_buy/sell`, `l1_super_buy/sell`
+      - `l2_main_buy/sell`, `l2_super_buy/sell`（preview 行为 `null`）
+      - `source/is_finalized/preview_level/fallback_used`
+    - 规则：今日未结算 preview 行必须返回 `is_finalized=false`、`preview_level=l1_only`，不得伪装为正式 L2。
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
     - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若进入历史/回溯日期，则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失，则继续尝试 `history_5m_l2`；若仍缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
     - 响应补充字段：`source`、`is_finalized`、`bucket_granularity`，供前端准确标记“实时 / 历史1m / 正式L2历史5m”。

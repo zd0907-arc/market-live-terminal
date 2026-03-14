@@ -146,10 +146,11 @@
   - 本轮完成文档治理：关闭前序基础阶段卡，迁移未完成项到 `07_PENDING_TODO`；
   - 冻结新版盯盘页的信息架构与数据层方案；
   - 明确 `2026-03` 数据入库后的盯盘/复盘推进顺序；
-  - 已完成 Step 1 数据层落地：新增 `realtime_5m_preview / realtime_daily_preview` schema、CRUD 与实时聚合写入链路。
+  - 已完成 Step 1 数据层落地：新增 `realtime_5m_preview / realtime_daily_preview` schema、CRUD 与实时聚合写入链路；
+  - 已完成 Step 2 统一接口层：新增 `/api/history/multiframe`，统一输出 `5m/15m/30m/1h/1d` 的 finalized + today preview 响应，并显式返回 `source/is_finalized/preview_level/fallback_used`。
 - 遗留问题：
-  1. 新版历史多维统一接口仍未实现；
-  2. 新版前端 IA 仍未从“旧 30m/日线结构”切到“当日分时 + 历史多维”；
+  1. 新版前端 IA 仍未从“旧 30m/日线结构”切到“当日分时 + 历史多维”；
+  2. `5m/30m/1h/日` 共用图层与日线融合视觉还未切到 `/api/history/multiframe`；
   3. 复盘页正式并库仍后置。
 
 ## 11. 归档信息
