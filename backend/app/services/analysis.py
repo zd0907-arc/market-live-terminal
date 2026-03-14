@@ -1,8 +1,15 @@
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from backend.app.models.schemas import TickData
 from backend.app.db.crud import get_ticks_by_date, get_app_config
 from backend.app.db.l2_history_db import query_l2_history_5m_rows
+from backend.app.db.realtime_preview_db import (
+    Realtime5mPreviewRow,
+    RealtimeDailyPreviewRow,
+    replace_realtime_5m_preview_rows,
+    replace_realtime_daily_preview_row,
+    query_realtime_daily_preview_row,
+)
 from backend.app.core.trade_side import (
     is_buy_series,
     is_sell_series,
@@ -15,6 +22,114 @@ import time
 _REALTIME_CACHE = {}
 _REALTIME_CACHE_LOCK = threading.Lock()
 _REALTIME_CACHE_TTL_SECONDS = 2.0
+
+
+def _prepare_tick_dataframe(raw_rows, date_str: str) -> pd.DataFrame:
+    df = pd.DataFrame(raw_rows, columns=['time', 'price', 'volume', 'amount', 'type'])
+    if df.empty:
+        return df
+    df = df[df['time'] <= '15:05:00']
+    if df.empty:
+        return df
+    df = df.sort_values('time', ascending=True).copy()
+    df['datetime'] = pd.to_datetime(date_str + ' ' + df['time'])
+    return df
+
+
+def _build_realtime_preview_rows(
+    symbol: str,
+    date_str: str,
+    raw_rows,
+    large_threshold: float,
+    super_threshold: float,
+) -> Tuple[List[Realtime5mPreviewRow], Optional[RealtimeDailyPreviewRow]]:
+    df = _prepare_tick_dataframe(raw_rows, date_str)
+    if df.empty:
+        return [], None
+
+    df['is_buy'] = is_buy_series(df['type'])
+    df['is_sell'] = is_sell_series(df['type'])
+    df['is_main'] = df['amount'] >= large_threshold
+    df['is_super'] = df['amount'] >= super_threshold
+    df['bucket_time'] = df['datetime'].dt.floor('5min')
+
+    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rows_5m: List[Realtime5mPreviewRow] = []
+
+    for bucket_time, group in df.groupby('bucket_time', sort=True):
+        l1_main_buy = float(group[group['is_main'] & group['is_buy']]['amount'].sum())
+        l1_main_sell = float(group[group['is_main'] & group['is_sell']]['amount'].sum())
+        l1_super_buy = float(group[group['is_super'] & group['is_buy']]['amount'].sum())
+        l1_super_sell = float(group[group['is_super'] & group['is_sell']]['amount'].sum())
+        total_amount = float(group['amount'].sum())
+        rows_5m.append(
+            (
+                symbol,
+                bucket_time.strftime("%Y-%m-%d %H:%M:%S"),
+                date_str,
+                float(group['price'].iloc[0]),
+                float(group['price'].max()),
+                float(group['price'].min()),
+                float(group['price'].iloc[-1]),
+                total_amount,
+                l1_main_buy,
+                l1_main_sell,
+                l1_super_buy,
+                l1_super_sell,
+                "realtime_ticks",
+                "l1_only",
+                updated_at,
+            )
+        )
+
+    l1_main_buy_total = float(df[df['is_main'] & df['is_buy']]['amount'].sum())
+    l1_main_sell_total = float(df[df['is_main'] & df['is_sell']]['amount'].sum())
+    l1_super_buy_total = float(df[df['is_super'] & df['is_buy']]['amount'].sum())
+    l1_super_sell_total = float(df[df['is_super'] & df['is_sell']]['amount'].sum())
+    total_amount = float(df['amount'].sum())
+    daily_row: RealtimeDailyPreviewRow = (
+        symbol,
+        date_str,
+        float(df['price'].iloc[0]),
+        float(df['price'].max()),
+        float(df['price'].min()),
+        float(df['price'].iloc[-1]),
+        total_amount,
+        l1_main_buy_total,
+        l1_main_sell_total,
+        l1_main_buy_total - l1_main_sell_total,
+        l1_super_buy_total,
+        l1_super_sell_total,
+        l1_super_buy_total - l1_super_sell_total,
+        "realtime_ticks",
+        "l1_only",
+        updated_at,
+    )
+    return rows_5m, daily_row
+
+
+def refresh_realtime_preview(symbol: str, date_str: str, raw_rows=None):
+    if raw_rows is None:
+        raw_rows = get_ticks_by_date(symbol, date_str)
+
+    if not raw_rows:
+        replace_realtime_5m_preview_rows(symbol, date_str, [])
+        replace_realtime_daily_preview_row(symbol, date_str, None)
+        return {"rows_5m": 0, "rows_daily": 0}
+
+    config = get_app_config()
+    large_threshold = float(config.get('large_threshold', 500000))
+    super_threshold = float(config.get('super_large_threshold', 1000000))
+    rows_5m, daily_row = _build_realtime_preview_rows(
+        symbol,
+        date_str,
+        raw_rows,
+        large_threshold,
+        super_threshold,
+    )
+    rows_5m_count = replace_realtime_5m_preview_rows(symbol, date_str, rows_5m)
+    rows_daily_count = replace_realtime_daily_preview_row(symbol, date_str, daily_row)
+    return {"rows_5m": rows_5m_count, "rows_daily": rows_daily_count}
 
 
 def _build_realtime_signature(raw_rows, large_threshold: float, super_threshold: float):
@@ -68,11 +183,7 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
 
     # Convert to DataFrame
     # columns: time, price, volume, amount, type
-    df = pd.DataFrame(raw_rows, columns=['time', 'price', 'volume', 'amount', 'type'])
-    
-    # 2. Filter invalid times (post 15:00:05) just in case
-    # Note: time is string "HH:MM:SS"
-    df = df[df['time'] <= '15:05:00']
+    df = _prepare_tick_dataframe(raw_rows, date_str)
     
     if df.empty:
         return {
@@ -81,10 +192,7 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
             "latest_ticks": []
         }
 
-    # 3. Sort by time ascending for calculation
-    df = df.sort_values('time', ascending=True)
-
-    # 4. Prepare Thresholds (From Config)
+    # 3. Prepare Thresholds (From Config)
     config = get_app_config()
     # Default to 500k if not set, as per user request
     LARGE_THRESHOLD = float(config.get('large_threshold', 500000))     
@@ -95,7 +203,10 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
     if cached is not None:
         return cached
 
-    # 5. Group by Minute (HH:MM)
+    # Persist preview layer as a write-through side effect for future multi-frame queries.
+    refresh_realtime_preview(symbol, date_str, raw_rows=raw_rows)
+
+    # 4. Group by Minute (HH:MM)
     df['minute'] = df['time'].str.slice(0, 5)
     
     # Pre-calculate flags
@@ -177,7 +288,7 @@ def calculate_realtime_aggregation(symbol: str, date_str: str) -> Dict:
             "cumSuperNetInflow": running_super_buy - running_super_sell
         })
 
-    # 6. Latest Ticks (Top 50 reversed)
+    # 5. Latest Ticks (Top 50 reversed)
     # df is sorted asc, so tail is latest. We need desc for display.
     latest_df = df.tail(50).iloc[::-1]
     latest_ticks = []

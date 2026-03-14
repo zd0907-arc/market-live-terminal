@@ -15,6 +15,7 @@
 | **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/评论源数据 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
 | **Derived（生产L2历史层）** | `history_5m_l2`, `history_daily_l2`, `l2_daily_ingest_runs`, `l2_daily_ingest_failures` | 仅允许按 `symbol+trade_date` 整日覆盖重写 | 盘后L2正式结算结果（含同源 L1/L2 双派生） |
+| **Derived（盘中预览层）** | `realtime_5m_preview`, `realtime_daily_preview` | 仅允许按 `symbol+trade_date` 整日覆盖重写；只存 preview，不得伪装 finalized | 盘中临时 L1 预览层，服务新版多维历史/当日衔接 |
 | **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等（⚠️ v4.0 起 LLM 配置已迁移至环境变量） |
 
 > **数据一致性原则**：云端 `data/market_data.db` 是唯一权威源（Single Source of Truth）。Mac 本地通过 `sync_cloud_db.sh` 整库下载保持一致。Windows 只负责向云端写入，不保留服务副本。
@@ -132,7 +133,47 @@
   - 重跑以覆盖写为准，不允许产生重复正式记录；
   - 失败记录必须可追溯到文件级。
 
-### 8. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产，V1兼容)
+### 8. `realtime_5m_preview`（盘中 5 分钟预览层）
+> **盘中预览层**：服务新版“当日分时 / 历史多维”在今日场景下的临时 L1 数据，不得与 finalized 历史混用。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `datetime` | `TEXT` | `NOT NULL`，5 分钟桶起点 `%Y-%m-%d %H:%M:%S` |
+| `trade_date` | `TEXT` | `NOT NULL`，交易日 `%Y-%m-%d` |
+| `open/high/low/close` | `REAL` | `NOT NULL` |
+| `total_amount` | `REAL` | `NOT NULL` |
+| `l1_main_buy/sell` | `REAL` | `NOT NULL` |
+| `l1_super_buy/sell` | `REAL` | `NOT NULL` |
+| `source` | `TEXT` | `NOT NULL`，当前固定 `realtime_ticks` |
+| `preview_level` | `TEXT` | `NOT NULL`，当前固定 `l1_only` |
+| `updated_at` | `TEXT` | `NOT NULL` |
+**主键**: `PRIMARY KEY(symbol, datetime)`
+> 说明：
+> - 当前只落 L1 preview，不伪造 L2；
+> - 写入方式为同一 `symbol+trade_date` 覆盖重写；
+> - 后续 `30m/1h` 统一由本表在“今日场景”下聚合。
+
+### 9. `realtime_daily_preview`（盘中日线预览层）
+> **盘中预览层**：服务新版“历史多维=日”在今日未结算场景下的 L1-only 日线。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `date` | `TEXT` | `NOT NULL`，交易日 `%Y-%m-%d` |
+| `open/high/low/close` | `REAL` | `NOT NULL` |
+| `total_amount` | `REAL` | `NOT NULL` |
+| `l1_main_buy/sell/net` | `REAL` | `NOT NULL` |
+| `l1_super_buy/sell/net` | `REAL` | `NOT NULL` |
+| `source` | `TEXT` | `NOT NULL`，当前固定 `realtime_ticks` |
+| `preview_level` | `TEXT` | `NOT NULL`，当前固定 `l1_only` |
+| `updated_at` | `TEXT` | `NOT NULL` |
+**主键**: `PRIMARY KEY(symbol, date)`
+> 说明：
+> - 盘后正式 L2 到位后，次日及以后应统一切回 `history_daily_l2`；
+> - 新版前端必须通过 `is_finalized=false + preview_level=l1_only` 显式识别该层。
+
+### 10. `sandbox_review.db::review_5m_bars` (沙盒复盘专用，非生产，V1兼容)
 > **隔离红线**：该表位于独立数据库 `data/sandbox_review.db`，禁止写入 `data/market_data.db`。
 
 | 字段名 | 数据类型 | 约束 / 备注 |
@@ -148,7 +189,7 @@
 | `source_date` | `TEXT` | `NOT NULL`，源交易日 `%Y-%m-%d` |
 **主键**: `PRIMARY KEY(symbol, datetime)`
 
-### 9. `data/sandbox/review_v2/`（沙盒复盘 V2，云端可访问但与生产库隔离）
+### 11. `data/sandbox/review_v2/`（沙盒复盘 V2，云端可访问但与生产库隔离）
 > **隔离红线**：目录级隔离，所有 V2 数据仅允许落在 `data/sandbox/review_v2/`，不得写入 `data/market_data.db`。
 
 #### 6.1 `meta.db::sandbox_stock_pool`

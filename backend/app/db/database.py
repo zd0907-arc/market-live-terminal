@@ -2,6 +2,7 @@ import sqlite3
 import logging
 from backend.app.core.config import DB_FILE, USER_DB_FILE
 from backend.app.db.l2_history_db import ensure_l2_history_schema
+from backend.app.db.realtime_preview_db import ensure_realtime_preview_schema
 
 logger = logging.getLogger(__name__)
 
@@ -167,3 +168,4 @@ def init_db():
     conn.commit()
     conn.close()
     ensure_l2_history_schema()
+    ensure_realtime_preview_schema()

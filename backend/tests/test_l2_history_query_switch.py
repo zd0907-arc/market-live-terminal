@@ -101,4 +101,5 @@ def test_history_analysis_keeps_today_realtime_overlay(monkeypatch, tmp_path):
     assert [row["date"] for row in resp.data] == ["2026-03-11", "2026-03-12"]
     assert resp.data[-1]["source"] == "realtime_ticks"
     assert resp.data[-1]["is_finalized"] is False
+    assert resp.data[-1]["preview_level"] == "l1_only"
     assert resp.data[-1]["main_buy_amount"] == 300000.0

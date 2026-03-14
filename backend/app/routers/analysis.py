@@ -17,6 +17,7 @@ router = APIRouter()
 
 def _merge_realtime_trend_rows(symbol: str, data: list, today_str: str):
     from backend.app.db.crud import get_ticks_by_date
+    from backend.app.services.analysis import refresh_realtime_preview
 
     config = get_app_config()
     large_th = float(config.get('large_threshold', 200000))
@@ -25,6 +26,8 @@ def _merge_realtime_trend_rows(symbol: str, data: list, today_str: str):
 
     if not ticks:
         return data
+
+    refresh_realtime_preview(symbol, today_str, raw_rows=ticks)
 
     df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
     df['datetime'] = pd.to_datetime(today_str + ' ' + df['time'])
@@ -100,44 +103,38 @@ def _try_l2_history_trend(symbol: str, days: int, granularity: str):
 
 def _build_realtime_daily_record(symbol: str, today_str: str):
     from backend.app.db.crud import get_ticks_by_date
+    from backend.app.db.realtime_preview_db import query_realtime_daily_preview_row
+    from backend.app.services.analysis import refresh_realtime_preview
 
-    config = get_app_config()
-    large_th = float(config.get('large_threshold', 200000))
-    super_th = float(config.get('super_large_threshold', 1000000))
     ticks = get_ticks_by_date(symbol, today_str)
     if not ticks:
         return None
 
-    df = pd.DataFrame(ticks, columns=['time', 'price', 'volume', 'amount', 'type'])
-    if df.empty:
+    refresh_realtime_preview(symbol, today_str, raw_rows=ticks)
+    preview_row = query_realtime_daily_preview_row(symbol, today_str)
+    if not preview_row:
         return None
-    df['is_main'] = df['amount'] >= large_th
-    df['is_super'] = df['amount'] >= super_th
-    b = is_buy_series(df['type'])
-    s = is_sell_series(df['type'])
-    main_buys = df[(df['is_main']) & b]['amount'].sum()
-    main_sells = df[(df['is_main']) & s]['amount'].sum()
-    super_buys = df[(df['is_super']) & b]['amount'].sum()
-    super_sells = df[(df['is_super']) & s]['amount'].sum()
-    total_amount = df['amount'].sum()
-    close_price = df['price'].iloc[0] if not df.empty else 0.0
 
     return {
         "date": today_str,
-        "close": float(close_price),
-        "total_amount": float(total_amount),
-        "main_buy_amount": float(main_buys),
-        "main_sell_amount": float(main_sells),
-        "net_inflow": float(main_buys - main_sells),
-        "super_large_in": float(super_buys),
-        "super_large_out": float(super_sells),
-        "buyRatio": float((main_buys / total_amount * 100) if total_amount > 0 else 0),
-        "sellRatio": float((main_sells / total_amount * 100) if total_amount > 0 else 0),
-        "activityRatio": float(((main_buys + main_sells) / total_amount * 100) if total_amount > 0 else 0),
-        "super_large_ratio": float((super_buys / total_amount * 100) if total_amount > 0 else 0),
-        "source": "realtime_ticks",
+        "open": float(preview_row["open"]),
+        "high": float(preview_row["high"]),
+        "low": float(preview_row["low"]),
+        "close": float(preview_row["close"]),
+        "total_amount": float(preview_row["total_amount"]),
+        "main_buy_amount": float(preview_row["l1_main_buy"]),
+        "main_sell_amount": float(preview_row["l1_main_sell"]),
+        "net_inflow": float(preview_row["l1_main_net"]),
+        "super_large_in": float(preview_row["l1_super_buy"]),
+        "super_large_out": float(preview_row["l1_super_sell"]),
+        "buyRatio": float((float(preview_row["l1_main_buy"]) / float(preview_row["total_amount"]) * 100) if float(preview_row["total_amount"]) > 0 else 0),
+        "sellRatio": float((float(preview_row["l1_main_sell"]) / float(preview_row["total_amount"]) * 100) if float(preview_row["total_amount"]) > 0 else 0),
+        "activityRatio": float(((float(preview_row["l1_main_buy"]) + float(preview_row["l1_main_sell"])) / float(preview_row["total_amount"]) * 100) if float(preview_row["total_amount"]) > 0 else 0),
+        "super_large_ratio": float((float(preview_row["l1_super_buy"]) / float(preview_row["total_amount"]) * 100) if float(preview_row["total_amount"]) > 0 else 0),
+        "source": str(preview_row["source"]),
         "is_finalized": False,
         "fallback_used": False,
+        "preview_level": str(preview_row["preview_level"]),
     }
 
 

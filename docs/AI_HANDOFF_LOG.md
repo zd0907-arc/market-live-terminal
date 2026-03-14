@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-14 23:55 | Codex
+- Task ID: `CHG-20260314-08`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成新版多维历史方案的 Step 1 数据层：新增 `realtime_5m_preview / realtime_daily_preview` 两张 preview 表，并在实时聚合/当日日线 overlay 链路中做写透；当前“今天”的 L1-only 预览值已具备独立存储层，不再只靠接口现场临算。
+- 风险: 当前只是数据层与写入链路，统一查询接口与新版前端 IA 尚未接入；preview 层仍只存 L1，不伪造 L2。`2026-03` 正式 L2 日包全月入库仍待 Windows 下载与清洗完成。
+- 链接: `backend/app/db/realtime_preview_db.py`, `backend/app/services/analysis.py`, `backend/app/routers/analysis.py`, `backend/tests/test_realtime_preview_db.py`, `docs/03_DATA_CONTRACTS.md`
+
 ## 2026-03-14 23:20 | Codex
 - Task ID: `CHG-20260314-08`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
