@@ -412,3 +412,10 @@
 - 结论: 已补强文档/发布治理 Skill，并纠偏“Windows 本机不能跑正式回补”的表述；当前结论冻结为“不可接受的是 Python 父进程分片编排，Windows 本机 OS 级自动控制器仍可作为正式目标方案”。
 - 风险: Windows 本机自动控制器尚未实现；当前正式稳定路径仍是“Windows 数据面 + 外部控制端 8 worker SSH 编排”。
 - 链接: `docs/changes/CFG-20260316-04-skill-hardening-and-windows-l2-ops-decision.md`, `docs/changes/REQ-20260316-05-history-multiframe-monthly-pool-rollout.md`
+
+## 2026-03-16 02:00 | 后端 AI
+- Task ID: `CHG-20260316-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-HISTORY-30M`, `CAP-SANDBOX-REVIEW`
+- 结论: 历史月份扩展路径已进一步收敛为“直接复用 sandbox V2 固定池 5m 产物，按月提升到生产 history L2”，并已新增月度提升脚本、在云端后台启动从 `2026-02 -> 2025-01` 的连续 rollout runner。
+- 风险: 当前云端 runner 正在执行，首个月份 `2026-02` 的完整月报尚未产出；若中途需要停止，可创建 `/home/ubuntu/l2_month_rollout/STOP`。
+- 链接: `backend/scripts/promote_sandbox_review_v2_month.py`, `backend/scripts/run_l2_history_monthly_rollout.py`, `docs/changes/REQ-20260316-05-history-multiframe-monthly-pool-rollout.md`
