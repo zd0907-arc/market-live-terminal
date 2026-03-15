@@ -106,28 +106,72 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
   - 通过 `scp -3 -r` 已完成 `data/sandbox/review_v2/symbols` 从 Windows 到云端的首轮全量同步；
   - 若云端 symbol DB 已存在但 `/api/sandbox/review_data` 仍为空，优先排查容器内是否还在运行旧版 `sandbox_review_v2_db.py`（1m 旧逻辑），必要时同步代码并 `sudo docker compose build backend frontend && sudo docker compose up -d backend frontend`。
 
-### 盘后 L2 正式回补 SOP（设计冻结，待实现）
-当每日盘后 L2 日包进入 Windows 后，正式流程应固定为：
+### 盘后 L2 正式回补 SOP（2026-03-16 修订）
+当前已验证的稳定方案，**不再使用当前这版 `backend/scripts/l2_day_sharded_backfill.py`（Windows Python 父进程 `Popen` 拉多个 shard 子进程）作为主路径**。  
+但这不等于“Windows 不能本机自动跑正式回补”——更准确的结论是：
+- **已验证稳定**：`Windows 数据面 + 常在线控制端 SSH 编排面`
+- **可接受的未来目标**：`Windows 数据面 + Windows 本机 OS 级控制器（Task Scheduler / PowerShell / cmd）`
+- **当前不接受**：`Windows Python 父进程 Popen 编排版 l2_day_sharded_backfill.py`
 
-1. **先归档目录**
-   - 确认数据已放入 `D:\MarketData\YYYYMM\YYYYMMDD\{symbol}` 结构；
-   - 若供应商只给了裸日目录，先完成归档整理。
-2. **先做日包验真**
-   - 使用 `backend/scripts/inspect_daily_l2_package.py` 检查结构、列名、OrderID、样本可读性；
-   - 验真失败的日包不得进入正式回补。
-3. **执行按日回补**
-   - 从同一份日包同时产出 L1/L2 的 `5m + daily` 正式派生结果；
-   - 写入前按 `symbol + trade_date` 执行整日删后重写。
-4. **记录回补状态**
-   - 必须写 `l2_daily_ingest_runs` / `l2_daily_ingest_failures`；
-   - 失败股票、失败文件、错误信息必须可追溯。
-5. **次日历史验真**
-   - 次日从盯盘页历史模式和日K历史模式抽样确认查询已转为正式值。
+也就是说，Windows 端未来仍然可以独立定时完成盘后数据跑数；  
+只是**不能继续依赖当前这版 Python 父进程包办“起 worker + 收结果”的实现**，而应改成 OS 级监督器去拉起多个独立 worker，并以 DB/run 记录做验真与收口。
 
-> 注意：
-> - 原始 `逐笔成交/逐笔委托/行情` 不上云；
-> - 云端只接收正式派生结果；
-> - `15m/30m/1h` 不单独落库，统一由 `5m` 聚合。
+#### A. 角色分工
+1. **Windows（数据面）**
+   - 保存原始包：`D:\MarketData\YYYYMM\YYYYMMDD.7z`
+   - staging：`Z:\l2_stage\YYYYMMDD`
+   - 正式库：`D:\market-live-terminal\data\market_data.db`
+2. **控制端（编排面）**
+   - 当前已验证：Mac 通过多条 SSH 会话直接并发起 worker；
+   - 若要完全无人值守，短期可把同样的 SSH 编排迁到一台常在线控制节点；
+   - 中期也允许改造成 **Windows 本机自动控制器**，但要求：
+     1. worker 彼此独立（每个 worker 独立 `python ... l2_daily_backfill.py --symbols-file ...`）；
+     2. 由 Task Scheduler / PowerShell / cmd 监督进程，而不是 Python 父进程 `Popen` 长时间托管；
+     3. 必须用 `l2_daily_ingest_runs / failures` 做结果验真与汇总；
+     4. staging 清理、repair queue 导出、失败汇总要纳入同一收尾动作。
+   - 不要退回当前 `backend/scripts/l2_day_sharded_backfill.py` 的 Windows 父进程版。
+
+#### B. 每日盘后时序
+1. **16:15 ~ 16:20：日包就绪检查**
+   - 检查 `D:\MarketData\YYYYMM\YYYYMMDD.7z` 已出现；
+   - 连续两次检查文件大小一致后，才允许进入正式流程。
+2. **16:20 ~ 16:25：staging 准备**
+   - 解压到 `Z:\l2_stage\YYYYMMDD`；
+   - 统一按 `YYYYMMDD/{symbol}` 结构整理；
+   - 如需，先跑 `backend/scripts/inspect_daily_l2_package.py` 抽样验真。
+3. **16:25 ~ 17:00：正式回补**
+   - 生成 `worker_*.symbols.txt`；
+   - 当前稳定方案由控制端并发启动 `8` 个 worker；
+   - 若后续切到 Windows 本机自动控制器，也必须维持“8 个独立 worker + DB 轮询验真”的语义，不得退化成单 Python 父进程盲等。
+   - 每个 worker 独立执行：
+     ```bash
+     python backend/scripts/l2_daily_backfill.py Z:\l2_stage\YYYYMMDD \
+       --symbols-file D:\market-live-terminal\.run\l2_shards\YYYYMMDD_worker_N.symbols.txt \
+       --db-path D:\market-live-terminal\data\market_data.db \
+       --mode direct_YYYYMMDD_wN --json
+     ```
+4. **17:00 后：结果汇总**
+   - 汇总 `history_daily_l2 / history_5m_l2` 写入量；
+   - 导出 `l2_daily_ingest_failures`；
+   - 若存在失败/空结果样本，登记 repair queue；
+   - 清理 `Z:\l2_stage\YYYYMMDD`，保留原始 `.7z`。
+5. **次日开盘前抽样**
+   - 对关键 symbol 在盯盘页历史多维 / 日线 / 复盘页做 finalized 冒烟确认。
+
+#### C. Repair Queue 规则
+1. `OrderID` 完全无法对齐 → `hard repair`
+2. `无有效 bar` → `review queue`
+   - 先区分停牌/无成交，还是源包异常；
+   - 这类样本从 `2026-03-15` 起也必须写入 `l2_daily_ingest_failures`，不再允许静默缺口。
+3. 日常验收口径：
+   - 不要求“0 失败”；
+   - 要求“主批次完成 + 失败样本已完整记录 + staging 已清理 + 次日可定向重跑”。
+
+#### D. 运行注意事项
+- 原始 `逐笔成交/逐笔委托/行情` 不上云；
+- 云端只接收正式派生结果；
+- `15m/30m/1h` 不单独落库，统一由 `5m` 聚合；
+- 若某一天出现多次试跑，必须在 `mode` 中保留清晰标识，便于事后复盘区分 probe / fix / direct formal run。
 
 ---
 

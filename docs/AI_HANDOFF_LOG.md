@@ -398,3 +398,17 @@
 - 结论: `v4.2.14` 已发布生产；历史多维三张副图恢复“左超大 / 右主力”真双柱，tooltip 收紧宽度并允许正常换行，生产健康检查与 `sz000833` 历史多维接口抽样通过，前端产物已确认包含版本号 `4.2.14`。
 - 风险: 仍建议你在生产页面实际点开 `5m / 30m / 1h / 日` 各看一遍 tooltip 密度与 hover 手感。
 - 链接: `docs/02_BUSINESS_DOMAIN.md#cap-history-30m`, `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`
+
+## 2026-03-16 01:18 | 文档 AI
+- Task ID: `CHG-20260316-03`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-REALTIME-FLOW`
+- 结论: 已完成新版历史多维从需求、Windows 跑数、质量治理到生产发布的完整复盘，明确三次关键收敛、主要踩坑与后续建议。
+- 风险: 复盘文档不改变线上行为；后续执行项仍需按 `07_PENDING_TODO` 与盘后 Runbook 继续推进。
+- 链接: `docs/changes/MOD-20260316-03-monitor-history-multiframe-and-l2-rollout-retrospective.md`
+
+## 2026-03-16 02:05 | 文档 AI
+- Task ID: `CHG-20260316-04`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-HISTORY-30M`
+- 结论: 已补强文档/发布治理 Skill，并纠偏“Windows 本机不能跑正式回补”的表述；当前结论冻结为“不可接受的是 Python 父进程分片编排，Windows 本机 OS 级自动控制器仍可作为正式目标方案”。
+- 风险: Windows 本机自动控制器尚未实现；当前正式稳定路径仍是“Windows 数据面 + 外部控制端 8 worker SSH 编排”。
+- 链接: `docs/changes/CFG-20260316-04-skill-hardening-and-windows-l2-ops-decision.md`, `docs/changes/REQ-20260316-05-history-multiframe-monthly-pool-rollout.md`
