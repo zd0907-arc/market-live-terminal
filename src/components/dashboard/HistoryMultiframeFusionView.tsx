@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
-import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts';
-import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { CandlestickChart, CustomChart, LineChart, ScatterChart } from 'echarts/charts';
+import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { AlertCircle, Database, RefreshCw } from 'lucide-react';
 
@@ -10,13 +10,12 @@ import { HistoryMultiframeGranularity, HistoryMultiframeItem, SearchResult } fro
 import * as StockService from '../../services/stockService';
 
 echarts.use([
-  BarChart,
   CandlestickChart,
+  CustomChart,
   LineChart,
   ScatterChart,
   DataZoomComponent,
   GridComponent,
-  LegendComponent,
   TooltipComponent,
   CanvasRenderer,
 ]);
@@ -54,6 +53,12 @@ type FusionRow = {
   l2SuperSell: number | null;
 };
 
+type FlowPanelKind = 'absolute' | 'net' | 'ratio';
+
+type CustomSeriesDatum = {
+  value: Array<number | null>;
+};
+
 const LOOKBACK_DAYS: Record<'5m' | '30m' | '1h' | '1d', number> = {
   '5m': 10,
   '30m': 20,
@@ -81,7 +86,11 @@ const COLORS = {
   candleUp: '#EF4444',
   candleDown: '#22C55E',
   border: '#1E293B',
+  zeroLine: '#64748B',
+  quality: '#F59E0B',
 };
+
+const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
@@ -116,6 +125,11 @@ const toNet = (buy: number | null, sell: number | null): number | null => {
 const toRatio = (value: number | null, totalAmount: number | null): number | null => {
   if (value === null || totalAmount === null || !Number.isFinite(totalAmount) || totalAmount <= 0) return null;
   return value / totalAmount * 100;
+};
+
+const formatQualityShort = (value: string | null): string => {
+  if (!value) return '';
+  return value.length > 24 ? `${value.slice(0, 24)}…` : value;
 };
 
 const buildLabel = (row: HistoryMultiframeItem, granularity: HistoryMultiframeGranularity): string => {
@@ -175,6 +189,239 @@ const buildRows = (
   .filter((row): row is FusionRow => !!row)
   .sort((a, b) => a.datetime.localeCompare(b.datetime));
 
+const buildPanelData = (rows: FusionRow[], kind: FlowPanelKind): CustomSeriesDatum[] => rows.map((row, index) => {
+  if (kind === 'net') {
+    return {
+      value: [
+        index,
+        toNet(row.l2SuperBuy, row.l2SuperSell),
+        toNet(row.l1SuperBuy, row.l1SuperSell),
+        toNet(row.l2MainBuy, row.l2MainSell),
+        toNet(row.l1MainBuy, row.l1MainSell),
+      ],
+    };
+  }
+
+  if (kind === 'ratio') {
+    const l2SuperSell = toRatio(row.l2SuperSell, row.totalAmount);
+    const l1SuperSell = toRatio(row.l1SuperSell, row.totalAmount);
+    const l2MainSell = toRatio(row.l2MainSell, row.totalAmount);
+    const l1MainSell = toRatio(row.l1MainSell, row.totalAmount);
+
+    return {
+      value: [
+        index,
+        toRatio(row.l2SuperBuy, row.totalAmount),
+        toRatio(row.l1SuperBuy, row.totalAmount),
+        l2SuperSell === null ? null : -l2SuperSell,
+        l1SuperSell === null ? null : -l1SuperSell,
+        toRatio(row.l2MainBuy, row.totalAmount),
+        toRatio(row.l1MainBuy, row.totalAmount),
+        l2MainSell === null ? null : -l2MainSell,
+        l1MainSell === null ? null : -l1MainSell,
+      ],
+    };
+  }
+
+  return {
+    value: [
+      index,
+      row.l2SuperBuy,
+      row.l1SuperBuy,
+      row.l2SuperSell === null ? null : -row.l2SuperSell,
+      row.l1SuperSell === null ? null : -row.l1SuperSell,
+      row.l2MainBuy,
+      row.l1MainBuy,
+      row.l2MainSell === null ? null : -row.l2MainSell,
+      row.l1MainSell === null ? null : -row.l1MainSell,
+    ],
+  };
+});
+
+const getTooltipPosition = (point: number[], size: { viewSize: number[]; contentSize: number[] }): number[] => {
+  const [x, y] = point;
+  const [viewWidth, viewHeight] = size.viewSize;
+  const [contentWidth, contentHeight] = size.contentSize;
+
+  let left = x + 16;
+  if (left + contentWidth > viewWidth - 12) {
+    left = x - contentWidth - 16;
+  }
+  left = clamp(left, 12, Math.max(12, viewWidth - contentWidth - 12));
+
+  let top = y - contentHeight / 2;
+  if (top + contentHeight > viewHeight - 12) {
+    top = viewHeight - contentHeight - 12;
+  }
+  top = clamp(top, 12, Math.max(12, viewHeight - contentHeight - 12));
+
+  return [left, top];
+};
+
+const buildTooltipHtml = (row: FusionRow): string => {
+  const renderValueRow = (label: string, l2Value: number | null, l1Value: number | null, colors: [string, string], formatter: (v: number | null) => string) => `
+    <div style="display:grid;grid-template-columns:58px minmax(0,1fr) minmax(0,1fr);align-items:start;gap:8px;line-height:1.45;">
+      <span style="color:#94A3B8;">${label}</span>
+      <span style="display:inline-flex;align-items:flex-start;gap:4px;color:#E2E8F0;min-width:0;white-space:normal;word-break:break-word;">
+        <span style="display:inline-block;width:8px;height:8px;background:${colors[0]};border-radius:2px;flex:0 0 auto;margin-top:4px;"></span>
+        <span><span style="color:#94A3B8;">L2</span> ${formatter(l2Value)}</span>
+      </span>
+      <span style="display:inline-flex;align-items:flex-start;gap:4px;color:#E2E8F0;min-width:0;white-space:normal;word-break:break-word;">
+        <span style="display:inline-block;width:8px;height:8px;background:${colors[1]};border-radius:2px;flex:0 0 auto;margin-top:4px;"></span>
+        <span><span style="color:#94A3B8;">L1</span> ${formatter(l1Value)}</span>
+      </span>
+    </div>
+  `;
+
+  const statusBadges = [
+    row.isPreviewOnly ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.25);color:#FCD34D;">未结算</span>' : '',
+    row.isPlaceholder ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);color:#BFDBFE;">缺失占位</span>' : '',
+    row.fallbackUsed ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.2);color:#CBD5E1;">fallback</span>' : '',
+  ].filter(Boolean).join('');
+
+  const notices = [
+    row.isPreviewOnly ? '当前仅 L1 实时口径，L2 待盘后覆盖。' : '',
+    row.qualityInfo ? `质量提示：${row.qualityInfo}` : '',
+  ].filter(Boolean);
+
+  return `
+    <div style="width:348px;max-width:348px;color:#E2E8F0;white-space:normal;word-break:break-word;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#F8FAFC;">${row.datetime}</div>
+          <div style="margin-top:4px;font-size:12px;color:#94A3B8;">来源 ${row.source} ｜ finalized ${row.isFinalized ? 'true' : 'false'}</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">${statusBadges}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div style="padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.68);border:1px solid rgba(51,65,85,.85);">
+          <div style="font-size:11px;color:#94A3B8;margin-bottom:6px;letter-spacing:.02em;">价格 / 元数据</div>
+          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">O ${formatPrice(row.open)} / H ${formatPrice(row.high)} / L ${formatPrice(row.low)} / C ${formatPrice(row.close)}</div>
+          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">成交额 ${compactAmount(row.totalAmount)}</div>
+          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">日期 ${row.tradeDate}</div>
+        </div>
+        <div style="padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.68);border:1px solid rgba(51,65,85,.85);">
+          <div style="font-size:11px;color:#94A3B8;margin-bottom:6px;letter-spacing:.02em;">图例速读</div>
+          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">左柱=超大单，右柱=主力</div>
+          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">深色=L2 底柱，浅色=L1 芯柱</div>
+          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">上=买入/净流入，下=卖出/净流出</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="padding:10px;border-radius:10px;background:rgba(76,29,149,.12);border:1px solid rgba(139,92,246,.24);">
+          <div style="font-size:12px;font-weight:700;color:#E9D5FF;margin-bottom:8px;">超大单（左柱）</div>
+          ${renderValueRow('买入', row.l2SuperBuy, row.l1SuperBuy, [COLORS.superL2Buy, COLORS.superL1Buy], compactAmount)}
+          ${renderValueRow('卖出', row.l2SuperSell, row.l1SuperSell, [COLORS.superL2Sell, COLORS.superL1Sell], compactAmount)}
+          ${renderValueRow('净流入', toNet(row.l2SuperBuy, row.l2SuperSell), toNet(row.l1SuperBuy, row.l1SuperSell), [COLORS.superL2Buy, COLORS.superL1Buy], compactAmount)}
+          ${renderValueRow('买入力度', toRatio(row.l2SuperBuy, row.totalAmount), toRatio(row.l1SuperBuy, row.totalAmount), [COLORS.superL2Buy, COLORS.superL1Buy], compactPercent)}
+          ${renderValueRow('卖出力度', toRatio(row.l2SuperSell, row.totalAmount), toRatio(row.l1SuperSell, row.totalAmount), [COLORS.superL2Sell, COLORS.superL1Sell], compactPercent)}
+        </div>
+        <div style="padding:10px;border-radius:10px;background:rgba(127,29,29,.12);border:1px solid rgba(248,113,113,.24);">
+          <div style="font-size:12px;font-weight:700;color:#FECACA;margin-bottom:8px;">主力（右柱）</div>
+          ${renderValueRow('买入', row.l2MainBuy, row.l1MainBuy, [COLORS.mainL2Buy, COLORS.mainL1Buy], compactAmount)}
+          ${renderValueRow('卖出', row.l2MainSell, row.l1MainSell, [COLORS.mainL2Sell, COLORS.mainL1Sell], compactAmount)}
+          ${renderValueRow('净流入', toNet(row.l2MainBuy, row.l2MainSell), toNet(row.l1MainBuy, row.l1MainSell), [COLORS.mainL2Buy, COLORS.mainL1Buy], compactAmount)}
+          ${renderValueRow('买入力度', toRatio(row.l2MainBuy, row.totalAmount), toRatio(row.l1MainBuy, row.totalAmount), [COLORS.mainL2Buy, COLORS.mainL1Buy], compactPercent)}
+          ${renderValueRow('卖出力度', toRatio(row.l2MainSell, row.totalAmount), toRatio(row.l1MainSell, row.totalAmount), [COLORS.mainL2Sell, COLORS.mainL1Sell], compactPercent)}
+        </div>
+      </div>
+
+      ${notices.length ? `<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.18);font-size:12px;line-height:1.65;color:#FDE68A;">${notices.join('<br/>')}</div>` : ''}
+    </div>
+  `;
+};
+
+const createFlowCustomSeries = (
+  name: string,
+  panel: FlowPanelKind,
+  xAxisIndex: number,
+  yAxisIndex: number,
+  data: CustomSeriesDatum[],
+  categoryCount: number,
+): any => {
+  const encode = panel === 'net'
+    ? { x: 0, y: [1, 2, 3, 4] }
+    : { x: 0, y: [1, 2, 3, 4, 5, 6, 7, 8] };
+
+  return {
+    name,
+    type: 'custom',
+    xAxisIndex,
+    yAxisIndex,
+    coordinateSystem: 'cartesian2d',
+    data,
+    encode,
+    silent: false,
+    z: 3,
+    animation: false,
+    markLine: {
+      silent: true,
+      symbol: ['none', 'none'],
+      label: { show: false },
+      lineStyle: { color: COLORS.zeroLine, width: 1, opacity: 0.9 },
+      data: [{ yAxis: 0 }],
+    },
+    renderItem: (params: any, api: any) => {
+      const categoryIndex = Number(api.value(0));
+      const coordSys = params.coordSys;
+      const xCenter = api.coord([categoryIndex, 0])[0];
+      const zeroY = api.coord([categoryIndex, 0])[1];
+      const bandWidth = coordSys.width / Math.max(categoryCount, 1);
+      const barWidth = clamp(bandWidth * 0.22, 4, panel === '1d' ? 14 : 12);
+      const groupGap = clamp(barWidth * 0.55, 3, 10);
+      const superCenter = xCenter - (barWidth / 2 + groupGap / 2);
+      const mainCenter = xCenter + (barWidth / 2 + groupGap / 2);
+      const chartRect = { x: coordSys.x, y: coordSys.y, width: coordSys.width, height: coordSys.height };
+
+      const makeRect = (centerX: number, value: number | null, color: string) => {
+        if (value === null || !Number.isFinite(value)) return null;
+        const valueY = api.coord([categoryIndex, value])[1];
+        const rectShape = echarts.graphic.clipRectByRect({
+          x: centerX - barWidth / 2,
+          y: Math.min(zeroY, valueY),
+          width: barWidth,
+          height: Math.max(Math.abs(zeroY - valueY), 1),
+        }, chartRect);
+        if (!rectShape) return null;
+        return {
+          type: 'rect',
+          shape: rectShape,
+          style: {
+            fill: color,
+            stroke: undefined,
+          },
+          silent: true,
+        };
+      };
+
+      const children: any[] = [];
+
+      if (panel === 'net') {
+        children.push(makeRect(superCenter, api.value(1), Number(api.value(1)) >= 0 ? COLORS.superL2Buy : COLORS.superL2Sell));
+        children.push(makeRect(superCenter, api.value(2), Number(api.value(2)) >= 0 ? COLORS.superL1Buy : COLORS.superL1Sell));
+        children.push(makeRect(mainCenter, api.value(3), Number(api.value(3)) >= 0 ? COLORS.mainL2Buy : COLORS.mainL2Sell));
+        children.push(makeRect(mainCenter, api.value(4), Number(api.value(4)) >= 0 ? COLORS.mainL1Buy : COLORS.mainL1Sell));
+      } else {
+        children.push(makeRect(superCenter, api.value(1), COLORS.superL2Buy));
+        children.push(makeRect(superCenter, api.value(3), COLORS.superL2Sell));
+        children.push(makeRect(superCenter, api.value(2), COLORS.superL1Buy));
+        children.push(makeRect(superCenter, api.value(4), COLORS.superL1Sell));
+        children.push(makeRect(mainCenter, api.value(5), COLORS.mainL2Buy));
+        children.push(makeRect(mainCenter, api.value(7), COLORS.mainL2Sell));
+        children.push(makeRect(mainCenter, api.value(6), COLORS.mainL1Buy));
+        children.push(makeRect(mainCenter, api.value(8), COLORS.mainL1Sell));
+      }
+
+      return {
+        type: 'group',
+        children: children.filter(Boolean),
+      };
+    },
+  };
+};
+
 const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = ({
   activeStock,
   backendStatus,
@@ -228,132 +475,77 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     return 'Source: 暂无可用正式L2历史';
   }, [fusionRows.length, hasFormalL2History, hasPreviewRows]);
 
+  const customLegend = [
+    { label: '超大 L2 买', color: COLORS.superL2Buy },
+    { label: '超大 L1 买', color: COLORS.superL1Buy },
+    { label: '超大 L2 卖', color: COLORS.superL2Sell },
+    { label: '超大 L1 卖', color: COLORS.superL1Sell },
+    { label: '主力 L2 买', color: COLORS.mainL2Buy },
+    { label: '主力 L1 买', color: COLORS.mainL1Buy },
+    { label: '主力 L2 卖', color: COLORS.mainL2Sell },
+    { label: '主力 L1 卖', color: COLORS.mainL1Sell },
+  ];
+
   const chartOption = useMemo(() => {
     if (!fusionRows.length) return {};
 
     const category = fusionRows.map((row) => row.label);
-    const candleData = fusionRows.map((row) => [row.open, row.close, row.low, row.high]);
+    const candleData = fusionRows.map((row) => (
+      row.open !== null && row.high !== null && row.low !== null && row.close !== null
+        ? [row.open, row.close, row.low, row.high]
+        : ['-', '-', '-', '-']
+    ));
     const closeLine = fusionRows.map((row) => row.close);
-    const qualityMarks = fusionRows.map((row) => (row.qualityInfo ? 0 : null));
+    const qualityMarks = fusionRows.map((row) => (row.qualityInfo ? row.close : null));
 
-    const superL2Buy = fusionRows.map((row) => row.l2SuperBuy);
-    const superL1Buy = fusionRows.map((row) => row.l1SuperBuy);
-    const superL2Sell = fusionRows.map((row) => (row.l2SuperSell === null ? null : -row.l2SuperSell));
-    const superL1Sell = fusionRows.map((row) => (row.l1SuperSell === null ? null : -row.l1SuperSell));
-    const mainL2Buy = fusionRows.map((row) => row.l2MainBuy);
-    const mainL1Buy = fusionRows.map((row) => row.l1MainBuy);
-    const mainL2Sell = fusionRows.map((row) => (row.l2MainSell === null ? null : -row.l2MainSell));
-    const mainL1Sell = fusionRows.map((row) => (row.l1MainSell === null ? null : -row.l1MainSell));
-
-    const superL2Net = fusionRows.map((row) => toNet(row.l2SuperBuy, row.l2SuperSell));
-    const superL1Net = fusionRows.map((row) => toNet(row.l1SuperBuy, row.l1SuperSell));
-    const mainL2Net = fusionRows.map((row) => toNet(row.l2MainBuy, row.l2MainSell));
-    const mainL1Net = fusionRows.map((row) => toNet(row.l1MainBuy, row.l1MainSell));
-
-    const superL2BuyRatio = fusionRows.map((row) => toRatio(row.l2SuperBuy, row.totalAmount));
-    const superL1BuyRatio = fusionRows.map((row) => toRatio(row.l1SuperBuy, row.totalAmount));
-    const superL2SellRatio = fusionRows.map((row) => {
-      const ratio = toRatio(row.l2SuperSell, row.totalAmount);
-      return ratio === null ? null : -ratio;
-    });
-    const superL1SellRatio = fusionRows.map((row) => {
-      const ratio = toRatio(row.l1SuperSell, row.totalAmount);
-      return ratio === null ? null : -ratio;
-    });
-    const mainL2BuyRatio = fusionRows.map((row) => toRatio(row.l2MainBuy, row.totalAmount));
-    const mainL1BuyRatio = fusionRows.map((row) => toRatio(row.l1MainBuy, row.totalAmount));
-    const mainL2SellRatio = fusionRows.map((row) => {
-      const ratio = toRatio(row.l2MainSell, row.totalAmount);
-      return ratio === null ? null : -ratio;
-    });
-    const mainL1SellRatio = fusionRows.map((row) => {
-      const ratio = toRatio(row.l1MainSell, row.totalAmount);
-      return ratio === null ? null : -ratio;
-    });
+    const absoluteData = buildPanelData(fusionRows, 'absolute');
+    const netData = buildPanelData(fusionRows, 'net');
+    const ratioData = buildPanelData(fusionRows, 'ratio');
 
     const amountAxisBound = (value: { max?: number; min?: number }) => {
       const maxAbs = Math.max(Math.abs(value.max ?? 0), Math.abs(value.min ?? 0));
-      return maxAbs === 0 ? 1 : maxAbs;
+      return maxAbs === 0 ? 1 : maxAbs * 1.08;
     };
 
     const percentAxisBound = (value: { max?: number; min?: number }) => {
       const maxAbs = Math.max(Math.abs(value.max ?? 0), Math.abs(value.min ?? 0));
       if (maxAbs === 0) return 5;
-      const padded = Math.min(100, maxAbs * 1.2);
+      const padded = Math.min(100, maxAbs * 1.15);
       return Math.max(5, Math.ceil(padded / 5) * 5);
     };
 
     return {
       animation: false,
       backgroundColor: 'transparent',
-      legend: {
-        top: 4,
-        type: 'scroll',
-        textStyle: { color: '#94A3B8', fontSize: 11 },
-      },
       axisPointer: {
         link: [{ xAxisIndex: [0, 1, 2, 3] }],
       },
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'cross' },
-        backgroundColor: 'rgba(15, 23, 42, 0.96)',
+        axisPointer: { type: 'cross', label: { backgroundColor: '#0F172A' } },
+        backgroundColor: 'rgba(15, 23, 42, 0.98)',
         borderColor: '#334155',
         borderWidth: 1,
+        padding: 12,
         textStyle: { color: '#E2E8F0', fontSize: 12 },
-        extraCssText: 'box-shadow: 0 10px 24px rgba(2,6,23,0.45);',
+        extraCssText: 'box-shadow: 0 18px 40px rgba(2,6,23,0.52); border-radius: 14px; white-space: normal; max-width: 360px;',
+        confine: true,
+        appendToBody: false,
+        position: (pos: number[], _params: any, _dom: HTMLElement, _rect: any, size: { viewSize: number[]; contentSize: number[] }) => getTooltipPosition(pos, size),
         formatter: (params: any) => {
           const items = Array.isArray(params) ? params : [params];
           if (!items.length) return '';
           const idx = Number(items[0]?.dataIndex ?? 0);
           const row = fusionRows[idx];
           if (!row) return '';
-
-          const marker = (color: string) =>
-            `<span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${color};"></span>`;
-
-          const meta = [
-            `<div style="font-weight:700;color:#F8FAFC;margin-bottom:6px;">${row.datetime}</div>`,
-            `<div style="color:#CBD5E1;">O ${formatPrice(row.open)} / H ${formatPrice(row.high)} / L ${formatPrice(row.low)} / C ${formatPrice(row.close)}</div>`,
-            `<div style="color:#CBD5E1;">来源: ${row.source} ｜ finalized: ${row.isFinalized ? 'true' : 'false'} ｜ fallback: ${row.fallbackUsed ? 'true' : 'false'}</div>`,
-            `<div style="color:#CBD5E1;">成交额: ${compactAmount(row.totalAmount)}</div>`,
-            row.isPreviewOnly ? `<div style="margin-top:4px;color:#FBBF24;">未结算 / 当前仅 ${row.previewLevel || 'L1'} 实时口径，L2 待盘后覆盖</div>` : '',
-            row.isPlaceholder ? `<div style="margin-top:4px;color:#FBBF24;">该点为缺失占位，不按 0 处理</div>` : '',
-            row.qualityInfo ? `<div style="margin-top:4px;color:#FCD34D;">质量提示: ${row.qualityInfo}</div>` : '',
-          ].filter(Boolean);
-
-          return [
-            ...meta,
-            `<div style="margin-top:8px;color:#E9D5FF;font-weight:600;">超大单（左柱）</div>`,
-            `<div>${marker(COLORS.superL2Buy)}L2买入: ${compactAmount(row.l2SuperBuy)}</div>`,
-            `<div>${marker(COLORS.superL1Buy)}L1买入: ${compactAmount(row.l1SuperBuy)}</div>`,
-            `<div>${marker(COLORS.superL2Sell)}L2卖出: ${compactAmount(row.l2SuperSell)}</div>`,
-            `<div>${marker(COLORS.superL1Sell)}L1卖出: ${compactAmount(row.l1SuperSell)}</div>`,
-            `<div>${marker(COLORS.superL2Buy)}L2净流入: ${compactAmount(toNet(row.l2SuperBuy, row.l2SuperSell))}</div>`,
-            `<div>${marker(COLORS.superL1Buy)}L1净流入: ${compactAmount(toNet(row.l1SuperBuy, row.l1SuperSell))}</div>`,
-            `<div>${marker(COLORS.superL2Buy)}L2买入力度: ${compactPercent(toRatio(row.l2SuperBuy, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.superL2Sell)}L2卖出力度: ${compactPercent(toRatio(row.l2SuperSell, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.superL1Buy)}L1买入力度: ${compactPercent(toRatio(row.l1SuperBuy, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.superL1Sell)}L1卖出力度: ${compactPercent(toRatio(row.l1SuperSell, row.totalAmount))}</div>`,
-            `<div style="margin-top:8px;color:#FECACA;font-weight:600;">主力（右柱）</div>`,
-            `<div>${marker(COLORS.mainL2Buy)}L2买入: ${compactAmount(row.l2MainBuy)}</div>`,
-            `<div>${marker(COLORS.mainL1Buy)}L1买入: ${compactAmount(row.l1MainBuy)}</div>`,
-            `<div>${marker(COLORS.mainL2Sell)}L2卖出: ${compactAmount(row.l2MainSell)}</div>`,
-            `<div>${marker(COLORS.mainL1Sell)}L1卖出: ${compactAmount(row.l1MainSell)}</div>`,
-            `<div>${marker(COLORS.mainL2Buy)}L2净流入: ${compactAmount(toNet(row.l2MainBuy, row.l2MainSell))}</div>`,
-            `<div>${marker(COLORS.mainL1Buy)}L1净流入: ${compactAmount(toNet(row.l1MainBuy, row.l1MainSell))}</div>`,
-            `<div>${marker(COLORS.mainL2Buy)}L2买入力度: ${compactPercent(toRatio(row.l2MainBuy, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.mainL2Sell)}L2卖出力度: ${compactPercent(toRatio(row.l2MainSell, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.mainL1Buy)}L1买入力度: ${compactPercent(toRatio(row.l1MainBuy, row.totalAmount))}</div>`,
-            `<div>${marker(COLORS.mainL1Sell)}L1卖出力度: ${compactPercent(toRatio(row.l1MainSell, row.totalAmount))}</div>`,
-          ].join('<br/>');
+          return buildTooltipHtml(row);
         },
       },
       grid: [
-        { left: '6%', right: '4%', top: 40, height: '20%' },
-        { left: '6%', right: '4%', top: '27%', height: '17%' },
-        { left: '6%', right: '4%', top: '50%', height: '13%' },
-        { left: '6%', right: '4%', top: '69%', height: '13%' },
+        { left: '6%', right: '4%', top: 24, height: '23%' },
+        { left: '6%', right: '4%', top: '31%', height: '22%' },
+        { left: '6%', right: '4%', top: '58%', height: '13%' },
+        { left: '6%', right: '4%', top: '76%', height: '13%' },
       ],
       xAxis: [
         {
@@ -361,6 +553,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           data: category,
           boundaryGap: true,
           axisLine: { lineStyle: { color: COLORS.border } },
+          axisTick: { show: false },
           axisLabel: { show: false },
           min: 'dataMin',
           max: 'dataMax',
@@ -371,6 +564,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           data: category,
           boundaryGap: true,
           axisLine: { lineStyle: { color: COLORS.border } },
+          axisTick: { show: false },
           axisLabel: { show: false },
           min: 'dataMin',
           max: 'dataMax',
@@ -381,6 +575,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           data: category,
           boundaryGap: true,
           axisLine: { lineStyle: { color: COLORS.border } },
+          axisTick: { show: false },
           axisLabel: { show: false },
           min: 'dataMin',
           max: 'dataMax',
@@ -391,6 +586,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           data: category,
           boundaryGap: true,
           axisLine: { lineStyle: { color: COLORS.border } },
+          axisTick: { show: false },
           axisLabel: {
             color: '#64748B',
             fontSize: 10,
@@ -405,56 +601,71 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           type: 'value',
           scale: true,
           name: '价格',
+          nameGap: 10,
           nameTextStyle: { color: COLORS.closeLine, fontSize: 11 },
           axisLabel: { color: COLORS.closeLine, fontSize: 10, formatter: (v: number) => v.toFixed(2) },
           splitLine: { lineStyle: { color: COLORS.border, type: 'dashed' } },
+          axisLine: { show: true, lineStyle: { color: COLORS.border } },
         },
         {
           type: 'value',
           gridIndex: 1,
           scale: true,
           name: '资金绝对值',
+          nameGap: 10,
           nameTextStyle: { color: '#CBD5E1', fontSize: 11 },
           min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
           max: (value: { max?: number; min?: number }) => amountAxisBound(value),
           axisLabel: { color: '#CBD5E1', fontSize: 10, formatter: (v: number) => compactAmount(v) },
           splitLine: { lineStyle: { color: COLORS.border, type: 'dashed' } },
-          axisLine: { show: true, lineStyle: { color: '#475569' } },
+          axisLine: { show: true, lineStyle: { color: COLORS.zeroLine } },
         },
         {
           type: 'value',
           gridIndex: 2,
           scale: true,
           name: '净流入',
+          nameGap: 10,
           nameTextStyle: { color: '#CBD5E1', fontSize: 11 },
           min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
           max: (value: { max?: number; min?: number }) => amountAxisBound(value),
           axisLabel: { color: '#CBD5E1', fontSize: 10, formatter: (v: number) => compactAmount(v) },
           splitLine: { lineStyle: { color: COLORS.border, type: 'dashed' } },
-          axisLine: { show: true, lineStyle: { color: '#475569' } },
+          axisLine: { show: true, lineStyle: { color: COLORS.zeroLine } },
         },
         {
           type: 'value',
           gridIndex: 3,
           scale: true,
           name: '买卖力度',
+          nameGap: 10,
           nameTextStyle: { color: '#CBD5E1', fontSize: 11 },
           min: (value: { max?: number; min?: number }) => -percentAxisBound(value),
           max: (value: { max?: number; min?: number }) => percentAxisBound(value),
           axisLabel: { color: '#CBD5E1', fontSize: 10, formatter: (v: number) => `${v.toFixed(0)}%` },
           splitLine: { lineStyle: { color: COLORS.border, type: 'dashed' } },
-          axisLine: { show: true, lineStyle: { color: '#475569' } },
+          axisLine: { show: true, lineStyle: { color: COLORS.zeroLine } },
         },
       ],
       dataZoom: [
         {
+          type: 'inside',
+          xAxisIndex: [0, 1, 2, 3],
+          filterMode: 'filter',
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: true,
+        },
+        {
           type: 'slider',
           xAxisIndex: [0, 1, 2, 3],
-          bottom: 6,
+          bottom: 8,
           height: 18,
           showDetail: false,
           brushSelect: false,
           filterMode: 'filter',
+          borderColor: '#334155',
+          fillerColor: 'rgba(71, 85, 105, 0.22)',
           start: Math.max(0, 100 - Math.min(100, Math.round((60 / Math.max(fusionRows.length, 1)) * 100))),
           end: 100,
         },
@@ -489,275 +700,25 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         {
           name: '质量提示',
           type: 'scatter',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
+          xAxisIndex: 0,
+          yAxisIndex: 0,
           data: qualityMarks,
-          symbolSize: 12,
-          itemStyle: { color: '#F59E0B' },
+          symbolSize: 16,
+          itemStyle: { color: COLORS.quality },
           label: {
             show: true,
             formatter: '!',
             color: '#0F172A',
             fontSize: 10,
-            fontWeight: 700,
+            fontWeight: 800,
+            offset: [0, -1],
           },
+          emphasis: { scale: false },
           z: 6,
         },
-        {
-          name: '超大L2买',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_super_l2',
-          data: superL2Buy,
-          barWidth: 11,
-          barCategoryGap: '42%',
-          itemStyle: { color: COLORS.superL2Buy, borderRadius: 0 },
-          markLine: { silent: true, symbol: ['none', 'none'], lineStyle: { color: '#475569', width: 1 }, data: [{ yAxis: 0 }] },
-          z: 2,
-        },
-        {
-          name: '超大L1买',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_super_l1',
-          data: superL1Buy,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL1Buy, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '超大L2卖',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_super_l2',
-          data: superL2Sell,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL2Sell, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '超大L1卖',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_super_l1',
-          data: superL1Sell,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL1Sell, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '主力L2买',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_main_l2',
-          data: mainL2Buy,
-          barWidth: 11,
-          barGap: '35%',
-          itemStyle: { color: COLORS.mainL2Buy, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '主力L1买',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_main_l1',
-          data: mainL1Buy,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL1Buy, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '主力L2卖',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_main_l2',
-          data: mainL2Sell,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL2Sell, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '主力L1卖',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          stack: 'abs_main_l1',
-          data: mainL1Sell,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL1Sell, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '超大L2净流入',
-          type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
-          stack: 'net_super_l2',
-          data: superL2Net,
-          barWidth: 11,
-          barCategoryGap: '42%',
-          itemStyle: {
-            color: (params: any) => (Number(params.value) >= 0 ? COLORS.superL2Buy : COLORS.superL2Sell),
-            borderRadius: 0,
-          },
-          markLine: { silent: true, symbol: ['none', 'none'], lineStyle: { color: '#475569', width: 1 }, data: [{ yAxis: 0 }] },
-          z: 2,
-        },
-        {
-          name: '超大L1净流入',
-          type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
-          stack: 'net_super_l1',
-          data: superL1Net,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: {
-            color: (params: any) => (Number(params.value) >= 0 ? COLORS.superL1Buy : COLORS.superL1Sell),
-            borderRadius: 0,
-          },
-          z: 3,
-        },
-        {
-          name: '主力L2净流入',
-          type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
-          stack: 'net_main_l2',
-          data: mainL2Net,
-          barWidth: 11,
-          barGap: '35%',
-          itemStyle: {
-            color: (params: any) => (Number(params.value) >= 0 ? COLORS.mainL2Buy : COLORS.mainL2Sell),
-            borderRadius: 0,
-          },
-          z: 2,
-        },
-        {
-          name: '主力L1净流入',
-          type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
-          stack: 'net_main_l1',
-          data: mainL1Net,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: {
-            color: (params: any) => (Number(params.value) >= 0 ? COLORS.mainL1Buy : COLORS.mainL1Sell),
-            borderRadius: 0,
-          },
-          z: 3,
-        },
-        {
-          name: '超大L2买入力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_super_l2',
-          data: superL2BuyRatio,
-          barWidth: 11,
-          barCategoryGap: '42%',
-          itemStyle: { color: COLORS.superL2Buy, borderRadius: 0 },
-          markLine: { silent: true, symbol: ['none', 'none'], lineStyle: { color: '#475569', width: 1 }, data: [{ yAxis: 0 }] },
-          z: 2,
-        },
-        {
-          name: '超大L1买入力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_super_l1',
-          data: superL1BuyRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL1Buy, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '超大L2卖出力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_super_l2',
-          data: superL2SellRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL2Sell, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '超大L1卖出力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_super_l1',
-          data: superL1SellRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.superL1Sell, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '主力L2买入力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_main_l2',
-          data: mainL2BuyRatio,
-          barWidth: 11,
-          barGap: '35%',
-          itemStyle: { color: COLORS.mainL2Buy, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '主力L1买入力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_main_l1',
-          data: mainL1BuyRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL1Buy, borderRadius: 0 },
-          z: 3,
-        },
-        {
-          name: '主力L2卖出力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_main_l2',
-          data: mainL2SellRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL2Sell, borderRadius: 0 },
-          z: 2,
-        },
-        {
-          name: '主力L1卖出力度',
-          type: 'bar',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
-          stack: 'ratio_main_l1',
-          data: mainL1SellRatio,
-          barWidth: 11,
-          barGap: '-100%',
-          itemStyle: { color: COLORS.mainL1Sell, borderRadius: 0 },
-          z: 3,
-        },
+        createFlowCustomSeries('资金绝对值双柱', 'absolute', 1, 1, absoluteData, fusionRows.length),
+        createFlowCustomSeries('净流入双柱', 'net', 2, 2, netData, fusionRows.length),
+        createFlowCustomSeries('买卖力度双柱', 'ratio', 3, 3, ratioData, fusionRows.length),
       ],
     };
   }, [fusionRows, granularity]);
@@ -799,7 +760,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
               )}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              上方价格区，下方依次为绝对买卖、净流入、买卖力度三层副图；深色 L2 做底，浅色 L1 做芯，异常点统一用黄色“!”提示。
+              上方价格区，下方三层都按“左超大 / 右主力”双柱展开：深色 L2 做底，浅色 L1 做芯；黄色 ! 表示该点存在质量提示。
             </p>
           </div>
 
@@ -812,6 +773,41 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             刷新
           </button>
         </div>
+
+        <div className="mb-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+            <span className="text-[11px] font-medium text-slate-300 mr-1">图例</span>
+            {customLegend.map((item) => (
+              <span
+                key={item.label}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300"
+              >
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                {item.label}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-start gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-400 lg:justify-end">
+            <span className="rounded-full border border-slate-700/80 px-2 py-1">左柱 = 超大单</span>
+            <span className="rounded-full border border-slate-700/80 px-2 py-1">右柱 = 主力</span>
+            <span className="rounded-full border border-slate-700/80 px-2 py-1">Hover 同步联动</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 px-2 py-1 text-amber-200">
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-black text-slate-950">!</span>
+              {issueCount > 0 ? `${issueCount} 个异常点` : '暂无异常点'}
+            </span>
+          </div>
+        </div>
+
+        {issueCount > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-100">
+            {fusionRows.filter((row) => !!row.qualityInfo).slice(0, 8).map((row) => (
+              <span key={row.key} className="rounded-full border border-amber-500/20 bg-slate-950/40 px-2 py-1">
+                {row.label.replace('\n', ' ')} · {formatQualityShort(row.qualityInfo)}
+              </span>
+            ))}
+            {issueCount > 8 && <span className="rounded-full border border-amber-500/20 bg-slate-950/40 px-2 py-1">其余 {issueCount - 8} 个请在图上 hover 查看</span>}
+          </div>
+        )}
 
         {error && (
           <div className="mb-3 bg-red-900/20 border border-red-800 p-3 rounded-lg flex items-center gap-3 text-red-200 text-xs">
@@ -835,13 +831,13 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             </p>
           </div>
         ) : (
-          <div className="w-full min-h-[920px]">
+          <div className="w-full min-h-[980px] rounded-xl border border-slate-800/70 bg-slate-950/35 p-2">
             <ReactEChartsCore
               echarts={echarts}
               option={chartOption}
               notMerge
               lazyUpdate
-              style={{ width: '100%', height: 920 }}
+              style={{ width: '100%', height: 960 }}
             />
           </div>
         )}
