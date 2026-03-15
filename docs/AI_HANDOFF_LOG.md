@@ -384,3 +384,17 @@
 - 结论: v4.2.8 上线，30m 统一 8 桶并过滤非标准桶。
 - 风险: 历史污染窗口仍需 Windows 重建后 merge 才能最终闭环。
 - 链接: `docs/02_BUSINESS_DOMAIN.md#cap-history-30m`
+
+## 2026-03-16 00:55 | 前端 AI
+- Task ID: `CHG-20260315-01`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 本地已重构新版历史多维图表，三张副图改为 custom series 真双柱，恢复“左超大 / 右主力”，并重做 tooltip/图例交互。
+- 风险: 仍需你在本地实际确认视觉是否符合样稿后再发生产。
+- 链接: `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`
+
+## 2026-03-16 01:02 | 前端 AI
+- Task ID: `CHG-20260316-01`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: `v4.2.14` 已发布生产；历史多维三张副图恢复“左超大 / 右主力”真双柱，tooltip 收紧宽度并允许正常换行，生产健康检查与 `sz000833` 历史多维接口抽样通过，前端产物已确认包含版本号 `4.2.14`。
+- 风险: 仍建议你在生产页面实际点开 `5m / 30m / 1h / 日` 各看一遍 tooltip 密度与 hover 手感。
+- 链接: `docs/02_BUSINESS_DOMAIN.md#cap-history-30m`, `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`
