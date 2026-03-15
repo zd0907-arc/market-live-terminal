@@ -24,6 +24,7 @@ History5mRow = Tuple[
     float,  # l2_main_sell
     float,  # l2_super_buy
     float,  # l2_super_sell
+    Optional[str],  # quality_info
 ]
 
 HistoryDailyRow = Tuple[
@@ -54,6 +55,7 @@ HistoryDailyRow = Tuple[
     float,  # l1_sell_ratio
     float,  # l2_buy_ratio
     float,  # l2_sell_ratio
+    Optional[str],  # quality_info
 ]
 
 
@@ -61,6 +63,15 @@ def get_l2_history_connection() -> sqlite3.Connection:
     db_path = os.getenv("DB_PATH", DB_FILE)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     return sqlite3.connect(db_path)
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {
+        str(row[1])
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def ensure_l2_history_schema() -> None:
@@ -85,6 +96,7 @@ def ensure_l2_history_schema() -> None:
                 l2_main_sell REAL NOT NULL,
                 l2_super_buy REAL NOT NULL,
                 l2_super_sell REAL NOT NULL,
+                quality_info TEXT NULL,
                 PRIMARY KEY(symbol, datetime)
             );
             CREATE INDEX IF NOT EXISTS idx_history_5m_l2_symbol_date
@@ -118,6 +130,7 @@ def ensure_l2_history_schema() -> None:
                 l1_sell_ratio REAL NOT NULL,
                 l2_buy_ratio REAL NOT NULL,
                 l2_sell_ratio REAL NOT NULL,
+                quality_info TEXT NULL,
                 PRIMARY KEY(symbol, date)
             );
             CREATE INDEX IF NOT EXISTS idx_history_daily_l2_date
@@ -152,6 +165,8 @@ def ensure_l2_history_schema() -> None:
             ON l2_daily_ingest_failures(run_id);
             """
         )
+        _ensure_column(conn, "history_5m_l2", "quality_info", "TEXT NULL")
+        _ensure_column(conn, "history_daily_l2", "quality_info", "TEXT NULL")
         conn.commit()
     finally:
         conn.close()
@@ -167,16 +182,21 @@ def replace_history_5m_l2_rows(symbol: str, source_date: str, rows: Sequence[His
                 (symbol, source_date),
             )
             if rows:
+                normalized_rows = [
+                    tuple(row) if len(tuple(row)) >= 17 else tuple(list(row) + [None])
+                    for row in rows
+                ]
                 conn.executemany(
                     """
                     INSERT INTO history_5m_l2 (
                         symbol, datetime, source_date,
                         open, high, low, close, total_amount,
                         l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
-                        l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell,
+                        quality_info
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    rows,
+                    normalized_rows,
                 )
         return len(rows)
     finally:
@@ -193,6 +213,7 @@ def replace_history_daily_l2_row(symbol: str, trade_date: str, row: Optional[His
                 (symbol, trade_date),
             )
             if row:
+                normalized_row = tuple(row) if len(tuple(row)) >= 28 else tuple(list(row) + [None])
                 conn.execute(
                     """
                     INSERT INTO history_daily_l2 (
@@ -204,10 +225,11 @@ def replace_history_daily_l2_row(symbol: str, trade_date: str, row: Optional[His
                         l2_super_buy, l2_super_sell, l2_super_net,
                         l1_activity_ratio, l1_super_ratio,
                         l2_activity_ratio, l2_super_ratio,
-                        l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio,
+                        quality_info
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    row,
+                    normalized_row,
                 )
                 return 1
         return 0
@@ -390,7 +412,17 @@ def _row_to_history_5m_dict(row: Sequence) -> Dict[str, object]:
         "l2_main_sell": float(row[13]),
         "l2_super_buy": float(row[14]),
         "l2_super_sell": float(row[15]),
+        "quality_info": row[16],
     }
+
+
+def _to_optional_float(value: object) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def query_l2_history_5m_rows(
@@ -437,7 +469,8 @@ def query_l2_history_5m_rows(
                 symbol, datetime, source_date,
                 open, high, low, close, total_amount,
                 l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
-                l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell
+                l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell,
+                quality_info
             FROM history_5m_l2
             WHERE {' AND '.join(clauses)}
             ORDER BY datetime ASC
@@ -483,7 +516,8 @@ def query_l2_history_daily_rows(
                 l2_super_buy, l2_super_sell, l2_super_net,
                 l1_activity_ratio, l1_super_ratio,
                 l2_activity_ratio, l2_super_ratio,
-                l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio
+                l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio,
+                quality_info
             FROM history_daily_l2
             WHERE {' AND '.join(clauses)}
             ORDER BY date DESC{limit_sql}
@@ -525,39 +559,114 @@ def aggregate_l2_history_5m_rows(
                 "symbol": row["symbol"],
                 "datetime": bucket_key,
                 "source_date": row["source_date"],
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "total_amount": float(row["total_amount"]),
-                "l1_main_buy": float(row["l1_main_buy"]),
-                "l1_main_sell": float(row["l1_main_sell"]),
-                "l1_super_buy": float(row["l1_super_buy"]),
-                "l1_super_sell": float(row["l1_super_sell"]),
-                "l2_main_buy": float(row["l2_main_buy"]),
-                "l2_main_sell": float(row["l2_main_sell"]),
-                "l2_super_buy": float(row["l2_super_buy"]),
-                "l2_super_sell": float(row["l2_super_sell"]),
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": None,
+                "total_amount": 0.0,
+                "l1_main_buy": 0.0,
+                "l1_main_sell": 0.0,
+                "l1_super_buy": 0.0,
+                "l1_super_sell": 0.0,
+                "l2_main_buy": 0.0,
+                "l2_main_sell": 0.0,
+                "l2_super_buy": 0.0,
+                "l2_super_sell": 0.0,
+                "quality_info": None,
+                "is_placeholder": False,
+                "_quality_messages": [],
+                "_placeholder_count": 0,
+                "_numeric_count": 0,
             }
             bucket_order.append(bucket_key)
+        item = aggregated[bucket_key]
+        item["source_date"] = str(row["source_date"])
+        quality_info = str(row.get("quality_info") or "").strip()
+        if quality_info:
+            item["_quality_messages"].append(quality_info)
+        if bool(row.get("is_placeholder")):
+            item["_placeholder_count"] += 1
+
+        open_value = _to_optional_float(row.get("open"))
+        high_value = _to_optional_float(row.get("high"))
+        low_value = _to_optional_float(row.get("low"))
+        close_value = _to_optional_float(row.get("close"))
+        if open_value is None or high_value is None or low_value is None or close_value is None:
             continue
 
-        item = aggregated[bucket_key]
-        item["high"] = max(float(item["high"]), float(row["high"]))
-        item["low"] = min(float(item["low"]), float(row["low"]))
-        item["close"] = float(row["close"])
-        item["total_amount"] = float(item["total_amount"]) + float(row["total_amount"])
-        item["l1_main_buy"] = float(item["l1_main_buy"]) + float(row["l1_main_buy"])
-        item["l1_main_sell"] = float(item["l1_main_sell"]) + float(row["l1_main_sell"])
-        item["l1_super_buy"] = float(item["l1_super_buy"]) + float(row["l1_super_buy"])
-        item["l1_super_sell"] = float(item["l1_super_sell"]) + float(row["l1_super_sell"])
-        item["l2_main_buy"] = float(item["l2_main_buy"]) + float(row["l2_main_buy"])
-        item["l2_main_sell"] = float(item["l2_main_sell"]) + float(row["l2_main_sell"])
-        item["l2_super_buy"] = float(item["l2_super_buy"]) + float(row["l2_super_buy"])
-        item["l2_super_sell"] = float(item["l2_super_sell"]) + float(row["l2_super_sell"])
-        item["source_date"] = str(row["source_date"])
+        if int(item["_numeric_count"]) == 0:
+            item["open"] = open_value
+            item["high"] = high_value
+            item["low"] = low_value
+            item["close"] = close_value
+            item["total_amount"] = float(_to_optional_float(row.get("total_amount")) or 0.0)
+            item["l1_main_buy"] = float(_to_optional_float(row.get("l1_main_buy")) or 0.0)
+            item["l1_main_sell"] = float(_to_optional_float(row.get("l1_main_sell")) or 0.0)
+            item["l1_super_buy"] = float(_to_optional_float(row.get("l1_super_buy")) or 0.0)
+            item["l1_super_sell"] = float(_to_optional_float(row.get("l1_super_sell")) or 0.0)
+            item["l2_main_buy"] = float(_to_optional_float(row.get("l2_main_buy")) or 0.0)
+            item["l2_main_sell"] = float(_to_optional_float(row.get("l2_main_sell")) or 0.0)
+            item["l2_super_buy"] = float(_to_optional_float(row.get("l2_super_buy")) or 0.0)
+            item["l2_super_sell"] = float(_to_optional_float(row.get("l2_super_sell")) or 0.0)
+            item["_numeric_count"] = 1
+            continue
 
-    return [aggregated[key] for key in sorted(bucket_order)]
+        item["high"] = max(float(item["high"]), high_value)
+        item["low"] = min(float(item["low"]), low_value)
+        item["close"] = close_value
+        item["total_amount"] = float(item["total_amount"]) + float(_to_optional_float(row.get("total_amount")) or 0.0)
+        item["l1_main_buy"] = float(item["l1_main_buy"]) + float(_to_optional_float(row.get("l1_main_buy")) or 0.0)
+        item["l1_main_sell"] = float(item["l1_main_sell"]) + float(_to_optional_float(row.get("l1_main_sell")) or 0.0)
+        item["l1_super_buy"] = float(item["l1_super_buy"]) + float(_to_optional_float(row.get("l1_super_buy")) or 0.0)
+        item["l1_super_sell"] = float(item["l1_super_sell"]) + float(_to_optional_float(row.get("l1_super_sell")) or 0.0)
+        item["l2_main_buy"] = float(item["l2_main_buy"]) + float(_to_optional_float(row.get("l2_main_buy")) or 0.0)
+        item["l2_main_sell"] = float(item["l2_main_sell"]) + float(_to_optional_float(row.get("l2_main_sell")) or 0.0)
+        item["l2_super_buy"] = float(item["l2_super_buy"]) + float(_to_optional_float(row.get("l2_super_buy")) or 0.0)
+        item["l2_super_sell"] = float(item["l2_super_sell"]) + float(_to_optional_float(row.get("l2_super_sell")) or 0.0)
+        item["_numeric_count"] = int(item["_numeric_count"]) + 1
+
+    result: List[Dict[str, object]] = []
+    for key in sorted(bucket_order):
+        item = aggregated[key]
+        numeric_count = int(item.pop("_numeric_count"))
+        placeholder_count = int(item.pop("_placeholder_count"))
+        quality_messages = [msg for msg in item.pop("_quality_messages") if msg]
+        unique_messages = list(dict.fromkeys(quality_messages))
+        if placeholder_count > 0:
+            item["quality_info"] = (
+                "该区间包含缺失 5m，聚合值可能偏小"
+                if numeric_count > 0
+                else "该区间缺失正式 5m 数据"
+            )
+        elif unique_messages:
+            item["quality_info"] = (
+                unique_messages[0]
+                if numeric_count <= 1 and len(unique_messages) == 1
+                else "该区间包含异常 5m，聚合值可能偏小"
+            )
+        else:
+            item["quality_info"] = None
+
+        if numeric_count <= 0:
+            item["open"] = None
+            item["high"] = None
+            item["low"] = None
+            item["close"] = None
+            item["total_amount"] = None
+            item["l1_main_buy"] = None
+            item["l1_main_sell"] = None
+            item["l1_super_buy"] = None
+            item["l1_super_sell"] = None
+            item["l2_main_buy"] = None
+            item["l2_main_sell"] = None
+            item["l2_super_buy"] = None
+            item["l2_super_sell"] = None
+            item["is_placeholder"] = True
+        else:
+            item["is_placeholder"] = False
+        result.append(item)
+
+    return result
 
 
 def query_l2_history_trend(

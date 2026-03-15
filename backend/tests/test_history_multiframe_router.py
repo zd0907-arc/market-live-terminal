@@ -1,6 +1,7 @@
 import importlib
 import sqlite3
 
+from backend.app.db.l2_history_db import replace_history_5m_l2_rows, replace_history_daily_l2_row
 from backend.scripts.l2_daily_backfill import backfill_day_package
 from backend.tests.test_l2_daily_backfill import _build_sample_day
 
@@ -48,14 +49,17 @@ def test_history_multiframe_returns_finalized_intraday_rows(monkeypatch, tmp_pat
 
     assert resp.code == 200
     assert resp.data["granularity"] == "30m"
-    assert resp.data["count"] == 1
+    assert resp.data["count"] >= 1
     item = resp.data["items"][0]
     assert item["datetime"] == "2026-03-11 09:30:00"
     assert item["source"] == "l2_history"
     assert item["is_finalized"] is True
     assert item["preview_level"] is None
+    assert item["quality_info"] == "该区间包含缺失 5m，聚合值可能偏小"
+    assert item["is_placeholder"] is False
     assert item["l1_main_buy"] > 0
     assert item["l2_main_buy"] > 0
+    assert any(row["is_placeholder"] is True for row in resp.data["items"][1:])
 
 
 def test_history_multiframe_appends_today_daily_preview(monkeypatch, tmp_path):
@@ -96,5 +100,102 @@ def test_history_multiframe_appends_today_daily_preview(monkeypatch, tmp_path):
     assert preview_item["source"] == "realtime_ticks"
     assert preview_item["is_finalized"] is False
     assert preview_item["preview_level"] == "l1_only"
+    assert preview_item["quality_info"] is None
+    assert preview_item["is_placeholder"] is False
     assert preview_item["l1_main_buy"] == 300000.0
     assert preview_item["l2_main_buy"] is None
+
+
+def test_history_multiframe_injects_daily_placeholder(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+
+    replace_history_daily_l2_row(
+        "sz000833",
+        "2026-03-11",
+        (
+            "sz000833", "2026-03-11", 25.0, 25.5, 24.8, 25.2, 1000000.0,
+            100.0, 90.0, 10.0, 50.0, 40.0, 10.0,
+            120.0, 80.0, 40.0, 60.0, 30.0, 30.0,
+            19.0, 9.0, 20.0, 10.0, 12.0, 8.0, 14.0, 6.0,
+            None,
+        ),
+    )
+    replace_history_daily_l2_row(
+        "sz000833",
+        "2026-03-13",
+        (
+            "sz000833", "2026-03-13", 26.0, 26.5, 25.8, 26.2, 1200000.0,
+            110.0, 95.0, 15.0, 55.0, 43.0, 12.0,
+            130.0, 85.0, 45.0, 66.0, 33.0, 33.0,
+            18.0, 8.0, 21.0, 11.0, 13.0, 8.0, 15.0, 7.0,
+            None,
+        ),
+    )
+
+    monkeypatch.setattr("backend.app.routers.analysis.MOCK_DATA_DATE", None)
+    monkeypatch.setattr("backend.app.routers.analysis.TradeCalendar.is_trade_day", lambda date_str: date_str in {"2026-03-11", "2026-03-12", "2026-03-13"})
+
+    resp = analysis.get_history_multiframe(
+        "sz000833",
+        granularity="1d",
+        start_date="2026-03-11",
+        end_date="2026-03-13",
+        include_today_preview=False,
+    )
+
+    assert resp.code == 200
+    assert [item["trade_date"] for item in resp.data["items"]] == ["2026-03-11", "2026-03-12", "2026-03-13"]
+    placeholder = resp.data["items"][1]
+    assert placeholder["is_placeholder"] is True
+    assert placeholder["quality_info"] == "该日缺失正式数据"
+    assert placeholder["open"] is None
+    assert placeholder["l2_main_buy"] is None
+
+
+def test_history_multiframe_aggregates_intraday_quality_info(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+
+    replace_history_5m_l2_rows(
+        "sz000833",
+        "2026-03-11",
+        [
+            (
+                "sz000833",
+                "2026-03-11 09:30:00",
+                "2026-03-11",
+                25.0,
+                25.2,
+                24.9,
+                25.1,
+                1000000.0,
+                100.0,
+                50.0,
+                10.0,
+                5.0,
+                200.0,
+                100.0,
+                20.0,
+                10.0,
+                "L2 买边单边回退，数值可能偏小",
+            ),
+        ],
+    )
+
+    monkeypatch.setattr("backend.app.routers.analysis.MOCK_DATA_DATE", None)
+    monkeypatch.setattr("backend.app.routers.analysis.TradeCalendar.is_trade_day", lambda date_str: date_str == "2026-03-11")
+
+    resp = analysis.get_history_multiframe(
+        "sz000833",
+        granularity="30m",
+        start_date="2026-03-11",
+        end_date="2026-03-11",
+        include_today_preview=False,
+    )
+
+    assert resp.code == 200
+    assert resp.data["count"] >= 1
+    first_item = resp.data["items"][0]
+    assert first_item["datetime"] == "2026-03-11 09:30:00"
+    assert first_item["quality_info"] is not None

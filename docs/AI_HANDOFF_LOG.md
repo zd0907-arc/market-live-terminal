@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-03-15 18:40 | Codex
+- Task ID: `CHG-20260315-03`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已按 STRICT 文档先行流程完成新版历史多维“轻量质量提示”第一版：正式 `5m / 1d` 表新增 `quality_info`，`/api/history/multiframe` 返回 `quality_info + is_placeholder`，缺失 `5m / 日` 在查询层补 placeholder，前端统一用黄色 `!` 标记异常点且 tooltip 直接展示质量说明。
+- 风险: 当前质量体系仍是单文本轻量方案；若后续要做更精细问题分类，应另开卡，而不是在本方案上继续叠复杂状态机。
+- 链接: `backend/app/db/l2_history_db.py`, `backend/app/routers/analysis.py`, `backend/scripts/l2_daily_backfill.py`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `docs/changes/REQ-20260315-03-monitor-multiframe-quality-info-lightweight.md`
+
+## 2026-03-15 13:20 | Codex
+- Task ID: `CHG-20260315-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成 `2026-03` 首批正式回补复盘：确认 `2026-03-02 ~ 2026-03-13` 共 10 个交易日的正式结果可作为当前基线使用，但仍有 `43` 个显式 `OrderID` 对齐失败和 `105` 个“无有效 bar”空结果样本需要进入 repair/review queue；同时已冻结未来每日盘后最佳执行方案为“Windows 数据面 + 常在线控制端 8 worker SSH 编排”。
+- 风险: 现有缺口不会污染其他 symbol/day，但会让对应 symbol 在对应日期缺少正式 L2 结果；当前 Windows 父进程 `Popen` 分片方案仍不稳定，不宜直接做正式定时任务主路径。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/tests/test_l2_daily_backfill.py`, `docs/changes/MOD-20260315-02-l2-march-backfill-review-and-postclose-runbook.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-15 14:18 | Codex
+- Task ID: `CHG-20260315-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成 `43` 个历史 `OrderID` 显式失败样本的脚本修复与 Windows 定向回补：`l2_daily_backfill.py` 现允许“单边 0 overlap、另一边可对齐”时回退到 `trade-side parent total`，仅在买卖两侧都完全无法对齐时才继续失败；同时新增 `l2_repair_failed_samples.py`，并已在 Windows 生成 `run_id=84~93` 的 repair run，`43/43` 全部恢复为正式成功。当前 `2026-03-02 ~ 2026-03-13` 正式累计已更新为 `history_daily_l2=74657`、`history_5m_l2=3361224`。
+- 风险: 旧失败记录仍保留在 `l2_daily_ingest_failures` 作为历史 run 审计；当前剩余待处理的核心缺口收敛为 `105` 个空结果样本，需要继续区分停牌/无成交与源包异常。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/scripts/l2_repair_failed_samples.py`, `backend/tests/test_l2_daily_backfill.py`, `docs/changes/MOD-20260315-02-l2-march-backfill-review-and-postclose-runbook.md`
+
 ## 2026-03-14 23:55 | Codex
 - Task ID: `CHG-20260314-08`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
@@ -39,6 +60,27 @@
 - 结论: 已完成历史多维副图第一版实现：在现有“价格 + 绝对买卖对比”主图下新增“净流入对比 + 买卖力度分离”两张副图，且四个粒度 `5m/30m/1h/日` 统一复用 `/api/history/multiframe` 前端派生；构建已通过。
 - 风险: 当前实现仍缺 `2026-03` 全月正式 L2 数据做大样本校正，后续需继续微调默认视窗、tooltip 信息密度与空值/未结算提示，避免在高密度样本下可读性下降。
 - 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `docs/changes/REQ-20260315-01-monitor-multiframe-secondary-panels.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-15 02:20 | Codex
+- Task ID: `CHG-20260314-04`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已复查 Windows `2026-03` 日包下载状态，并验证稳定并发回补路径：`D:\\MarketData\\202603` 已具备 `20260302 ~ 20260313` 共 10 个日包；其中 `2026-03-12` 已通过“本地直连多 SSH 会话并发 6 shard”方式完成正式回补，累计落库 `history_daily_l2=7630`、`history_5m_l2=344317`。`2026-03-11` 整日回补结果维持 `history_daily_l2=7648`、`history_5m_l2=344439`。
+- 风险: Windows 本机父进程拉起子进程的 shard 并发编排仍不稳定，当前可靠方案是“Mac 端直接并发多条 SSH worker”；`2026-03-12` 仍留有 `5` 个 `OrderID` 对齐失败 symbol 与 `20` 个无有效 bar symbol，后续批量跑 `20260313/10/09/06/05/04/03/02` 时需继续沿用该稳定路径并保留失败清单。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/scripts/l2_day_sharded_backfill.py`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-15 05:10 | Codex
+- Task ID: `CHG-20260314-04`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已把稳定并发路径扩大到 `8 worker` 并继续批量处理 `2026-03-13 / 2026-03-10 / 2026-03-09`：当前正式结果分别为 `7610/343162`、`7348/331198`、`5893/260777`（格式：`history_daily_l2/history_5m_l2`）。剩余失败清单已收敛到少量 `OrderID` 对齐异常：`2026-03-13=4`、`2026-03-10=2`、`2026-03-09=1`。
+- 风险: 现在真正未完成的只剩 `20260306/05/04/03/02`，且 Windows staging 已同时挂着多天解压目录；若继续连跑，建议优先补一个“清理已完成 staging + 按日生成 shard + 多 SSH worker 执行”的稳定脚本，避免后续纯手工编排出错。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-15 10:42 | Codex
+- Task ID: `CHG-20260314-04`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已把 `2026-03-06 / 05 / 04 / 03 / 02` 也全部按 `8 worker` 并发路径补完；至此，Windows 当前已下载的 `2026-03-02 ~ 2026-03-13` 共 10 个交易日已全部完成正式回补。10 日累计正式结果为：`history_daily_l2=74614`、`history_5m_l2=3360187`。显式 `OrderID` 对齐失败累计 `43` 个 `symbol-day`，另有 `105` 个 `symbol-day` 因无有效 bar 未形成正式 `5m+daily`。
+- 风险: 失败样本不会污染其他 symbol/day 的正式数据，但会导致对应 symbol 在对应日期缺少正式 L2 行；下一步应对这 `43` 个失败样本按“ETF/基金类优先、上证样本次之”做专项容错评估，并尽快把当前手工并发流程脚本化，避免后续增量日包继续人工编排。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `docs/changes/REQ-20260314-04-l2-daily-package-adapter-and-backfill.md`, `docs/07_PENDING_TODO.md`
 
 ## 2026-03-14 23:20 | Codex
 - Task ID: `CHG-20260314-08`

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -8,6 +8,7 @@ from backend.app.services.market import get_sina_money_flow, get_sina_kline
 from backend.app.services.analysis import perform_aggregation, refresh_realtime_preview
 from backend.app.db.crud import get_local_history_data, get_app_config, get_history_30m
 from backend.app.core.time_buckets import map_to_30m_bucket_start
+from backend.app.core.calendar import TradeCalendar
 from backend.app.core.trade_side import is_buy_series, is_sell_series
 from backend.app.core.http_client import MarketClock
 from backend.app.core.config import MOCK_DATA_DATE
@@ -50,28 +51,167 @@ def _get_natural_today_str() -> str:
     return MarketClock._now_china().strftime("%Y-%m-%d")
 
 
+def _nullable_float(value: object) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_trade_day_range(
+    existing_dates: List[str],
+    start_date: Optional[str],
+    end_date: Optional[str],
+) -> List[str]:
+    if start_date and end_date and start_date > end_date:
+        return []
+
+    range_start = start_date or (min(existing_dates) if existing_dates else None)
+    range_end = end_date or (max(existing_dates) if existing_dates else None)
+    if not range_start or not range_end:
+        return []
+
+    cursor = datetime.strptime(range_start, "%Y-%m-%d")
+    end_dt = datetime.strptime(range_end, "%Y-%m-%d")
+    dates: List[str] = []
+    while cursor <= end_dt:
+        trade_day = cursor.strftime("%Y-%m-%d")
+        if TradeCalendar.is_trade_day(trade_day):
+            dates.append(trade_day)
+        cursor += timedelta(days=1)
+    return dates
+
+
+def _expected_5m_datetimes(trade_date: str) -> List[str]:
+    slots: List[str] = []
+    for hour, minute in [(9, 30), (13, 0)]:
+        current = datetime.strptime(f"{trade_date} {hour:02d}:{minute:02d}:00", "%Y-%m-%d %H:%M:%S")
+        end_time = datetime.strptime(
+            f"{trade_date} {'11:30:00' if hour == 9 else '15:00:00'}",
+            "%Y-%m-%d %H:%M:%S",
+        )
+        while current <= end_time:
+            slots.append(current.strftime("%Y-%m-%d %H:%M:%S"))
+            current += timedelta(minutes=5)
+    return slots
+
+
+def _build_5m_placeholder_row(symbol: str, trade_date: str, bucket_dt: str) -> Dict[str, object]:
+    return {
+        "symbol": symbol,
+        "datetime": bucket_dt,
+        "source_date": trade_date,
+        "open": None,
+        "high": None,
+        "low": None,
+        "close": None,
+        "total_amount": None,
+        "l1_main_buy": None,
+        "l1_main_sell": None,
+        "l1_super_buy": None,
+        "l1_super_sell": None,
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "quality_info": "该 5 分钟桶缺失",
+        "is_placeholder": True,
+    }
+
+
+def _build_daily_placeholder_row(symbol: str, trade_date: str) -> Dict[str, object]:
+    return {
+        "symbol": symbol,
+        "date": trade_date,
+        "open": None,
+        "high": None,
+        "low": None,
+        "close": None,
+        "total_amount": None,
+        "l1_main_buy": None,
+        "l1_main_sell": None,
+        "l1_super_buy": None,
+        "l1_super_sell": None,
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "quality_info": "该日缺失正式数据",
+        "is_placeholder": True,
+    }
+
+
+def _inject_missing_5m_placeholders(
+    symbol: str,
+    rows_5m: List[Dict[str, object]],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    skip_trade_date: Optional[str],
+) -> List[Dict[str, object]]:
+    existing_dates = sorted({str(row["source_date"]) for row in rows_5m})
+    expected_dates = _safe_trade_day_range(existing_dates, start_date, end_date)
+    if not expected_dates:
+        return rows_5m
+
+    existing_datetimes = {str(row["datetime"]) for row in rows_5m}
+    output = [dict(row) for row in rows_5m]
+    for trade_date in expected_dates:
+        if skip_trade_date and trade_date == skip_trade_date:
+            continue
+        for bucket_dt in _expected_5m_datetimes(trade_date):
+            if bucket_dt not in existing_datetimes:
+                output.append(_build_5m_placeholder_row(symbol, trade_date, bucket_dt))
+    output.sort(key=lambda item: str(item["datetime"]))
+    return output
+
+
+def _inject_missing_daily_placeholders(
+    symbol: str,
+    rows_daily: List[Dict[str, object]],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    skip_trade_date: Optional[str],
+) -> List[Dict[str, object]]:
+    existing_dates = sorted({str(row["date"]) for row in rows_daily})
+    expected_dates = _safe_trade_day_range(existing_dates, start_date, end_date)
+    if not expected_dates:
+        return rows_daily
+
+    row_map = {str(row["date"]): dict(row) for row in rows_daily}
+    output: List[Dict[str, object]] = []
+    for trade_date in expected_dates:
+        if skip_trade_date and trade_date == skip_trade_date:
+            continue
+        output.append(row_map.get(trade_date, _build_daily_placeholder_row(symbol, trade_date)))
+    return output
+
+
 def _map_finalized_intraday_row(row: Dict[str, object], granularity: str) -> Dict[str, object]:
     return {
         "datetime": str(row["datetime"]),
         "trade_date": str(row["source_date"]),
         "granularity": granularity,
-        "open": float(row["open"]),
-        "high": float(row["high"]),
-        "low": float(row["low"]),
-        "close": float(row["close"]),
-        "total_amount": float(row["total_amount"]),
-        "l1_main_buy": float(row["l1_main_buy"]),
-        "l1_main_sell": float(row["l1_main_sell"]),
-        "l1_super_buy": float(row["l1_super_buy"]),
-        "l1_super_sell": float(row["l1_super_sell"]),
-        "l2_main_buy": float(row["l2_main_buy"]),
-        "l2_main_sell": float(row["l2_main_sell"]),
-        "l2_super_buy": float(row["l2_super_buy"]),
-        "l2_super_sell": float(row["l2_super_sell"]),
-        "source": "l2_history",
-        "is_finalized": True,
+        "open": _nullable_float(row.get("open")),
+        "high": _nullable_float(row.get("high")),
+        "low": _nullable_float(row.get("low")),
+        "close": _nullable_float(row.get("close")),
+        "total_amount": _nullable_float(row.get("total_amount")),
+        "l1_main_buy": _nullable_float(row.get("l1_main_buy")),
+        "l1_main_sell": _nullable_float(row.get("l1_main_sell")),
+        "l1_super_buy": _nullable_float(row.get("l1_super_buy")),
+        "l1_super_sell": _nullable_float(row.get("l1_super_sell")),
+        "l2_main_buy": _nullable_float(row.get("l2_main_buy")),
+        "l2_main_sell": _nullable_float(row.get("l2_main_sell")),
+        "l2_super_buy": _nullable_float(row.get("l2_super_buy")),
+        "l2_super_sell": _nullable_float(row.get("l2_super_sell")),
+        "source": "l2_history_placeholder" if bool(row.get("is_placeholder")) else "l2_history",
+        "is_finalized": not bool(row.get("is_placeholder")),
         "preview_level": None,
         "fallback_used": False,
+        "quality_info": str(row.get("quality_info") or "").strip() or None,
+        "is_placeholder": bool(row.get("is_placeholder")),
     }
 
 
@@ -81,23 +221,25 @@ def _map_finalized_daily_row(row: Dict[str, object]) -> Dict[str, object]:
         "datetime": f"{trade_date} 15:00:00",
         "trade_date": trade_date,
         "granularity": "1d",
-        "open": float(row["open"]),
-        "high": float(row["high"]),
-        "low": float(row["low"]),
-        "close": float(row["close"]),
-        "total_amount": float(row["total_amount"]),
-        "l1_main_buy": float(row["l1_main_buy"]),
-        "l1_main_sell": float(row["l1_main_sell"]),
-        "l1_super_buy": float(row["l1_super_buy"]),
-        "l1_super_sell": float(row["l1_super_sell"]),
-        "l2_main_buy": float(row["l2_main_buy"]),
-        "l2_main_sell": float(row["l2_main_sell"]),
-        "l2_super_buy": float(row["l2_super_buy"]),
-        "l2_super_sell": float(row["l2_super_sell"]),
-        "source": "l2_history",
-        "is_finalized": True,
+        "open": _nullable_float(row.get("open")),
+        "high": _nullable_float(row.get("high")),
+        "low": _nullable_float(row.get("low")),
+        "close": _nullable_float(row.get("close")),
+        "total_amount": _nullable_float(row.get("total_amount")),
+        "l1_main_buy": _nullable_float(row.get("l1_main_buy")),
+        "l1_main_sell": _nullable_float(row.get("l1_main_sell")),
+        "l1_super_buy": _nullable_float(row.get("l1_super_buy")),
+        "l1_super_sell": _nullable_float(row.get("l1_super_sell")),
+        "l2_main_buy": _nullable_float(row.get("l2_main_buy")),
+        "l2_main_sell": _nullable_float(row.get("l2_main_sell")),
+        "l2_super_buy": _nullable_float(row.get("l2_super_buy")),
+        "l2_super_sell": _nullable_float(row.get("l2_super_sell")),
+        "source": "l2_history_placeholder" if bool(row.get("is_placeholder")) else "l2_history",
+        "is_finalized": not bool(row.get("is_placeholder")),
         "preview_level": None,
         "fallback_used": False,
+        "quality_info": str(row.get("quality_info") or "").strip() or None,
+        "is_placeholder": bool(row.get("is_placeholder")),
     }
 
 
@@ -123,6 +265,8 @@ def _map_preview_intraday_row(row: Dict[str, object], granularity: str) -> Dict[
         "is_finalized": False,
         "preview_level": str(row["preview_level"]),
         "fallback_used": False,
+        "quality_info": None,
+        "is_placeholder": False,
     }
 
 
@@ -149,6 +293,8 @@ def _map_preview_daily_row(row: Dict[str, object]) -> Dict[str, object]:
         "is_finalized": False,
         "preview_level": str(row["preview_level"]),
         "fallback_used": False,
+        "quality_info": None,
+        "is_placeholder": False,
     }
 
 
@@ -171,19 +317,35 @@ def _build_multiframe_rows(
     normalized_granularity = _normalize_multiframe_granularity(granularity)
 
     if normalized_granularity == "1d":
+        today_str = _get_natural_today_str()
         finalized_daily_rows = query_l2_history_daily_rows(
             symbol,
             start_date=start_date,
             end_date=end_date,
             limit_days=None if (start_date or end_date) else days,
         )
+        finalized_daily_rows = _inject_missing_daily_placeholders(
+            symbol=symbol,
+            rows_daily=finalized_daily_rows,
+            start_date=start_date,
+            end_date=end_date,
+            skip_trade_date=today_str if include_today_preview else None,
+        )
         rows = [_map_finalized_daily_row(row) for row in finalized_daily_rows]
     else:
+        today_str = _get_natural_today_str()
         finalized_5m_rows = query_l2_history_5m_rows(
             symbol,
             start_date=start_date,
             end_date=end_date,
             limit_days=None if (start_date or end_date) else days,
+        )
+        finalized_5m_rows = _inject_missing_5m_placeholders(
+            symbol=symbol,
+            rows_5m=finalized_5m_rows,
+            start_date=start_date,
+            end_date=end_date,
+            skip_trade_date=today_str if include_today_preview else None,
         )
         finalized_rows = aggregate_l2_history_5m_rows(finalized_5m_rows, normalized_granularity)
         rows = [_map_finalized_intraday_row(row, normalized_granularity) for row in finalized_rows]

@@ -89,11 +89,13 @@
 | `l1_super_buy/sell` | `REAL` | `NOT NULL`，L1 超大单绝对买卖 |
 | `l2_main_buy/sell` | `REAL` | `NOT NULL`，L2 主力绝对买卖（母单聚合） |
 | `l2_super_buy/sell` | `REAL` | `NOT NULL`，L2 超大单绝对买卖 |
+| `quality_info` | `TEXT` | Allow `NULL`，有问题时写一段人类可读说明 |
 **主键**: `PRIMARY KEY(symbol, datetime)`
 > 说明：
 > - 正式历史最细粒度固定为 `5m`，不额外维护 `1m` 生产持久层；
 > - `net` 字段允许查询时按 `buy-sell` 派生，避免重复存储；
 > - `15m/30m/1h` 统一由本表聚合，不单独落库。
+> - `quality_info` 仅服务新版历史多维轻量质量提示；无问题时保持为空。
 
 ### 6. `history_daily_l2`（生产正式 L2 历史日线底座）
 > **生产正式层**：服务历史日K资金博弈分析，并为后续 L1/L2 对比提供统一日线事实表。
@@ -114,10 +116,12 @@
 | `l2_super_ratio` | `REAL` | `NOT NULL`，L2 超大单参与度 |
 | `l1_buy_ratio` / `l1_sell_ratio` | `REAL` | `NOT NULL`，供历史日K资金博弈分析 |
 | `l2_buy_ratio` / `l2_sell_ratio` | `REAL` | `NOT NULL`，供未来历史 L1/L2 对比分析 |
+| `quality_info` | `TEXT` | Allow `NULL`，有问题时写一段人类可读说明 |
 **主键**: `PRIMARY KEY(symbol, date)`
 > 说明：
 > - 当天历史模块仍可临时展示实时值，但次日及以后应以本表为正式值；
 > - 本表是未来历史日K里 L1/L2 对比分析的统一来源。
+> - 对整日缺失的日线，不强行写假值入本表，而在新版查询层补 placeholder。
 
 ### 7. `l2_daily_ingest_runs / l2_daily_ingest_failures`（盘后 L2 日级回补状态）
 > **生产运维层**：记录每日盘后 L2 正式结算 / 重跑 / 失败信息。
@@ -131,7 +135,8 @@
 - 写入规则：
   - 支持同一天重复回补；
   - 重跑以覆盖写为准，不允许产生重复正式记录；
-  - 失败记录必须可追溯到文件级。
+  - 失败记录必须可追溯到文件级；
+  - 除了解析/对齐失败，**未形成正式 `5m + daily` 的空结果样本**也必须写入本表，避免静默缺口。
 
 ### 8. `realtime_5m_preview`（盘中 5 分钟预览层）
 > **盘中预览层**：服务新版“当日分时 / 历史多维”在今日场景下的临时 L1 数据，不得与 finalized 历史混用。
@@ -269,7 +274,10 @@
       - `l1_main_buy/sell`, `l1_super_buy/sell`
       - `l2_main_buy/sell`, `l2_super_buy/sell`（preview 行为 `null`）
       - `source/is_finalized/preview_level/fallback_used`
+      - `quality_info`（有问题时为文本说明，无问题时为空）
+      - `is_placeholder`（查询层补出的缺失占位）
     - 规则：今日未结算 preview 行必须返回 `is_finalized=false`、`preview_level=l1_only`，不得伪装为正式 L2。
+    - 规则：placeholder 项只允许用于新版历史多维展示缺失，不得被前端当成数值 `0`。
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
     - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若进入历史/回溯日期，则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失，则继续尝试 `history_5m_l2`；若仍缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
     - 响应补充字段：`source`、`is_finalized`、`bucket_granularity`，供前端准确标记“实时 / 历史1m / 正式L2历史5m”。

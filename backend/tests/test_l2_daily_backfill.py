@@ -157,3 +157,108 @@ def test_l2_daily_backfill_allows_partial_order_alignment(monkeypatch, tmp_path)
     assert row is not None
     assert row[0] > 0
     assert row[1] > 0
+
+
+def test_l2_daily_backfill_allows_single_side_zero_overlap(monkeypatch, tmp_path):
+    db_path = tmp_path / "market_data.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    package_path = _build_sample_day(tmp_path)
+    trade_path = package_path / "000833.SZ" / "逐笔成交.csv"
+    _write_csv(
+        trade_path,
+        "\n".join(
+            [
+                "万得代码,交易所代码,自然日,时间,成交编号,成交代码,委托代码,BS标志,成交价格,成交数量,叫卖序号,叫买序号",
+                "000833.SZ,000833,20260311,93000000,1,C,0,B,250000,10000,2001,9991",
+                "000833.SZ,000833,20260311,93010000,2,C,0,B,250000,10000,2001,9991",
+                "000833.SZ,000833,20260311,93500000,3,C,0,B,251000,30000,2002,9992",
+                "000833.SZ,000833,20260311,93520000,4,C,0,B,251000,30000,2002,9992",
+            ]
+        ),
+    )
+
+    report = backfill_day_package(package_path, mode="unit-test")
+
+    assert report["success_symbols"] == 1
+    assert report["failed_symbols"] == 0
+
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT datetime, l2_main_buy, l2_main_sell, quality_info FROM history_5m_l2 WHERE symbol='sz000833' ORDER BY datetime"
+    ).fetchall()
+    daily_row = conn.execute(
+        "SELECT quality_info FROM history_daily_l2 WHERE symbol='sz000833' AND date='2026-03-11'"
+    ).fetchone()
+    conn.close()
+
+    assert len(rows) == 2
+    assert rows[0][1] > 0
+    assert rows[0][2] > 0
+    assert rows[0][3] is not None
+    assert rows[1][1] > 0
+    assert rows[1][2] > 0
+    assert daily_row is not None
+    assert daily_row[0] is not None
+
+
+def test_l2_daily_backfill_still_fails_when_both_sides_zero_overlap(monkeypatch, tmp_path):
+    db_path = tmp_path / "market_data.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    package_path = _build_sample_day(tmp_path)
+    bad_trade = package_path / "000833.SZ" / "逐笔成交.csv"
+    _write_csv(
+        bad_trade,
+        "\n".join(
+            [
+                "万得代码,交易所代码,自然日,时间,成交编号,成交代码,委托代码,BS标志,成交价格,成交数量,叫卖序号,叫买序号",
+                "000833.SZ,000833,20260311,93000000,1,C,0,B,250000,10000,9999,8888",
+                "000833.SZ,000833,20260311,93010000,2,C,0,S,250000,10000,9999,8888",
+            ]
+        ),
+    )
+
+    report = backfill_day_package(package_path, mode="unit-test")
+
+    assert report["success_symbols"] == 0
+    assert report["failed_symbols"] == 1
+
+def test_l2_daily_backfill_records_empty_bar_review_item(monkeypatch, tmp_path):
+    db_path = tmp_path / "market_data.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    package_path = _build_sample_day(tmp_path)
+    trade_path = package_path / "000833.SZ" / "逐笔成交.csv"
+    _write_csv(
+        trade_path,
+        "\n".join(
+            [
+                "万得代码,交易所代码,自然日,时间,成交编号,成交代码,委托代码,BS标志,成交价格,成交数量,叫卖序号,叫买序号",
+                "000833.SZ,000833,20260311,08000000,1,C,0,B,250000,10000,2001,1001",
+            ]
+        ),
+    )
+
+    report = backfill_day_package(package_path, mode="unit-test")
+
+    assert report["success_symbols"] == 0
+    assert report["empty_symbols"] == 1
+    assert report["failed_symbols"] == 1
+    assert report["rows_5m"] == 0
+    assert report["rows_daily"] == 0
+
+    conn = sqlite3.connect(db_path)
+    failure_row = conn.execute(
+        "SELECT trade_date, symbol, error_message FROM l2_daily_ingest_failures"
+    ).fetchone()
+    run_row = conn.execute(
+        "SELECT trade_date, status, symbol_count, rows_daily, message FROM l2_daily_ingest_runs"
+    ).fetchone()
+    written_5m = conn.execute("SELECT COUNT(*) FROM history_5m_l2").fetchone()[0]
+    written_daily = conn.execute("SELECT COUNT(*) FROM history_daily_l2").fetchone()[0]
+    conn.close()
+
+    assert failure_row[0] == "2026-03-11"
+    assert failure_row[1] == "sz000833"
+    assert "无有效 bar" in failure_row[2]
+    assert run_row == ("2026-03-11", "partial_done", 0, 0, "success=0, failed=1, empty=1")
+    assert written_5m == 0
+    assert written_daily == 0

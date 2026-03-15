@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
-import { BarChart, CandlestickChart, LineChart } from 'echarts/charts';
+import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts';
 import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { AlertCircle, Database, RefreshCw } from 'lucide-react';
@@ -13,6 +13,7 @@ echarts.use([
   BarChart,
   CandlestickChart,
   LineChart,
+  ScatterChart,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
@@ -31,16 +32,18 @@ type FusionRow = {
   label: string;
   datetime: string;
   tradeDate: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  totalAmount: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  totalAmount: number | null;
   source: string;
   isFinalized: boolean;
   previewLevel: string | null;
   fallbackUsed: boolean;
   isPreviewOnly: boolean;
+  isPlaceholder: boolean;
+  qualityInfo: string | null;
   l1MainBuy: number | null;
   l1MainSell: number | null;
   l1SuperBuy: number | null;
@@ -100,13 +103,18 @@ const compactPercent = (value: number | null): string => {
   return `${value.toFixed(value >= 10 ? 1 : 2)}%`;
 };
 
+const formatPrice = (value: number | null): string => {
+  if (value === null || !Number.isFinite(value)) return '--';
+  return value.toFixed(2);
+};
+
 const toNet = (buy: number | null, sell: number | null): number | null => {
   if (buy === null || sell === null) return null;
   return buy - sell;
 };
 
-const toRatio = (value: number | null, totalAmount: number): number | null => {
-  if (value === null || !Number.isFinite(totalAmount) || totalAmount <= 0) return null;
+const toRatio = (value: number | null, totalAmount: number | null): number | null => {
+  if (value === null || totalAmount === null || !Number.isFinite(totalAmount) || totalAmount <= 0) return null;
   return value / totalAmount * 100;
 };
 
@@ -127,10 +135,13 @@ const buildRows = (
     const previewLevel = row.preview_level || null;
     const isFinalized = row.is_finalized === true;
     const isPreviewOnly = !isFinalized;
+    const isPlaceholder = row.is_placeholder === true;
+    const qualityInfo = row.quality_info || null;
     const hasUsableL2 = isFinalized
       && [row.l2_main_buy, row.l2_main_sell, row.l2_super_buy, row.l2_super_sell].some((item) => toFiniteNumber(item) !== null);
+    const hasUsableL1 = [row.l1_main_buy, row.l1_main_sell, row.l1_super_buy, row.l1_super_sell].some((item) => toFiniteNumber(item) !== null);
 
-    if (!hasUsableL2 && !isPreviewOnly) {
+    if (!hasUsableL2 && !hasUsableL1 && !isPreviewOnly && !isPlaceholder) {
       return null;
     }
 
@@ -139,16 +150,18 @@ const buildRows = (
       label: buildLabel(row, granularity),
       datetime: row.datetime,
       tradeDate: row.trade_date,
-      open: Number(row.open || 0),
-      high: Number(row.high || 0),
-      low: Number(row.low || 0),
-      close: Number(row.close || 0),
-      totalAmount: Number(row.total_amount || 0),
+      open: toFiniteNumber(row.open),
+      high: toFiniteNumber(row.high),
+      low: toFiniteNumber(row.low),
+      close: toFiniteNumber(row.close),
+      totalAmount: toFiniteNumber(row.total_amount),
       source,
       isFinalized,
       previewLevel,
       fallbackUsed: row.fallback_used === true,
       isPreviewOnly,
+      isPlaceholder,
+      qualityInfo,
       l1MainBuy: toFiniteNumber(row.l1_main_buy),
       l1MainSell: toFiniteNumber(row.l1_main_sell),
       l1SuperBuy: toFiniteNumber(row.l1_super_buy),
@@ -201,15 +214,19 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   }, [activeStock, granularity, refreshKey]);
 
   const fusionRows = useMemo(() => buildRows(rows, granularity), [rows, granularity]);
-  const hasFormalL2History = fusionRows.some((row) => row.isFinalized);
+  const hasFormalL2History = fusionRows.some(
+    (row) => row.isFinalized && !row.isPlaceholder && [row.l2MainBuy, row.l2MainSell, row.l2SuperBuy, row.l2SuperSell].some((item) => item !== null),
+  );
   const hasPreviewRows = fusionRows.some((row) => row.isPreviewOnly);
+  const issueCount = fusionRows.filter((row) => !!row.qualityInfo).length;
 
   const sourceLabel = useMemo(() => {
     if (hasFormalL2History && hasPreviewRows) return 'Source: 正式L2历史 + 今日L1预览';
     if (hasFormalL2History) return 'Source: 正式L2历史';
     if (hasPreviewRows) return 'Source: 今日L1预览';
+    if (fusionRows.length) return 'Source: 仅异常占位 / 待补正式L2';
     return 'Source: 暂无可用正式L2历史';
-  }, [hasFormalL2History, hasPreviewRows]);
+  }, [fusionRows.length, hasFormalL2History, hasPreviewRows]);
 
   const chartOption = useMemo(() => {
     if (!fusionRows.length) return {};
@@ -217,6 +234,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     const category = fusionRows.map((row) => row.label);
     const candleData = fusionRows.map((row) => [row.open, row.close, row.low, row.high]);
     const closeLine = fusionRows.map((row) => row.close);
+    const qualityMarks = fusionRows.map((row) => (row.qualityInfo ? 0 : null));
 
     const superL2Buy = fusionRows.map((row) => row.l2SuperBuy);
     const superL1Buy = fusionRows.map((row) => row.l1SuperBuy);
@@ -296,10 +314,12 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
 
           const meta = [
             `<div style="font-weight:700;color:#F8FAFC;margin-bottom:6px;">${row.datetime}</div>`,
-            `<div style="color:#CBD5E1;">O ${row.open.toFixed(2)} / H ${row.high.toFixed(2)} / L ${row.low.toFixed(2)} / C ${row.close.toFixed(2)}</div>`,
+            `<div style="color:#CBD5E1;">O ${formatPrice(row.open)} / H ${formatPrice(row.high)} / L ${formatPrice(row.low)} / C ${formatPrice(row.close)}</div>`,
             `<div style="color:#CBD5E1;">来源: ${row.source} ｜ finalized: ${row.isFinalized ? 'true' : 'false'} ｜ fallback: ${row.fallbackUsed ? 'true' : 'false'}</div>`,
             `<div style="color:#CBD5E1;">成交额: ${compactAmount(row.totalAmount)}</div>`,
             row.isPreviewOnly ? `<div style="margin-top:4px;color:#FBBF24;">未结算 / 当前仅 ${row.previewLevel || 'L1'} 实时口径，L2 待盘后覆盖</div>` : '',
+            row.isPlaceholder ? `<div style="margin-top:4px;color:#FBBF24;">该点为缺失占位，不按 0 处理</div>` : '',
+            row.qualityInfo ? `<div style="margin-top:4px;color:#FCD34D;">质量提示: ${row.qualityInfo}</div>` : '',
           ].filter(Boolean);
 
           return [
@@ -465,6 +485,23 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           lineStyle: { color: COLORS.closeLine, width: 1.2, opacity: 0.9 },
           itemStyle: { color: COLORS.closeLine },
           z: 4,
+        },
+        {
+          name: '质量提示',
+          type: 'scatter',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: qualityMarks,
+          symbolSize: 12,
+          itemStyle: { color: '#F59E0B' },
+          label: {
+            show: true,
+            formatter: '!',
+            color: '#0F172A',
+            fontSize: 10,
+            fontWeight: 700,
+          },
+          z: 6,
         },
         {
           name: '超大L2买',
@@ -735,9 +772,14 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
                   今日未结算：仅展示 L1 芯柱
                 </span>
               )}
+              {issueCount > 0 && (
+                <span className="text-[10px] font-medium text-amber-200 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+                  质量提示 {issueCount} 个
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              上方价格区，下方依次为绝对买卖、净流入、买卖力度三层副图；深色 L2 做底，浅色 L1 做芯。
+              上方价格区，下方依次为绝对买卖、净流入、买卖力度三层副图；深色 L2 做底，浅色 L1 做芯，异常点统一用黄色“!”提示。
             </p>
           </div>
 
@@ -763,7 +805,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             <RefreshCw className="w-8 h-8 animate-spin mb-4" />
             <p>正在加载{LABELS[granularity]}融合数据...</p>
           </div>
-        ) : !hasFormalL2History ? (
+        ) : !fusionRows.length ? (
           <div className="min-h-[420px] flex flex-col items-center justify-center text-center bg-slate-950/30 rounded-lg border border-slate-800/50 px-6">
             <Database className="w-14 h-14 mb-4 text-slate-700" />
             <h4 className="text-slate-200 font-semibold mb-2">暂无可用正式 L2 {LABELS[granularity]}历史</h4>

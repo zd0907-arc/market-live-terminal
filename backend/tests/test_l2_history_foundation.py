@@ -25,12 +25,22 @@ def test_l2_history_schema_created_by_init_db(monkeypatch, tmp_path):
         row[0]
         for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     }
+    history_5m_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(history_5m_l2)").fetchall()
+    }
+    history_daily_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(history_daily_l2)").fetchall()
+    }
     conn.close()
 
     assert "history_5m_l2" in tables
     assert "history_daily_l2" in tables
     assert "l2_daily_ingest_runs" in tables
     assert "l2_daily_ingest_failures" in tables
+    assert "quality_info" in history_5m_columns
+    assert "quality_info" in history_daily_columns
 
 
 def test_replace_l2_history_rows_overwrites_same_trade_date(monkeypatch, tmp_path):

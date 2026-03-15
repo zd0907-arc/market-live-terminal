@@ -141,11 +141,11 @@ export interface HistoryMultiframeItem {
   datetime: string;
   trade_date: string;
   granularity: HistoryMultiframeGranularity;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  total_amount: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  total_amount: number | null;
   l1_main_buy: number | null;
   l1_main_sell: number | null;
   l1_super_buy: number | null;
@@ -158,6 +158,8 @@ export interface HistoryMultiframeItem {
   is_finalized?: boolean;
   preview_level?: string | null;
   fallback_used?: boolean;
+  quality_info?: string | null;
+  is_placeholder?: boolean;
 }
 
 export interface SandboxReviewBar {

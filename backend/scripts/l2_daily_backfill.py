@@ -65,7 +65,7 @@ def _format_trade_time(raw_series: pd.Series) -> pd.Series:
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, encoding="gb18030")
+    df = pd.read_csv(path, encoding="gb18030", low_memory=False)
     bad_cols = [c for c in df.columns if str(c).strip() == "" or str(c).startswith("Unnamed")]
     if bad_cols:
         df = df.drop(columns=bad_cols)
@@ -141,7 +141,7 @@ def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.Data
     overlap_sell_refs = sorted(sell_refs & order_ids)
     missing_buy_refs = sorted(buy_refs - order_ids)
     missing_sell_refs = sorted(sell_refs - order_ids)
-    if (buy_refs and not overlap_buy_refs) or (sell_refs and not overlap_sell_refs):
+    if (buy_refs and not overlap_buy_refs) and (sell_refs and not overlap_sell_refs):
         raise ValueError(
             f"OrderID 无法在逐笔委托中对齐: buy_missing={len(missing_buy_refs)}, sell_missing={len(missing_sell_refs)}"
         )
@@ -181,6 +181,24 @@ def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.Data
         "order_alignment_sell_missing": int(len(missing_sell_refs)),
     }
     return ticks, diagnostics
+
+
+def _build_quality_info(diagnostics: Dict[str, object]) -> Optional[str]:
+    buy_overlap = int(diagnostics.get("order_alignment_buy_overlap", 0) or 0)
+    sell_overlap = int(diagnostics.get("order_alignment_sell_overlap", 0) or 0)
+    buy_missing = int(diagnostics.get("order_alignment_buy_missing", 0) or 0)
+    sell_missing = int(diagnostics.get("order_alignment_sell_missing", 0) or 0)
+
+    messages: List[str] = []
+    if buy_missing > 0 and buy_overlap <= 0 and sell_overlap > 0:
+        messages.append("L2 买边单边回退，数值可能偏小")
+    if sell_missing > 0 and sell_overlap <= 0 and buy_overlap > 0:
+        messages.append("L2 卖边单边回退，数值可能偏小")
+    if not messages and (buy_missing > 0 or sell_missing > 0):
+        messages.append("OrderID 部分缺失，L2 数值可能偏小")
+    if not messages:
+        return None
+    return "；".join(messages)
 
 
 def compute_5m_bars(
@@ -271,6 +289,8 @@ def compute_daily_row(symbol: str, trade_date: str, rows_5m: Sequence[Tuple]) ->
     l2_main_sell = sum(row[13] for row in rows_5m)
     l2_super_buy = sum(row[14] for row in rows_5m)
     l2_super_sell = sum(row[15] for row in rows_5m)
+    quality_messages = [str(row[16]).strip() for row in rows_5m if len(row) > 16 and str(row[16]).strip()]
+    quality_info = "；".join(dict.fromkeys(quality_messages)) if quality_messages else None
 
     def ratio(v: float) -> float:
         return float(v / total_amount * 100) if total_amount > 0 else 0.0
@@ -303,6 +323,7 @@ def compute_daily_row(symbol: str, trade_date: str, rows_5m: Sequence[Tuple]) ->
         ratio(l1_main_sell),
         ratio(l2_main_buy),
         ratio(l2_main_sell),
+        quality_info,
     )
 
 
@@ -318,6 +339,7 @@ def process_symbol_dir(
         raise ValueError(f"缺少文件: {', '.join(missing)}")
 
     ticks, diagnostics = build_standardized_ticks(symbol_dir, trade_date)
+    quality_info = _build_quality_info(diagnostics)
     rows_5m = compute_5m_bars(
         ticks,
         symbol=symbol,
@@ -325,10 +347,25 @@ def process_symbol_dir(
         large_threshold=large_threshold,
         super_threshold=super_threshold,
     )
+    if quality_info:
+        rows_5m = [tuple(list(row) + [quality_info]) for row in rows_5m]
+    else:
+        rows_5m = [tuple(list(row) + [None]) for row in rows_5m]
     daily_row = compute_daily_row(symbol, trade_date, rows_5m)
     diagnostics["bars_5m"] = len(rows_5m)
     diagnostics["has_daily"] = daily_row is not None
+    diagnostics["quality_info"] = quality_info
     return symbol, rows_5m, daily_row, diagnostics
+
+
+def _build_empty_result_message(diagnostics: Dict[str, object]) -> str:
+    ticks_rows = int(diagnostics.get("ticks_rows", 0) or 0)
+    bars_5m = int(diagnostics.get("bars_5m", 0) or 0)
+    if ticks_rows <= 0:
+        return "无有效 bar：交易时段内无可用逐笔（可能停牌、无成交或原始数据为空）"
+    if bars_5m <= 0:
+        return "无有效 bar：逐笔可读但未形成正式 5m 结果"
+    return "无有效 daily：5m 已生成但未形成正式日线结果"
 
 
 def backfill_day_package(
@@ -348,6 +385,7 @@ def backfill_day_package(
     run_id = None if dry_run else create_l2_daily_ingest_run(trade_date=trade_date, source_root=str(day_root), mode=mode)
     failures: List[Tuple[str, str, str, str]] = []
     success_symbols = 0
+    empty_symbols = 0
     rows_5m_total = 0
     rows_daily_total = 0
     symbol_reports: Dict[str, Dict[str, object]] = {}
@@ -363,6 +401,17 @@ def backfill_day_package(
                     super_threshold,
                 )
                 symbol_reports[normalized_symbol] = diagnostics
+                if not rows_5m or daily_row is None:
+                    empty_symbols += 1
+                    failures.append(
+                        (
+                            normalized_symbol,
+                            trade_date,
+                            str(symbol_dir),
+                            _build_empty_result_message(diagnostics),
+                        )
+                    )
+                    continue
                 if not dry_run:
                     replace_history_5m_l2_rows(normalized_symbol, trade_date, rows_5m)
                     replace_history_daily_l2_row(normalized_symbol, trade_date, daily_row)
@@ -381,7 +430,7 @@ def backfill_day_package(
                 symbol_count=success_symbols,
                 rows_5m=rows_5m_total,
                 rows_daily=rows_daily_total,
-                message=f"success={success_symbols}, failed={len(failures)}",
+                message=f"success={success_symbols}, failed={len(failures)}, empty={empty_symbols}",
             )
     except Exception as exc:
         if not dry_run and run_id is not None:
@@ -400,6 +449,7 @@ def backfill_day_package(
         "day_root": str(day_root),
         "symbol_count": len(symbol_dirs),
         "success_symbols": success_symbols,
+        "empty_symbols": empty_symbols,
         "failed_symbols": len(failures),
         "rows_5m": rows_5m_total,
         "rows_daily": rows_daily_total,
@@ -426,6 +476,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="盘后 L2 日包正式回补（5m + daily）")
     parser.add_argument("package_path", help=r"日包目录，如 D:\MarketData\202603\20260311")
     parser.add_argument("--symbols", default="", help="逗号分隔的 symbol，如 sz000833,sh600519；留空为全目录")
+    parser.add_argument("--symbols-file", default="", help="可选 symbols 文件路径；每行一个 symbol，也兼容逗号分隔")
     parser.add_argument("--large-threshold", type=float, default=default_large)
     parser.add_argument("--super-threshold", type=float, default=default_super)
     parser.add_argument("--mode", default="manual", help="run mode，例如 manual/daily_auto")
@@ -438,6 +489,16 @@ def main() -> None:
         os.environ["DB_PATH"] = os.path.abspath(args.db_path)
 
     symbols = [s.strip().lower() for s in args.symbols.split(",") if s.strip()]
+    if args.symbols_file:
+        text = Path(args.symbols_file).read_text(encoding="utf-8")
+        file_symbols = [
+            part.strip().lower()
+            for line in text.splitlines()
+            for part in line.split(",")
+            if part.strip()
+        ]
+        symbols.extend(file_symbols)
+        symbols = sorted(set(symbols))
     report = backfill_day_package(
         Path(args.package_path),
         symbols=symbols or None,
