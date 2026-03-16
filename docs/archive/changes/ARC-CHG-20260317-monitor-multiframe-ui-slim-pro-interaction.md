@@ -1,3 +1,10 @@
+> Archive-Meta
+- Archive-ID: ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction
+- Archive-Type: CHG
+- Archived-At: 2026-03-17
+- Source-Path: docs/changes/REQ-20260316-08-monitor-multiframe-ui-slim-pro-interaction.md
+- Status: FROZEN
+
 # REQ-20260316-08-monitor-multiframe-ui-slim-pro-interaction
 
 ## 1. 基本信息
@@ -111,6 +118,6 @@
   3. 本卡未包含版本号更新与生产发布动作。
 
 ## 9. 归档信息
-- 归档时间：
-- Archive ID：
-- 归档路径：
+- 归档时间：2026-03-17
+- Archive ID：ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction
+- 归档路径：docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction.md

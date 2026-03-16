@@ -453,4 +453,11 @@
 - CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
 - 结论: 已完成新版历史多维 UI 瘦身与专业级交互重构第一版：`[旧版 / 新版]` 切换上移到全局头部，历史多维头部改为单行控制区，并新增 `15m` 粒度、步进缩放、主图时间轴标签、表格化 tooltip 与移动端长按 tooltip。
 - 风险: 当前仅完成构建级验证，`Shift + 滚轮` / 触控板横向平移与真机移动端长按手感仍需用户侧体验确认；本次未包含发版动作。
-- 链接: `docs/changes/REQ-20260316-08-monitor-multiframe-ui-slim-pro-interaction.md`, `src/App.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`
+- 链接: `docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction.md`, `src/App.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`
+
+## 2026-03-17 00:16 | 发布 AI
+- Task ID: `CHG-20260316-08`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成 `v4.2.16` 生产发布；新版历史多维 UI / 交互重构与盘后 L2 一条命令链路一并进入 `main`，GitHub tag=`v4.2.16`，发布锚点 commit=`d640146`。
+- 风险: 本次按发布 SOP 只执行部署，不代跑生产冒烟；建议你重点手测“顶部版本切换 / 历史多维 15m / 图表头部单行控制区 / v4.2.16 可见性”。
+- 链接: `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction.md`, `docs/changes/REQ-20260316-07-postclose-l2-one-command-runner.md`
