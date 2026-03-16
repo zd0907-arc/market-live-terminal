@@ -420,6 +420,13 @@
 - 风险: 当前云端 runner 正在执行，首个月份 `2026-02` 的完整月报尚未产出；若中途需要停止，可创建 `/home/ubuntu/l2_month_rollout/STOP`。
 - 链接: `backend/scripts/promote_sandbox_review_v2_month.py`, `backend/scripts/run_l2_history_monthly_rollout.py`, `docs/changes/REQ-20260316-05-history-multiframe-monthly-pool-rollout.md`
 
+## 2026-03-16 09:02 | 发布 AI
+- Task ID: `CHG-20260316-06`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: `v4.2.15` 已发布生产；修复历史多维将 `quality_info=None/null` 误判为黄色异常点的问题，后端与前端已双重归一化，生产接口抽样确认不再返回字符串 `"None"`，前端静态产物版本已切到 `4.2.15`。
+- 风险: 历史月份 rollout runner 仍在后台执行中，本次前端修复不影响其写库流程；建议你刷新生产历史多维并抽看此前有大量黄标的股票确认视觉收敛。
+- 链接: `backend/app/routers/analysis.py`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `src/version.ts`
+
 ## 2026-03-16 10:05 | 文档 AI
 - Task ID: `CHG-20260316-06`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
