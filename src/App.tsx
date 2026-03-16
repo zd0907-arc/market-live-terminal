@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, CandlestickChart, Star, Server, Target } from 'lucide-react';
-import { RealTimeQuote, SearchResult } from './types';
+import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Star, Server, Target } from 'lucide-react';
+import { HistoryMultiframeGranularity, RealTimeQuote, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
 import RealTimeClock from './components/common/RealTimeClock';
@@ -35,7 +35,7 @@ const App: React.FC = () => {
   const [legacyViewMode, setLegacyViewMode] = useState<'intraday_live' | 'intraday_30m' | 'daily'>('intraday_live');
   const [pageVersion, setPageVersion] = useState<'legacy' | 'fusion_v1'>('legacy');
   const [fusionSection, setFusionSection] = useState<'intraday_live' | 'history_multiframe'>('intraday_live');
-  const [fusionGranularity, setFusionGranularity] = useState<'5m' | '30m' | '1h' | '1d'>('1d');
+  const [fusionGranularity, setFusionGranularity] = useState<HistoryMultiframeGranularity>('1d');
 
   // Shared Data
   const [quote, setQuote] = useState<RealTimeQuote | null>(null);
@@ -320,7 +320,22 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              {/* Config Button (Mobile) */}
+              <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800 shrink-0">
+                <button
+                  onClick={() => setPageVersion('legacy')}
+                  className={`px-2.5 py-1.5 rounded-md text-[11px] md:text-xs font-medium transition-colors ${pageVersion === 'legacy' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                  title="切换到旧版页面"
+                >
+                  旧版
+                </button>
+                <button
+                  onClick={() => setPageVersion('fusion_v1')}
+                  className={`px-2.5 py-1.5 rounded-md text-[11px] md:text-xs font-medium transition-colors ${pageVersion === 'fusion_v1' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                  title="切换到新版页面"
+                >
+                  新版
+                </button>
+              </div>
             </div>
 
             {/* Spacer for centering */}
@@ -504,27 +519,6 @@ const App: React.FC = () => {
         {/* View Switcher */}
         {quote && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 bg-slate-900/70 border border-slate-800 rounded-xl px-3 py-2">
-              <div className="flex items-center gap-2">
-                <CandlestickChart className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-400">页面版本</span>
-              </div>
-              <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
-                <button
-                  onClick={() => setPageVersion('legacy')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${pageVersion === 'legacy' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                  旧版
-                </button>
-                <button
-                  onClick={() => setPageVersion('fusion_v1')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${pageVersion === 'fusion_v1' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                  新版
-                </button>
-              </div>
-            </div>
-
             {pageVersion === 'legacy' ? (
               <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
                 <button
@@ -550,48 +544,21 @@ const App: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
-                  <button
-                    onClick={() => setFusionSection('intraday_live')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    当日分时
-                  </button>
-                  <button
-                    onClick={() => setFusionSection('history_multiframe')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  >
-                    <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    历史多维
-                  </button>
-                </div>
-
-                {fusionSection === 'history_multiframe' && (
-                  <div className="flex items-center justify-between gap-3 bg-slate-900/70 border border-slate-800 rounded-xl px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs text-slate-400">时间维度</span>
-                    </div>
-                    <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
-                      {([
-                        ['5m', '5m'],
-                        ['30m', '30m'],
-                        ['1h', '1h'],
-                        ['1d', '日'],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          onClick={() => setFusionGranularity(value)}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${fusionGranularity === value ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+                <button
+                  onClick={() => setFusionSection('intraday_live')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                >
+                  <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  当日分时
+                </button>
+                <button
+                  onClick={() => setFusionSection('history_multiframe')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  历史多维
+                </button>
               </div>
             )}
           </div>
@@ -648,6 +615,7 @@ const App: React.FC = () => {
               activeStock={activeStock}
               backendStatus={backendStatus}
               granularity={fusionGranularity}
+              onGranularityChange={setFusionGranularity}
             />
           </Suspense>
         )}

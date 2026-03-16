@@ -419,3 +419,31 @@
 - 结论: 历史月份扩展路径已进一步收敛为“直接复用 sandbox V2 固定池 5m 产物，按月提升到生产 history L2”，并已新增月度提升脚本、在云端后台启动从 `2026-02 -> 2025-01` 的连续 rollout runner。
 - 风险: 当前云端 runner 正在执行，首个月份 `2026-02` 的完整月报尚未产出；若中途需要停止，可创建 `/home/ubuntu/l2_month_rollout/STOP`。
 - 链接: `backend/scripts/promote_sandbox_review_v2_month.py`, `backend/scripts/run_l2_history_monthly_rollout.py`, `docs/changes/REQ-20260316-05-history-multiframe-monthly-pool-rollout.md`
+
+## 2026-03-16 10:05 | 文档 AI
+- Task ID: `CHG-20260316-06`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已回填生产实时 K 线缺失事故文档，明确根因是 Windows 计划任务 `ZhangDataLiveCrawler` 未自动拉起；手动恢复后，已将“计划任务稳态化”登记为显式待办 `T-016`。
+- 风险: 当前 Windows 实时采集仍存在“登录触发 / 交互方式”脆弱点；若未完成稳态化，后续盘中仍可能再次出现实时 K 线空白。
+- 链接: `docs/changes/INV-20260316-06-prod-realtime-kline-scheduler-gap.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-16 11:10 | 后端 AI
+- Task ID: `CHG-20260316-07`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已落地“Mac 一条命令盘后 L2 日增量总控”第一版：新增 Windows prepare、云端 artifact merge、Mac 总控与 shell/bat 入口；同时冻结后续范围为“自 `2025-01-02` 起向后增量”，不再回补 `2025-01` 之前更老月份。
+- 风险: 当前尚未做真实跨机实跑，需先把新脚本同步到 Windows 后再做一次真实 `--dry-run` / 单日演练；完全无人值守定时执行仍需后续把这套语义迁到 OS 级调度器。
+- 链接: `docs/changes/REQ-20260316-07-postclose-l2-one-command-runner.md`, `backend/scripts/run_postclose_l2_daily.py`, `backend/scripts/l2_postclose_prepare_day.py`, `backend/scripts/merge_l2_day_delta.py`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-16 23:40 | 后端 AI
+- Task ID: `CHG-20260316-07`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成 `20260316` 的首个真实“一条命令盘后 L2”演练：dry-run 正常识别 pending day，8 worker Windows artifact 产出成功，云端 merge 经修正后已写入生产；最终 `history_daily_l2=7663`、`history_5m_l2=345461`，latest merge run `id=102`，`status=partial_done`，失败样本 `15`。
+- 风险: 当前总控链路虽然已打通，但仍依赖 Mac 发起与云端 `sudo` merge；若要完全无人值守，还需继续推进 `T-014` 的 OS 级定时控制器固化。
+- 链接: `backend/scripts/run_postclose_l2_daily.py`, `backend/scripts/merge_l2_day_delta.py`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-16 23:58 | 前端 AI
+- Task ID: `CHG-20260316-08`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成新版历史多维 UI 瘦身与专业级交互重构第一版：`[旧版 / 新版]` 切换上移到全局头部，历史多维头部改为单行控制区，并新增 `15m` 粒度、步进缩放、主图时间轴标签、表格化 tooltip 与移动端长按 tooltip。
+- 风险: 当前仅完成构建级验证，`Shift + 滚轮` / 触控板横向平移与真机移动端长按手感仍需用户侧体验确认；本次未包含发版动作。
+- 链接: `docs/changes/REQ-20260316-08-monitor-multiframe-ui-slim-pro-interaction.md`, `src/App.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`

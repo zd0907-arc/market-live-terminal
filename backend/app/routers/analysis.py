@@ -87,9 +87,10 @@ def _safe_trade_day_range(
     cursor = datetime.strptime(range_start, "%Y-%m-%d")
     end_dt = datetime.strptime(range_end, "%Y-%m-%d")
     dates: List[str] = []
+    existing_date_set = {str(item) for item in existing_dates}
     while cursor <= end_dt:
         trade_day = cursor.strftime("%Y-%m-%d")
-        if TradeCalendar.is_trade_day(trade_day):
+        if trade_day in existing_date_set or TradeCalendar.is_trade_day(trade_day):
             dates.append(trade_day)
         cursor += timedelta(days=1)
     return dates
@@ -326,43 +327,44 @@ def _build_multiframe_rows(
     include_today_preview: bool = True,
 ) -> List[Dict[str, object]]:
     normalized_granularity = _normalize_multiframe_granularity(granularity)
+    today_str = _get_natural_today_str()
+    has_finalized_today = False
 
     if normalized_granularity == "1d":
-        today_str = _get_natural_today_str()
         finalized_daily_rows = query_l2_history_daily_rows(
             symbol,
             start_date=start_date,
             end_date=end_date,
             limit_days=None if (start_date or end_date) else days,
         )
+        has_finalized_today = any(str(row.get("date")) == today_str for row in finalized_daily_rows)
         finalized_daily_rows = _inject_missing_daily_placeholders(
             symbol=symbol,
             rows_daily=finalized_daily_rows,
             start_date=start_date,
             end_date=end_date,
-            skip_trade_date=today_str if include_today_preview else None,
+            skip_trade_date=today_str if (include_today_preview and not has_finalized_today) else None,
         )
         rows = [_map_finalized_daily_row(row) for row in finalized_daily_rows]
     else:
-        today_str = _get_natural_today_str()
         finalized_5m_rows = query_l2_history_5m_rows(
             symbol,
             start_date=start_date,
             end_date=end_date,
             limit_days=None if (start_date or end_date) else days,
         )
+        has_finalized_today = any(str(row.get("source_date")) == today_str for row in finalized_5m_rows)
         finalized_5m_rows = _inject_missing_5m_placeholders(
             symbol=symbol,
             rows_5m=finalized_5m_rows,
             start_date=start_date,
             end_date=end_date,
-            skip_trade_date=today_str if include_today_preview else None,
+            skip_trade_date=today_str if (include_today_preview and not has_finalized_today) else None,
         )
         finalized_rows = aggregate_l2_history_5m_rows(finalized_5m_rows, normalized_granularity)
         rows = [_map_finalized_intraday_row(row, normalized_granularity) for row in finalized_rows]
 
-    if include_today_preview:
-        today_str = _get_natural_today_str()
+    if include_today_preview and not has_finalized_today:
         if _today_is_in_requested_window(today_str, start_date, end_date):
             refresh_realtime_preview(symbol, today_str)
             existing_trade_dates = {str(item["trade_date"]) for item in rows}

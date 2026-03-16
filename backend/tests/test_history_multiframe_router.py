@@ -199,3 +199,122 @@ def test_history_multiframe_aggregates_intraday_quality_info(monkeypatch, tmp_pa
     first_item = resp.data["items"][0]
     assert first_item["datetime"] == "2026-03-11 09:30:00"
     assert first_item["quality_info"] is not None
+
+
+def test_history_multiframe_prefers_finalized_today_daily_even_if_trade_calendar_false(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+
+    replace_history_daily_l2_row(
+        "sz000833",
+        "2026-03-16",
+        (
+            "sz000833", "2026-03-16", 28.5, 29.23, 26.86, 27.58, 1886212818.0,
+            698078129.0, 823173357.0, -125095228.0, 464694215.0, 546786924.0, -82092709.0,
+            765863513.84, 801627748.55, -35764234.71, 268785465.4, 288291142.66, -19505677.26,
+            21.0, 10.0, 84.4, 30.0, 12.0, 9.0, 41.2, 43.1,
+            None,
+        ),
+    )
+
+    conn = sqlite3.connect(config.DB_FILE)
+    conn.execute(
+        """
+        INSERT INTO trade_ticks (symbol, time, price, volume, amount, type, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("sz000833", "10:01:00", 27.8, 100, 300000.0, "buy", "2026-03-16"),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("backend.app.routers.analysis.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.analysis.MarketClock._now_china",
+        lambda: type("T", (), {"strftime": lambda self, fmt: "2026-03-16"})(),
+    )
+    monkeypatch.setattr("backend.app.routers.analysis.TradeCalendar.is_trade_day", lambda date_str: False)
+
+    resp = analysis.get_history_multiframe(
+        "sz000833",
+        granularity="1d",
+        start_date="2026-03-16",
+        end_date="2026-03-16",
+        include_today_preview=True,
+    )
+
+    assert resp.code == 200
+    assert resp.data["count"] == 1
+    item = resp.data["items"][0]
+    assert item["trade_date"] == "2026-03-16"
+    assert item["source"] == "l2_history"
+    assert item["is_finalized"] is True
+    assert item["preview_level"] is None
+    assert item["l2_main_buy"] == 765863513.84
+
+
+def test_history_multiframe_prefers_finalized_today_intraday_without_preview_mix(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+
+    replace_history_5m_l2_rows(
+        "sz000833",
+        "2026-03-16",
+        [
+            (
+                "sz000833",
+                "2026-03-16 09:30:00",
+                "2026-03-16",
+                28.5,
+                29.25,
+                28.15,
+                29.04,
+                358055909.5,
+                45415911.0,
+                36460585.13,
+                12318133.0,
+                11448669.0,
+                158227560.0,
+                173617942.33,
+                65828785.0,
+                60594091.94,
+                None,
+            ),
+        ],
+    )
+
+    conn = sqlite3.connect(config.DB_FILE)
+    conn.execute(
+        """
+        INSERT INTO trade_ticks (symbol, time, price, volume, amount, type, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("sz000833", "09:25:00", 28.5, 100, 29369250.0, "sell", "2026-03-16"),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("backend.app.routers.analysis.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.analysis.MarketClock._now_china",
+        lambda: type("T", (), {"strftime": lambda self, fmt: "2026-03-16"})(),
+    )
+    monkeypatch.setattr("backend.app.routers.analysis.TradeCalendar.is_trade_day", lambda date_str: False)
+
+    resp = analysis.get_history_multiframe(
+        "sz000833",
+        granularity="5m",
+        start_date="2026-03-16",
+        end_date="2026-03-16",
+        include_today_preview=True,
+    )
+
+    assert resp.code == 200
+    assert resp.data["count"] >= 1
+    assert all(item["source"] != "realtime_ticks" for item in resp.data["items"])
+    assert all(item["datetime"] != "2026-03-16 09:25:00" for item in resp.data["items"])
+    item = resp.data["items"][0]
+    assert item["datetime"] == "2026-03-16 09:30:00"
+    assert item["source"] == "l2_history"
+    assert item["is_finalized"] is True
+    assert item["preview_level"] is None

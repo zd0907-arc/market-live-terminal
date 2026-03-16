@@ -39,6 +39,52 @@ ssh laqiyuan@100.115.228.56
 - **Windows 统一项目目录**：`D:\market-live-terminal`
 - 凡是脚本同步、自启脚本、ETL 执行路径，均以该目录为准。
 
+### Windows 实时采集任务巡检与恢复（2026-03-16 新增）
+- **计划任务名**：`ZhangDataLiveCrawler`
+- **启动脚本**：`D:\market-live-terminal\start_live_crawler.bat`
+- **实际脚本**：`D:\market-live-terminal\backend\scripts\live_crawler_win.py`
+
+#### 适用场景
+- 生产盯盘页盘中无实时 K 线；
+- `/api/realtime/dashboard` 返回空 `chart_data`；
+- 用户怀疑“Windows 实时拉数没正常执行”。
+
+#### 快速检查顺序
+1. **先看生产接口是否真停更**
+   ```bash
+   curl -s -m 10 "http://111.229.144.202/api/realtime/dashboard?symbol=sz000833"
+   ```
+   - 若当日 `chart_data/latest_ticks` 明显为空，继续检查 Windows。
+2. **查计划任务状态**
+   ```bash
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /FO LIST"
+   ```
+   重点看：
+   - `上次运行时间`
+   - `上次结果`
+   - 触发方式是否仍停留在“登录时 / 仅交互方式”
+3. **查 Python 进程是否真在跑**
+   ```bash
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c tasklist /v | findstr /I python.exe"
+   ```
+4. **临时恢复**
+   ```bash
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c schtasks /Run /TN ZhangDataLiveCrawler"
+   ```
+5. **恢复后复核**
+   - 再查一次 `tasklist`，确认新的 `python ... live_crawler_win.py` 进程存在；
+   - 再请求一次生产 `/api/realtime/dashboard`，确认已恢复当日实时数据。
+
+#### 当前冻结结论
+- `2026-03-16` 线上事故已证明：**只要 `ZhangDataLiveCrawler` 没自动拉起，生产实时 K 线就会直接空白**。
+- 本次故障根因不是前端，也不是云端图表接口逻辑，而是 **Windows 计划任务稳态不足**。
+- 在正式稳态化完成前，盘中实时区异常的第一排查入口就是这条计划任务。
+
+#### 后续治理要求
+- 不再把“曾经手动 Run 成功”视为稳定；
+- 必须把任务改造成可跨 **重启 / 注销 / 周末后首个交易日** 自动恢复的正式方案；
+- 跟踪项见 `docs/07_PENDING_TODO.md::T-016`。
+
 ### Windows 盘后 L2 日包目录约定（2026-03-14 冻结）
 - **原始数据根目录**：`D:\MarketData`
 - **统一目录结构**：
@@ -158,6 +204,53 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
 5. **次日开盘前抽样**
    - 对关键 symbol 在盯盘页历史多维 / 日线 / 复盘页做 finalized 冒烟确认。
 
+#### B.1 Mac 一条命令正式入口（2026-03-16 新增）
+当你确认 Windows 当天日包已经下载完毕后，日常推荐入口统一为：
+
+```bash
+./ops/run_postclose_l2.sh
+```
+
+默认行为：
+- 自动发现 Windows `D:\MarketData\YYYYMM\YYYYMMDD.7z` 中**已下载但云端正式库尚未存在**的交易日；
+- 按日期从老到新依次执行；
+- 每个交易日自动完成：
+  1. archive 大小稳定检查；
+  2. 解压到 `Z:\l2_stage\YYYYMMDD`；
+  3. 切 8 个 shard；
+  4. 通过 Mac 并发拉起 8 个 Windows worker；
+  5. 每个 worker 先写自己的 artifact DB，而不是直接并发写生产正式库；
+  6. Mac 中转 artifact 到云端；
+  7. 云端执行 `merge_l2_day_delta.py` 按交易日合并入正式 `history_5m_l2 / history_daily_l2`；
+  8. 自动验真并输出本地 JSON report。
+
+常用参数：
+```bash
+./ops/run_postclose_l2.sh --date 20260317
+./ops/run_postclose_l2.sh --force-date 20260317
+./ops/run_postclose_l2.sh --dry-run
+./ops/run_postclose_l2.sh --skip-cloud-merge
+```
+
+相关脚本：
+- Mac 总控：`backend/scripts/run_postclose_l2_daily.py`
+- Windows prepare：`backend/scripts/l2_postclose_prepare_day.py`
+- 云端 merge：`backend/scripts/merge_l2_day_delta.py`
+- Windows wrapper：
+  - `ops/win_prepare_l2_day.bat`
+  - `ops/win_run_l2_shard.bat`
+
+首轮真实演练（`2026-03-16`）结论：
+- `--dry-run` 已能自动识别 pending day：`20260316`；
+- 单日实跑已完成：
+  - `history_daily_l2 = 7663`
+  - `history_5m_l2 = 345461`
+  - merge run `id=102`，`status=partial_done`，失败样本 `15`
+- 演练过程中新增三条运维经验：
+  1. Windows 端必须同步最新 `backend/app/db/l2_history_db.py`，否则 worker artifact 会因 `quality_info` 列位不一致导致全量失败；
+  2. cloud merge 不能直接用普通用户写主库，需走 **`sudo python3 backend/scripts/merge_l2_day_delta.py`**；
+  3. cloud artifact 路径必须使用**绝对路径**（如 `/home/ubuntu/...`），不能在 `sudo` 场景下传 `~/...`。
+
 #### C. Repair Queue 规则
 1. `OrderID` 完全无法对齐 → `hard repair`
 2. `无有效 bar` → `review queue`
@@ -172,6 +265,7 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
 - 云端只接收正式派生结果；
 - `15m/30m/1h` 不单独落库，统一由 `5m` 聚合；
 - 若某一天出现多次试跑，必须在 `mode` 中保留清晰标识，便于事后复盘区分 probe / fix / direct formal run。
+- 日常正式路径不再推荐“整库覆盖云端”；应优先使用**按日 artifact merge**。
 
 ---
 

@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.15';
+export const APP_VERSION = '4.2.16';
 export const RELEASE_NOTES = [
+    'v4.2.16: 新版历史多维完成专业级 UI 瘦身与交互重构，新增 15m 粒度、顶部版本切换、步进缩放与移动端长按 tooltip',
     'v4.2.15: 修复历史多维将 None/null 空质量信息误判为异常点，黄色质量标仅在存在真实提示文案时显示',
     'v4.2.14: 历史多维三张副图恢复左超大/右主力真双柱，并优化 tooltip 边界、卡片布局与版本可见性',
     'v4.2.13: 新版历史多维接入轻量质量提示（quality_info / is_placeholder），并完成生产正式 L2 历史底座同步',

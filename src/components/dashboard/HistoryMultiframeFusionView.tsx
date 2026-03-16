@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { CandlestickChart, CustomChart, LineChart, ScatterChart } from 'echarts/charts';
 import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import { AlertCircle, Database, RefreshCw } from 'lucide-react';
+import { AlertCircle, CircleHelp, Database, Minus, Plus, RefreshCw } from 'lucide-react';
 
 import { HistoryMultiframeGranularity, HistoryMultiframeItem, SearchResult } from '../../types';
 import * as StockService from '../../services/stockService';
@@ -23,7 +23,8 @@ echarts.use([
 interface HistoryMultiframeFusionViewProps {
   activeStock: SearchResult | null;
   backendStatus: boolean;
-  granularity: '5m' | '30m' | '1h' | '1d';
+  granularity: HistoryMultiframeGranularity;
+  onGranularityChange: (value: HistoryMultiframeGranularity) => void;
 }
 
 type FusionRow = {
@@ -59,18 +60,87 @@ type CustomSeriesDatum = {
   value: Array<number | null>;
 };
 
-const LOOKBACK_DAYS: Record<'5m' | '30m' | '1h' | '1d', number> = {
-  '5m': 10,
-  '30m': 20,
-  '1h': 40,
-  '1d': 240,
+type ZoomWindow = {
+  start: number;
+  end: number;
 };
 
-const LABELS: Record<'5m' | '30m' | '1h' | '1d', string> = {
+const LOOKBACK_DAYS: Record<HistoryMultiframeGranularity, number> = {
+  '5m': 32,
+  '15m': 32,
+  '30m': 180,
+  '1h': 180,
+  '1d': 360,
+};
+
+const LABELS: Record<HistoryMultiframeGranularity, string> = {
   '5m': '5分钟',
+  '15m': '15分钟',
   '30m': '30分钟',
   '1h': '1小时',
   '1d': '日线',
+};
+
+const GRANULARITY_BUTTONS: Array<{ value: HistoryMultiframeGranularity; label: string }> = [
+  { value: '5m', label: '5分' },
+  { value: '15m', label: '15分' },
+  { value: '30m', label: '30分' },
+  { value: '1h', label: '1小时' },
+  { value: '1d', label: '日线' },
+];
+
+const BARS_PER_DAY: Record<HistoryMultiframeGranularity, number> = {
+  '5m': 48,
+  '15m': 16,
+  '30m': 8,
+  '1h': 4,
+  '1d': 1,
+};
+
+const ZOOM_PRESETS: Record<HistoryMultiframeGranularity, Array<{ label: string; tradingDays: number }>> = {
+  '5m': [
+    { label: '当天', tradingDays: 1 },
+    { label: '2天', tradingDays: 2 },
+    { label: '5天', tradingDays: 5 },
+    { label: '10天', tradingDays: 10 },
+    { label: '1月', tradingDays: 22 },
+  ],
+  '15m': [
+    { label: '当天', tradingDays: 1 },
+    { label: '2天', tradingDays: 2 },
+    { label: '5天', tradingDays: 5 },
+    { label: '10天', tradingDays: 10 },
+    { label: '1月', tradingDays: 22 },
+  ],
+  '30m': [
+    { label: '1周', tradingDays: 5 },
+    { label: '2周', tradingDays: 10 },
+    { label: '1月', tradingDays: 22 },
+    { label: '3月', tradingDays: 66 },
+    { label: '半年', tradingDays: 132 },
+  ],
+  '1h': [
+    { label: '1周', tradingDays: 5 },
+    { label: '2周', tradingDays: 10 },
+    { label: '1月', tradingDays: 22 },
+    { label: '3月', tradingDays: 66 },
+    { label: '半年', tradingDays: 132 },
+  ],
+  '1d': [
+    { label: '1月', tradingDays: 20 },
+    { label: '3月', tradingDays: 60 },
+    { label: '半年', tradingDays: 120 },
+    { label: '1年', tradingDays: 240 },
+    { label: '全部', tradingDays: 320 },
+  ],
+};
+
+const DEFAULT_ZOOM_INDEX: Record<HistoryMultiframeGranularity, number> = {
+  '5m': 2,
+  '15m': 2,
+  '30m': 2,
+  '1h': 2,
+  '1d': 2,
 };
 
 const COLORS = {
@@ -125,11 +195,6 @@ const toNet = (buy: number | null, sell: number | null): number | null => {
 const toRatio = (value: number | null, totalAmount: number | null): number | null => {
   if (value === null || totalAmount === null || !Number.isFinite(totalAmount) || totalAmount <= 0) return null;
   return value / totalAmount * 100;
-};
-
-const formatQualityShort = (value: string | null): string => {
-  if (!value) return '';
-  return value.length > 24 ? `${value.slice(0, 24)}…` : value;
 };
 
 const normalizeQualityInfo = (value: string | null | undefined): string | null => {
@@ -251,9 +316,9 @@ const getTooltipPosition = (point: number[], size: { viewSize: number[]; content
   const [viewWidth, viewHeight] = size.viewSize;
   const [contentWidth, contentHeight] = size.contentSize;
 
-  let left = x + 16;
+  let left = x + 18;
   if (left + contentWidth > viewWidth - 12) {
-    left = x - contentWidth - 16;
+    left = x - contentWidth - 18;
   }
   left = clamp(left, 12, Math.max(12, viewWidth - contentWidth - 12));
 
@@ -266,77 +331,96 @@ const getTooltipPosition = (point: number[], size: { viewSize: number[]; content
   return [left, top];
 };
 
-const buildTooltipHtml = (row: FusionRow): string => {
-  const renderValueRow = (label: string, l2Value: number | null, l1Value: number | null, colors: [string, string], formatter: (v: number | null) => string) => `
-    <div style="display:grid;grid-template-columns:58px minmax(0,1fr) minmax(0,1fr);align-items:start;gap:8px;line-height:1.45;">
-      <span style="color:#94A3B8;">${label}</span>
-      <span style="display:inline-flex;align-items:flex-start;gap:4px;color:#E2E8F0;min-width:0;white-space:normal;word-break:break-word;">
-        <span style="display:inline-block;width:8px;height:8px;background:${colors[0]};border-radius:2px;flex:0 0 auto;margin-top:4px;"></span>
-        <span><span style="color:#94A3B8;">L2</span> ${formatter(l2Value)}</span>
-      </span>
-      <span style="display:inline-flex;align-items:flex-start;gap:4px;color:#E2E8F0;min-width:0;white-space:normal;word-break:break-word;">
-        <span style="display:inline-block;width:8px;height:8px;background:${colors[1]};border-radius:2px;flex:0 0 auto;margin-top:4px;"></span>
-        <span><span style="color:#94A3B8;">L1</span> ${formatter(l1Value)}</span>
-      </span>
+const buildMetricTable = (
+  title: string,
+  accent: string,
+  rows: Array<{ label: string; l2: number | null; l1: number | null; formatter: (value: number | null) => string }>,
+): string => {
+  const body = rows.map((item) => `
+    <tr>
+      <td style="padding:3px 0;color:#94A3B8;white-space:nowrap;">${item.label}</td>
+      <td style="padding:3px 0;text-align:right;color:#E2E8F0;white-space:nowrap;">${item.formatter(item.l2)}</td>
+      <td style="padding:3px 0;text-align:right;color:#E2E8F0;white-space:nowrap;">${item.formatter(item.l1)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="border:1px solid rgba(51,65,85,.92);border-radius:10px;background:rgba(15,23,42,.72);padding:10px 12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:${accent};"></span>
+        <span style="font-size:12px;font-weight:700;color:#F8FAFC;">${title}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;">
+        <thead>
+          <tr>
+            <th style="text-align:left;color:#64748B;font-weight:600;padding-bottom:5px;white-space:nowrap;">指标</th>
+            <th style="text-align:right;color:#64748B;font-weight:600;padding-bottom:5px;white-space:nowrap;">L2</th>
+            <th style="text-align:right;color:#64748B;font-weight:600;padding-bottom:5px;white-space:nowrap;">L1</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
     </div>
   `;
+};
 
+const buildTooltipHtml = (row: FusionRow): string => {
   const statusBadges = [
-    row.isPreviewOnly ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.25);color:#FCD34D;">未结算</span>' : '',
-    row.isPlaceholder ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);color:#BFDBFE;">缺失占位</span>' : '',
-    row.fallbackUsed ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.2);color:#CBD5E1;">fallback</span>' : '',
+    row.isPreviewOnly ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.25);color:#FCD34D;white-space:nowrap;">未结算</span>' : '',
+    row.isPlaceholder ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);color:#BFDBFE;white-space:nowrap;">缺失占位</span>' : '',
+    row.fallbackUsed ? '<span style="padding:2px 6px;border-radius:999px;background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.2);color:#CBD5E1;white-space:nowrap;">fallback</span>' : '',
   ].filter(Boolean).join('');
 
   const notices = [
-    row.isPreviewOnly ? '当前仅 L1 实时口径，L2 待盘后覆盖。' : '',
+    row.isPreviewOnly ? '未结算 / 当前仅 L1 实时口径，L2 待盘后覆盖。' : '',
     row.qualityInfo ? `质量提示：${row.qualityInfo}` : '',
   ].filter(Boolean);
 
   return `
-    <div style="width:348px;max-width:348px;color:#E2E8F0;white-space:normal;word-break:break-word;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
+    <div style="width:332px;max-width:332px;color:#E2E8F0;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;">
         <div>
-          <div style="font-size:15px;font-weight:700;color:#F8FAFC;">${row.datetime}</div>
-          <div style="margin-top:4px;font-size:12px;color:#94A3B8;">来源 ${row.source} ｜ finalized ${row.isFinalized ? 'true' : 'false'}</div>
+          <div style="font-size:14px;font-weight:700;color:#F8FAFC;white-space:nowrap;">${row.datetime}</div>
+          <div style="margin-top:4px;font-size:11px;color:#94A3B8;white-space:nowrap;">source ${row.source} ｜ finalized ${row.isFinalized ? 'true' : 'false'}</div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">${statusBadges}</div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;">${statusBadges}</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-        <div style="padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.68);border:1px solid rgba(51,65,85,.85);">
-          <div style="font-size:11px;color:#94A3B8;margin-bottom:6px;letter-spacing:.02em;">价格 / 元数据</div>
-          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">O ${formatPrice(row.open)} / H ${formatPrice(row.high)} / L ${formatPrice(row.low)} / C ${formatPrice(row.close)}</div>
-          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">成交额 ${compactAmount(row.totalAmount)}</div>
-          <div style="font-size:12px;line-height:1.6;color:#E2E8F0;">日期 ${row.tradeDate}</div>
-        </div>
-        <div style="padding:10px 12px;border-radius:10px;background:rgba(15,23,42,.68);border:1px solid rgba(51,65,85,.85);">
-          <div style="font-size:11px;color:#94A3B8;margin-bottom:6px;letter-spacing:.02em;">图例速读</div>
-          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">左柱=超大单，右柱=主力</div>
-          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">深色=L2 底柱，浅色=L1 芯柱</div>
-          <div style="font-size:12px;line-height:1.65;color:#E2E8F0;">上=买入/净流入，下=卖出/净流出</div>
-        </div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;table-layout:fixed;">
+        <tbody>
+          <tr>
+            <td style="color:#94A3B8;padding:2px 0;white-space:nowrap;">日期</td>
+            <td style="text-align:right;color:#E2E8F0;padding:2px 0;white-space:nowrap;">${row.tradeDate}</td>
+          </tr>
+          <tr>
+            <td style="color:#94A3B8;padding:2px 0;white-space:nowrap;">OHLC</td>
+            <td style="text-align:right;color:#E2E8F0;padding:2px 0;white-space:nowrap;">${formatPrice(row.open)} / ${formatPrice(row.high)} / ${formatPrice(row.low)} / ${formatPrice(row.close)}</td>
+          </tr>
+          <tr>
+            <td style="color:#94A3B8;padding:2px 0;white-space:nowrap;">成交额</td>
+            <td style="text-align:right;color:#E2E8F0;padding:2px 0;white-space:nowrap;">${compactAmount(row.totalAmount)}</td>
+          </tr>
+        </tbody>
+      </table>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div style="padding:10px;border-radius:10px;background:rgba(76,29,149,.12);border:1px solid rgba(139,92,246,.24);">
-          <div style="font-size:12px;font-weight:700;color:#E9D5FF;margin-bottom:8px;">超大单（左柱）</div>
-          ${renderValueRow('买入', row.l2SuperBuy, row.l1SuperBuy, [COLORS.superL2Buy, COLORS.superL1Buy], compactAmount)}
-          ${renderValueRow('卖出', row.l2SuperSell, row.l1SuperSell, [COLORS.superL2Sell, COLORS.superL1Sell], compactAmount)}
-          ${renderValueRow('净流入', toNet(row.l2SuperBuy, row.l2SuperSell), toNet(row.l1SuperBuy, row.l1SuperSell), [COLORS.superL2Buy, COLORS.superL1Buy], compactAmount)}
-          ${renderValueRow('买入力度', toRatio(row.l2SuperBuy, row.totalAmount), toRatio(row.l1SuperBuy, row.totalAmount), [COLORS.superL2Buy, COLORS.superL1Buy], compactPercent)}
-          ${renderValueRow('卖出力度', toRatio(row.l2SuperSell, row.totalAmount), toRatio(row.l1SuperSell, row.totalAmount), [COLORS.superL2Sell, COLORS.superL1Sell], compactPercent)}
-        </div>
-        <div style="padding:10px;border-radius:10px;background:rgba(127,29,29,.12);border:1px solid rgba(248,113,113,.24);">
-          <div style="font-size:12px;font-weight:700;color:#FECACA;margin-bottom:8px;">主力（右柱）</div>
-          ${renderValueRow('买入', row.l2MainBuy, row.l1MainBuy, [COLORS.mainL2Buy, COLORS.mainL1Buy], compactAmount)}
-          ${renderValueRow('卖出', row.l2MainSell, row.l1MainSell, [COLORS.mainL2Sell, COLORS.mainL1Sell], compactAmount)}
-          ${renderValueRow('净流入', toNet(row.l2MainBuy, row.l2MainSell), toNet(row.l1MainBuy, row.l1MainSell), [COLORS.mainL2Buy, COLORS.mainL1Buy], compactAmount)}
-          ${renderValueRow('买入力度', toRatio(row.l2MainBuy, row.totalAmount), toRatio(row.l1MainBuy, row.totalAmount), [COLORS.mainL2Buy, COLORS.mainL1Buy], compactPercent)}
-          ${renderValueRow('卖出力度', toRatio(row.l2MainSell, row.totalAmount), toRatio(row.l1MainSell, row.totalAmount), [COLORS.mainL2Sell, COLORS.mainL1Sell], compactPercent)}
-        </div>
+        ${buildMetricTable('超大单（左柱）', COLORS.superL2Buy, [
+          { label: '买入', l2: row.l2SuperBuy, l1: row.l1SuperBuy, formatter: compactAmount },
+          { label: '卖出', l2: row.l2SuperSell, l1: row.l1SuperSell, formatter: compactAmount },
+          { label: '净流入', l2: toNet(row.l2SuperBuy, row.l2SuperSell), l1: toNet(row.l1SuperBuy, row.l1SuperSell), formatter: compactAmount },
+          { label: '买入力度', l2: toRatio(row.l2SuperBuy, row.totalAmount), l1: toRatio(row.l1SuperBuy, row.totalAmount), formatter: compactPercent },
+          { label: '卖出力度', l2: toRatio(row.l2SuperSell, row.totalAmount), l1: toRatio(row.l1SuperSell, row.totalAmount), formatter: compactPercent },
+        ])}
+        ${buildMetricTable('主力（右柱）', COLORS.mainL2Buy, [
+          { label: '买入', l2: row.l2MainBuy, l1: row.l1MainBuy, formatter: compactAmount },
+          { label: '卖出', l2: row.l2MainSell, l1: row.l1MainSell, formatter: compactAmount },
+          { label: '净流入', l2: toNet(row.l2MainBuy, row.l2MainSell), l1: toNet(row.l1MainBuy, row.l1MainSell), formatter: compactAmount },
+          { label: '买入力度', l2: toRatio(row.l2MainBuy, row.totalAmount), l1: toRatio(row.l1MainBuy, row.totalAmount), formatter: compactPercent },
+          { label: '卖出力度', l2: toRatio(row.l2MainSell, row.totalAmount), l1: toRatio(row.l1MainSell, row.totalAmount), formatter: compactPercent },
+        ])}
       </div>
 
-      ${notices.length ? `<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.18);font-size:12px;line-height:1.65;color:#FDE68A;">${notices.join('<br/>')}</div>` : ''}
+      ${notices.length ? `<div style="margin-top:10px;border-radius:10px;border:1px solid rgba(250,204,21,.18);background:rgba(250,204,21,.08);padding:9px 10px;font-size:11px;line-height:1.6;color:#FDE68A;word-break:break-word;">${notices.join('<br/>')}</div>` : ''}
     </div>
   `;
 };
@@ -430,18 +514,111 @@ const createFlowCustomSeries = (
   };
 };
 
+const buildZoomWindowFromVisibleBars = (totalBars: number, visibleBars: number): ZoomWindow => {
+  if (totalBars <= 0) return { start: 0, end: 100 };
+  const safeVisible = clamp(visibleBars, 1, totalBars);
+  if (safeVisible >= totalBars) return { start: 0, end: 100 };
+  const start = ((totalBars - safeVisible) / totalBars) * 100;
+  return { start, end: 100 };
+};
+
+const normalizeZoomWindow = (start: number, end: number, minRange: number): ZoomWindow => {
+  const safeMin = clamp(minRange, 0.2, 100);
+  let nextStart = clamp(start, 0, 100);
+  let nextEnd = clamp(end, 0, 100);
+  if (nextEnd - nextStart < safeMin) {
+    const center = (nextStart + nextEnd) / 2;
+    nextStart = clamp(center - safeMin / 2, 0, 100 - safeMin);
+    nextEnd = clamp(nextStart + safeMin, safeMin, 100);
+  }
+  if (nextStart <= 0 && nextEnd >= 100) return { start: 0, end: 100 };
+  return { start: nextStart, end: nextEnd };
+};
+
+const getVisibleBarsForPreset = (granularity: HistoryMultiframeGranularity, presetIndex: number): number => {
+  const preset = ZOOM_PRESETS[granularity][presetIndex] ?? ZOOM_PRESETS[granularity][DEFAULT_ZOOM_INDEX[granularity]];
+  return preset.tradingDays * BARS_PER_DAY[granularity];
+};
+
+const inferNearestPresetIndex = (granularity: HistoryMultiframeGranularity, totalBars: number, zoomWindow: ZoomWindow): number => {
+  if (totalBars <= 0) return DEFAULT_ZOOM_INDEX[granularity];
+  const visibleBars = totalBars * Math.max(0.01, (zoomWindow.end - zoomWindow.start) / 100);
+  let bestIndex = DEFAULT_ZOOM_INDEX[granularity];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  ZOOM_PRESETS[granularity].forEach((preset, index) => {
+    const presetBars = preset.tradingDays * BARS_PER_DAY[granularity];
+    const distance = Math.abs(presetBars - visibleBars);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+};
+
+const formatAxisLabel = (rows: FusionRow[], granularity: HistoryMultiframeGranularity, index: number): string => {
+  const row = rows[index];
+  if (!row) return '';
+  const prev = rows[index - 1];
+
+  if (granularity === '1d') {
+    const month = row.tradeDate.slice(0, 7);
+    const prevMonth = prev?.tradeDate.slice(0, 7);
+    if (index === 0 || month !== prevMonth) return row.tradeDate.slice(2, 7);
+    if (index === rows.length - 1) return row.tradeDate.slice(5);
+    return '';
+  }
+
+  const time = row.datetime.slice(11, 16);
+  const isDayStart = !prev || prev.tradeDate !== row.tradeDate;
+  if (isDayStart) return `${row.tradeDate.slice(5)}\n${time}`;
+
+  if ((granularity === '30m' || granularity === '1h') && time === '13:00') return '13:00';
+  if ((granularity === '5m' || granularity === '15m') && (time === '10:30' || time === '14:00')) return time;
+  if (index === rows.length - 1) return time;
+  return '';
+};
+
+const InfoPopover: React.FC<{
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+  widthClass?: string;
+}> = ({ children, align = 'left', widthClass = 'w-[300px] sm:w-[340px]' }) => (
+  <div className="relative group inline-flex">
+    <button
+      type="button"
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-100"
+    >
+      <CircleHelp className="h-3.5 w-3.5" />
+    </button>
+    <div
+      className={`pointer-events-none absolute top-full z-20 mt-2 hidden rounded-xl border border-slate-700 bg-slate-950/95 p-3 text-left text-[11px] leading-5 text-slate-300 shadow-2xl backdrop-blur group-hover:block ${widthClass} ${align === 'right' ? 'right-0' : 'left-0'}`}
+    >
+      {children}
+    </div>
+  </div>
+);
+
 const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = ({
   activeStock,
   backendStatus,
   granularity,
+  onGranularityChange,
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [rows, setRows] = useState<HistoryMultiframeItem[]>([]);
+  const [zoomWindow, setZoomWindow] = useState<ZoomWindow>({ start: 0, end: 100 });
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  const chartRef = useRef<ReactEChartsCore | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const touchActiveRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
     const load = async () => {
       if (!activeStock) return;
       setLoading(true);
@@ -452,47 +629,174 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           days: LOOKBACK_DAYS[granularity],
           includeTodayPreview: true,
         });
-        if (!isMounted) return;
         setRows(data);
       } catch (e: any) {
-        if (!isMounted) return;
         setError(e?.message || '获取历史多维数据失败');
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     };
 
     load();
-    return () => {
-      isMounted = false;
-    };
   }, [activeStock, granularity, refreshKey]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const media = window.matchMedia('(pointer: coarse)');
+    const sync = () => setIsTouchDevice(media.matches || window.innerWidth < 768);
+    sync();
+    media.addEventListener?.('change', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      media.removeEventListener?.('change', sync);
+      window.removeEventListener('resize', sync);
+    };
+  }, []);
+
   const fusionRows = useMemo(() => buildRows(rows, granularity), [rows, granularity]);
+  const issueRows = useMemo(() => fusionRows.filter((row) => !!row.qualityInfo), [fusionRows]);
+
   const hasFormalL2History = fusionRows.some(
     (row) => row.isFinalized && !row.isPlaceholder && [row.l2MainBuy, row.l2MainSell, row.l2SuperBuy, row.l2SuperSell].some((item) => item !== null),
   );
   const hasPreviewRows = fusionRows.some((row) => row.isPreviewOnly);
-  const issueCount = fusionRows.filter((row) => !!row.qualityInfo).length;
+  const issueCount = issueRows.length;
+
+  useEffect(() => {
+    if (!fusionRows.length) {
+      setZoomWindow({ start: 0, end: 100 });
+      return;
+    }
+    const defaultVisibleBars = getVisibleBarsForPreset(granularity, DEFAULT_ZOOM_INDEX[granularity]);
+    setZoomWindow(buildZoomWindowFromVisibleBars(fusionRows.length, defaultVisibleBars));
+  }, [fusionRows.length, granularity]);
 
   const sourceLabel = useMemo(() => {
-    if (hasFormalL2History && hasPreviewRows) return 'Source: 正式L2历史 + 今日L1预览';
-    if (hasFormalL2History) return 'Source: 正式L2历史';
-    if (hasPreviewRows) return 'Source: 今日L1预览';
-    if (fusionRows.length) return 'Source: 仅异常占位 / 待补正式L2';
-    return 'Source: 暂无可用正式L2历史';
+    if (hasFormalL2History && hasPreviewRows) return '正式L2 + 今日L1';
+    if (hasFormalL2History) return '正式L2';
+    if (hasPreviewRows) return '今日L1预览';
+    if (fusionRows.length) return '占位 / 待补';
+    return '暂无正式L2';
   }, [fusionRows.length, hasFormalL2History, hasPreviewRows]);
 
-  const customLegend = [
-    { label: '超大 L2 买', color: COLORS.superL2Buy },
-    { label: '超大 L1 买', color: COLORS.superL1Buy },
-    { label: '超大 L2 卖', color: COLORS.superL2Sell },
-    { label: '超大 L1 卖', color: COLORS.superL1Sell },
-    { label: '主力 L2 买', color: COLORS.mainL2Buy },
-    { label: '主力 L1 买', color: COLORS.mainL1Buy },
-    { label: '主力 L2 卖', color: COLORS.mainL2Sell },
-    { label: '主力 L1 卖', color: COLORS.mainL1Sell },
-  ];
+  const issueTagLabel = issueCount > 0 ? `${issueCount}条缺失 / 异常` : '数据完整';
+
+  const handleZoomStep = useCallback((direction: 'in' | 'out') => {
+    const totalBars = fusionRows.length;
+    if (!totalBars) return;
+    const currentIndex = inferNearestPresetIndex(granularity, totalBars, zoomWindow);
+    const nextIndex = clamp(
+      currentIndex + (direction === 'in' ? -1 : 1),
+      0,
+      ZOOM_PRESETS[granularity].length - 1,
+    );
+    const visibleBars = getVisibleBarsForPreset(granularity, nextIndex);
+    setZoomWindow(buildZoomWindowFromVisibleBars(totalBars, visibleBars));
+  }, [fusionRows.length, granularity, zoomWindow]);
+
+  const handleDataZoom = useCallback((event: any) => {
+    const payload = Array.isArray(event?.batch) && event.batch.length ? event.batch[event.batch.length - 1] : event;
+    const start = Number(payload?.start);
+    const end = Number(payload?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+    setZoomWindow({ start, end });
+  }, []);
+
+  useEffect(() => {
+    if (!chartContainerRef.current) return undefined;
+    const element = chartContainerRef.current;
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.metaKey || event.ctrlKey) return;
+      event.preventDefault();
+      setZoomWindow((prev) => {
+        const totalBars = fusionRows.length;
+        const minRange = totalBars > 0 ? Math.max((2 / totalBars) * 100, 0.6) : 0.6;
+        const currentRange = Math.max(prev.end - prev.start, minRange);
+        const nextRange = clamp(currentRange * (event.deltaY > 0 ? 1.16 : 0.86), minRange, 100);
+        const center = (prev.start + prev.end) / 2;
+        return normalizeZoomWindow(center - nextRange / 2, center + nextRange / 2, minRange);
+      });
+    };
+
+    element.addEventListener('wheel', handleWheel, { passive: false });
+    return () => element.removeEventListener('wheel', handleWheel);
+  }, [fusionRows.length]);
+
+  const showTouchTooltip = useCallback((clientX: number, clientY: number) => {
+    const chartInstance = chartRef.current?.getEchartsInstance?.();
+    if (!chartInstance) return;
+
+    const dom = chartInstance.getDom();
+    const rect = dom.getBoundingClientRect();
+    const point = [clientX - rect.left, clientY - rect.top];
+    const converted = chartInstance.convertFromPixel({ xAxisIndex: 0 }, point);
+    const rawIndex = Array.isArray(converted) ? Number(converted[0]) : Number(converted);
+    if (!Number.isFinite(rawIndex)) return;
+
+    const dataIndex = clamp(Math.round(rawIndex), 0, Math.max(fusionRows.length - 1, 0));
+    chartInstance.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex });
+    chartInstance.dispatchAction({ type: 'updateAxisPointer', x: point[0], y: point[1] });
+  }, [fusionRows.length]);
+
+  useEffect(() => {
+    if (!isTouchDevice || !chartContainerRef.current) return undefined;
+    const element = chartContainerRef.current;
+
+    const clearLongPress = () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    };
+
+    const hideTouchTooltip = () => {
+      clearLongPress();
+      if (touchActiveRef.current) {
+        chartRef.current?.getEchartsInstance?.().dispatchAction({ type: 'hideTip' });
+      }
+      touchActiveRef.current = false;
+      touchStartRef.current = null;
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      clearLongPress();
+      longPressTimerRef.current = window.setTimeout(() => {
+        touchActiveRef.current = true;
+        showTouchTooltip(touch.clientX, touch.clientY);
+      }, 380);
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const start = touchStartRef.current;
+      if (!touchActiveRef.current && start) {
+        const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y);
+        if (moved > 12) clearLongPress();
+        return;
+      }
+      if (touchActiveRef.current) {
+        event.preventDefault();
+        showTouchTooltip(touch.clientX, touch.clientY);
+      }
+    };
+
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', hideTouchTooltip, { passive: true });
+    element.addEventListener('touchcancel', hideTouchTooltip, { passive: true });
+
+    return () => {
+      clearLongPress();
+      element.removeEventListener('touchstart', onTouchStart);
+      element.removeEventListener('touchmove', onTouchMove);
+      element.removeEventListener('touchend', hideTouchTooltip);
+      element.removeEventListener('touchcancel', hideTouchTooltip);
+    };
+  }, [isTouchDevice, showTouchTooltip]);
 
   const chartOption = useMemo(() => {
     if (!fusionRows.length) return {};
@@ -504,7 +808,10 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         : ['-', '-', '-', '-']
     ));
     const closeLine = fusionRows.map((row) => row.close);
-    const qualityMarks = fusionRows.map((row) => (row.qualityInfo ? row.close : null));
+    const qualityMarks = fusionRows.map((row, index) => {
+      if (!row.qualityInfo) return null;
+      return row.close ?? fusionRows[index - 1]?.close ?? fusionRows[index + 1]?.close ?? null;
+    });
 
     const absoluteData = buildPanelData(fusionRows, 'absolute');
     const netData = buildPanelData(fusionRows, 'net');
@@ -522,6 +829,8 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       return Math.max(5, Math.ceil(padded / 5) * 5);
     };
 
+    const axisLabelFormatter = (_value: string, index: number) => formatAxisLabel(fusionRows, granularity, index);
+
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -530,13 +839,14 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       },
       tooltip: {
         trigger: 'axis',
+        triggerOn: isTouchDevice ? 'none' : 'mousemove|click',
         axisPointer: { type: 'cross', label: { backgroundColor: '#0F172A' } },
         backgroundColor: 'rgba(15, 23, 42, 0.98)',
         borderColor: '#334155',
         borderWidth: 1,
         padding: 12,
         textStyle: { color: '#E2E8F0', fontSize: 12 },
-        extraCssText: 'box-shadow: 0 18px 40px rgba(2,6,23,0.52); border-radius: 14px; white-space: normal; max-width: 360px;',
+        extraCssText: 'box-shadow: 0 18px 40px rgba(2,6,23,0.52); border-radius: 14px; white-space: normal; max-width: 344px; pointer-events:none;',
         confine: true,
         appendToBody: false,
         position: (pos: number[], _params: any, _dom: HTMLElement, _rect: any, size: { viewSize: number[]; contentSize: number[] }) => getTooltipPosition(pos, size),
@@ -550,7 +860,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         },
       },
       grid: [
-        { left: '6%', right: '4%', top: 24, height: '23%' },
+        { left: '6%', right: '4%', top: 30, height: '21%' },
         { left: '6%', right: '4%', top: '31%', height: '22%' },
         { left: '6%', right: '4%', top: '58%', height: '13%' },
         { left: '6%', right: '4%', top: '76%', height: '13%' },
@@ -562,7 +872,15 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           boundaryGap: true,
           axisLine: { lineStyle: { color: COLORS.border } },
           axisTick: { show: false },
-          axisLabel: { show: false },
+          axisLabel: {
+            show: true,
+            color: '#64748B',
+            fontSize: 10,
+            interval: 0,
+            formatter: axisLabelFormatter,
+            hideOverlap: true,
+            margin: 10,
+          },
           min: 'dataMin',
           max: 'dataMax',
         },
@@ -598,7 +916,9 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           axisLabel: {
             color: '#64748B',
             fontSize: 10,
-            interval: granularity === '5m' ? 'auto' : 0,
+            interval: 0,
+            formatter: axisLabelFormatter,
+            hideOverlap: true,
           },
           min: 'dataMin',
           max: 'dataMax',
@@ -660,9 +980,11 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           type: 'inside',
           xAxisIndex: [0, 1, 2, 3],
           filterMode: 'filter',
-          zoomOnMouseWheel: true,
-          moveOnMouseMove: true,
-          moveOnMouseWheel: true,
+          zoomOnMouseWheel: 'ctrl',
+          moveOnMouseWheel: 'shift',
+          moveOnMouseMove: false,
+          start: zoomWindow.start,
+          end: zoomWindow.end,
         },
         {
           type: 'slider',
@@ -674,8 +996,8 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           filterMode: 'filter',
           borderColor: '#334155',
           fillerColor: 'rgba(71, 85, 105, 0.22)',
-          start: Math.max(0, 100 - Math.min(100, Math.round((60 / Math.max(fusionRows.length, 1)) * 100))),
-          end: 100,
+          start: zoomWindow.start,
+          end: zoomWindow.end,
         },
       ],
       series: [
@@ -729,7 +1051,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         createFlowCustomSeries('买卖力度双柱', 'ratio', 3, 3, ratioData, fusionRows.length),
       ],
     };
-  }, [fusionRows, granularity]);
+  }, [fusionRows, granularity, isTouchDevice, zoomWindow]);
 
   if (!activeStock) return null;
 
@@ -746,76 +1068,87 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       )}
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
-        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-bold text-white">历史多维融合版</h3>
-              <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
-                {LABELS[granularity]}
-              </span>
-              <span className="text-[10px] font-normal text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
-                {sourceLabel}
-              </span>
-              {hasPreviewRows && (
-                <span className="text-[10px] font-medium text-amber-200 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
-                  今日未结算：仅展示 L1 芯柱
-                </span>
-              )}
-              {issueCount > 0 && (
-                <span className="text-[10px] font-medium text-amber-200 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
-                  质量提示 {issueCount} 个
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              上方价格区，下方三层都按“左超大 / 右主力”双柱展开：深色 L2 做底，浅色 L1 做芯；黄色 ! 表示该点存在质量提示。
-            </p>
-          </div>
-
-          <button
-            onClick={() => setRefreshKey((prev) => prev + 1)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
-            title="刷新历史多维数据"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            刷新
-          </button>
-        </div>
-
-        <div className="mb-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-            <span className="text-[11px] font-medium text-slate-300 mr-1">图例</span>
-            {customLegend.map((item) => (
-              <span
-                key={item.label}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/80 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300"
-              >
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center justify-start gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] text-slate-400 lg:justify-end">
-            <span className="rounded-full border border-slate-700/80 px-2 py-1">左柱 = 超大单</span>
-            <span className="rounded-full border border-slate-700/80 px-2 py-1">右柱 = 主力</span>
-            <span className="rounded-full border border-slate-700/80 px-2 py-1">Hover 同步联动</span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 px-2 py-1 text-amber-200">
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-black text-slate-950">!</span>
-              {issueCount > 0 ? `${issueCount} 个异常点` : '暂无异常点'}
+        <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <h3 className="text-sm font-semibold tracking-wide text-white">波段复盘</h3>
+            <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] text-cyan-200">{sourceLabel}</span>
+            <InfoPopover>
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-100">图例说明</div>
+                <div>左柱 = 超大单，右柱 = 主力；深色是 L2 底柱，浅色是 L1 芯柱。</div>
+                <div>资金绝对值 / 净流入 / 买卖力度三张副图都共用同一视觉语言。</div>
+                <div>黄色 <span className="font-bold text-amber-300">!</span> 表示该点存在 `quality_info`；若为当日未结算，则 tooltip 会额外提示 “当前仅 L1 实时口径”。</div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL2Buy }} />超大 L2 买</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL1Buy }} />超大 L1 买</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.mainL2Buy }} />主力 L2 买</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.mainL1Buy }} />主力 L1 买</span>
+                </div>
+              </div>
+            </InfoPopover>
+            <span className={`rounded-full border px-2 py-1 text-[11px] ${issueCount > 0 ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'}`}>
+              {issueTagLabel}
             </span>
+            <InfoPopover widthClass="w-[320px] sm:w-[380px]">
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-100">缺失 / 异常详情</div>
+                {issueRows.length === 0 ? (
+                  <div className="text-slate-300">当前窗口暂无 `quality_info`，历史点位视为正常可读。</div>
+                ) : (
+                  <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {issueRows.slice(0, 16).map((row) => (
+                      <div key={row.key} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-2">
+                        <div className="font-medium text-amber-100">{row.datetime}</div>
+                        <div className="mt-1 text-slate-300">{row.qualityInfo}</div>
+                      </div>
+                    ))}
+                    {issueRows.length > 16 && (
+                      <div className="text-slate-400">其余 {issueRows.length - 16} 条请缩放后在 tooltip 内查看。</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </InfoPopover>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+            <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+              {GRANULARITY_BUTTONS.map((item) => (
+                <button
+                  key={item.value}
+                  onClick={() => onGranularityChange(item.value)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${granularity === item.value ? 'bg-violet-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+                  title={`切换到 ${LABELS[item.value]}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+              <button
+                onClick={() => handleZoomStep('out')}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+                title={`缩小查看更多（当前 ${ZOOM_PRESETS[granularity][inferNearestPresetIndex(granularity, fusionRows.length || 1, zoomWindow)]?.label || '默认'}）`}
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleZoomStep('in')}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+                title={`放大查看细节（当前 ${ZOOM_PRESETS[granularity][inferNearestPresetIndex(granularity, fusionRows.length || 1, zoomWindow)]?.label || '默认'}）`}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            <button
+              onClick={() => setRefreshKey((prev) => prev + 1)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/50 text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+              title="刷新历史多维数据"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
           </div>
         </div>
-
-        {issueCount > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-100">
-            {fusionRows.filter((row) => !!row.qualityInfo).slice(0, 8).map((row) => (
-              <span key={row.key} className="rounded-full border border-amber-500/20 bg-slate-950/40 px-2 py-1">
-                {row.label.replace('\n', ' ')} · {formatQualityShort(row.qualityInfo)}
-              </span>
-            ))}
-            {issueCount > 8 && <span className="rounded-full border border-amber-500/20 bg-slate-950/40 px-2 py-1">其余 {issueCount - 8} 个请在图上 hover 查看</span>}
-          </div>
-        )}
 
         {error && (
           <div className="mb-3 bg-red-900/20 border border-red-800 p-3 rounded-lg flex items-center gap-3 text-red-200 text-xs">
@@ -839,14 +1172,24 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             </p>
           </div>
         ) : (
-          <div className="w-full min-h-[980px] rounded-xl border border-slate-800/70 bg-slate-950/35 p-2">
+          <div
+            ref={chartContainerRef}
+            className="w-full min-h-[980px] rounded-xl border border-slate-800/70 bg-slate-950/35 p-2"
+          >
             <ReactEChartsCore
+              ref={chartRef}
               echarts={echarts}
               option={chartOption}
               notMerge
               lazyUpdate
+              onEvents={{ datazoom: handleDataZoom }}
               style={{ width: '100%', height: 960 }}
             />
+            {isTouchDevice && (
+              <div className="px-3 pb-1 pt-2 text-[11px] text-slate-500">
+                手机端：单指可直接滚页面，长按图表约 0.4 秒后再左右拖动查看详细数据。
+              </div>
+            )}
           </div>
         )}
       </div>
