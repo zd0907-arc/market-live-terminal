@@ -132,6 +132,14 @@ const formatQualityShort = (value: string | null): string => {
   return value.length > 24 ? `${value.slice(0, 24)}…` : value;
 };
 
+const normalizeQualityInfo = (value: string | null | undefined): string | null => {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (['none', 'null', 'nan', 'undefined'].includes(text.toLowerCase())) return null;
+  return text;
+};
+
 const buildLabel = (row: HistoryMultiframeItem, granularity: HistoryMultiframeGranularity): string => {
   if (granularity === '1d') return row.trade_date.slice(5);
   const timePart = row.datetime.slice(11, 16);
@@ -150,7 +158,7 @@ const buildRows = (
     const isFinalized = row.is_finalized === true;
     const isPreviewOnly = !isFinalized;
     const isPlaceholder = row.is_placeholder === true;
-    const qualityInfo = row.quality_info || null;
+    const qualityInfo = normalizeQualityInfo(row.quality_info);
     const hasUsableL2 = isFinalized
       && [row.l2_main_buy, row.l2_main_sell, row.l2_super_buy, row.l2_super_sell].some((item) => toFiniteNumber(item) !== null);
     const hasUsableL1 = [row.l1_main_buy, row.l1_main_sell, row.l1_super_buy, row.l1_super_sell].some((item) => toFiniteNumber(item) !== null);

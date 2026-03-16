@@ -60,6 +60,17 @@ def _nullable_float(value: object) -> Optional[float]:
         return None
 
 
+def _normalize_quality_info(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.lower() in {"none", "null", "nan", "undefined"}:
+        return None
+    return text
+
+
 def _safe_trade_day_range(
     existing_dates: List[str],
     start_date: Optional[str],
@@ -210,7 +221,7 @@ def _map_finalized_intraday_row(row: Dict[str, object], granularity: str) -> Dic
         "is_finalized": not bool(row.get("is_placeholder")),
         "preview_level": None,
         "fallback_used": False,
-        "quality_info": str(row.get("quality_info") or "").strip() or None,
+        "quality_info": _normalize_quality_info(row.get("quality_info")),
         "is_placeholder": bool(row.get("is_placeholder")),
     }
 
@@ -238,7 +249,7 @@ def _map_finalized_daily_row(row: Dict[str, object]) -> Dict[str, object]:
         "is_finalized": not bool(row.get("is_placeholder")),
         "preview_level": None,
         "fallback_used": False,
-        "quality_info": str(row.get("quality_info") or "").strip() or None,
+        "quality_info": _normalize_quality_info(row.get("quality_info")),
         "is_placeholder": bool(row.get("is_placeholder")),
     }
 
