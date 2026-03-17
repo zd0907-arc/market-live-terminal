@@ -31,6 +31,9 @@ WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", r"D:\market-live-terminal\ops\
 WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", r"D:\market-live-terminal\ops\win_run_l2_shard.bat")
 CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal")
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
+SOFT_WARNING_PATTERNS = (
+    "无有效 bar：交易时段内无可用逐笔",
+)
 
 
 def _run(cmd: Sequence[str], *, check: bool = True, capture_output: bool = True, text: bool = True) -> subprocess.CompletedProcess:
@@ -237,6 +240,126 @@ def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
     return json.loads(result.stdout)
 
 
+def _fetch_cloud_failure_summary(run_id: int) -> Dict[str, object]:
+    python_code = (
+        "import sqlite3, json; "
+        "conn=sqlite3.connect('file:data/market_data.db?mode=ro&immutable=1', uri=True); "
+        "conn.row_factory=sqlite3.Row; "
+        "cur=conn.cursor(); "
+        f"rows=[dict(r) for r in cur.execute(\"SELECT symbol, source_file, error_message FROM l2_daily_ingest_failures WHERE run_id={int(run_id)} ORDER BY symbol\")]; "
+        "summary={}; "
+        "[summary.__setitem__(r['error_message'], summary.get(r['error_message'], 0) + 1) for r in rows]; "
+        "print(json.dumps({'count': len(rows), 'summary': summary, 'samples': rows[:20]}, ensure_ascii=False))"
+    )
+    result = _ssh(CLOUD_HOST, f"cd {CLOUD_PROJECT_ROOT} && python3 -c {shlex.quote(python_code)}")
+    return json.loads(result.stdout or "{}")
+
+
+def _is_soft_warning_message(message: str) -> bool:
+    text = str(message or "").strip()
+    return any(pattern in text for pattern in SOFT_WARNING_PATTERNS)
+
+
+def _classify_day_report(report: Dict[str, object]) -> Dict[str, object]:
+    worker_results = report.get("worker_results") or []
+    merge_report = report.get("merge_report") or {}
+    verify_report = report.get("verify_report") or {}
+    skip_cloud_merge = bool(report.get("skip_cloud_merge"))
+
+    if any(int(item.get("return_code", 1)) != 0 for item in worker_results if isinstance(item, dict)):
+        return {
+            "final_status": "FAIL",
+            "reason": "存在 worker 非零退出",
+            "warning_count": 0,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    if skip_cloud_merge:
+        return {
+            "final_status": "FAIL",
+            "reason": "跳过 cloud merge，未形成生产可用结果",
+            "warning_count": 0,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    if not merge_report:
+        return {
+            "final_status": "FAIL",
+            "reason": "缺少 merge_report",
+            "warning_count": 0,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    merge_status = str(merge_report.get("status") or "").strip().lower()
+    rows_daily = int(merge_report.get("rows_daily") or 0)
+    rows_5m = int(merge_report.get("rows_5m") or 0)
+    verify_daily = int(verify_report.get("rows_daily") or 0)
+    verify_5m = int(verify_report.get("rows_5m") or 0)
+    failure_count = int(merge_report.get("failure_count") or 0)
+
+    if merge_status == "failed":
+        return {
+            "final_status": "FAIL",
+            "reason": "cloud merge 失败",
+            "warning_count": failure_count,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    if rows_daily <= 0 or rows_5m <= 0:
+        return {
+            "final_status": "FAIL",
+            "reason": "merge 后正式库写入结果为空",
+            "warning_count": failure_count,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    if verify_daily != rows_daily or verify_5m != rows_5m:
+        return {
+            "final_status": "FAIL",
+            "reason": "verify_report 与 merge_report 不一致",
+            "warning_count": failure_count,
+            "failure_summary": {},
+            "is_production_ready": False,
+        }
+
+    if failure_count <= 0:
+        return {
+            "final_status": "PASS",
+            "reason": "正式回补完成，且无失败样本",
+            "warning_count": 0,
+            "failure_summary": {},
+            "is_production_ready": True,
+        }
+
+    run_id = int(merge_report.get("run_id") or 0)
+    failure_report = _fetch_cloud_failure_summary(run_id) if run_id > 0 else {}
+    failure_summary = failure_report.get("summary") or {}
+    unique_messages = [str(key) for key in failure_summary.keys()]
+    only_soft_warnings = bool(unique_messages) and all(_is_soft_warning_message(message) for message in unique_messages)
+
+    if only_soft_warnings:
+        return {
+            "final_status": "PASS_WITH_WARNINGS",
+            "reason": "正式回补完成，但存在仅空样本类软告警",
+            "warning_count": int(failure_report.get("count") or failure_count),
+            "failure_summary": failure_summary,
+            "is_production_ready": True,
+        }
+
+    return {
+        "final_status": "FAIL",
+        "reason": "存在非空样本类硬失败",
+        "warning_count": int(failure_report.get("count") or failure_count),
+        "failure_summary": failure_summary,
+        "is_production_ready": False,
+    }
+
+
 def _cleanup_remote_day(trade_date: str) -> None:
     _ssh(WIN_HOST, f'cmd /c if exist "{WIN_STAGE_ROOT}\\{trade_date}" rmdir /s /q "{WIN_STAGE_ROOT}\\{trade_date}"', check=False)
     _ssh(CLOUD_HOST, f"rm -rf {CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}", check=False)
@@ -280,6 +403,7 @@ def run_day(trade_date: str, workers: int, stable_seconds: int, skip_cloud_merge
         "verify_report": verify_report,
         "skip_cloud_merge": skip_cloud_merge,
     }
+    report["execution_summary"] = _classify_day_report(report)
     _write_local_report(local_day_root, report)
     return report
 
@@ -346,15 +470,22 @@ def main() -> None:
         )
         for day in target_days
     ]
+    final_status = "PASS"
+    if any((report.get("execution_summary") or {}).get("final_status") == "FAIL" for report in day_reports):
+        final_status = "FAIL"
+    elif any((report.get("execution_summary") or {}).get("final_status") == "PASS_WITH_WARNINGS" for report in day_reports):
+        final_status = "PASS_WITH_WARNINGS"
+
     final_result = {
         "status": "done",
+        "final_status": final_status,
         "target_days": target_days,
         "day_reports": day_reports,
     }
     if args.json:
         print(json.dumps(final_result, ensure_ascii=False, indent=2))
     else:
-        print(f"[postclose-l2] 完成交易日: {','.join(target_days)}")
+        print(f"[postclose-l2] final_status={final_status} 完成交易日: {','.join(target_days)}")
 
 
 if __name__ == "__main__":

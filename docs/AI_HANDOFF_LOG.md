@@ -468,3 +468,17 @@
 - 结论: 已完成 `v4.2.17` 生产发布；新版历史多维读数条改为外置顶栏，y 轴修正为“左轴 + 轴右侧内嵌标签”，并把普通滚轮优先级还给页面滚动，发布锚点 commit=`9e13fd3`，tag=`v4.2.17`。
 - 风险: 本次仍未代跑生产冒烟；`Shift + 滚轮` / 触控板横向平移手感与浏览器差异仍需用户侧持续观察。
 - 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-info-strip-polish.md`
+
+## 2026-03-17 22:10 | 运维 AI
+- Task ID: `CHG-20260317-10`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已将盘后 L2 一条命令总控收口为 `PASS / PASS_WITH_WARNINGS / FAIL` 三档结论；其中“仅无有效 bar 空样本”归类为 `PASS_WITH_WARNINGS`，视为生产前端可用。`20260317` 现有报告重算结果为 `PASS_WITH_WARNINGS`。
+- 风险: 当前仍未把“最终状态”反写进云端 merge 表本身；数据库 run 记录仍保持 `done / partial_done / failed` 原始技术状态。
+- 链接: `backend/scripts/run_postclose_l2_daily.py`, `ops/run_postclose_l2.sh`, `docs/04_OPS_AND_DEV.md`, `docs/archive/changes/ARC-CHG-20260317-postclose-l2-one-command-final-status.md`
+
+## 2026-03-17 22:45 | 发布 AI
+- Task ID: `CHG-20260317-11`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 准备发布 `v4.2.18`；新版历史多维已补齐“本周期涨跌”、默认约 40 点窗口与 20/40/80/160 步进缩放、横轴真实时间刻度、无 L2 假底柱隐藏、L1 配色增强，并在第四图叠加 L2 超大单/主力活跃度细实线；同时纳入盘后 L2 一条命令最终态三档结论。
+- 风险: 本次仍为发布后人工验收模式，未代跑生产冒烟；重点关注白天 preview 场景是否只剩真实 L1 芯柱、以及第四图双实线在移动端的可读性。
+- 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `backend/scripts/run_postclose_l2_daily.py`, `src/version.ts`, `docs/04_OPS_AND_DEV.md`

@@ -89,69 +89,20 @@ const GRANULARITY_BUTTONS: Array<{ value: HistoryMultiframeGranularity; label: s
   { value: '1d', label: '日线' },
 ];
 
-const BARS_PER_DAY: Record<HistoryMultiframeGranularity, number> = {
-  '5m': 48,
-  '15m': 16,
-  '30m': 8,
-  '1h': 4,
-  '1d': 1,
-};
-
-const ZOOM_PRESETS: Record<HistoryMultiframeGranularity, Array<{ label: string; tradingDays: number }>> = {
-  '5m': [
-    { label: '当天', tradingDays: 1 },
-    { label: '2天', tradingDays: 2 },
-    { label: '5天', tradingDays: 5 },
-    { label: '10天', tradingDays: 10 },
-    { label: '1月', tradingDays: 22 },
-  ],
-  '15m': [
-    { label: '当天', tradingDays: 1 },
-    { label: '2天', tradingDays: 2 },
-    { label: '5天', tradingDays: 5 },
-    { label: '10天', tradingDays: 10 },
-    { label: '1月', tradingDays: 22 },
-  ],
-  '30m': [
-    { label: '1周', tradingDays: 5 },
-    { label: '2周', tradingDays: 10 },
-    { label: '1月', tradingDays: 22 },
-    { label: '3月', tradingDays: 66 },
-    { label: '半年', tradingDays: 132 },
-  ],
-  '1h': [
-    { label: '1周', tradingDays: 5 },
-    { label: '2周', tradingDays: 10 },
-    { label: '1月', tradingDays: 22 },
-    { label: '3月', tradingDays: 66 },
-    { label: '半年', tradingDays: 132 },
-  ],
-  '1d': [
-    { label: '1月', tradingDays: 20 },
-    { label: '3月', tradingDays: 60 },
-    { label: '半年', tradingDays: 120 },
-    { label: '1年', tradingDays: 240 },
-    { label: '全部', tradingDays: 320 },
-  ],
-};
-
-const DEFAULT_ZOOM_INDEX: Record<HistoryMultiframeGranularity, number> = {
-  '5m': 2,
-  '15m': 2,
-  '30m': 2,
-  '1h': 2,
-  '1d': 2,
-};
+const ZOOM_POINT_PRESETS = [20, 40, 80, 160];
+const DEFAULT_VISIBLE_POINTS = 40;
+const MIN_VISIBLE_POINTS = 20;
+const MAX_VISIBLE_POINTS = 160;
 
 const COLORS = {
   mainL2Buy: '#D32F2F',
-  mainL1Buy: '#FFCDD2',
+  mainL1Buy: '#EF9A9A',
   mainL2Sell: '#388E3C',
-  mainL1Sell: '#C8E6C9',
+  mainL1Sell: '#81C784',
   superL2Buy: '#7B1FA2',
-  superL1Buy: '#E1BEE7',
+  superL1Buy: '#BA68C8',
   superL2Sell: '#00796B',
-  superL1Sell: '#B2DFDB',
+  superL1Sell: '#4DB6AC',
   closeLine: '#FBBF24',
   candleUp: '#EF4444',
   candleDown: '#22C55E',
@@ -179,7 +130,8 @@ const compactAmount = (value: number | null): string => {
 
 const compactPercent = (value: number | null): string => {
   if (value === null || !Number.isFinite(value)) return '--';
-  return `${value.toFixed(value >= 10 ? 1 : 2)}%`;
+  const abs = Math.abs(value);
+  return `${value.toFixed(abs >= 10 ? 1 : 2)}%`;
 };
 
 const formatPrice = (value: number | null): string => {
@@ -263,6 +215,9 @@ const buildRows = (
   .sort((a, b) => a.datetime.localeCompare(b.datetime));
 
 const buildPanelData = (rows: FusionRow[], kind: FlowPanelKind): CustomSeriesDatum[] => rows.map((row, index) => {
+  const hasL2Super = row.l2SuperBuy !== null || row.l2SuperSell !== null;
+  const hasL2Main = row.l2MainBuy !== null || row.l2MainSell !== null;
+
   if (kind === 'net') {
     return {
       value: [
@@ -271,6 +226,8 @@ const buildPanelData = (rows: FusionRow[], kind: FlowPanelKind): CustomSeriesDat
         toNet(row.l1SuperBuy, row.l1SuperSell),
         toNet(row.l2MainBuy, row.l2MainSell),
         toNet(row.l1MainBuy, row.l1MainSell),
+        hasL2Super ? 1 : 0,
+        hasL2Main ? 1 : 0,
       ],
     };
   }
@@ -292,6 +249,8 @@ const buildPanelData = (rows: FusionRow[], kind: FlowPanelKind): CustomSeriesDat
         toRatio(row.l1MainBuy, row.totalAmount),
         l2MainSell === null ? null : -l2MainSell,
         l1MainSell === null ? null : -l1MainSell,
+        hasL2Super ? 1 : 0,
+        hasL2Main ? 1 : 0,
       ],
     };
   }
@@ -307,9 +266,18 @@ const buildPanelData = (rows: FusionRow[], kind: FlowPanelKind): CustomSeriesDat
       row.l1MainBuy,
       row.l2MainSell === null ? null : -row.l2MainSell,
       row.l1MainSell === null ? null : -row.l1MainSell,
+      hasL2Super ? 1 : 0,
+      hasL2Main ? 1 : 0,
     ],
   };
 });
+
+const getZoomBarLimits = (totalBars: number): { minBars: number; maxBars: number } => {
+  if (totalBars <= 0) return { minBars: 1, maxBars: 1 };
+  const maxBars = Math.min(totalBars, MAX_VISIBLE_POINTS);
+  const minBars = Math.min(totalBars, MIN_VISIBLE_POINTS, maxBars);
+  return { minBars: Math.max(1, minBars), maxBars: Math.max(1, maxBars) };
+};
 
 const getVisibleIndexRange = (rowCount: number, zoom: ZoomWindow): { startIndex: number; endIndex: number } => {
   if (rowCount <= 0) return { startIndex: 0, endIndex: 0 };
@@ -403,17 +371,21 @@ const createFlowCustomSeries = (
       const children: any[] = [];
 
       if (panel === 'net') {
-        children.push(makeRect(superCenter, api.value(1), Number(api.value(1)) >= 0 ? COLORS.superL2Buy : COLORS.superL2Sell));
+        const hasL2Super = Number(api.value(5)) === 1;
+        const hasL2Main = Number(api.value(6)) === 1;
+        children.push(hasL2Super ? makeRect(superCenter, api.value(1), Number(api.value(1)) >= 0 ? COLORS.superL2Buy : COLORS.superL2Sell) : null);
         children.push(makeRect(superCenter, api.value(2), Number(api.value(2)) >= 0 ? COLORS.superL1Buy : COLORS.superL1Sell));
-        children.push(makeRect(mainCenter, api.value(3), Number(api.value(3)) >= 0 ? COLORS.mainL2Buy : COLORS.mainL2Sell));
+        children.push(hasL2Main ? makeRect(mainCenter, api.value(3), Number(api.value(3)) >= 0 ? COLORS.mainL2Buy : COLORS.mainL2Sell) : null);
         children.push(makeRect(mainCenter, api.value(4), Number(api.value(4)) >= 0 ? COLORS.mainL1Buy : COLORS.mainL1Sell));
       } else {
-        children.push(makeRect(superCenter, api.value(1), COLORS.superL2Buy));
-        children.push(makeRect(superCenter, api.value(3), COLORS.superL2Sell));
+        const hasL2Super = Number(api.value(9)) === 1;
+        const hasL2Main = Number(api.value(10)) === 1;
+        children.push(hasL2Super ? makeRect(superCenter, api.value(1), COLORS.superL2Buy) : null);
+        children.push(hasL2Super ? makeRect(superCenter, api.value(3), COLORS.superL2Sell) : null);
         children.push(makeRect(superCenter, api.value(2), COLORS.superL1Buy));
         children.push(makeRect(superCenter, api.value(4), COLORS.superL1Sell));
-        children.push(makeRect(mainCenter, api.value(5), COLORS.mainL2Buy));
-        children.push(makeRect(mainCenter, api.value(7), COLORS.mainL2Sell));
+        children.push(hasL2Main ? makeRect(mainCenter, api.value(5), COLORS.mainL2Buy) : null);
+        children.push(hasL2Main ? makeRect(mainCenter, api.value(7), COLORS.mainL2Sell) : null);
         children.push(makeRect(mainCenter, api.value(6), COLORS.mainL1Buy));
         children.push(makeRect(mainCenter, api.value(8), COLORS.mainL1Sell));
       }
@@ -428,7 +400,8 @@ const createFlowCustomSeries = (
 
 const buildZoomWindowFromVisibleBars = (totalBars: number, visibleBars: number): ZoomWindow => {
   if (totalBars <= 0) return { start: 0, end: 100 };
-  const safeVisible = clamp(visibleBars, 1, totalBars);
+  const { minBars, maxBars } = getZoomBarLimits(totalBars);
+  const safeVisible = clamp(visibleBars, minBars, maxBars);
   if (safeVisible >= totalBars) return { start: 0, end: 100 };
   const start = ((totalBars - safeVisible) / totalBars) * 100;
   return { start, end: 100 };
@@ -447,18 +420,30 @@ const normalizeZoomWindow = (start: number, end: number, minRange: number): Zoom
   return { start: nextStart, end: nextEnd };
 };
 
-const getVisibleBarsForPreset = (granularity: HistoryMultiframeGranularity, presetIndex: number): number => {
-  const preset = ZOOM_PRESETS[granularity][presetIndex] ?? ZOOM_PRESETS[granularity][DEFAULT_ZOOM_INDEX[granularity]];
-  return preset.tradingDays * BARS_PER_DAY[granularity];
+const normalizeZoomWindowByBarLimits = (totalBars: number, start: number, end: number): ZoomWindow => {
+  if (totalBars <= 0) return { start: 0, end: 100 };
+  const { minBars, maxBars } = getZoomBarLimits(totalBars);
+  const minRange = (minBars / totalBars) * 100;
+  const maxRange = totalBars <= maxBars ? 100 : (maxBars / totalBars) * 100;
+  let normalized = normalizeZoomWindow(start, end, minRange);
+  const currentRange = normalized.end - normalized.start;
+  if (currentRange > maxRange) {
+    const center = (normalized.start + normalized.end) / 2;
+    normalized = normalizeZoomWindow(center - maxRange / 2, center + maxRange / 2, minRange);
+  }
+  return normalized;
 };
 
-const inferNearestPresetIndex = (granularity: HistoryMultiframeGranularity, totalBars: number, zoomWindow: ZoomWindow): number => {
-  if (totalBars <= 0) return DEFAULT_ZOOM_INDEX[granularity];
+const getVisibleBarsForPreset = (presetIndex: number): number => {
+  return ZOOM_POINT_PRESETS[presetIndex] ?? DEFAULT_VISIBLE_POINTS;
+};
+
+const inferNearestPresetIndex = (totalBars: number, zoomWindow: ZoomWindow): number => {
+  if (totalBars <= 0) return 1;
   const visibleBars = totalBars * Math.max(0.01, (zoomWindow.end - zoomWindow.start) / 100);
-  let bestIndex = DEFAULT_ZOOM_INDEX[granularity];
+  let bestIndex = 1;
   let bestDistance = Number.POSITIVE_INFINITY;
-  ZOOM_PRESETS[granularity].forEach((preset, index) => {
-    const presetBars = preset.tradingDays * BARS_PER_DAY[granularity];
+  ZOOM_POINT_PRESETS.forEach((presetBars, index) => {
     const distance = Math.abs(presetBars - visibleBars);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -468,27 +453,40 @@ const inferNearestPresetIndex = (granularity: HistoryMultiframeGranularity, tota
   return bestIndex;
 };
 
-const formatAxisLabel = (rows: FusionRow[], granularity: HistoryMultiframeGranularity, index: number): string => {
+const formatAxisLabel = (
+  rows: FusionRow[],
+  granularity: HistoryMultiframeGranularity,
+  index: number,
+  visibleRange: { startIndex: number; endIndex: number },
+): string => {
   const row = rows[index];
   if (!row) return '';
-  const prev = rows[index - 1];
+
+  const { startIndex, endIndex } = visibleRange;
+  if (index <= startIndex || index > endIndex) return '';
+
+  const visibleCount = Math.max(1, endIndex - startIndex + 1);
+  const desiredLabels = visibleCount <= 32 ? 4 : visibleCount <= 80 ? 5 : 6;
+  const slots = Math.max(2, desiredLabels);
+  const chosen = new Set<number>();
+  for (let slot = 1; slot < slots; slot += 1) {
+    const ratio = slot / (slots - 1);
+    const nextIndex = Math.round(startIndex + (visibleCount - 1) * ratio);
+    if (nextIndex > startIndex && nextIndex <= endIndex) {
+      chosen.add(nextIndex);
+    }
+  }
+  chosen.add(endIndex);
+  if (!chosen.has(index)) return '';
 
   if (granularity === '1d') {
-    const month = row.tradeDate.slice(0, 7);
-    const prevMonth = prev?.tradeDate.slice(0, 7);
-    if (index === 0 || month !== prevMonth) return row.tradeDate.slice(2, 7);
-    if (index === rows.length - 1) return row.tradeDate.slice(5);
-    return '';
+    return visibleCount > 90 ? row.tradeDate.slice(2, 7) : row.tradeDate.slice(5);
   }
 
   const time = row.datetime.slice(11, 16);
-  const isDayStart = !prev || prev.tradeDate !== row.tradeDate;
-  if (isDayStart) return `${row.tradeDate.slice(5)}\n${time}`;
-
-  if ((granularity === '30m' || granularity === '1h') && time === '13:00') return '13:00';
-  if ((granularity === '5m' || granularity === '15m') && (time === '10:30' || time === '14:00')) return time;
-  if (index === rows.length - 1) return time;
-  return '';
+  if (visibleCount > 96) return row.tradeDate.slice(5);
+  if (visibleCount > 48) return `${row.tradeDate.slice(5)}\n${time}`;
+  return `${row.tradeDate.slice(5)}\n${time}`;
 };
 
 const InfoPopover: React.FC<{
@@ -599,6 +597,10 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     return defaultVisibleIndex;
   }, [activeDataIndex, defaultVisibleIndex, fusionRows.length]);
   const selectedRow = selectedDataIndex === null ? null : fusionRows[selectedDataIndex] ?? null;
+  const selectedPeriodChangePct = useMemo(() => {
+    if (!selectedRow || selectedRow.open === null || selectedRow.close === null || selectedRow.open === 0) return null;
+    return ((selectedRow.close - selectedRow.open) / selectedRow.open) * 100;
+  }, [selectedRow]);
 
   const hasFormalL2History = fusionRows.some(
     (row) => row.isFinalized && !row.isPlaceholder && [row.l2MainBuy, row.l2MainSell, row.l2SuperBuy, row.l2SuperSell].some((item) => item !== null),
@@ -612,7 +614,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       setActiveDataIndex(null);
       return;
     }
-    const defaultVisibleBars = getVisibleBarsForPreset(granularity, DEFAULT_ZOOM_INDEX[granularity]);
+    const defaultVisibleBars = DEFAULT_VISIBLE_POINTS;
     setZoomWindow(buildZoomWindowFromVisibleBars(fusionRows.length, defaultVisibleBars));
     setActiveDataIndex(null);
   }, [fusionRows.length, granularity]);
@@ -630,23 +632,23 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   const handleZoomStep = useCallback((direction: 'in' | 'out') => {
     const totalBars = fusionRows.length;
     if (!totalBars) return;
-    const currentIndex = inferNearestPresetIndex(granularity, totalBars, zoomWindow);
+    const currentIndex = inferNearestPresetIndex(totalBars, zoomWindow);
     const nextIndex = clamp(
       currentIndex + (direction === 'in' ? -1 : 1),
       0,
-      ZOOM_PRESETS[granularity].length - 1,
+      ZOOM_POINT_PRESETS.length - 1,
     );
-    const visibleBars = getVisibleBarsForPreset(granularity, nextIndex);
+    const visibleBars = getVisibleBarsForPreset(nextIndex);
     setZoomWindow(buildZoomWindowFromVisibleBars(totalBars, visibleBars));
-  }, [fusionRows.length, granularity, zoomWindow]);
+  }, [fusionRows.length, zoomWindow]);
 
   const handleDataZoom = useCallback((event: any) => {
     const payload = Array.isArray(event?.batch) && event.batch.length ? event.batch[event.batch.length - 1] : event;
     const start = Number(payload?.start);
     const end = Number(payload?.end);
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-    setZoomWindow({ start, end });
-  }, []);
+    setZoomWindow(normalizeZoomWindowByBarLimits(fusionRows.length, start, end));
+  }, [fusionRows.length]);
 
   const handleActivePointer = useCallback((event: any) => {
     const nextIndex = resolveDataIndexFromEvent(event, fusionRows.length);
@@ -670,18 +672,20 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       event.preventDefault();
       setZoomWindow((prev) => {
         const totalBars = fusionRows.length;
-        const minRange = totalBars > 0 ? Math.max((2 / totalBars) * 100, 0.6) : 0.6;
-        const currentRange = Math.max(prev.end - prev.start, minRange);
+        const { minBars, maxBars } = getZoomBarLimits(totalBars);
+        const minRange = totalBars > 0 ? Math.max((minBars / totalBars) * 100, 0.6) : 0.6;
+        const maxRange = totalBars > 0 ? Math.min(100, (maxBars / totalBars) * 100) : 100;
+        const currentRange = clamp(Math.max(prev.end - prev.start, minRange), minRange, maxRange);
 
         if (isPanGesture) {
           const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
           const shift = (delta > 0 ? 1 : -1) * Math.max(currentRange * 0.12, 1.5);
-          return normalizeZoomWindow(prev.start + shift, prev.end + shift, minRange);
+          return normalizeZoomWindowByBarLimits(totalBars, prev.start + shift, prev.end + shift);
         }
 
-        const nextRange = clamp(currentRange * (event.deltaY > 0 ? 1.16 : 0.86), minRange, 100);
+        const nextRange = clamp(currentRange * (event.deltaY > 0 ? 1.16 : 0.86), minRange, maxRange);
         const center = (prev.start + prev.end) / 2;
-        return normalizeZoomWindow(center - nextRange / 2, center + nextRange / 2, minRange);
+        return normalizeZoomWindowByBarLimits(totalBars, center - nextRange / 2, center + nextRange / 2);
       });
     };
 
@@ -770,13 +774,25 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   const chartOption = useMemo(() => {
     if (!fusionRows.length) return {};
 
-    const category = fusionRows.map((row) => row.label);
+    const category = fusionRows.map((row) => row.datetime);
     const candleData = fusionRows.map((row) => (
       row.open !== null && row.high !== null && row.low !== null && row.close !== null
         ? [row.open, row.close, row.low, row.high]
         : ['-', '-', '-', '-']
     ));
     const closeLine = fusionRows.map((row) => row.close);
+    const superL2ActivityLine = fusionRows.map((row) => {
+      const buy = row.l2SuperBuy;
+      const sell = row.l2SuperSell;
+      if (buy === null || sell === null) return null;
+      return toRatio(buy + sell, row.totalAmount);
+    });
+    const mainL2ActivityLine = fusionRows.map((row) => {
+      const buy = row.l2MainBuy;
+      const sell = row.l2MainSell;
+      if (buy === null || sell === null) return null;
+      return toRatio(buy + sell, row.totalAmount);
+    });
     const qualityMarks = fusionRows.map((row, index) => {
       if (!row.qualityInfo) return null;
       return row.close ?? fusionRows[index - 1]?.close ?? fusionRows[index + 1]?.close ?? null;
@@ -798,7 +814,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       return Math.max(5, Math.ceil(padded / 5) * 5);
     };
 
-    const axisLabelFormatter = (_value: string, index: number) => formatAxisLabel(fusionRows, granularity, index);
+    const axisLabelFormatter = (_value: string, index: number) => formatAxisLabel(fusionRows, granularity, index, visibleIndexRange);
     const makeYAxis = (
       gridIndex: number,
       formatter: (value: number) => string,
@@ -1001,9 +1017,43 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         createFlowCustomSeries('资金绝对值双柱', 'absolute', 1, 1, absoluteData, fusionRows.length),
         createFlowCustomSeries('净流入双柱', 'net', 2, 2, netData, fusionRows.length),
         createFlowCustomSeries('买卖力度双柱', 'ratio', 3, 3, ratioData, fusionRows.length),
+        {
+          name: 'L2超大单活跃度',
+          type: 'line',
+          xAxisIndex: 3,
+          yAxisIndex: 3,
+          data: superL2ActivityLine,
+          showSymbol: false,
+          smooth: 0.25,
+          connectNulls: false,
+          lineStyle: {
+            color: COLORS.superL2Buy,
+            width: 1.2,
+            opacity: 0.95,
+          },
+          itemStyle: { color: COLORS.superL2Buy },
+          z: 7,
+        },
+        {
+          name: 'L2主力活跃度',
+          type: 'line',
+          xAxisIndex: 3,
+          yAxisIndex: 3,
+          data: mainL2ActivityLine,
+          showSymbol: false,
+          smooth: 0.25,
+          connectNulls: false,
+          lineStyle: {
+            color: COLORS.mainL2Buy,
+            width: 1.2,
+            opacity: 0.95,
+          },
+          itemStyle: { color: COLORS.mainL2Buy },
+          z: 7,
+        },
       ],
     };
-  }, [fusionRows, granularity, isTouchDevice, zoomWindow]);
+  }, [fusionRows, granularity, isTouchDevice, visibleIndexRange, zoomWindow]);
 
   const selectedStatusBadges = useMemo(() => {
     if (!selectedRow) return [];
@@ -1090,14 +1140,14 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
               <button
                 onClick={() => handleZoomStep('out')}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-                title={`缩小查看更多（当前 ${ZOOM_PRESETS[granularity][inferNearestPresetIndex(granularity, fusionRows.length || 1, zoomWindow)]?.label || '默认'}）`}
+                title={`缩小查看更多（当前约 ${getVisibleBarsForPreset(inferNearestPresetIndex(fusionRows.length || 1, zoomWindow))} 点）`}
               >
                 <Minus className="h-4 w-4" />
               </button>
               <button
                 onClick={() => handleZoomStep('in')}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-                title={`放大查看细节（当前 ${ZOOM_PRESETS[granularity][inferNearestPresetIndex(granularity, fusionRows.length || 1, zoomWindow)]?.label || '默认'}）`}
+                title={`放大查看细节（当前约 ${getVisibleBarsForPreset(inferNearestPresetIndex(fusionRows.length || 1, zoomWindow))} 点）`}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -1192,9 +1242,25 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
                         <span className="whitespace-nowrap text-right font-mono text-amber-200">{formatPrice(selectedRow.close)}</span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
-                      <span className="whitespace-nowrap text-slate-500">成交额</span>
-                      <span className="whitespace-nowrap text-right font-mono text-slate-100">{compactAmount(selectedRow.totalAmount)}</span>
+                    <div className="grid grid-cols-2 gap-x-4">
+                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                        <span className="whitespace-nowrap text-slate-500">成交额</span>
+                        <span className="whitespace-nowrap text-right font-mono text-slate-100">{compactAmount(selectedRow.totalAmount)}</span>
+                      </div>
+                      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2">
+                        <span className="whitespace-nowrap text-slate-500">涨跌</span>
+                        <span
+                          className={`whitespace-nowrap text-right font-mono ${
+                            (selectedPeriodChangePct ?? 0) > 0
+                              ? 'text-red-300'
+                              : (selectedPeriodChangePct ?? 0) < 0
+                                ? 'text-emerald-300'
+                                : 'text-slate-100'
+                          }`}
+                        >
+                          {selectedPeriodChangePct === null ? '--' : `${selectedPeriodChangePct > 0 ? '+' : ''}${compactPercent(selectedPeriodChangePct)}`}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>

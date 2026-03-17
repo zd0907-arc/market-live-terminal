@@ -232,6 +232,18 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
 ./ops/run_postclose_l2.sh --skip-cloud-merge
 ```
 
+**运行位置（冻结）**：
+- 必须在 **Mac 本机** 执行；
+- 必须先进入项目根目录：
+  ```bash
+  cd /Users/dong/Desktop/AIGC/market-live-terminal
+  ```
+- 然后再执行：
+  ```bash
+  ./ops/run_postclose_l2.sh
+  ```
+- 不要在 `ops/` 目录里直接执行相对路径，也不要在 Windows/云端机器上执行这条命令。
+
 相关脚本：
 - Mac 总控：`backend/scripts/run_postclose_l2_daily.py`
 - Windows prepare：`backend/scripts/l2_postclose_prepare_day.py`
@@ -250,6 +262,11 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
   1. Windows 端必须同步最新 `backend/app/db/l2_history_db.py`，否则 worker artifact 会因 `quality_info` 列位不一致导致全量失败；
   2. cloud merge 不能直接用普通用户写主库，需走 **`sudo python3 backend/scripts/merge_l2_day_delta.py`**；
   3. cloud artifact 路径必须使用**绝对路径**（如 `/home/ubuntu/...`），不能在 `sudo` 场景下传 `~/...`。
+- `2026-03-17` 收敛后的最终状态解释：
+  - `PASS`：worker 全部成功、cloud merge 完成、正式库写入与 verify 一致，且**无失败样本**；
+  - `PASS_WITH_WARNINGS`：worker 全部成功、cloud merge 完成、正式库写入与 verify 一致，但失败样本**仅包含“无有效 bar”类空样本软告警**；此状态视为**生产前端可用**；
+  - `FAIL`：存在 worker 非零退出、merge 失败、正式库写入为空、verify 不一致，或出现除“无有效 bar”外的硬失败。
+- 当前总控脚本 `backend/scripts/run_postclose_l2_daily.py` 已内建上述三档判定；执行完 `./ops/run_postclose_l2.sh` 后，以终端输出的 `final_status` 为准。
 
 #### C. Repair Queue 规则
 1. `OrderID` 完全无法对齐 → `hard repair`
