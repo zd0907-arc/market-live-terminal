@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.bundle
 
 # Editor directories and files
 .vscode/*
@@ -31,6 +32,8 @@ data/
 __pycache__/
 .trae/
 .pytest_cache/
+.venv/
+.run/
 
 # Environment Variables (绝对禁止提交)
 .env

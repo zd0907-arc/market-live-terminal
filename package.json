@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:version": "python3 scripts/check_version_consistency.py",
+    "check:baseline": "bash scripts/check_baseline.sh"
   },
   "dependencies": {
     "axios": "^1.13.5",

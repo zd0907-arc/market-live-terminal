@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-18 00:20 | Codex
+- Task ID: `CFG-20260318-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已完成第一阶段“先存档 → 再做最小治理”基线落地：创建 `snapshot-20260318-pre-governance` / `codex/archive-pre-governance-20260318` / `codex/baseline-governance-20260318`，导出 bundle 与仓库外 DB/.env 快照；同时移除前端 `VITE_WRITE_API_TOKEN` 注入，改为 Vite/Nginx 代理在服务端侧注入写请求头，并补齐版本一致性检查与统一 `check:baseline` 自检入口。
+- 风险: 官方前端写请求现依赖 dev proxy / Nginx proxy 正确注入 `X-Write-Token`；若本地 `.env.local` 或生产 frontend 容器未配置 `WRITE_API_TOKEN`，写接口会返回 401/503。另：`.venv` 已从 Git 索引移除，后续环境需按本地重新安装维护，不再依赖仓库内虚拟环境副本。
+- 链接: `scripts/check_version_consistency.py`, `scripts/check_baseline.sh`, `deploy/nginx.conf`, `deploy/docker-compose.yml`, `docs/AI_QUICK_START.md`, `docs/changes/CFG-20260318-01-baseline-governance-hardening.md`
+
 ## 2026-03-15 18:40 | Codex
 - Task ID: `CHG-20260315-03`
 - CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`

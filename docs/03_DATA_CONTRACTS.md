@@ -298,6 +298,7 @@
 
 > 写接口鉴权约束（v4.2.3+）：
 > - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
+> - 官方前端不再把 `WRITE_API_TOKEN` 注入浏览器；开发环境由 Vite 代理注入，生产环境由 Nginx 代理注入。若绕过官方代理直接调用 API，调用方必须自行提供 `X-Write-Token`。
 > - 内部高速 ingest 接口继续使用 `INGEST_TOKEN`，且服务端不再提供默认 token。
 
 ### 2. 散户情绪类 (Retail Sentiment)

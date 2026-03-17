@@ -13,10 +13,6 @@ RUN npm install
 # 复制前端源码
 COPY . .
 
-# Inject write token at build time so frontend mutating requests can pass auth header
-ARG VITE_WRITE_API_TOKEN=""
-ENV VITE_WRITE_API_TOKEN=${VITE_WRITE_API_TOKEN}
-
 # 编译生产环境代码 (输出到 /app/dist)
 RUN npm run build
 
@@ -26,8 +22,8 @@ FROM nginx:alpine
 # 复制编译好的静态文件到 Nginx 目录
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# 复制自定义 Nginx 配置 (注意：构建上下文需要是项目根目录)
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+# 复制带环境变量占位符的 Nginx 模板；官方 entrypoint 会自动 envsubst
+COPY deploy/nginx.conf /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 

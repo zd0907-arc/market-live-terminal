@@ -32,6 +32,7 @@ npm run dev
 - LLM 与密钥安全：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/05_LLM_KEY_SECURITY.md`
 - 变更与阶段目标流程：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/06_CHANGE_MANAGEMENT.md`
 - AI 协作交接：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/00_AI_HANDOFF_PROTOCOL.md`
+- AI 快速入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/AI_QUICK_START.md`
 - 最新交接日志：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/AI_HANDOFF_LOG.md`
 - 人工待办（含 Windows 离线阻塞）：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/07_PENDING_TODO.md`
 - 文档治理与索引：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
@@ -55,6 +56,13 @@ npm run dev
 - Windows 脚本同步：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_to_windows.sh`
 - 本地离线补数上云：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
 
+## 最小自检
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+npm run check:baseline
+```
+
 ## 注意事项
 - 根目录下存在历史遗留目录 `market-live-terminal/`（旧副本），请勿在其中开发或发版。
+- `WRITE_API_TOKEN` 仅允许保留在服务端环境变量中；前端静态资源不得携带该值。
 - 当前仍使用 CDN Tailwind；后续将迁移到本地构建链路。

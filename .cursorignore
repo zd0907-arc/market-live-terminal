@@ -21,6 +21,8 @@ node_modules/
 
 # 构建产物
 dist/
+.venv/
+.run/
 
 # 历史遗留旧仓库副本（避免 AI 误扫误改）
 market-live-terminal/
