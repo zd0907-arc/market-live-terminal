@@ -12,6 +12,13 @@
 - 风险: 官方前端写请求现依赖 dev proxy / Nginx proxy 正确注入 `X-Write-Token`；若本地 `.env.local` 或生产 frontend 容器未配置 `WRITE_API_TOKEN`，写接口会返回 401/503。另：`.venv` 已从 Git 索引移除，后续环境需按本地重新安装维护，不再依赖仓库内虚拟环境副本。
 - 链接: `scripts/check_version_consistency.py`, `scripts/check_baseline.sh`, `deploy/nginx.conf`, `deploy/docker-compose.yml`, `docs/AI_QUICK_START.md`, `docs/changes/CFG-20260318-01-baseline-governance-hardening.md`
 
+## 2026-03-18 01:40 | Codex
+- Task ID: `CFG-20260318-01`
+- CAP: `CAP-WIN-PIPELINE`
+- 结论: 已完成分支治理收口：`codex/baseline-governance-20260318` 已 fast-forward 合入 `main` 并推送 GitHub；本地与远端现仅保留 `main` + `codex/archive-pre-governance-20260318` 两个长期分支。历史分支 `codex/daily-postclose-l2-fusion`、`codex/sandbox-review-mvp`、`release/v4.1.0` 已删除；历史中文命名远端分支先转存为 tag `archive-legacy-v2.8-local-final-20260318` 后删除。
+- 风险: 后续日常开发不要再保留长期工作分支；建议所有新需求都从 `main` 临时拉 `codex/<topic>`，完成即删，避免再次堆积历史分支。
+- 链接: `docs/changes/CFG-20260318-01-baseline-governance-hardening.md`, `docs/AI_QUICK_START.md`
+
 ## 2026-03-15 18:40 | Codex
 - Task ID: `CHG-20260315-03`
 - CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
