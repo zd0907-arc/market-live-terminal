@@ -787,9 +787,21 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       if (buy === null || sell === null) return null;
       return toRatio(buy + sell, row.totalAmount);
     });
+    const superL1ActivityLine = fusionRows.map((row) => {
+      const buy = row.l1SuperBuy;
+      const sell = row.l1SuperSell;
+      if (buy === null || sell === null) return null;
+      return toRatio(buy + sell, row.totalAmount);
+    });
     const mainL2ActivityLine = fusionRows.map((row) => {
       const buy = row.l2MainBuy;
       const sell = row.l2MainSell;
+      if (buy === null || sell === null) return null;
+      return toRatio(buy + sell, row.totalAmount);
+    });
+    const mainL1ActivityLine = fusionRows.map((row) => {
+      const buy = row.l1MainBuy;
+      const sell = row.l1MainSell;
       if (buy === null || sell === null) return null;
       return toRatio(buy + sell, row.totalAmount);
     });
@@ -941,6 +953,17 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           min: (value: { max?: number; min?: number }) => -percentAxisBound(value),
           max: (value: { max?: number; min?: number }) => percentAxisBound(value),
         }),
+        {
+          type: 'value',
+          gridIndex: 3,
+          min: 0,
+          max: 120,
+          show: false,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { show: false },
+          splitLine: { show: false },
+        },
       ],
       dataZoom: [
         {
@@ -1021,7 +1044,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           name: 'L2超大单活跃度',
           type: 'line',
           xAxisIndex: 3,
-          yAxisIndex: 3,
+          yAxisIndex: 4,
           data: superL2ActivityLine,
           showSymbol: false,
           smooth: 0.25,
@@ -1038,7 +1061,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           name: 'L2主力活跃度',
           type: 'line',
           xAxisIndex: 3,
-          yAxisIndex: 3,
+          yAxisIndex: 4,
           data: mainL2ActivityLine,
           showSymbol: false,
           smooth: 0.25,
@@ -1049,6 +1072,40 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             opacity: 0.95,
           },
           itemStyle: { color: COLORS.mainL2Buy },
+          z: 7,
+        },
+        {
+          name: 'L1超大单活跃度',
+          type: 'line',
+          xAxisIndex: 3,
+          yAxisIndex: 4,
+          data: superL1ActivityLine,
+          showSymbol: false,
+          smooth: 0.25,
+          connectNulls: false,
+          lineStyle: {
+            color: COLORS.mainL2Sell,
+            width: 1.2,
+            opacity: 0.92,
+          },
+          itemStyle: { color: COLORS.mainL2Sell },
+          z: 7,
+        },
+        {
+          name: 'L1主力活跃度',
+          type: 'line',
+          xAxisIndex: 3,
+          yAxisIndex: 4,
+          data: mainL1ActivityLine,
+          showSymbol: false,
+          smooth: 0.25,
+          connectNulls: false,
+          lineStyle: {
+            color: COLORS.mainL1Sell,
+            width: 1.2,
+            opacity: 0.92,
+          },
+          itemStyle: { color: COLORS.mainL1Sell },
           z: 7,
         },
       ],
@@ -1085,16 +1142,21 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             <h3 className="text-sm font-semibold tracking-wide text-white">波段复盘</h3>
             <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] text-cyan-200">{sourceLabel}</span>
             <InfoPopover>
-              <div className="space-y-2">
+                <div className="space-y-2">
                 <div className="text-xs font-semibold text-slate-100">图例说明</div>
                 <div>左柱 = 超大单，右柱 = 主力；深色是 L2 底柱，浅色是 L1 芯柱。</div>
                 <div>资金绝对值 / 净流入 / 买卖力度三张副图都共用同一视觉语言。</div>
+                <div>第四图中的细线表示买卖总额占总成交额比例：紫线 = L2 超大单，红线 = L2 主力，深绿线 = L1 超大单，浅绿线 = L1 主力。</div>
                 <div>黄色 <span className="font-bold text-amber-300">!</span> 表示该点存在 `quality_info`；若为当日未结算，则外置读数条会提示 “当前仅 L1 实时口径”。</div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL2Buy }} />超大 L2 买</span>
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL1Buy }} />超大 L1 买</span>
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.mainL2Buy }} />主力 L2 买</span>
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.mainL1Buy }} />主力 L1 买</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-[2px] w-4 rounded-full" style={{ backgroundColor: COLORS.superL2Buy }} />L2 超大占比线</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-[2px] w-4 rounded-full" style={{ backgroundColor: COLORS.mainL2Buy }} />L2 主力占比线</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-[2px] w-4 rounded-full" style={{ backgroundColor: COLORS.mainL2Sell }} />L1 超大占比线</span>
+                  <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-[2px] w-4 rounded-full" style={{ backgroundColor: COLORS.mainL1Sell }} />L1 主力占比线</span>
                 </div>
               </div>
             </InfoPopover>
@@ -1223,31 +1285,31 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
                   <div className="mb-2 text-[10px] font-semibold tracking-wide text-amber-200">价格 / 元数据</div>
                   <div className="space-y-1.5 text-[11px] leading-5">
                     <div className="grid grid-cols-2 gap-x-4">
-                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">开盘价</span>
                         <span className="whitespace-nowrap text-right font-mono text-slate-100">{formatPrice(selectedRow.open)}</span>
                       </div>
-                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">最高价</span>
                         <span className="whitespace-nowrap text-right font-mono text-red-300">{formatPrice(selectedRow.high)}</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-4">
-                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">最低价</span>
                         <span className="whitespace-nowrap text-right font-mono text-emerald-300">{formatPrice(selectedRow.low)}</span>
                       </div>
-                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">收盘价</span>
                         <span className="whitespace-nowrap text-right font-mono text-amber-200">{formatPrice(selectedRow.close)}</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-4">
-                      <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">成交额</span>
                         <span className="whitespace-nowrap text-right font-mono text-slate-100">{compactAmount(selectedRow.totalAmount)}</span>
                       </div>
-                      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-slate-500">涨跌</span>
                         <span
                           className={`whitespace-nowrap text-right font-mono ${
