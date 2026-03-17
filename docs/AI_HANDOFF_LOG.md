@@ -482,3 +482,10 @@
 - 结论: 准备发布 `v4.2.18`；新版历史多维已补齐“本周期涨跌”、默认约 40 点窗口与 20/40/80/160 步进缩放、横轴真实时间刻度、无 L2 假底柱隐藏、L1 配色增强，并在第四图叠加 L2 超大单/主力活跃度细实线；同时纳入盘后 L2 一条命令最终态三档结论。
 - 风险: 本次仍为发布后人工验收模式，未代跑生产冒烟；重点关注白天 preview 场景是否只剩真实 L1 芯柱、以及第四图双实线在移动端的可读性。
 - 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `backend/scripts/run_postclose_l2_daily.py`, `src/version.ts`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-03-17 23:18 | 发布 AI
+- Task ID: `CHG-20260317-12`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已将当前线上真实状态重新收口为 `v4.2.19`，用于覆盖“`v4.2.18` tag 后仍继续上线小修”的漂移；同时已把项目版本纪律写入 `04_OPS_AND_DEV.md`，后续要求“每次生产变更必须 bump 版本、一个 tag 只对应一个线上状态、本地 main 必须跟上 origin/main`。
+- 风险: 当前 Git 工作流仍以长生命周期 `codex/*` 分支推进，后续若不按新纪律执行，仍可能再次出现 tag / 线上状态漂移。
+- 链接: `docs/04_OPS_AND_DEV.md`, `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-version-discipline-and-v4-2-19-normalization.md`
