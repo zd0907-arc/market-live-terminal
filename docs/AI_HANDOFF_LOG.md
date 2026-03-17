@@ -461,3 +461,10 @@
 - 结论: 已完成 `v4.2.16` 生产发布；新版历史多维 UI / 交互重构与盘后 L2 一条命令链路一并进入 `main`，GitHub tag=`v4.2.16`，发布锚点 commit=`d640146`。
 - 风险: 本次按发布 SOP 只执行部署，不代跑生产冒烟；建议你重点手测“顶部版本切换 / 历史多维 15m / 图表头部单行控制区 / v4.2.16 可见性”。
 - 链接: `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-ui-slim-pro-interaction.md`, `docs/changes/REQ-20260316-07-postclose-l2-one-command-runner.md`
+
+## 2026-03-17 00:38 | 发布 AI
+- Task ID: `CHG-20260317-09`
+- CAP: `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成 `v4.2.17` 生产发布；新版历史多维读数条改为外置顶栏，y 轴修正为“左轴 + 轴右侧内嵌标签”，并把普通滚轮优先级还给页面滚动，发布锚点 commit=`9e13fd3`，tag=`v4.2.17`。
+- 风险: 本次仍未代跑生产冒烟；`Shift + 滚轮` / 触控板横向平移手感与浏览器差异仍需用户侧持续观察。
+- 链接: `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-info-strip-polish.md`

@@ -1,3 +1,10 @@
+> Archive-Meta
+- Archive-ID: ARC-CHG-20260317-monitor-multiframe-info-strip-polish
+- Archive-Type: CHG
+- Archived-At: 2026-03-17
+- Source-Path: docs/changes/REQ-20260317-09-monitor-multiframe-info-strip-polish.md
+- Status: FROZEN
+
 # REQ-20260317-09-monitor-multiframe-info-strip-polish
 
 ## 1. 基本信息
@@ -42,6 +49,6 @@
   1. 浏览器与触控板驱动差异仍可能影响 `Shift + 滚轮` 横向平移手感，但普通上下滚动已优先回到页面。
 
 ## 6. 归档信息
-- 归档时间：
-- Archive ID：
-- 归档路径：
+- 归档时间：2026-03-17
+- Archive ID：ARC-CHG-20260317-monitor-multiframe-info-strip-polish
+- 归档路径：docs/archive/changes/ARC-CHG-20260317-monitor-multiframe-info-strip-polish.md
