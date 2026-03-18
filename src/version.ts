@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.20';
+export const APP_VERSION = '4.2.21';
 export const RELEASE_NOTES = [
+    'v4.2.21: 收口 Windows 实时计划任务为单正式任务（SYSTEM + Boot + 每5分钟 + IgnoreNew），清理历史重复 crawler，多实例收敛为单实例',
     'v4.2.20: 修复 Windows 实时 crawler 被 AkShare 卡死时整条链路阻断；新增当日 sentiment 快照兜底，避免实时页直接空白',
     'v4.2.19: 规范化收口当前生产真实状态，补齐历史多维信息条布局修正与版本治理纪律，确保 tag、版本号、生产代码一一对应',
     'v4.2.18: 历史多维修正本周期涨跌、统一默认40点缩放窗口、修复横轴真实时间刻度，并隐藏无L2假底柱、增强L1配色与第四图L2活跃度细实线',

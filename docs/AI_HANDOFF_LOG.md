@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-18 13:00 | Codex
+- Task ID: `CHG-20260318-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已完成 Windows 实时采集第二阶段稳态化：`ZhangDataLiveCrawler` 收口为单正式任务（`SYSTEM + Boot + 每5分钟 + IgnoreNew`），同步时自动清理旧 crawler 多实例；Windows 进程数已从 `11` 个收敛为 `1` 个，并跨下一个 5 分钟周期复检未再膨胀。生产 `/api/realtime/dashboard?symbol=sz000833` 与云端 `trade_ticks/sentiment_snapshots` 已恢复 `2026-03-18` 当天真实数据。
+- 风险: 当前已验证“非交互单实例稳态 + 生产恢复”，但尚未补做“Windows 重启/注销后自动恢复”正式演练；`T-016` 继续保留为 ACTIVE。
+- 链接: `backend/scripts/live_crawler_win.py`, `ops/win_register_live_crawler_tasks.ps1`, `start_live_crawler.bat`, `sync_to_windows.sh`, `docs/changes/MOD-20260318-01-windows-realtime-task-stabilization.md`, `docs/07_PENDING_TODO.md`
+
 ## 2026-03-18 00:20 | Codex
 - Task ID: `CFG-20260318-01`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`

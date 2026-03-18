@@ -2,8 +2,9 @@
 
 ## 当前真相
 - 当前权威工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
-- 当前版本：`v4.2.20`
-- 当前治理分支：`codex/baseline-governance-20260318`
+- 当前版本：`v4.2.21`
+- 当前主线分支：`main`
+- 当前临时工作分支规范：`codex/<feat|fix|chore>-<topic>-YYYYMMDD`
 - 当前回退 Tag：`snapshot-20260318-pre-governance`
 - 当前回退分支：`codex/archive-pre-governance-20260318`
 
@@ -27,6 +28,16 @@
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
 npm run check:baseline
+```
+
+## 标准开分支模板
+```bash
+git checkout main && git pull
+git checkout -b codex/<feat|fix|chore>-<topic>-YYYYMMDD
+# 改代码 → 小步提交
+npm run check:baseline
+git checkout main && git merge --no-ff <branch>
+# 若已影响生产：同步 bump 版本 + tag
 ```
 
 ## 发布前最小检查项
