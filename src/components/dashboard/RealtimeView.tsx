@@ -99,10 +99,19 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     setChartData(processedChart);
                     setCumulativeData(data.cumulative_data || []);
                     setSourceMeta({
+                        natural_today: data.natural_today,
                         source: data.source,
                         is_finalized: data.is_finalized,
                         bucket_granularity: data.bucket_granularity,
                         display_date: data.display_date,
+                        market_status: data.market_status,
+                        market_status_label: data.market_status_label,
+                        default_display_date: data.default_display_date,
+                        default_display_scope: data.default_display_scope,
+                        default_display_scope_label: data.default_display_scope_label,
+                        view_mode: data.view_mode,
+                        view_mode_label: data.view_mode_label,
+                        is_realtime_session: data.is_realtime_session,
                     });
 
                     // Update Ticks Table (Only latest N)
@@ -177,32 +186,55 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
 
     const off = gradientOffset();
 
-    // Date comparison for UI status
-    const getChinaDate = () => {
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Shanghai',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-        });
-        const parts = formatter.formatToParts(new Date());
-        const year = parts.find(p => p.type === 'year')?.value;
-        const month = parts.find(p => p.type === 'month')?.value;
-        const day = parts.find(p => p.type === 'day')?.value;
-        if (!year || !month || !day) {
-            return new Date().toISOString().slice(0, 10);
-        }
-        return `${year}-${month}-${day}`;
-    };
-
-    const isBackfillMode = () => {
-        if (!displayDate) return false;
-        return displayDate !== getChinaDate();
-    };
-
     const getWeekDay = (dateStr: string) => {
         const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
         return days[new Date(dateStr).getDay()];
+    };
+
+    const getStatusBadge = () => {
+        if (!displayDate) {
+            return {
+                className: 'text-[11px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded border border-slate-700',
+                text: '⚪ 状态检测中...',
+            };
+        }
+
+        if (sourceMeta.view_mode === 'manual_date') {
+            return {
+                className: 'text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20',
+                text: `🟡 手动回溯: ${displayDate} (${getWeekDay(displayDate)})`,
+            };
+        }
+
+        const marketStatus = sourceMeta.market_status;
+        const marketLabel = sourceMeta.market_status_label || '状态未知';
+        const scopeLabel = sourceMeta.default_display_scope_label || sourceMeta.view_mode_label || '';
+
+        if (marketStatus === 'trading') {
+            return {
+                className: 'text-[11px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20',
+                text: `🟢 ${marketLabel} · ${scopeLabel}`,
+            };
+        }
+
+        if (marketStatus === 'lunch_break') {
+            return {
+                className: 'text-[11px] font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20',
+                text: `🟠 ${marketLabel} · ${scopeLabel}`,
+            };
+        }
+
+        if (marketStatus === 'post_close') {
+            return {
+                className: 'text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20',
+                text: `🔵 ${marketLabel} · ${scopeLabel}`,
+            };
+        }
+
+        return {
+            className: 'text-[11px] font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700',
+            text: `⚪ ${marketLabel} · ${scopeLabel}`,
+        };
     };
 
     const getSourceLabel = () => {
@@ -213,11 +245,16 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         if (sourceMeta.source === 'history_1m') {
             return 'Source: 历史1m回放';
         }
+        if (sourceMeta.source === 'sentiment_snapshots_fallback') {
+            return 'Source: 当日快照兜底';
+        }
         if (sourceMeta.source === 'realtime_ticks') {
             return sourceMeta.is_finalized ? 'Source: 实时 ticks（已结算）' : 'Source: 实时 ticks';
         }
         return 'Source: 数据源识别中...';
     };
+
+    const statusBadge = getStatusBadge();
 
     return (
         <div className="space-y-2">
@@ -259,19 +296,9 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
 
                     <div className="flex items-center gap-4">
                         {/* Status Indicator */}
-                        {!displayDate ? (
-                            <span className="text-[11px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                                ⚪ 状态检测中...
-                            </span>
-                        ) : isBackfillMode() ? (
-                            <span className="text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
-                                🟡 回溯模式: {displayDate} ({getWeekDay(displayDate)})
-                            </span>
-                        ) : (
-                            <span className="text-[11px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
-                                🟢 实时交易中
-                            </span>
-                        )}
+                        <span className={statusBadge.className}>
+                            {statusBadge.text}
+                        </span>
                         {/* Last Updated */}
                         <span className="text-[10px] text-slate-500 font-mono">
                             {lastUpdated ? `Updated: ${lastUpdated}` : '正在同步数据...'}
