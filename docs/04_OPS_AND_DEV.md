@@ -338,12 +338,6 @@ cd ~/market-live-terminal/deploy
 sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|ENABLE_CLOUD_COLLECTOR"
 ```
 
-前端容器核验（生产 Nginx 代理应持有该变量，用于服务端侧注入写请求头）：
-```bash
-cd ~/market-live-terminal/deploy
-sudo docker exec market-frontend printenv WRITE_API_TOKEN
-```
-
 Windows 节点核验：
 ```bat
 echo %INGEST_TOKEN%
@@ -404,6 +398,11 @@ echo %CLOUD_API_URL%
 - 本地 `npm run dev` 不再向浏览器注入 `VITE_WRITE_API_TOKEN`。
 - 若本地需要使用官方前端执行写操作（watchlist/config/sentiment 手动触发），请在 `.env.local` 中设置服务端变量 `WRITE_API_TOKEN`，由 Vite dev proxy 在代理层注入 `X-Write-Token`。
 - 浏览器源码、前端静态产物、Git 仓库中均不得出现真实 `WRITE_API_TOKEN`。
+
+### 生产写接口约束（2026-03-18 热修后）
+- 生产公网 Nginx 不得再对全部 `/api` 自动注入 `X-Write-Token`。
+- 生产前端默认只读；若管理员需要执行星标、保存配置、手动抓取等写操作，必须先在受信浏览器会话录入 `WRITE_API_TOKEN`。
+- 浏览器会话令牌仅允许保存在当前 session，不得写入构建产物、仓库文件或长期持久化配置。
 
 ### 目的 B：隔空装填 Windows 洗地/抓取节点
 **红线**：Windows 不受 Git 控制。绝不允许手动通过 RDP 等工具拷贝文件过去拖拽！它是一个被物理封印的黑盒主机。

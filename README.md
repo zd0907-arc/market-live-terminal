@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端（v4.2.22）
+# ZhangData 金融实时终端（v4.2.23）
 
 ## 项目定位
 - 云端 FastAPI + 前端 Vite 的 A 股实时资金流终端。
@@ -64,5 +64,6 @@ npm run check:baseline
 
 ## 注意事项
 - 根目录下存在历史遗留目录 `market-live-terminal/`（旧副本），请勿在其中开发或发版。
-- `WRITE_API_TOKEN` 仅允许保留在服务端环境变量中；前端静态资源不得携带该值。
+- `WRITE_API_TOKEN` 不得打包进前端静态资源；生产公网代理也不得对全部 `/api` 自动注入该值。
+- 生产前端默认只读；如需管理员写操作，请在受信浏览器会话中手动录入 `WRITE_API_TOKEN`。
 - 当前仍使用 CDN Tailwind；后续将迁移到本地构建链路。

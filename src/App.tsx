@@ -157,12 +157,16 @@ const App: React.FC = () => {
 
   const toggleWatchlist = async () => {
     if (!activeStock) return;
-    if (isWatchlisted) {
-      await StockService.removeFromWatchlist(activeStock.symbol);
-      setIsWatchlisted(false);
-    } else {
-      await StockService.addToWatchlist(activeStock.symbol, activeStock.name);
-      setIsWatchlisted(true);
+    try {
+      if (isWatchlisted) {
+        await StockService.removeFromWatchlist(activeStock.symbol);
+        setIsWatchlisted(false);
+      } else {
+        await StockService.addToWatchlist(activeStock.symbol, activeStock.name);
+        setIsWatchlisted(true);
+      }
+    } catch (e: any) {
+      alert(e?.message || '星标操作失败');
     }
   };
 

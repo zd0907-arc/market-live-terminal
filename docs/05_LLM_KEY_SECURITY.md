@@ -55,8 +55,9 @@ WRITE_API_TOKEN=replace-with-strong-token
 ENABLE_CLOUD_COLLECTOR=false
 ```
 
-> `WRITE_API_TOKEN` 仅允许存在于服务端环境变量（backend / frontend 代理容器 / 本地 Vite dev proxy 所在进程）中。  
-> **禁止**继续使用 `VITE_WRITE_API_TOKEN`、禁止把共享写 token 打包进浏览器静态资源。
+> `WRITE_API_TOKEN` 仍必须存在于服务端环境变量（backend / 本地 Vite dev proxy 所在进程）中作为权威值。  
+> **禁止**继续使用 `VITE_WRITE_API_TOKEN`、禁止把共享写 token 打包进浏览器静态资源、禁止让公网 Nginx 对全部 `/api` 自动注入该值。  
+> 生产环境若需要管理员写操作，只允许在受信浏览器当前会话手动录入后，经 `X-Write-Token` 发送；关闭标签页后应失效。
 
 保存并退出 (`Ctrl+X` → `Y` → `Enter`)。
 
