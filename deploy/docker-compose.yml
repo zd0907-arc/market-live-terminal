@@ -33,6 +33,8 @@ services:
     ports:
       # 映射 80 端口到宿主机
       - "80:80"
+    environment:
+      - WRITE_API_TOKEN=${WRITE_API_TOKEN}
     depends_on:
       - backend
     restart: always

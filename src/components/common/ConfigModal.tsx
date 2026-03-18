@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield } from 'lucide-react';
 import * as StockService from '../../services/stockService';
-import { clearStoredWriteToken, getStoredWriteToken, setStoredWriteToken } from '../../config';
 
 interface ConfigModalProps {
     isOpen: boolean;
@@ -22,9 +21,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     const [llmKeyConfigured, setLlmKeyConfigured] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean, message: string } | null>(null);
-    const [adminWriteToken, setAdminWriteToken] = useState('');
-    const [adminTokenSaved, setAdminTokenSaved] = useState(false);
-    const [adminTokenMessage, setAdminTokenMessage] = useState('');
 
     useEffect(() => {
         if (isOpen) {
@@ -40,33 +36,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                 setLlmBaseUrl(info.base_url || '未配置');
                 setLlmKeyConfigured(info.key_configured || false);
             });
-
-            const existingToken = getStoredWriteToken();
-            setAdminWriteToken(existingToken);
-            setAdminTokenSaved(Boolean(existingToken));
-            setAdminTokenMessage('');
         }
     }, [isOpen]);
-
-    const saveAdminToken = () => {
-        const normalized = adminWriteToken.trim();
-        if (!normalized) {
-            clearStoredWriteToken();
-            setAdminTokenSaved(false);
-            setAdminTokenMessage('已清除本会话管理员写令牌');
-            return;
-        }
-        setStoredWriteToken(normalized);
-        setAdminTokenSaved(true);
-        setAdminTokenMessage('管理员写令牌已保存到当前浏览器会话');
-    };
-
-    const clearAdminToken = () => {
-        setAdminWriteToken('');
-        clearStoredWriteToken();
-        setAdminTokenSaved(false);
-        setAdminTokenMessage('已清除本会话管理员写令牌');
-    };
 
     const handleTestConnection = async () => {
         setIsTesting(true);
@@ -78,23 +49,19 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
             } else {
                 setTestResult({ success: false, message: res.message || '连接失败' });
             }
-        } catch (e: any) {
-            setTestResult({ success: false, message: e?.message || '请求失败，请检查后端服务' });
+        } catch (e) {
+            setTestResult({ success: false, message: '请求失败，请检查后端服务' });
         } finally {
             setIsTesting(false);
         }
     };
 
     const handleSave = async () => {
-        try {
-            // 只保存情绪关键词配置，LLM 配置不再通过前端修改
-            await StockService.updateAppConfig('sentiment_bull_words', bullWords);
-            await StockService.updateAppConfig('sentiment_bear_words', bearWords);
-            onSave();
-            onClose();
-        } catch (e: any) {
-            alert(e?.message || '保存配置失败');
-        }
+        // 只保存情绪关键词配置，LLM 配置不再通过前端修改
+        await StockService.updateAppConfig('sentiment_bull_words', bullWords);
+        await StockService.updateAppConfig('sentiment_bear_words', bearWords);
+        onSave();
+        onClose();
     };
 
     if (!isOpen) return null;
@@ -212,45 +179,6 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                                         </span>
                                     )}
                                 </div>
-                            </div>
-
-                            <div className="pt-3 border-t border-slate-700 space-y-3">
-                                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                                    <Shield className="w-4 h-4 text-amber-300 mt-0.5 flex-shrink-0" />
-                                    <p className="text-xs text-slate-300 leading-relaxed">
-                                        生产环境默认只读。若需执行星标、保存配置、手动抓取等写操作，请在受信设备输入管理员写令牌。令牌仅保存在当前浏览器会话，关闭标签页后失效。
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-slate-500 mb-1">管理员写令牌（仅当前会话）</label>
-                                    <input
-                                        type="password"
-                                        value={adminWriteToken}
-                                        onChange={e => setAdminWriteToken(e.target.value)}
-                                        placeholder="输入 WRITE_API_TOKEN"
-                                        className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-amber-400 focus:outline-none"
-                                    />
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={saveAdminToken}
-                                        className="px-3 py-1.5 text-xs rounded bg-amber-600 hover:bg-amber-500 text-white transition-colors"
-                                    >
-                                        保存到会话
-                                    </button>
-                                    <button
-                                        onClick={clearAdminToken}
-                                        className="px-3 py-1.5 text-xs rounded bg-slate-700 hover:bg-slate-600 text-white transition-colors"
-                                    >
-                                        清除
-                                    </button>
-                                    <span className={`text-xs ${adminTokenSaved ? 'text-green-400' : 'text-slate-500'}`}>
-                                        {adminTokenSaved ? '当前会话已持有管理员写令牌' : '当前会话未持有管理员写令牌'}
-                                    </span>
-                                </div>
-                                {adminTokenMessage && (
-                                    <p className="text-xs text-slate-400">{adminTokenMessage}</p>
-                                )}
                             </div>
                         </div>
                     )}
