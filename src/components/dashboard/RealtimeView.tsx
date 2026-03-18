@@ -23,6 +23,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
     const [displayDate, setDisplayDate] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [sourceMeta, setSourceMeta] = useState<DashboardSourceMeta>({});
+    const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
     const requestSeqRef = useRef(0);
 
     // Thresholds (Loaded from Backend)
@@ -77,6 +78,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
             if (!isMounted || isFetchingRef.current) return;
             const requestSeq = ++requestSeqRef.current;
             isFetchingRef.current = true;
+            if (isMounted) setIsLoadingDashboard(true);
             if (chartData.length > 0) setIsRefreshing(true); // Only show breathing text if we already have data
             try {
                 // Fetch pre-calculated dashboard data from backend
@@ -140,7 +142,10 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                 console.warn("Dashboard update failed", err);
             } finally {
                 isFetchingRef.current = false;
-                if (isMounted) setIsRefreshing(false);
+                if (isMounted) {
+                    setIsRefreshing(false);
+                    setIsLoadingDashboard(false);
+                }
             }
         };
 
@@ -191,24 +196,158 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         return days[new Date(dateStr).getDay()];
     };
 
+    const getChinaNow = () => {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+        const parts = formatter.formatToParts(now);
+        const year = parts.find(p => p.type === 'year')?.value || '1970';
+        const month = parts.find(p => p.type === 'month')?.value || '01';
+        const day = parts.find(p => p.type === 'day')?.value || '01';
+        const hour = parts.find(p => p.type === 'hour')?.value || '00';
+        const minute = parts.find(p => p.type === 'minute')?.value || '00';
+        return {
+            date: `${year}-${month}-${day}`,
+            hhmm: `${hour}:${minute}`,
+            timeNum: Number(hour) * 100 + Number(minute),
+            weekday: new Date(`${year}-${month}-${day}T00:00:00+08:00`).getDay(),
+        };
+    };
+
+    const getProvisionalMeta = (): DashboardSourceMeta => {
+        const now = getChinaNow();
+        const isWeekend = now.weekday === 0 || now.weekday === 6;
+        const isTradeDay = !isWeekend;
+
+        if (selectedDate) {
+            return {
+                display_date: selectedDate,
+                market_status: isTradeDay ? (now.timeNum > 1500 ? 'post_close' : (now.timeNum >= 1130 && now.timeNum < 1300 ? 'lunch_break' : (now.timeNum >= 915 && now.timeNum <= 1500 ? 'trading' : 'pre_open'))) : 'closed_day',
+                market_status_label: isTradeDay ? (now.timeNum > 1500 ? '盘后复盘' : (now.timeNum >= 1130 && now.timeNum < 1300 ? '午间休市' : (now.timeNum >= 915 && now.timeNum <= 1500 ? '盘中交易' : '盘前未开盘'))) : '休盘日',
+                view_mode: 'manual_date',
+                view_mode_label: '手动查看指定日期数据',
+                default_display_scope_label: '手动查看指定日期数据',
+            };
+        }
+
+        if (!isTradeDay) {
+            return {
+                display_date: now.date,
+                natural_today: now.date,
+                market_status: 'closed_day',
+                market_status_label: '休盘日',
+                default_display_scope: 'previous_trade_day',
+                default_display_scope_label: '默认展示上一交易日数据',
+                view_mode: 'previous_trade_day',
+                view_mode_label: '默认展示上一交易日数据',
+            };
+        }
+
+        if (now.timeNum < 915) {
+            return {
+                display_date: now.date,
+                natural_today: now.date,
+                market_status: 'pre_open',
+                market_status_label: '盘前未开盘',
+                default_display_scope: 'previous_trade_day',
+                default_display_scope_label: '默认展示上一交易日数据',
+                view_mode: 'previous_trade_day',
+                view_mode_label: '默认展示上一交易日数据',
+            };
+        }
+
+        if (now.timeNum >= 915 && now.timeNum < 1130) {
+            return {
+                display_date: now.date,
+                natural_today: now.date,
+                market_status: 'trading',
+                market_status_label: '盘中交易',
+                default_display_scope: 'today',
+                default_display_scope_label: '默认展示今日实时数据',
+                view_mode: 'today_realtime',
+                view_mode_label: '默认展示今日实时数据',
+            };
+        }
+
+        if (now.timeNum >= 1130 && now.timeNum < 1300) {
+            return {
+                display_date: now.date,
+                natural_today: now.date,
+                market_status: 'lunch_break',
+                market_status_label: '午间休市',
+                default_display_scope: 'today',
+                default_display_scope_label: '默认展示今日已采集数据',
+                view_mode: 'today_midday_review',
+                view_mode_label: '默认展示今日已采集数据',
+            };
+        }
+
+        if (now.timeNum >= 1300 && now.timeNum <= 1500) {
+            return {
+                display_date: now.date,
+                natural_today: now.date,
+                market_status: 'trading',
+                market_status_label: '盘中交易',
+                default_display_scope: 'today',
+                default_display_scope_label: '默认展示今日实时数据',
+                view_mode: 'today_realtime',
+                view_mode_label: '默认展示今日实时数据',
+            };
+        }
+
+        return {
+            display_date: now.date,
+            natural_today: now.date,
+            market_status: 'post_close',
+            market_status_label: '盘后复盘',
+            default_display_scope: 'today',
+            default_display_scope_label: '默认展示今日收盘后数据',
+            view_mode: 'today_postclose_review',
+            view_mode_label: '默认展示今日收盘后数据',
+        };
+    };
+
+    useEffect(() => {
+        if (!activeStock) return;
+        const provisional = getProvisionalMeta();
+        setDisplayDate(provisional.display_date || '');
+        setSourceMeta(prev => ({
+            ...provisional,
+            source: prev.source,
+            bucket_granularity: prev.bucket_granularity,
+            is_finalized: prev.is_finalized,
+        }));
+        setIsLoadingDashboard(true);
+    }, [activeStock, selectedDate]);
+
     const getStatusBadge = () => {
-        if (!displayDate) {
+        const effectiveMeta = sourceMeta.market_status ? sourceMeta : getProvisionalMeta();
+        const effectiveDisplayDate = displayDate || effectiveMeta.display_date || '';
+
+        if (!effectiveDisplayDate) {
             return {
                 className: 'text-[11px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded border border-slate-700',
                 text: '⚪ 状态检测中...',
             };
         }
 
-        if (sourceMeta.view_mode === 'manual_date') {
+        if (effectiveMeta.view_mode === 'manual_date') {
             return {
                 className: 'text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20',
-                text: `🟡 手动回溯: ${displayDate} (${getWeekDay(displayDate)})`,
+                text: `🟡 手动回溯: ${effectiveDisplayDate} (${getWeekDay(effectiveDisplayDate)})`,
             };
         }
 
-        const marketStatus = sourceMeta.market_status;
-        const marketLabel = sourceMeta.market_status_label || '状态未知';
-        const scopeLabel = sourceMeta.default_display_scope_label || sourceMeta.view_mode_label || '';
+        const marketStatus = effectiveMeta.market_status;
+        const marketLabel = effectiveMeta.market_status_label || '状态未知';
+        const scopeLabel = effectiveMeta.default_display_scope_label || effectiveMeta.view_mode_label || '';
 
         if (marketStatus === 'trading') {
             return {
@@ -387,10 +526,15 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                                     <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500} />
                                 </ComposedChart>
                             </ResponsiveContainer>
+                        ) : isLoadingDashboard ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
+                                <span>正在获取分时数据...</span>
+                                <span className="text-xs text-slate-600">已先判定市场状态，图表数据仍在加载</span>
+                            </div>
                         ) : displayDate ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-                                <span>{isBackfillMode() ? '当前回溯日期无本地 Tick 数据' : '暂无交易数据'}</span>
-                                {isBackfillMode() && <span className="text-xs text-slate-600">本地数据库未在此日期保存该股票的明细记录</span>}
+                                <span>{sourceMeta.view_mode === 'manual_date' ? '当前回溯日期无本地 Tick 数据' : '暂无交易数据'}</span>
+                                {sourceMeta.view_mode === 'manual_date' && <span className="text-xs text-slate-600">本地数据库未在此日期保存该股票的明细记录</span>}
                             </div>
                         ) : (
                             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
