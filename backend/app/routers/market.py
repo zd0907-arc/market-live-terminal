@@ -74,8 +74,12 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         # 仅在“自然日当天且为交易日”时走实时 ticks 聚合。
         # 周末/节假日/盘前回溯到上一交易日时，应走 history_1m 静态回放，
         # 否则会因为当前不在实时采集窗口而出现“当日分时为空”。
-        from backend.app.services.analysis import calculate_realtime_aggregation
+        from backend.app.services.analysis import calculate_realtime_aggregation, get_sentiment_fallback_dashboard
         data = calculate_realtime_aggregation(symbol, natural_today_str)
+        if not (data.get("chart_data") or data.get("cumulative_data") or data.get("latest_ticks")):
+            fallback = get_sentiment_fallback_dashboard(symbol, natural_today_str)
+            if fallback is not None:
+                data = fallback
     else:
         # 历史/回溯日期：
         # 1) 优先读预聚合 history_1m；

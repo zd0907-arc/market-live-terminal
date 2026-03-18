@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import List, Dict, Optional, Tuple
 from backend.app.models.schemas import TickData
-from backend.app.db.crud import get_ticks_by_date, get_app_config
+from backend.app.db.crud import get_ticks_by_date, get_app_config, get_sentiment_history_aggregated
 from backend.app.db.l2_history_db import query_l2_history_5m_rows
 from backend.app.db.realtime_preview_db import (
     Realtime5mPreviewRow,
@@ -603,6 +603,72 @@ def get_history_l2_dashboard(symbol: str, date_str: str):
         "is_finalized": True,
         "bucket_granularity": "5m",
     }
+
+def get_sentiment_fallback_dashboard(symbol: str, date_str: str):
+    """
+    Temporary degraded realtime fallback built from sentiment_snapshots when trade_ticks are unavailable.
+    This keeps today's intraday view non-empty while external tick source is timing out.
+    """
+    rows = get_sentiment_history_aggregated(symbol, date_str)
+    if not rows:
+        return None
+
+    chart_data = []
+    cumulative_data = []
+    running_main_buy = 0.0
+    running_main_sell = 0.0
+
+    for row in rows:
+        minute = row['timestamp']
+        oib = float(row.get('oib') or 0.0)
+        bid1_vol = float(row.get('bid1_vol') or 0.0)
+        ask1_vol = float(row.get('ask1_vol') or 0.0)
+        tick_vol = float(row.get('tick_vol') or 0.0)
+        close_price = float(row.get('price') or 0.0)
+
+        main_buy = max(oib, 0.0)
+        main_sell = max(-oib, 0.0)
+        total_proxy = max(main_buy + main_sell, bid1_vol + ask1_vol, tick_vol, 1.0)
+        main_buy_ratio = (main_buy / total_proxy) * 100 if total_proxy > 0 else 0.0
+        main_sell_ratio = (main_sell / total_proxy) * 100 if total_proxy > 0 else 0.0
+        participation_ratio = ((main_buy + main_sell) / total_proxy) * 100 if total_proxy > 0 else 0.0
+
+        chart_data.append({
+            'time': minute,
+            'mainBuyRatio': round(main_buy_ratio, 1),
+            'mainSellRatio': round(main_sell_ratio, 1),
+            'mainParticipationRatio': round(participation_ratio, 1),
+            'mainBuyAmount': float(main_buy),
+            'mainSellAmount': float(main_sell),
+            'superBuyAmount': 0.0,
+            'superSellAmount': 0.0,
+            'superParticipationRatio': 0.0,
+            'closePrice': close_price,
+        })
+
+        running_main_buy += main_buy
+        running_main_sell += main_sell
+        cumulative_data.append({
+            'time': minute,
+            'cumMainBuy': running_main_buy,
+            'cumMainSell': running_main_sell,
+            'cumNetInflow': running_main_buy - running_main_sell,
+            'cumSuperBuy': 0.0,
+            'cumSuperSell': 0.0,
+            'cumSuperNetInflow': 0.0,
+        })
+
+    return {
+        'chart_data': chart_data,
+        'cumulative_data': cumulative_data,
+        'latest_ticks': [],
+        'source': 'sentiment_snapshots_fallback',
+        'is_finalized': False,
+        'fallback_used': True,
+        'preview_level': 'l1_snapshot',
+        'bucket_granularity': '1m',
+    }
+
 
 def aggregate_intraday_1m(symbol: str, date_str: str = None):
     """
