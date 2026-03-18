@@ -2,7 +2,7 @@
 
 ## 当前真相
 - 当前权威工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
-- 当前版本：`v4.2.21`
+- 当前版本：`v4.2.22`
 - 当前主线分支：`main`
 - 当前临时工作分支规范：`codex/<feat|fix|chore>-<topic>-YYYYMMDD`
 - 当前回退 Tag：`snapshot-20260318-pre-governance`
