@@ -13,6 +13,25 @@ import {
 } from '../types';
 import { API_BASE_URL, getWriteHeaders } from '../config';
 
+const parseJsonSafe = async (res: Response) => {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+const ensureApiSuccess = async (res: Response, fallbackMessage: string) => {
+  const payload = await parseJsonSafe(res);
+  if (!res.ok) {
+    throw new Error(payload?.detail || payload?.message || `${fallbackMessage}（HTTP ${res.status}）`);
+  }
+  if (payload && typeof payload.code === 'number' && payload.code !== 200) {
+    throw new Error(payload.message || fallbackMessage);
+  }
+  return payload;
+};
+
 // ==========================================
 // 基础网络层：JSONP / Script Injection
 // ==========================================
@@ -274,17 +293,19 @@ export const fetchRealtimeDashboard = async (symbol: string, date?: string): Pro
 // Watchlist API
 // ==========================================
 export const addToWatchlist = async (symbol: string, name: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, {
+  const res = await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, {
     method: 'POST',
     headers: getWriteHeaders()
   });
+  await ensureApiSuccess(res, '加入星标失败');
 };
 
 export const removeFromWatchlist = async (symbol: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, {
+  const res = await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, {
     method: 'DELETE',
     headers: getWriteHeaders()
   });
+  await ensureApiSuccess(res, '取消星标失败');
 };
 
 export const getWatchlist = async (): Promise<any[]> => {
@@ -487,7 +508,7 @@ export const runSandboxReviewEtl = async (payload: {
     headers: getWriteHeaders(true),
     body: JSON.stringify(payload),
   });
-  return await res.json();
+  return await ensureApiSuccess(res, '沙盒 ETL 启动失败');
 };
 
 export const fetchSandboxReviewEtlStatus = async (): Promise<SandboxEtlStatus | null> => {
@@ -510,11 +531,12 @@ export const getAppConfig = async () => {
 };
 
 export const updateAppConfig = async (key: string, value: string) => {
-  await fetch(`${API_BASE_URL}/config`, {
+  const res = await fetch(`${API_BASE_URL}/config`, {
     method: 'POST',
     headers: getWriteHeaders(true),
     body: JSON.stringify({ key, value })
   });
+  await ensureApiSuccess(res, '保存配置失败');
 };
 
 export const getLLMInfo = async () => {
@@ -533,7 +555,7 @@ export const testLLMConnection = async () => {
     headers: getWriteHeaders(true),
     body: JSON.stringify({})
   });
-  return await res.json();
+  return await ensureApiSuccess(res, '测试连接失败');
 };
 
 export const verifyRealtime = async (symbol: string) => {

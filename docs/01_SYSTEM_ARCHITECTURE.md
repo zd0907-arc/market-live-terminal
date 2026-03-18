@@ -74,7 +74,7 @@
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。
 *   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202`，由 Nginx 反代到后端)。
 *   `INGEST_TOKEN`: 控制云端高速穿透接口权限的秘钥，云端和 Windows 节点必须完全对齐（无默认值，未配置即拒绝写入）。
-*   `WRITE_API_TOKEN`: 保护业务写接口（如 watchlist/config/sentiment 手动触发）的共享秘钥；**只允许保留在服务端环境变量中**。官方前端通过 Vite/Nginx 代理在服务端侧注入 `X-Write-Token`，浏览器端不得直接持有该值。
+*   `WRITE_API_TOKEN`: 保护业务写接口（如 watchlist/config/sentiment 手动触发）的共享秘钥；**不得打包进前端静态资源，也不得由公网 Nginx 对全部 `/api` 自动注入**。本地开发可由 Vite dev proxy 在代理层注入；生产环境默认只读，如需管理员写操作，仅允许在受信浏览器会话中手动录入后随请求头发送。
 *   `ENABLE_CLOUD_COLLECTOR`: 是否允许云端主动外采（默认 `false`，用于遵守“云端只被动 ingest”红线）。
 
 ### LLM 大模型配置（🔴 仅通过服务端环境变量）

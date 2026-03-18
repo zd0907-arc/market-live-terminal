@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.22';
+export const APP_VERSION = '4.2.23';
 export const RELEASE_NOTES = [
+    'v4.2.23: 修复生产 Nginx 对全部 /api 无差别注入写 token 的红线问题；生产前端改为默认只读，管理员需在当前浏览器会话手动录入写令牌后才能执行写操作',
     'v4.2.22: 收口当日分时市场状态机（盘前/盘中/午休/盘后/休盘日），修复盘后查看新股票仍显示实时交易中，并新增盘后同日按需补抓',
     'v4.2.21: 收口 Windows 实时计划任务为单正式任务（SYSTEM + Boot + 每5分钟 + IgnoreNew），清理历史重复 crawler，多实例收敛为单实例',
     'v4.2.20: 修复 Windows 实时 crawler 被 AkShare 卡死时整条链路阻断；新增当日 sentiment 快照兜底，避免实时页直接空白',
