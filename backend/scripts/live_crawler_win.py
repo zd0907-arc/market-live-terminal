@@ -4,6 +4,7 @@ import time
 import requests
 import asyncio
 import logging
+import concurrent.futures
 from datetime import datetime, timedelta
 import akshare as ak
 
@@ -32,6 +33,23 @@ FULL_SWEEP_INTERVAL_SECONDS = int(os.getenv("FULL_SWEEP_INTERVAL_SECONDS", "900"
 FINAL_SWEEP_RETRY_INTERVAL_SECONDS = int(os.getenv("FINAL_SWEEP_RETRY_INTERVAL_SECONDS", "90"))
 FOCUS_SNAPSHOT_INTERVAL_SECONDS = int(os.getenv("FOCUS_SNAPSHOT_INTERVAL_SECONDS", "3"))
 WARM_SNAPSHOT_INTERVAL_SECONDS = int(os.getenv("WARM_SNAPSHOT_INTERVAL_SECONDS", "10"))
+AKSHARE_TICK_TIMEOUT_SECONDS = float(os.getenv("AKSHARE_TICK_TIMEOUT_SECONDS", "15"))
+
+
+def fetch_ticks_with_timeout(symbol, timeout_seconds=AKSHARE_TICK_TIMEOUT_SECONDS):
+    """Guard AkShare tick fetch to avoid hanging the entire crawler on one symbol."""
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(ak.stock_zh_a_tick_tx_js, symbol)
+    try:
+        result = future.result(timeout=timeout_seconds)
+    except concurrent.futures.TimeoutError:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    except Exception:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    executor.shutdown(wait=False)
+    return result
 
 def get_watchlist():
     """从云端拉取当前的自选股列表"""
@@ -229,7 +247,7 @@ def fetch_and_post_ticks(target_symbols=None, max_retries=1):
         for attempt in range(max_retries + 1):
             try:
                 logger.info(f"Fetching Ticks: {sym} (attempt {attempt + 1}/{max_retries + 1})")
-                df = ak.stock_zh_a_tick_tx_js(sym)
+                df = fetch_ticks_with_timeout(sym)
                 if df is None or df.empty:
                     raise RuntimeError("empty dataframe")
 
@@ -273,6 +291,10 @@ def fetch_and_post_ticks(target_symbols=None, max_retries=1):
                 pushed = True
                 break
 
+            except concurrent.futures.TimeoutError:
+                last_err = TimeoutError(f"AkShare timeout>{AKSHARE_TICK_TIMEOUT_SECONDS}s")
+                logger.error(f"[{sym}] tick fetch timeout after {AKSHARE_TICK_TIMEOUT_SECONDS}s")
+                break
             except Exception as e:
                 last_err = e
                 if attempt < max_retries:
