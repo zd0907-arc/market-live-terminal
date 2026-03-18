@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-03-18 22:15 | Codex
+- Task ID: `CHG-20260318-02`
+- CAP: `CAP-MKT-TIME`, `CAP-REALTIME-FLOW`
+- 结论: 已完成当日分时市场状态机收口：后端新增 `盘前 / 盘中 / 午间休市 / 盘后 / 休盘日` 五态，`/api/realtime/dashboard` 明确返回 `market_status / default_display_scope / view_mode`；前端状态不再等数据返回才判定，改为先显示临时状态、后用后端权威状态覆盖。盘后查看“今天”的新股票时，若本地无分时，后端会按需补抓当天 full-day ticks 并聚合展示。
+- 风险: 盘后按需补抓仍依赖外部源可用性；若外部源短时失败，页面状态语义仍会正确，但图表可能暂时无数据。
+- 链接: `backend/app/core/http_client.py`, `backend/app/routers/market.py`, `src/components/dashboard/RealtimeView.tsx`, `backend/tests/test_market_clock.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/changes/MOD-20260318-02-market-session-states-and-intraday-defaults.md`
+
 ## 2026-03-18 13:00 | Codex
 - Task ID: `CHG-20260318-01`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`

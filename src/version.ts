@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.21';
+export const APP_VERSION = '4.2.22';
 export const RELEASE_NOTES = [
+    'v4.2.22: 收口当日分时市场状态机（盘前/盘中/午休/盘后/休盘日），修复盘后查看新股票仍显示实时交易中，并新增盘后同日按需补抓',
     'v4.2.21: 收口 Windows 实时计划任务为单正式任务（SYSTEM + Boot + 每5分钟 + IgnoreNew），清理历史重复 crawler，多实例收敛为单实例',
     'v4.2.20: 修复 Windows 实时 crawler 被 AkShare 卡死时整条链路阻断；新增当日 sentiment 快照兜底，避免实时页直接空白',
     'v4.2.19: 规范化收口当前生产真实状态，补齐历史多维信息条布局修正与版本治理纪律，确保 tag、版本号、生产代码一一对应',

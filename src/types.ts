@@ -73,6 +73,15 @@ export interface DashboardSourceMeta {
   is_finalized?: boolean;
   bucket_granularity?: string;
   display_date?: string;
+  natural_today?: string;
+  market_status?: string;
+  market_status_label?: string;
+  default_display_date?: string;
+  default_display_scope?: string;
+  default_display_scope_label?: string;
+  view_mode?: string;
+  view_mode_label?: string;
+  is_realtime_session?: boolean;
 }
 
 export interface RealtimeDashboardData extends DashboardSourceMeta {
