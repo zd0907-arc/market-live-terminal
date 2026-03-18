@@ -1,27 +1,52 @@
 @echo off
+setlocal EnableExtensions
+
 :: =========================================================
 :: ZhangData - Windows Live Crawler Auto-Starter
-:: This script is meant to be run by Windows Task Scheduler
+:: Stable entry for Task Scheduler / watchdog / manual recovery
 :: =========================================================
 
-echo [ZhangData] Starting Live Market Crawler...
-echo.
+set "PROJECT_ROOT=D:\market-live-terminal"
+set "DEFAULT_PYTHON_EXE=C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe"
+set "LOG_DIR=%PROJECT_ROOT%\.run"
+set "LOG_FILE=%LOG_DIR%\live_crawler.log"
 
-:: Modify the path below if your python environment or project lives elsewhere
-cd /d "D:\market-live-terminal"
+if not exist "%PROJECT_ROOT%" exit /b 2
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
-:: Set environment variables required for Cloud Ingestion
-:: NOTE: backend container is only exposed via nginx(80); do not use :8000 externally.
-if "%CLOUD_API_URL%"=="" set "CLOUD_API_URL=http://111.229.144.202"
-echo [Cloud Node] Targeting %CLOUD_API_URL%
+if "%PYTHON_EXE%"=="" set "PYTHON_EXE=%DEFAULT_PYTHON_EXE%"
+if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
 
 if "%INGEST_TOKEN%"=="" (
-    echo [ERROR] INGEST_TOKEN is not set. Please configure it in system environment variables.
-    exit /b 1
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('INGEST_TOKEN','Machine')"`) do set "INGEST_TOKEN=%%i"
 )
 
-:: Run the crawler. It will safely idle if outside trading hours.
-:: To keep the window open for debugging, remove the 'pythonw' and use 'python'
-python backend\scripts\live_crawler_win.py
+if "%CLOUD_API_URL%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('CLOUD_API_URL','Machine')"`) do set "CLOUD_API_URL=%%i"
+)
+if "%CLOUD_API_URL%"=="" set "CLOUD_API_URL=http://111.229.144.202"
 
-pause
+if "%FOCUS_TICK_INTERVAL_SECONDS%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FOCUS_TICK_INTERVAL_SECONDS','Machine')"`) do set "FOCUS_TICK_INTERVAL_SECONDS=%%i"
+)
+if "%WARM_TICK_INTERVAL_SECONDS%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('WARM_TICK_INTERVAL_SECONDS','Machine')"`) do set "WARM_TICK_INTERVAL_SECONDS=%%i"
+)
+if "%FULL_SWEEP_INTERVAL_SECONDS%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FULL_SWEEP_INTERVAL_SECONDS','Machine')"`) do set "FULL_SWEEP_INTERVAL_SECONDS=%%i"
+)
+if "%AKSHARE_TICK_TIMEOUT_SECONDS%"=="" (
+  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('AKSHARE_TICK_TIMEOUT_SECONDS','Machine')"`) do set "AKSHARE_TICK_TIMEOUT_SECONDS=%%i"
+)
+
+if "%INGEST_TOKEN%"=="" (
+  echo [%date% %time%] [BOOT] ERROR: INGEST_TOKEN is not set.>> "%LOG_FILE%"
+  exit /b 1
+)
+
+echo [%date% %time%] [BOOT] Starting live crawler with PYTHON_EXE=%PYTHON_EXE% CLOUD_API_URL=%CLOUD_API_URL%>> "%LOG_FILE%"
+cd /d "%PROJECT_ROOT%"
+"%PYTHON_EXE%" -u backend\scripts\live_crawler_win.py >> "%LOG_FILE%" 2>&1
+set "EXIT_CODE=%ERRORLEVEL%"
+echo [%date% %time%] [BOOT] live crawler exited code=%EXIT_CODE%>> "%LOG_FILE%"
+exit /b %EXIT_CODE%

@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import atexit
 import requests
 import asyncio
 import logging
@@ -13,7 +14,46 @@ for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
     if k in os.environ:
         del os.environ[k]
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [WIN-CRAWLER] - %(levelname)s - %(message)s')
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RUN_DIR = os.path.join(ROOT_DIR, '.run')
+os.makedirs(RUN_DIR, exist_ok=True)
+LOG_FILE = os.path.join(RUN_DIR, 'live_crawler_runtime.log')
+PID_FILE = os.path.join(RUN_DIR, 'live_crawler.pid')
+
+
+def _write_pid_file():
+    try:
+        with open(PID_FILE, 'w', encoding='utf-8') as fh:
+            fh.write(str(os.getpid()))
+    except Exception:
+        pass
+
+
+def _cleanup_pid_file():
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, 'r', encoding='utf-8') as fh:
+                content = fh.read().strip()
+            if content == str(os.getpid()):
+                os.remove(PID_FILE)
+    except Exception:
+        pass
+
+
+_write_pid_file()
+atexit.register(_cleanup_pid_file)
+
+_log_handlers = [logging.StreamHandler()]
+try:
+    _log_handlers.append(logging.FileHandler(LOG_FILE, encoding='utf-8'))
+except Exception:
+    pass
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - [WIN-CRAWLER] - %(levelname)s - %(message)s',
+    handlers=_log_handlers,
+)
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---

@@ -43,6 +43,15 @@ ssh laqiyuan@100.115.228.56
 - **计划任务名**：`ZhangDataLiveCrawler`
 - **启动脚本**：`D:\market-live-terminal\start_live_crawler.bat`
 - **实际脚本**：`D:\market-live-terminal\backend\scripts\live_crawler_win.py`
+- **正式触发模式（2026-03-18 冻结）**：
+  - `Boot Trigger`
+  - `Every 5 Minutes`
+  - `Run As = SYSTEM`
+  - `MultipleInstancesPolicy = IgnoreNew`
+- **巡检日志**：
+  - `D:\market-live-terminal\.run\live_crawler.log`
+  - `D:\market-live-terminal\.run\live_crawler_runtime.log`
+  - `D:\market-live-terminal\.run\live_crawler_task_setup.log`
 
 #### 适用场景
 - 生产盯盘页盘中无实时 K 线；
@@ -60,25 +69,43 @@ ssh laqiyuan@100.115.228.56
    ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /FO LIST"
    ```
    重点看：
-   - `上次运行时间`
-   - `上次结果`
-   - 触发方式是否仍停留在“登录时 / 仅交互方式”
+   - `任务名 = \ZhangDataLiveCrawler`
+   - `运行用户 = SYSTEM`
+   - 是否同时出现“系统启动时 + 每 5 分钟重复”两类触发
+   - 运行模式是否保持“正在运行 / 已启用”
 3. **查 Python 进程是否真在跑**
    ```bash
    ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c tasklist /v | findstr /I python.exe"
+   ```
+   - 正常稳态下应只看到 **1 个** crawler 进程；若出现多个，优先怀疑旧 watchdog/旧任务残留。
+4. **查启动/运行日志**
+   ```bash
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "powershell -NoProfile -Command \"Get-Content -Path 'D:\\market-live-terminal\\.run\\live_crawler.log' -Tail 30\""
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "powershell -NoProfile -Command \"Get-Content -Path 'D:\\market-live-terminal\\.run\\live_crawler_runtime.log' -Tail 30\""
    ```
 4. **临时恢复**
    ```bash
    ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c schtasks /Run /TN ZhangDataLiveCrawler"
    ```
 5. **恢复后复核**
-   - 再查一次 `tasklist`，确认新的 `python ... live_crawler_win.py` 进程存在；
+   - 再查一次 `tasklist`，确认仅剩 `1` 个 `python ... live_crawler_win.py` 进程；
    - 再请求一次生产 `/api/realtime/dashboard`，确认已恢复当日实时数据。
+6. **若怀疑旧 watchdog 残留**
+   ```bash
+   ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "cmd /c schtasks /Query /TN ZhangDataLiveCrawlerWatchdog /V /FO LIST"
+   ```
+   - 正常情况应返回“找不到指定文件”；
+   - 若旧 watchdog 仍存在，不要继续手工加任务，统一重新执行：
+     ```bash
+     cd /Users/dong/Desktop/AIGC/market-live-terminal
+     ./sync_to_windows.sh
+     ```
 
 #### 当前冻结结论
 - `2026-03-16` 线上事故已证明：**只要 `ZhangDataLiveCrawler` 没自动拉起，生产实时 K 线就会直接空白**。
 - 本次故障根因不是前端，也不是云端图表接口逻辑，而是 **Windows 计划任务稳态不足**。
 - 在正式稳态化完成前，盘中实时区异常的第一排查入口就是这条计划任务。
+- `2026-03-18` 已把正式策略冻结为：**单任务 + SYSTEM + 开机触发 + 每 5 分钟重复 + IgnoreNew**；不再依赖双任务 watchdog 探测。
 
 #### 后续治理要求
 - 不再把“曾经手动 Run 成功”视为稳定；
@@ -487,10 +514,11 @@ curl "http://127.0.0.1:8000/api/realtime/dashboard?symbol=sz000833&date=2026-03-
 1. 修改 `package.json` → `version` 字段
 2. 修改 `src/version.ts` → `APP_VERSION` 常量 + `RELEASE_NOTES` 首位添加说明
 3. 修改 `README.md` 标题版本（如 `# ...（vX.Y.Z）`）
-4. 执行版本一致性核对（至少核对下列 3 处完全一致）：
+4. 执行版本一致性核对（至少核对下列 4 处完全一致）：
    - `package.json` `version`
    - `src/version.ts` `APP_VERSION`
    - `README.md` 标题版本
+   - `backend/app/main.py` FastAPI `version`
 5. `git commit -m "release: vX.Y.Z"`
 6. `git tag vX.Y.Z && git push origin main --tags`
 
@@ -522,23 +550,34 @@ curl "http://127.0.0.1:8000/api/realtime/dashboard?symbol=sz000833&date=2026-03-
 
 ### 5.3 Git 分支命名规范
 ```
-main                    # 唯一主干，始终可部署到云端
-feature/v4.x-描述       # 功能开发分支，完成后合并删除
-hotfix/简短描述         # 紧急修复
-release/vX.Y.Z         # 发版准备（如需要冻结测试）
+main                                   # 唯一主干，始终保持可发布
+codex/feat-<topic>-YYYYMMDD            # 新功能
+codex/fix-<topic>-YYYYMMDD             # Bug 修复
+codex/chore-<topic>-YYYYMMDD           # 治理 / 文档 / 脚本 / 运维
 ```
 
-> **红线**：GitHub 上只保留 `main` + 版本 Tag。功能分支合并后必须删除。
+> **红线**：统一只用 `codex/*` 临时分支；合并完成后删除远端/本地临时分支，GitHub 长期只保留 `main` + 必要 tag。
 
 ### 5.3.1 本项目当前建议实践
-- 日常 AI 开发可继续在 `codex/*` 工作分支上进行；
-- 但**阶段收口**时必须满足：
-  1. 工作分支内容已进入 `origin/main`
-  2. 本地 `main` 已同步到 `origin/main`
-  3. 本阶段最新线上状态已有明确版本 tag
-- 如果一个阶段已经稳定（例如“历史多维 + 盘后 L2 一条命令”），建议：
-  - 先补一个正式版本收口；
-  - 再决定是否切新工作分支进入下一阶段。
+- 默认流程：
+  1. `main` 只做读取、排查、确认范围，不直接开发；
+  2. 一旦要改 repo 文件，立刻新建 `codex/*` 分支；
+  3. 一个分支只做一个主题，避免“顺手塞第二件事”；
+  4. 改完先跑 `npm run check:baseline`；
+  5. 通过后再合回 `main`；
+  6. 只要实际生产状态发生变化，就必须 bump 版本并打 tag。
+
+### 5.3.2 固定 6 行模板（以后默认照抄）
+```bash
+# 1) 先在 main 只读排查，不直接改
+git checkout main && git pull
+# 2) 一旦要改，立刻开分支
+git checkout -b codex/<feat|fix|chore>-<topic>-YYYYMMDD
+# 3) 小步提交 + 4) 跑 baseline
+git commit -m "<type>: <summary>" && npm run check:baseline
+# 5) 通过后合回 main + 6) 若影响生产则 bump/tag
+git checkout main && git merge --no-ff <branch>
+```
 
 ---
 
