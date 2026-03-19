@@ -509,3 +509,183 @@ def test_intraday_fusion_falls_back_to_history_l1_when_finalized_missing(monkeyp
     assert bar["preview_level"] == "historical_l1_fallback"
     assert bar["l2_main_buy"] is None
     assert bar["total_volume"] == 18000.0
+
+
+def test_realtime_dashboard_rehydrates_stale_today_payload_during_trading(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-03-19",
+            "is_trade_day": True,
+            "market_status": "trading",
+            "market_status_label": "盘中交易",
+            "default_display_date": "2026-03-19",
+            "default_display_scope": "today",
+            "default_display_scope_label": "默认展示今日实时数据",
+            "should_use_realtime_path": True,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock._now_china",
+        lambda: __import__("datetime").datetime(2026, 3, 19, 10, 10, 0),
+    )
+
+    rehydrate_called = {"count": 0}
+    aggregation_calls = {"count": 0}
+
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+        rehydrate_called["count"] += 1
+        return True
+
+    def fake_realtime(symbol, date_str):
+        aggregation_calls["count"] += 1
+        if aggregation_calls["count"] == 1:
+            return {"chart_data": [{"time": "09:31"}], "cumulative_data": [], "latest_ticks": []}
+        return {"chart_data": [{"time": "10:05"}], "cumulative_data": [], "latest_ticks": []}
+
+    monkeypatch.setattr("backend.app.routers.market._rehydrate_today_if_stale", fake_rehydrate)
+    monkeypatch.setattr("backend.app.services.analysis.calculate_realtime_aggregation", fake_realtime)
+
+    resp = asyncio.run(get_realtime_dashboard(symbol="sz000833", date=None))
+
+    assert resp.code == 200
+    assert resp.data["chart_data"][-1]["time"] == "10:05"
+    assert rehydrate_called["count"] == 1
+    assert aggregation_calls["count"] == 2
+
+
+def test_realtime_dashboard_rehydrates_stale_today_review_payload_during_lunch_break(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-03-19",
+            "is_trade_day": True,
+            "market_status": "lunch_break",
+            "market_status_label": "午间休市",
+            "default_display_date": "2026-03-19",
+            "default_display_scope": "today",
+            "default_display_scope_label": "默认展示今日已采集数据",
+            "should_use_realtime_path": False,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock._now_china",
+        lambda: __import__("datetime").datetime(2026, 3, 19, 11, 40, 0),
+    )
+
+    rehydrate_called = {"count": 0}
+    aggregation_calls = {"count": 0}
+
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+        rehydrate_called["count"] += 1
+        return True
+
+    def fake_history(symbol, date_str):
+        return {"chart_data": [{"time": "09:25"}], "cumulative_data": [], "latest_ticks": [], "source": "history_1m"}
+
+    def fake_realtime(symbol, date_str):
+        aggregation_calls["count"] += 1
+        if aggregation_calls["count"] == 1:
+            return {"chart_data": [{"time": "09:25"}], "cumulative_data": [], "latest_ticks": []}
+        return {"chart_data": [{"time": "11:29"}], "cumulative_data": [], "latest_ticks": []}
+
+    monkeypatch.setattr("backend.app.routers.market._rehydrate_today_if_stale", fake_rehydrate)
+    monkeypatch.setattr("backend.app.services.analysis.get_history_1m_dashboard", fake_history)
+    monkeypatch.setattr("backend.app.services.analysis.get_history_l2_dashboard", lambda symbol, date_str: None)
+    monkeypatch.setattr("backend.app.services.analysis.calculate_realtime_aggregation", fake_realtime)
+
+    resp = asyncio.run(get_realtime_dashboard(symbol="sz002570", date=None))
+
+    assert resp.code == 200
+    assert resp.data["chart_data"][-1]["time"] == "11:29"
+    assert rehydrate_called["count"] == 1
+    assert aggregation_calls["count"] == 2
+
+
+def test_intraday_fusion_rehydrates_stale_today_preview(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-03-19",
+            "is_trade_day": True,
+            "market_status": "trading",
+            "market_status_label": "盘中交易",
+            "default_display_date": "2026-03-19",
+            "default_display_scope": "today",
+            "default_display_scope_label": "默认展示今日实时数据",
+            "should_use_realtime_path": True,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock._now_china",
+        lambda: __import__("datetime").datetime(2026, 3, 19, 10, 10, 0),
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.query_l2_history_5m_rows",
+        lambda symbol, start_date=None, end_date=None, limit_days=None: [],
+    )
+    monkeypatch.setattr("backend.app.services.analysis.refresh_realtime_preview", lambda symbol, date_str: {"rows_5m": 1})
+
+    query_calls = {"count": 0}
+    rehydrate_called = {"count": 0}
+
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+        rehydrate_called["count"] += 1
+        return True
+
+    def fake_query_preview(symbol, start_date=None, end_date=None, limit_days=None):
+        query_calls["count"] += 1
+        if query_calls["count"] == 1:
+            return [
+                {
+                    "symbol": symbol,
+                    "datetime": "2026-03-19 09:25:00",
+                    "trade_date": "2026-03-19",
+                    "open": 6.07,
+                    "high": 6.07,
+                    "low": 6.07,
+                    "close": 6.07,
+                    "total_amount": 100000.0,
+                    "total_volume": 1000.0,
+                    "l1_main_buy": 100000.0,
+                    "l1_main_sell": 0.0,
+                    "l1_super_buy": 0.0,
+                    "l1_super_sell": 0.0,
+                    "source": "realtime_ticks",
+                    "preview_level": "l1_only",
+                    "updated_at": "2026-03-19 09:25:30",
+                }
+            ]
+        return [
+            {
+                "symbol": symbol,
+                "datetime": "2026-03-19 10:05:00",
+                "trade_date": "2026-03-19",
+                "open": 6.0,
+                "high": 6.1,
+                "low": 5.98,
+                "close": 6.05,
+                "total_amount": 200000.0,
+                "total_volume": 2000.0,
+                "l1_main_buy": 120000.0,
+                "l1_main_sell": 20000.0,
+                "l1_super_buy": 0.0,
+                "l1_super_sell": 0.0,
+                "source": "realtime_ticks",
+                "preview_level": "l1_only",
+                "updated_at": "2026-03-19 10:05:30",
+            }
+        ]
+
+    monkeypatch.setattr("backend.app.routers.market._rehydrate_today_if_stale", fake_rehydrate)
+    monkeypatch.setattr("backend.app.routers.market.query_realtime_5m_preview_rows", fake_query_preview)
+
+    resp = asyncio.run(get_intraday_fusion(symbol="sz002570", date=None, include_today_preview=True))
+
+    assert resp.code == 200
+    assert resp.data["bars"][-1]["datetime"] == "2026-03-19 10:05:00"
+    assert rehydrate_called["count"] == 1
+    assert query_calls["count"] == 2
