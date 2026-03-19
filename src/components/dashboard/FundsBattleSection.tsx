@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { FundsBattleSignalTuning, IntradayFusionData } from '../../types';
 import FundsBattleL1Panel from './FundsBattleL1Panel';
 import FundsBattleL2Panel from './FundsBattleL2Panel';
@@ -153,6 +153,7 @@ export const FundsBattleSection: React.FC<FundsBattleSectionProps> = ({ data, is
   const l2SignalCount = useMemo(() => countSignals(l2Result.points), [l2Result.points]);
   const orderEventComplete = hasFullOrderEventFactors(l2Result.points, l2Result.lacksOrderEventFactors);
   const factorStatus = !canUseL2Signals ? '未就绪' : orderEventComplete ? '完整' : '不完整';
+  const showL2Panel = Boolean(data?.is_l2_finalized && data?.source !== 'history_l1_fallback');
   const lacksVolumeForVwap = useMemo(
     () => (data?.bars ?? []).length > 0 && (data?.bars ?? []).every((bar) => !bar.total_volume || Number(bar.total_volume) <= 0),
     [data?.bars]
@@ -185,28 +186,35 @@ export const FundsBattleSection: React.FC<FundsBattleSectionProps> = ({ data, is
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-slate-800 bg-slate-950/40">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex shrink-0 items-center gap-2 text-base font-bold text-white">
+          <TrendingUp className="h-4 w-4 text-purple-400" />
+          资金博弈分析
+        </h3>
         <button
           type="button"
           onClick={() => setIsAdvancedOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between px-3 py-2 text-left"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500"
         >
-          <div>
-            <div className="text-sm font-semibold text-slate-100">高级设置：资金博弈信号调参</div>
-            <div className="mt-0.5 text-[11px] text-slate-500">
-              当前股票参数会保存在本地浏览器；切换股票时自动加载各自参数，不请求后端。
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300">
-              L1 {l1SignalCount} / L2 {l2SignalCount}
-            </span>
-            {isAdvancedOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-          </div>
+          <span>L1 {l1SignalCount} / L2 {l2SignalCount}</span>
+          {isAdvancedOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </button>
+      </div>
 
-        {isAdvancedOpen && (
-          <div className="border-t border-slate-800 px-3 pb-3 pt-2">
+      {isAdvancedOpen && (
+        <div className="rounded-lg border border-slate-800 bg-slate-950/40">
+          <div className="px-3 pb-3 pt-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-slate-100">高级设置：资金博弈信号调参</div>
+              <button
+                type="button"
+                onClick={restoreDefaults}
+                className="rounded border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:border-slate-500"
+              >
+                恢复默认
+              </button>
+            </div>
+
             <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
               <StatRow label="L1 当前标签数" value={`${l1SignalCount}`} />
               <StatRow label="L2 当前标签数" value={`${l2SignalCount}`} />
@@ -291,14 +299,7 @@ export const FundsBattleSection: React.FC<FundsBattleSectionProps> = ({ data, is
               />
             </div>
 
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={restoreDefaults}
-                className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-slate-500"
-              >
-                恢复默认
-              </button>
+            <div className="mt-3 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setIsAdvancedOpen(false)}
@@ -308,15 +309,17 @@ export const FundsBattleSection: React.FC<FundsBattleSectionProps> = ({ data, is
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="min-h-[360px]">
         <FundsBattleL1Panel data={data} isLoading={isLoading} tuning={tuning} />
       </div>
-      <div className="min-h-[360px]">
-        <FundsBattleL2Panel data={data} isLoading={isLoading} tuning={tuning} />
-      </div>
+      {showL2Panel && (
+        <div className="min-h-[360px]">
+          <FundsBattleL2Panel data={data} isLoading={isLoading} tuning={tuning} />
+        </div>
+      )}
     </div>
   );
 };
