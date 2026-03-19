@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Query
-from typing import List
+from typing import List, Optional
 import asyncio
+import threading
+import time
 from backend.app.models.schemas import TickData, VerifyResult, APIResponse
 from backend.app.services.market import fetch_live_ticks, fetch_tencent_snapshot
 from backend.app.db.crud import get_ticks_by_date, get_sentiment_history_aggregated
-from datetime import datetime
+from datetime import datetime, timedelta, time as dt_time
 
 from backend.app.core.config import MOCK_DATA_DATE
 from backend.app.core.http_client import MarketClock
@@ -14,6 +16,9 @@ from backend.app.db.l2_history_db import query_l2_history_5m_rows
 from backend.app.db.realtime_preview_db import query_realtime_5m_preview_rows
 
 router = APIRouter()
+_STALE_HYDRATE_ATTEMPTS = {}
+_STALE_HYDRATE_LOCK = threading.Lock()
+_STALE_HYDRATE_COOLDOWN_SECONDS = 120
 
 
 def _safe_float(value):
@@ -108,7 +113,115 @@ def _map_preview_fusion_bar(row: dict, source_override: str = None, preview_leve
 def _has_dashboard_payload(data) -> bool:
     if not data:
         return False
-    return bool(data.get("chart_data") or data.get("cumulative_data") or data.get("latest_ticks"))
+    return bool(
+        data.get("chart_data")
+        or data.get("cumulative_data")
+        or data.get("latest_ticks")
+        or data.get("bars")
+    )
+
+
+def _parse_intraday_time(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    if " " in text:
+        text = text.split(" ")[-1]
+
+    for fmt in ("%H:%M:%S", "%H:%M"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_latest_intraday_time(data) -> Optional[dt_time]:
+    if not data:
+        return None
+
+    latest_ticks = data.get("latest_ticks") or []
+    if latest_ticks:
+        parsed = _parse_intraday_time((latest_ticks[0] or {}).get("time"))
+        if parsed:
+            return parsed
+
+    latest_tick = data.get("latest_tick") or {}
+    parsed = _parse_intraday_time(latest_tick.get("time"))
+    if parsed:
+        return parsed
+
+    chart_data = data.get("chart_data") or []
+    if chart_data:
+        parsed = _parse_intraday_time((chart_data[-1] or {}).get("time"))
+        if parsed:
+            return parsed
+
+    bars = data.get("bars") or []
+    if bars:
+        parsed = _parse_intraday_time((bars[-1] or {}).get("datetime"))
+        if parsed:
+            return parsed
+
+    return None
+
+
+def _expected_floor_time(market_context: dict) -> Optional[dt_time]:
+    market_status = str(market_context.get("market_status") or "")
+    now = MarketClock._now_china()
+
+    if market_status == "trading":
+        current_floor = (now - timedelta(minutes=10)).time()
+        if current_floor < dt_time(9, 25):
+            return dt_time(9, 25)
+        if dt_time(11, 30) < current_floor < dt_time(13, 0):
+            return dt_time(11, 25)
+        return current_floor
+
+    if market_status == "lunch_break":
+        return dt_time(11, 25)
+
+    if market_status == "post_close":
+        return dt_time(14, 55)
+
+    return None
+
+
+def _is_today_payload_stale(data, market_context: dict, query_date: str, natural_today: str) -> bool:
+    if query_date != natural_today:
+        return False
+    if not _has_dashboard_payload(data):
+        return False
+
+    floor_time = _expected_floor_time(market_context)
+    if floor_time is None:
+        return False
+
+    latest_time = _extract_latest_intraday_time(data)
+    if latest_time is None:
+        return True
+
+    return latest_time < floor_time
+
+
+def _mark_stale_hydrate_attempt(symbol: str, trade_date: str) -> bool:
+    key = (str(symbol), str(trade_date))
+    now_ts = time.time()
+    with _STALE_HYDRATE_LOCK:
+        last_ts = _STALE_HYDRATE_ATTEMPTS.get(key, 0.0)
+        if now_ts - last_ts < _STALE_HYDRATE_COOLDOWN_SECONDS:
+            return False
+        _STALE_HYDRATE_ATTEMPTS[key] = now_ts
+        return True
+
+
+async def _rehydrate_today_if_stale(symbol: str, query_date: str, natural_today: str, market_context: dict) -> bool:
+    if query_date != natural_today:
+        return False
+    if not _mark_stale_hydrate_attempt(symbol, query_date):
+        return False
+    return await _hydrate_today_ticks_on_demand(symbol, query_date)
 
 
 async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
@@ -236,6 +349,10 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         # 否则会因为当前不在实时采集窗口而出现“当日分时为空”。
         from backend.app.services.analysis import calculate_realtime_aggregation, get_sentiment_fallback_dashboard
         data = calculate_realtime_aggregation(symbol, natural_today_str)
+        if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
+            hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today_str, market_context)
+            if hydrated:
+                data = calculate_realtime_aggregation(symbol, natural_today_str)
         if not _has_dashboard_payload(data):
             hydrated = await _hydrate_today_ticks_on_demand(symbol, natural_today_str)
             if hydrated:
@@ -256,6 +373,14 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
             get_sentiment_fallback_dashboard,
         )
         data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+        if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
+            fallback = calculate_realtime_aggregation(symbol, query_date)
+            if _has_dashboard_payload(fallback):
+                data = fallback
+            if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
+                hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today_str, market_context)
+                if hydrated:
+                    data = calculate_realtime_aggregation(symbol, query_date)
         if data is None:
             data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
         if data is None:
@@ -345,6 +470,18 @@ async def get_intraday_fusion(symbol: str, date: str = Query(None), include_toda
             query_date,
             None,
         )
+        preview_payload = {"bars": [_map_preview_fusion_bar(row) for row in preview_rows]}
+        if include_today_preview and _is_today_payload_stale(preview_payload, market_context, query_date, natural_today):
+            hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today, market_context)
+            if hydrated:
+                await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
+                preview_rows = await asyncio.to_thread(
+                    query_realtime_5m_preview_rows,
+                    symbol,
+                    query_date,
+                    query_date,
+                    None,
+                )
         if not preview_rows and query_date == natural_today:
             hydrated = await _hydrate_today_ticks_on_demand(symbol, natural_today)
             if hydrated:

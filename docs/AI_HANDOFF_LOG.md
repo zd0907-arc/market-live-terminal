@@ -573,3 +573,10 @@
 - 结论: 已将当前线上真实状态重新收口为 `v4.2.19`，用于覆盖“`v4.2.18` tag 后仍继续上线小修”的漂移；同时已把项目版本纪律写入 `04_OPS_AND_DEV.md`，后续要求“每次生产变更必须 bump 版本、一个 tag 只对应一个线上状态、本地 main 必须跟上 origin/main`。
 - 风险: 当前 Git 工作流仍以长生命周期 `codex/*` 分支推进，后续若不按新纪律执行，仍可能再次出现 tag / 线上状态漂移。
 - 链接: `docs/04_OPS_AND_DEV.md`, `src/version.ts`, `README.md`, `docs/archive/changes/ARC-CHG-20260317-version-discipline-and-v4-2-19-normalization.md`
+
+## 2026-03-19 11:40 | 后端 AI
+- Task ID: `CHG-20260319-02`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已修复“当日分时今日已有部分数据但已陈旧时，页面继续复用旧数据而不补拉”的链路缺口：`/api/realtime/dashboard` 与 `/api/realtime/intraday_fusion` 现在会在盘中/午休/盘后对今日陈旧 payload 做节流补拉，避免个别股票因为 Windows 逐笔超时而长期停在 `09:31` 之类旧时间点。
+- 风险: 当前 Windows `live_crawler_win.py` 仍可能出现 AkShare 逐笔超时，热修只能保证“页面打开时尝试自救”，不能替代 Windows 采集稳态化本身。
+- 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`
