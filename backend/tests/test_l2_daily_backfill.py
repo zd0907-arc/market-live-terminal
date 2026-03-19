@@ -27,8 +27,11 @@ def _build_sample_day(root: Path) -> Path:
                 "万得代码,交易所代码,自然日,时间,委托编号,交易所委托号,委托类型,委托代码,委托价格,委托数量",
                 "000833.SZ,000833,20260311,93000000,1,1001,0,B,250000,10000",
                 "000833.SZ,000833,20260311,93000000,2,2001,0,S,250000,10000",
+                "000833.SZ,000833,20260311,93020000,5,1001,1,B,0,2000",
+                "000833.SZ,000833,20260311,93020000,6,2001,1,S,0,1000",
                 "000833.SZ,000833,20260311,93500000,3,1002,0,B,251000,30000",
                 "000833.SZ,000833,20260311,93500000,4,2002,0,S,251000,30000",
+                "000833.SZ,000833,20260311,93510000,7,2002,U,S,0,3000",
             ]
         ),
     )
@@ -62,7 +65,15 @@ def test_l2_daily_backfill_writes_5m_and_daily(monkeypatch, tmp_path):
 
     conn = sqlite3.connect(db_path)
     rows_5m = conn.execute(
-        "SELECT symbol, datetime, total_amount, l2_main_buy, l2_main_sell FROM history_5m_l2 ORDER BY datetime"
+        """
+        SELECT
+            symbol, datetime, total_amount, total_volume,
+            l2_main_buy, l2_main_sell,
+            l2_add_buy_amount, l2_add_sell_amount,
+            l2_cancel_buy_amount, l2_cancel_sell_amount,
+            l2_cvd_delta, l2_oib_delta
+        FROM history_5m_l2 ORDER BY datetime
+        """
     ).fetchall()
     row_daily = conn.execute(
         "SELECT symbol, date, total_amount, l1_activity_ratio, l2_activity_ratio FROM history_daily_l2"
@@ -75,7 +86,21 @@ def test_l2_daily_backfill_writes_5m_and_daily(monkeypatch, tmp_path):
     assert rows_5m[0][0] == "sz000833"
     assert rows_5m[0][1] == "2026-03-11 09:30:00"
     assert rows_5m[0][2] == 500000.0
+    assert rows_5m[0][3] == 20000.0
+    assert rows_5m[0][6] == 250000.0
+    assert rows_5m[0][7] == 250000.0
+    assert rows_5m[0][8] == 50000.0
+    assert rows_5m[0][9] == 25000.0
+    assert rows_5m[0][10] == 0.0
+    assert rows_5m[0][11] == -25000.0
     assert rows_5m[1][1] == "2026-03-11 09:35:00"
+    assert rows_5m[1][3] == 60000.0
+    assert rows_5m[1][6] == 753000.0
+    assert rows_5m[1][7] == 753000.0
+    assert rows_5m[1][8] == 0.0
+    assert rows_5m[1][9] == 75300.0
+    assert rows_5m[1][10] == 0.0
+    assert rows_5m[1][11] == 75300.0
     assert row_daily == ("sz000833", "2026-03-11", 2006000.0, 100.0, 200.0)
     assert run_row == ("2026-03-11", "done", 1, 2, 1)
 

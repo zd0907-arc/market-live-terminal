@@ -10,8 +10,99 @@ from backend.app.core.config import MOCK_DATA_DATE
 from backend.app.core.http_client import MarketClock
 from backend.app.core.calendar import TradeCalendar
 from backend.app.db.crud import save_ticks_daily_overwrite
+from backend.app.db.l2_history_db import query_l2_history_5m_rows
+from backend.app.db.realtime_preview_db import query_realtime_5m_preview_rows
 
 router = APIRouter()
+
+
+def _safe_float(value):
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_intraday_fusion_mode(query_date: str, natural_today: str, has_finalized_today: bool) -> tuple[str, str]:
+    if query_date != natural_today:
+        return ("historical_dual_track", "历史 L1/L2 双轨")
+    if has_finalized_today:
+        return ("postclose_dual_track", "盘后 L1/L2 双轨")
+    return ("intraday_l1_only", "盘中 L1 单轨")
+
+
+def _map_finalized_fusion_bar(row: dict) -> dict:
+    l1_main_buy = _safe_float(row.get("l1_main_buy")) or 0.0
+    l1_main_sell = _safe_float(row.get("l1_main_sell")) or 0.0
+    l2_main_buy = _safe_float(row.get("l2_main_buy")) or 0.0
+    l2_main_sell = _safe_float(row.get("l2_main_sell")) or 0.0
+    return {
+        "datetime": str(row["datetime"]),
+        "trade_date": str(row["source_date"]),
+        "open": _safe_float(row.get("open")),
+        "high": _safe_float(row.get("high")),
+        "low": _safe_float(row.get("low")),
+        "close": _safe_float(row.get("close")),
+        "total_amount": _safe_float(row.get("total_amount")),
+        "total_volume": _safe_float(row.get("total_volume")),
+        "l1_main_buy": l1_main_buy,
+        "l1_main_sell": l1_main_sell,
+        "l1_super_buy": _safe_float(row.get("l1_super_buy")) or 0.0,
+        "l1_super_sell": _safe_float(row.get("l1_super_sell")) or 0.0,
+        "l1_net_inflow": l1_main_buy - l1_main_sell,
+        "l2_main_buy": l2_main_buy,
+        "l2_main_sell": l2_main_sell,
+        "l2_super_buy": _safe_float(row.get("l2_super_buy")) or 0.0,
+        "l2_super_sell": _safe_float(row.get("l2_super_sell")) or 0.0,
+        "l2_net_inflow": l2_main_buy - l2_main_sell,
+        "add_buy_amount": _safe_float(row.get("l2_add_buy_amount")),
+        "add_sell_amount": _safe_float(row.get("l2_add_sell_amount")),
+        "cancel_buy_amount": _safe_float(row.get("l2_cancel_buy_amount")),
+        "cancel_sell_amount": _safe_float(row.get("l2_cancel_sell_amount")),
+        "l2_cvd_delta": _safe_float(row.get("l2_cvd_delta")),
+        "l2_oib_delta": _safe_float(row.get("l2_oib_delta")),
+        "source": "l2_history",
+        "is_finalized": True,
+        "preview_level": None,
+        "fallback_used": False,
+    }
+
+
+def _map_preview_fusion_bar(row: dict, source_override: str = None, preview_level_override: str = None) -> dict:
+    l1_main_buy = _safe_float(row.get("l1_main_buy")) or 0.0
+    l1_main_sell = _safe_float(row.get("l1_main_sell")) or 0.0
+    return {
+        "datetime": str(row["datetime"]),
+        "trade_date": str(row["trade_date"]),
+        "open": _safe_float(row.get("open")),
+        "high": _safe_float(row.get("high")),
+        "low": _safe_float(row.get("low")),
+        "close": _safe_float(row.get("close")),
+        "total_amount": _safe_float(row.get("total_amount")),
+        "total_volume": _safe_float(row.get("total_volume")),
+        "l1_main_buy": l1_main_buy,
+        "l1_main_sell": l1_main_sell,
+        "l1_super_buy": _safe_float(row.get("l1_super_buy")) or 0.0,
+        "l1_super_sell": _safe_float(row.get("l1_super_sell")) or 0.0,
+        "l1_net_inflow": l1_main_buy - l1_main_sell,
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "l2_net_inflow": None,
+        "add_buy_amount": None,
+        "add_sell_amount": None,
+        "cancel_buy_amount": None,
+        "cancel_sell_amount": None,
+        "l2_cvd_delta": None,
+        "l2_oib_delta": None,
+        "source": str(source_override or row.get("source") or "realtime_ticks"),
+        "is_finalized": False,
+        "preview_level": str(preview_level_override or row.get("preview_level") or "l1_only"),
+        "fallback_used": False,
+    }
 
 
 def _has_dashboard_payload(data) -> bool:
@@ -201,3 +292,112 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         data['is_realtime_session'] = bool(market_context.get('should_use_realtime_path'))
     
     return APIResponse(code=200, data=data)
+
+
+@router.get("/realtime/intraday_fusion", response_model=APIResponse)
+async def get_intraday_fusion(symbol: str, date: str = Query(None), include_today_preview: bool = Query(True)):
+    """
+    当日分时页统一双轨接口：
+    - 盘中：L1 5m preview
+    - 当天盘后 finalized 到位：L1/L2 finalized 5m
+    - 历史日期：L1/L2 finalized 5m
+    """
+    if MOCK_DATA_DATE:
+        market_context = {
+            "natural_today": MOCK_DATA_DATE,
+            "is_trade_day": True,
+            "market_status": "mock",
+            "market_status_label": "Mock 日期",
+            "default_display_date": MOCK_DATA_DATE,
+            "default_display_scope": "today",
+            "default_display_scope_label": "Mock 展示今日数据",
+            "should_use_realtime_path": False,
+        }
+    else:
+        market_context = MarketClock.get_market_context()
+
+    natural_today = str(market_context["natural_today"])
+    query_date = date if date else str(market_context["default_display_date"])
+
+    finalized_rows = await asyncio.to_thread(
+        query_l2_history_5m_rows,
+        symbol,
+        query_date,
+        query_date,
+        None,
+    )
+    has_finalized_today = query_date == natural_today and len(finalized_rows) > 0
+    mode, mode_label = _build_intraday_fusion_mode(query_date, natural_today, has_finalized_today)
+
+    bars = []
+    source = "l2_history"
+    is_l2_finalized = mode != "intraday_l1_only"
+
+    if mode == "intraday_l1_only":
+        from backend.app.services.analysis import refresh_realtime_preview
+
+        if include_today_preview and query_date == natural_today:
+            await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
+        preview_rows = await asyncio.to_thread(
+            query_realtime_5m_preview_rows,
+            symbol,
+            query_date,
+            query_date,
+            None,
+        )
+        if not preview_rows and query_date == natural_today:
+            hydrated = await _hydrate_today_ticks_on_demand(symbol, natural_today)
+            if hydrated:
+                await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
+                preview_rows = await asyncio.to_thread(
+                    query_realtime_5m_preview_rows,
+                    symbol,
+                    query_date,
+                    query_date,
+                    None,
+                )
+        bars = [_map_preview_fusion_bar(row) for row in preview_rows]
+        source = "realtime_preview"
+        is_l2_finalized = False
+    else:
+        if finalized_rows:
+            bars = [_map_finalized_fusion_bar(row) for row in finalized_rows]
+        else:
+            from backend.app.services.analysis import refresh_realtime_preview
+
+            await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
+            preview_rows = await asyncio.to_thread(
+                query_realtime_5m_preview_rows,
+                symbol,
+                query_date,
+                query_date,
+                None,
+            )
+            if preview_rows:
+                bars = [
+                    _map_preview_fusion_bar(
+                        row,
+                        source_override="history_l1_fallback",
+                        preview_level_override="historical_l1_fallback",
+                    )
+                    for row in preview_rows
+                ]
+                source = "history_l1_fallback"
+                is_l2_finalized = False
+            else:
+                bars = []
+
+    return APIResponse(
+        code=200,
+        data={
+            "symbol": symbol,
+            "trade_date": query_date,
+            "mode": mode,
+            "mode_label": mode_label,
+            "bucket_granularity": "5m",
+            "is_l2_finalized": is_l2_finalized,
+            "source": source,
+            "fallback_used": source == "history_l1_fallback",
+            "bars": bars,
+        },
+    )

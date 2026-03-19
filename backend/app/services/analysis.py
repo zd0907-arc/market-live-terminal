@@ -62,6 +62,7 @@ def _build_realtime_preview_rows(
         l1_super_buy = float(group[group['is_super'] & group['is_buy']]['amount'].sum())
         l1_super_sell = float(group[group['is_super'] & group['is_sell']]['amount'].sum())
         total_amount = float(group['amount'].sum())
+        total_volume = float(group['volume'].sum())
         rows_5m.append(
             (
                 symbol,
@@ -72,6 +73,7 @@ def _build_realtime_preview_rows(
                 float(group['price'].min()),
                 float(group['price'].iloc[-1]),
                 total_amount,
+                total_volume,
                 l1_main_buy,
                 l1_main_sell,
                 l1_super_buy,

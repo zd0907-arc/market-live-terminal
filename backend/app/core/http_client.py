@@ -85,11 +85,11 @@ class MarketClock:
             return {
                 "natural_today": today_str,
                 "is_trade_day": True,
-                "market_status": "pre_open",
-                "market_status_label": "盘前未开盘",
+                "market_status": "post_close",
+                "market_status_label": "盘后复盘",
                 "default_display_date": default_display_date,
                 "default_display_scope": "previous_trade_day",
-                "default_display_scope_label": "默认展示上一交易日数据",
+                "default_display_scope_label": "默认展示上一交易日复盘数据",
                 "should_use_realtime_path": False,
             }
 

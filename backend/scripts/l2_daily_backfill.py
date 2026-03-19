@@ -95,7 +95,56 @@ def validate_symbol_dir(symbol_dir: Path) -> List[str]:
     return missing
 
 
-def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.DataFrame, Dict[str, object]]:
+def _build_standardized_order_events(order: pd.DataFrame, trade_date: str) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    required_order = ["时间", "交易所委托号", "委托类型", "委托代码", "委托价格", "委托数量"]
+    missing_order = [c for c in required_order if c not in order.columns]
+    if missing_order:
+        raise ValueError(f"逐笔委托缺列: {', '.join(missing_order)}")
+
+    events = pd.DataFrame()
+    events["time"] = _format_trade_time(order["时间"])
+    events["datetime"] = pd.to_datetime(f"{trade_date} " + events["time"], errors="coerce")
+    events["order_id"] = pd.to_numeric(order["交易所委托号"], errors="coerce").fillna(0).astype("int64")
+    events["event_code"] = order["委托类型"].astype(str).str.strip().str.upper()
+    events["side"] = order["委托代码"].astype(str).str.strip().str.upper().map({"B": "buy", "S": "sell"})
+    events["price"] = pd.to_numeric(order["委托价格"], errors="coerce") / 10000
+    events["volume"] = pd.to_numeric(order["委托数量"], errors="coerce")
+    events["event_type"] = events["event_code"].map({"0": "add", "1": "cancel", "U": "cancel"})
+
+    events = events.dropna(subset=["datetime", "side", "event_type", "volume"])
+    events = events[(events["volume"] > 0) & (events["order_id"] > 0)]
+
+    session_time = events["datetime"].dt.strftime("%H:%M:%S")
+    trading_mask = ((session_time >= "09:30:00") & (session_time <= "11:30:00")) | (
+        (session_time >= "13:00:00") & (session_time <= "15:00:00")
+    )
+    events = events[trading_mask].sort_values("datetime").reset_index(drop=True)
+
+    positive_price_rows = events[events["price"] > 0].copy()
+    known_price_by_order_id = (
+        positive_price_rows.groupby("order_id")["price"].last().to_dict()
+        if not positive_price_rows.empty
+        else {}
+    )
+    events["fallback_price"] = events["order_id"].map(known_price_by_order_id)
+    events["effective_price"] = events["price"].where(events["price"] > 0, events["fallback_price"])
+    events["amount"] = events["effective_price"] * events["volume"]
+    events = events.dropna(subset=["amount"])
+    events = events[events["amount"] > 0].reset_index(drop=True)
+
+    diagnostics = {
+        "order_event_rows": int(len(events)),
+        "order_add_rows": int((events["event_type"] == "add").sum()),
+        "order_cancel_rows": int((events["event_type"] == "cancel").sum()),
+        "order_cancel_zero_price_rows": int(((events["event_type"] == "cancel") & (events["price"] <= 0)).sum()),
+        "order_cancel_repriced_rows": int(
+            ((events["event_type"] == "cancel") & (events["price"] <= 0) & events["fallback_price"].notna()).sum()
+        ),
+    }
+    return events, diagnostics
+
+
+def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]:
     trade_path = symbol_dir / "逐笔成交.csv"
     order_path = symbol_dir / "逐笔委托.csv"
     quote_path = symbol_dir / "行情.csv"
@@ -105,13 +154,10 @@ def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.Data
     _ = _read_csv(quote_path)  # Read once to fail fast on encoding/shape issues.
 
     required_trade = ["时间", "成交价格", "成交数量", "BS标志", "叫卖序号", "叫买序号"]
-    required_order = ["交易所委托号"]
     missing_trade = [c for c in required_trade if c not in trade.columns]
-    missing_order = [c for c in required_order if c not in order.columns]
     if missing_trade:
         raise ValueError(f"逐笔成交缺列: {', '.join(missing_trade)}")
-    if missing_order:
-        raise ValueError(f"逐笔委托缺列: {', '.join(missing_order)}")
+    order_events, order_diagnostics = _build_standardized_order_events(order, trade_date)
 
     ticks = pd.DataFrame()
     ticks["time"] = _format_trade_time(trade["时间"])
@@ -180,7 +226,8 @@ def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.Data
         "order_alignment_buy_missing": int(len(missing_buy_refs)),
         "order_alignment_sell_missing": int(len(missing_sell_refs)),
     }
-    return ticks, diagnostics
+    diagnostics.update(order_diagnostics)
+    return ticks, order_events, diagnostics
 
 
 def _build_quality_info(diagnostics: Dict[str, object]) -> Optional[str]:
@@ -203,6 +250,7 @@ def _build_quality_info(diagnostics: Dict[str, object]) -> Optional[str]:
 
 def compute_5m_bars(
     ticks: pd.DataFrame,
+    order_events: pd.DataFrame,
     symbol: str,
     trade_date: str,
     large_threshold: float,
@@ -238,6 +286,7 @@ def compute_5m_bars(
     ohlc = df.groupby("bucket")["price"].agg(open="first", high="max", low="min", close="last")
     flow = df.groupby("bucket").agg(
         total_amount=("amount", "sum"),
+        total_volume=("volume", "sum"),
         l1_main_buy=("l1_main_buy_amt", "sum"),
         l1_main_sell=("l1_main_sell_amt", "sum"),
         l1_super_buy=("l1_super_buy_amt", "sum"),
@@ -246,8 +295,35 @@ def compute_5m_bars(
         l2_main_sell=("l2_main_sell_amt", "sum"),
         l2_super_buy=("l2_super_buy_amt", "sum"),
         l2_super_sell=("l2_super_sell_amt", "sum"),
+        l2_cvd_buy=("amount", lambda s: float(s[df.loc[s.index, "side"] == "buy"].sum())),
+        l2_cvd_sell=("amount", lambda s: float(s[df.loc[s.index, "side"] == "sell"].sum())),
     )
-    merged = ohlc.join(flow, how="inner").reset_index()
+    merged = ohlc.join(flow, how="inner")
+
+    if not order_events.empty:
+        events = order_events.copy()
+        events["bucket"] = events["datetime"].dt.floor("5min")
+        event_agg = events.groupby("bucket").agg(
+            l2_add_buy_amount=("amount", lambda s: float(s[(events.loc[s.index, "event_type"] == "add") & (events.loc[s.index, "side"] == "buy")].sum())),
+            l2_add_sell_amount=("amount", lambda s: float(s[(events.loc[s.index, "event_type"] == "add") & (events.loc[s.index, "side"] == "sell")].sum())),
+            l2_cancel_buy_amount=("amount", lambda s: float(s[(events.loc[s.index, "event_type"] == "cancel") & (events.loc[s.index, "side"] == "buy")].sum())),
+            l2_cancel_sell_amount=("amount", lambda s: float(s[(events.loc[s.index, "event_type"] == "cancel") & (events.loc[s.index, "side"] == "sell")].sum())),
+        )
+        merged = merged.join(event_agg, how="left")
+    else:
+        merged["l2_add_buy_amount"] = None
+        merged["l2_add_sell_amount"] = None
+        merged["l2_cancel_buy_amount"] = None
+        merged["l2_cancel_sell_amount"] = None
+
+    merged["l2_cvd_delta"] = merged["l2_cvd_buy"] - merged["l2_cvd_sell"]
+    merged["l2_oib_delta"] = (
+        merged["l2_add_buy_amount"].fillna(0.0)
+        - merged["l2_cancel_buy_amount"].fillna(0.0)
+        - merged["l2_add_sell_amount"].fillna(0.0)
+        + merged["l2_cancel_sell_amount"].fillna(0.0)
+    )
+    merged = merged.reset_index()
 
     return [
         (
@@ -259,6 +335,7 @@ def compute_5m_bars(
             float(row["low"]),
             float(row["close"]),
             float(row["total_amount"]),
+            float(row["total_volume"]),
             float(row["l1_main_buy"]),
             float(row["l1_main_sell"]),
             float(row["l1_super_buy"]),
@@ -267,6 +344,12 @@ def compute_5m_bars(
             float(row["l2_main_sell"]),
             float(row["l2_super_buy"]),
             float(row["l2_super_sell"]),
+            float(row["l2_add_buy_amount"]) if pd.notna(row["l2_add_buy_amount"]) else None,
+            float(row["l2_add_sell_amount"]) if pd.notna(row["l2_add_sell_amount"]) else None,
+            float(row["l2_cancel_buy_amount"]) if pd.notna(row["l2_cancel_buy_amount"]) else None,
+            float(row["l2_cancel_sell_amount"]) if pd.notna(row["l2_cancel_sell_amount"]) else None,
+            float(row["l2_cvd_delta"]),
+            float(row["l2_oib_delta"]) if pd.notna(row["l2_oib_delta"]) else None,
         )
         for _, row in merged.iterrows()
     ]
@@ -281,15 +364,15 @@ def compute_daily_row(symbol: str, trade_date: str, rows_5m: Sequence[Tuple]) ->
     lows = min(row[5] for row in rows_5m)
     closes = rows_5m[-1][6]
     total_amount = sum(row[7] for row in rows_5m)
-    l1_main_buy = sum(row[8] for row in rows_5m)
-    l1_main_sell = sum(row[9] for row in rows_5m)
-    l1_super_buy = sum(row[10] for row in rows_5m)
-    l1_super_sell = sum(row[11] for row in rows_5m)
-    l2_main_buy = sum(row[12] for row in rows_5m)
-    l2_main_sell = sum(row[13] for row in rows_5m)
-    l2_super_buy = sum(row[14] for row in rows_5m)
-    l2_super_sell = sum(row[15] for row in rows_5m)
-    quality_messages = [str(row[16]).strip() for row in rows_5m if len(row) > 16 and str(row[16]).strip()]
+    l1_main_buy = sum(row[9] for row in rows_5m)
+    l1_main_sell = sum(row[10] for row in rows_5m)
+    l1_super_buy = sum(row[11] for row in rows_5m)
+    l1_super_sell = sum(row[12] for row in rows_5m)
+    l2_main_buy = sum(row[13] for row in rows_5m)
+    l2_main_sell = sum(row[14] for row in rows_5m)
+    l2_super_buy = sum(row[15] for row in rows_5m)
+    l2_super_sell = sum(row[16] for row in rows_5m)
+    quality_messages = [str(row[23]).strip() for row in rows_5m if len(row) > 23 and str(row[23]).strip()]
     quality_info = "；".join(dict.fromkeys(quality_messages)) if quality_messages else None
 
     def ratio(v: float) -> float:
@@ -338,10 +421,11 @@ def process_symbol_dir(
     if missing:
         raise ValueError(f"缺少文件: {', '.join(missing)}")
 
-    ticks, diagnostics = build_standardized_ticks(symbol_dir, trade_date)
+    ticks, order_events, diagnostics = build_standardized_ticks(symbol_dir, trade_date)
     quality_info = _build_quality_info(diagnostics)
     rows_5m = compute_5m_bars(
         ticks,
+        order_events,
         symbol=symbol,
         trade_date=trade_date,
         large_threshold=large_threshold,

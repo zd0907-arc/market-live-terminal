@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, Layers } from 'lucide-react';
-import { LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
-import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta } from '../../types';
+import { TrendingUp } from 'lucide-react';
+import { Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
+import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta, IntradayFusionData } from '../../types';
 import * as StockService from '../../services/stockService';
-import SentimentTrend from './SentimentTrend';
+import FundsBattleSection from './FundsBattleSection';
 
 interface RealtimeViewProps {
     activeStock: SearchResult | null;
@@ -24,7 +24,42 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [sourceMeta, setSourceMeta] = useState<DashboardSourceMeta>({});
     const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+    const [fusionData, setFusionData] = useState<IntradayFusionData | null>(null);
+    const [isLoadingFusion, setIsLoadingFusion] = useState(false);
     const requestSeqRef = useRef(0);
+
+    const getChinaNow = () => {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        });
+        const parts = formatter.formatToParts(now);
+        const year = parts.find(p => p.type === 'year')?.value || '1970';
+        const month = parts.find(p => p.type === 'month')?.value || '01';
+        const day = parts.find(p => p.type === 'day')?.value || '01';
+        const hour = parts.find(p => p.type === 'hour')?.value || '00';
+        const minute = parts.find(p => p.type === 'minute')?.value || '00';
+        return {
+            date: `${year}-${month}-${day}`,
+            hhmm: `${hour}:${minute}`,
+            timeNum: Number(hour) * 100 + Number(minute),
+            weekday: new Date(`${year}-${month}-${day}T00:00:00+08:00`).getDay(),
+        };
+    };
+
+    const shouldPollRealtime = () => {
+        if (selectedDate) return false;
+        const now = getChinaNow();
+        const isWeekend = now.weekday === 0 || now.weekday === 6;
+        if (isWeekend) return false;
+        return now.timeNum >= 915 && now.timeNum <= 1500 && !(now.timeNum >= 1130 && now.timeNum < 1300);
+    };
 
     // Thresholds (Loaded from Backend)
     const [thresholds, setThresholds] = useState({ large: 200000, superLarge: 1000000 });
@@ -53,6 +88,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         setCumulativeData([]);
         setLastUpdated('');
         setSourceMeta({});
+        setFusionData(null);
     }, [activeStock, selectedDate]);
 
     useEffect(() => {
@@ -61,7 +97,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         let isMounted = true;
 
         const heartbeatMode = focusMode === 'focus' ? 'focus' : 'warm';
-        const enableRealtimeTracking = !selectedDate;
+        const enableRealtimeTracking = !selectedDate && shouldPollRealtime();
 
         let heartbeatInterval: any = null;
         if (enableRealtimeTracking) {
@@ -130,6 +166,10 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     if (data.display_date) {
                         setDisplayDate(data.display_date);
                     }
+                    if (intervalId && data.market_status !== 'trading') {
+                        clearInterval(intervalId);
+                        intervalId = null;
+                    }
                 } else if (selectedDate) {
                     // Historical empty state clears the canvas; realtime polling keeps stale data visible.
                     setChartData([]);
@@ -151,7 +191,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
 
         fetchData();
 
-        if (enableRealtimeTracking) {
+        if (enableRealtimeTracking && shouldPollRealtime()) {
             // Quiet refresh: focus=5s, normal=30s.
             const intervalMs = focusMode === 'focus' ? 5000 : 30000;
             intervalId = setInterval(fetchData, intervalMs);
@@ -164,6 +204,39 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
             if (intervalId) clearInterval(intervalId);
         };
     }, [activeStock, forceRefresh, selectedDate, focusMode]);
+
+    useEffect(() => {
+        if (!activeStock) return;
+
+        let isMounted = true;
+        let intervalId: any = null;
+
+        const fetchFusion = async () => {
+            if (!isMounted) return;
+            setIsLoadingFusion(true);
+            try {
+                const data = await StockService.fetchIntradayFusion(activeStock.symbol, selectedDate);
+                if (!isMounted) return;
+                setFusionData(data);
+            } catch (err) {
+                console.warn('Intraday fusion update failed', err);
+            } finally {
+                if (isMounted) setIsLoadingFusion(false);
+            }
+        };
+
+        fetchFusion();
+
+        if (!selectedDate && shouldPollRealtime()) {
+            const intervalMs = focusMode === 'focus' ? 5000 : 30000;
+            intervalId = setInterval(fetchFusion, intervalMs);
+        }
+
+        return () => {
+            isMounted = false;
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [activeStock, selectedDate, focusMode]);
 
     // Callback when config is updated
     useEffect(() => {
@@ -196,41 +269,26 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
         return days[new Date(dateStr).getDay()];
     };
 
-    const getChinaNow = () => {
-        const now = new Date();
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Shanghai',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-        });
-        const parts = formatter.formatToParts(now);
-        const year = parts.find(p => p.type === 'year')?.value || '1970';
-        const month = parts.find(p => p.type === 'month')?.value || '01';
-        const day = parts.find(p => p.type === 'day')?.value || '01';
-        const hour = parts.find(p => p.type === 'hour')?.value || '00';
-        const minute = parts.find(p => p.type === 'minute')?.value || '00';
-        return {
-            date: `${year}-${month}-${day}`,
-            hhmm: `${hour}:${minute}`,
-            timeNum: Number(hour) * 100 + Number(minute),
-            weekday: new Date(`${year}-${month}-${day}T00:00:00+08:00`).getDay(),
-        };
-    };
-
     const getProvisionalMeta = (): DashboardSourceMeta => {
         const now = getChinaNow();
         const isWeekend = now.weekday === 0 || now.weekday === 6;
         const isTradeDay = !isWeekend;
 
         if (selectedDate) {
+            const provisionalStatus = isTradeDay
+                ? (now.timeNum >= 915 && now.timeNum <= 1500
+                    ? (now.timeNum >= 1130 && now.timeNum < 1300 ? 'lunch_break' : 'trading')
+                    : 'post_close')
+                : 'closed_day';
+            const provisionalStatusLabel = isTradeDay
+                ? (now.timeNum >= 915 && now.timeNum <= 1500
+                    ? (now.timeNum >= 1130 && now.timeNum < 1300 ? '午间休市' : '盘中交易')
+                    : '盘后复盘')
+                : '休盘日';
             return {
                 display_date: selectedDate,
-                market_status: isTradeDay ? (now.timeNum > 1500 ? 'post_close' : (now.timeNum >= 1130 && now.timeNum < 1300 ? 'lunch_break' : (now.timeNum >= 915 && now.timeNum <= 1500 ? 'trading' : 'pre_open'))) : 'closed_day',
-                market_status_label: isTradeDay ? (now.timeNum > 1500 ? '盘后复盘' : (now.timeNum >= 1130 && now.timeNum < 1300 ? '午间休市' : (now.timeNum >= 915 && now.timeNum <= 1500 ? '盘中交易' : '盘前未开盘'))) : '休盘日',
+                market_status: provisionalStatus,
+                market_status_label: provisionalStatusLabel,
                 view_mode: 'manual_date',
                 view_mode_label: '手动查看指定日期数据',
                 default_display_scope_label: '手动查看指定日期数据',
@@ -254,12 +312,12 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
             return {
                 display_date: now.date,
                 natural_today: now.date,
-                market_status: 'pre_open',
-                market_status_label: '盘前未开盘',
+                market_status: 'post_close',
+                market_status_label: '盘后复盘',
                 default_display_scope: 'previous_trade_day',
-                default_display_scope_label: '默认展示上一交易日数据',
+                default_display_scope_label: '默认展示上一交易日复盘数据',
                 view_mode: 'previous_trade_day',
-                view_mode_label: '默认展示上一交易日数据',
+                view_mode_label: '默认展示上一交易日复盘数据',
             };
         }
 
@@ -445,207 +503,189 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     </div>
                 </div>
 
-                <div className="flex flex-col md:grid md:grid-rows-2 gap-4 md:gap-2 h-[800px] md:h-[500px]">
-                    {/* 1. 分时强度图 (Instantaneous) */}
-                    <div className="h-full w-full relative">
-                        <div className="absolute top-2 left-2 md:left-10 z-10 text-[10px] md:text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
-                            分时博弈强度
-                        </div>
-                        {chartData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ComposedChart data={chartData} syncId="capitalFlow">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                    <XAxis
-                                        dataKey="time"
-                                        xAxisId="0"
-                                        stroke="#64748b"
-                                        tick={{ fontSize: 12 }}
-                                        ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
-                                        interval="preserveStartEnd"
-                                        hide // Hide X Axis for top chart
-                                    />
-                                    {/* Second XAxis for Super Large Bars to overlap */}
-                                    <XAxis
-                                        dataKey="time"
-                                        xAxisId="1"
-                                        hide
-                                    />
-                                    {/* Left Axis: Amount (Bar) */}
-                                    <YAxis
-                                        yAxisId="amount"
-                                        stroke="#94a3b8"
-                                        tick={{ fontSize: 10 }}
-                                        tickFormatter={(val) => (Math.abs(val) / 10000).toFixed(0)}
-                                    />
-                                    {/* Right Axis: Ratio (Line) */}
-                                    <YAxis
-                                        yAxisId="ratio"
-                                        orientation="right"
-                                        stroke="#cbd5e1"
-                                        tick={{ fontSize: 10 }}
-                                        unit="%"
-                                        domain={[0, 100]}
-                                        hide
-                                    />
-                                    {/* Hidden Axis: Price */}
-                                    <YAxis
-                                        yAxisId="price"
-                                        orientation="right"
-                                        domain={['auto', 'auto']}
-                                        hide
-                                    />
+                <div className="w-full">
+                    <div className="flex flex-col md:grid md:grid-rows-2 gap-4 md:gap-2 h-[800px] md:h-[500px]">
+                        <div className="h-full w-full relative">
+                            <div className="absolute top-2 left-2 md:left-10 z-10 text-[10px] md:text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
+                                分时博弈强度
+                            </div>
+                            {chartData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={chartData} syncId="capitalFlow">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                        <XAxis
+                                            dataKey="time"
+                                            xAxisId="0"
+                                            stroke="#64748b"
+                                            tick={{ fontSize: 12 }}
+                                            ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                                            interval="preserveStartEnd"
+                                            hide
+                                        />
+                                        <XAxis
+                                            dataKey="time"
+                                            xAxisId="1"
+                                            hide
+                                        />
+                                        <YAxis
+                                            yAxisId="amount"
+                                            stroke="#94a3b8"
+                                            tick={{ fontSize: 10 }}
+                                            tickFormatter={(val) => (Math.abs(val) / 10000).toFixed(0)}
+                                        />
+                                        <YAxis
+                                            yAxisId="ratio"
+                                            orientation="right"
+                                            stroke="#cbd5e1"
+                                            tick={{ fontSize: 10 }}
+                                            unit="%"
+                                            domain={[0, 100]}
+                                            hide
+                                        />
+                                        <YAxis
+                                            yAxisId="price"
+                                            orientation="right"
+                                            domain={['auto', 'auto']}
+                                            hide
+                                        />
 
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                                        itemStyle={{ fontSize: 12 }}
-                                        formatter={(val: number, name: string) => {
-                                            if (name.includes('主力') || name.includes('超大单')) {
-                                                if (name.includes('占比') || name.includes('参与度')) {
-                                                    return [val + '%', name];
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                            itemStyle={{ fontSize: 12 }}
+                                            formatter={(val: number, name: string) => {
+                                                if (name.includes('主力') || name.includes('超大单')) {
+                                                    if (name.includes('占比') || name.includes('参与度')) {
+                                                        return [val + '%', name];
+                                                    }
+                                                    return [(Math.abs(val) / 10000).toFixed(1) + '万', name];
                                                 }
-                                                return [(Math.abs(val) / 10000).toFixed(1) + '万', name];
-                                            }
-                                            if (name === '股价') return [val.toFixed(2), name];
-                                            return [val, name];
-                                        }}
-                                    />
-                                    <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
+                                                if (name === '股价') return [val.toFixed(2), name];
+                                                return [val, name];
+                                            }}
+                                        />
+                                        <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
 
-                                    {/* Bars: Buy (Up) / Sell (Down) */}
-                                    {/* Layer 1: Main Force (Background) - Lighter Colors */}
-                                    <Bar xAxisId="0" yAxisId="amount" dataKey="mainBuyAmount" name="主力买入" fill="#f87171" barSize={4} fillOpacity={1} />
-                                    <Bar xAxisId="0" yAxisId="amount" dataKey="mainSellAmountPlot" name="主力卖出" fill="#4ade80" barSize={4} fillOpacity={1} />
+                                        <Bar xAxisId="0" yAxisId="amount" dataKey="mainBuyAmount" name="主力买入" fill="#f87171" barSize={4} fillOpacity={1} />
+                                        <Bar xAxisId="0" yAxisId="amount" dataKey="mainSellAmountPlot" name="主力卖出" fill="#4ade80" barSize={4} fillOpacity={1} />
 
-                                    {/* Layer 2: Super Large (Foreground) - Darker/Vivid Colors */}
-                                    <Bar xAxisId="1" yAxisId="amount" dataKey="superBuyAmount" name="超大单买入" fill="#9333ea" barSize={4} />
-                                    <Bar xAxisId="1" yAxisId="amount" dataKey="superSellAmountPlot" name="超大单卖出" fill="#14532d" barSize={4} />
+                                        <Bar xAxisId="1" yAxisId="amount" dataKey="superBuyAmount" name="超大单买入" fill="#9333ea" barSize={4} />
+                                        <Bar xAxisId="1" yAxisId="amount" dataKey="superSellAmountPlot" name="超大单卖出" fill="#14532d" barSize={4} />
 
-                                    {/* Lines: Participation & Price */}
-                                    <Line yAxisId="ratio" type="monotone" dataKey="mainParticipationRatio" name="主力参与度" stroke="#f8fafc" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
-                                    <Line yAxisId="ratio" type="monotone" dataKey="superParticipationRatio" name="超大单参与度" stroke="#9333ea" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
-                                    <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500} />
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        ) : isLoadingDashboard ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-                                <span>正在获取分时数据...</span>
-                                <span className="text-xs text-slate-600">已先判定市场状态，图表数据仍在加载</span>
-                            </div>
-                        ) : displayDate ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
-                                <span>{sourceMeta.view_mode === 'manual_date' ? '当前回溯日期无本地 Tick 数据' : '暂无交易数据'}</span>
-                                {sourceMeta.view_mode === 'manual_date' && <span className="text-xs text-slate-600">本地数据库未在此日期保存该股票的明细记录</span>}
-                            </div>
-                        ) : (
-                            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                                加载中...
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 2. 累计趋势图 (Cumulative) */}
-                    <div className="h-full w-full relative">
-                        <div className="absolute top-2 left-2 md:left-10 z-10 text-[10px] md:text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
-                            主力累计资金 (万元)
+                                        <Line yAxisId="ratio" type="monotone" dataKey="mainParticipationRatio" name="主力参与度" stroke="#f8fafc" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
+                                        <Line yAxisId="ratio" type="monotone" dataKey="superParticipationRatio" name="超大单参与度" stroke="#9333ea" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
+                                        <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            ) : isLoadingDashboard ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
+                                    <span>正在获取分时数据...</span>
+                                    <span className="text-xs text-slate-600">已先判定市场状态，图表数据仍在加载</span>
+                                </div>
+                            ) : displayDate ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2">
+                                    <span>{sourceMeta.view_mode === 'manual_date' ? '当前回溯日期无本地 Tick 数据' : '暂无交易数据'}</span>
+                                    {sourceMeta.view_mode === 'manual_date' && <span className="text-xs text-slate-600">本地数据库未在此日期保存该股票的明细记录</span>}
+                                </div>
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                                    加载中...
+                                </div>
+                            )}
                         </div>
-                        {cumulativeData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ComposedChart data={cumulativeData} syncId="capitalFlow">
-                                    <defs>
-                                        <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset={off} stopColor="#ef4444" stopOpacity={0.3} />
-                                            <stop offset={off} stopColor="#22c55e" stopOpacity={0.3} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                    <XAxis
-                                        dataKey="time"
-                                        stroke="#64748b"
-                                        tick={{ fontSize: 12 }}
-                                        ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
-                                        interval="preserveStartEnd"
-                                    />
-                                    {/* Left Axis: Net Inflow */}
-                                    <YAxis
-                                        yAxisId="net"
-                                        stroke="#a78bfa"
-                                        tick={{ fontSize: 12 }}
-                                        tickFormatter={(val) => (val / 10000).toFixed(0)}
-                                        domain={['auto', 'auto']}
-                                    />
-                                    {/* Right Axis: Total Buy/Sell */}
-                                    <YAxis
-                                        yAxisId="total"
-                                        orientation="right"
-                                        stroke="#64748b"
-                                        tick={{ fontSize: 12 }}
-                                        tickFormatter={(val) => (val / 10000).toFixed(0)}
-                                        domain={['auto', 'auto']}
-                                        hide // Hide right axis ticks to avoid clutter, just use for scaling
-                                    />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                                        itemStyle={{ fontSize: 12 }}
-                                        formatter={(val: number, name: string) => {
-                                            const v = (val / 10000).toFixed(1) + '万';
-                                            return [v, name];
-                                        }}
-                                    />
-                                    <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
 
-                                    {/* Area for Main Net Inflow - Red/Green based on value */}
-                                    <Area
-                                        yAxisId="net"
-                                        type="monotone"
-                                        dataKey="cumNetInflow"
-                                        name="主力净流入"
-                                        stroke="none"
-                                        fill="url(#splitColor)"
-                                        animationDuration={500}
-                                    />
-
-                                    {/* Super Large Net Inflow Line */}
-                                    <Line
-                                        yAxisId="net"
-                                        type="monotone"
-                                        dataKey="cumSuperNetInflow"
-                                        name="超大单净流入"
-                                        stroke="#d946ef"
-                                        strokeWidth={2}
-                                        dot={false}
-                                        strokeDasharray="5 5"
-                                        animationDuration={500}
-                                    />
-
-                                    {/* Background Reference Lines (Total) */}
-                                    {/* Main Force: Solid Lines */}
-                                    <Line yAxisId="total" type="monotone" dataKey="cumMainBuy" name="主力买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
-                                    <Line yAxisId="total" type="monotone" dataKey="cumMainSell" name="主力卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
-
-                                    {/* Super Large: Dashed Lines */}
-                                    <Line yAxisId="total" type="monotone" dataKey="cumSuperBuy" name="超大单买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
-                                    <Line yAxisId="total" type="monotone" dataKey="cumSuperSell" name="超大单卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                                计算累计趋势中...
+                        <div className="h-full w-full relative">
+                            <div className="absolute top-2 left-2 md:left-10 z-10 text-[10px] md:text-xs font-bold text-slate-400 bg-slate-900/80 px-2 rounded">
+                                主力累计资金 (万元)
                             </div>
-                        )}
+                            {cumulativeData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={cumulativeData} syncId="capitalFlow">
+                                        <defs>
+                                            <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset={off} stopColor="#ef4444" stopOpacity={0.3} />
+                                                <stop offset={off} stopColor="#22c55e" stopOpacity={0.3} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                        <XAxis
+                                            dataKey="time"
+                                            stroke="#64748b"
+                                            tick={{ fontSize: 12 }}
+                                            ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                                            interval="preserveStartEnd"
+                                        />
+                                        <YAxis
+                                            yAxisId="net"
+                                            stroke="#a78bfa"
+                                            tick={{ fontSize: 12 }}
+                                            tickFormatter={(val) => (val / 10000).toFixed(0)}
+                                            domain={['auto', 'auto']}
+                                        />
+                                        <YAxis
+                                            yAxisId="total"
+                                            orientation="right"
+                                            stroke="#64748b"
+                                            tick={{ fontSize: 12 }}
+                                            tickFormatter={(val) => (val / 10000).toFixed(0)}
+                                            domain={['auto', 'auto']}
+                                            hide
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
+                                            itemStyle={{ fontSize: 12 }}
+                                            formatter={(val: number, name: string) => {
+                                                const v = (val / 10000).toFixed(1) + '万';
+                                                return [v, name];
+                                            }}
+                                        />
+                                        <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
+
+                                        <Area
+                                            yAxisId="net"
+                                            type="monotone"
+                                            dataKey="cumNetInflow"
+                                            name="主力净流入"
+                                            stroke="none"
+                                            fill="url(#splitColor)"
+                                            animationDuration={500}
+                                        />
+
+                                        <Line
+                                            yAxisId="net"
+                                            type="monotone"
+                                            dataKey="cumSuperNetInflow"
+                                            name="超大单净流入"
+                                            stroke="#d946ef"
+                                            strokeWidth={2}
+                                            dot={false}
+                                            strokeDasharray="5 5"
+                                            animationDuration={500}
+                                        />
+
+                                        <Line yAxisId="total" type="monotone" dataKey="cumMainBuy" name="主力买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
+                                        <Line yAxisId="total" type="monotone" dataKey="cumMainSell" name="主力卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
+                                        <Line yAxisId="total" type="monotone" dataKey="cumSuperBuy" name="超大单买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
+                                        <Line yAxisId="total" type="monotone" dataKey="cumSuperSell" name="超大单卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                                    计算累计趋势中...
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Bottom Row: Sentiment (Full Width Now) */}
-            <div className="min-h-[400px] flex">
-                <div className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative flex flex-col">
+            <div>
+                <div className="min-w-0 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
                     <h3 className="text-base font-bold text-white flex items-center gap-2 mb-2 shrink-0">
                         <TrendingUp className="w-4 h-4 text-purple-400" />
                         资金博弈分析
                     </h3>
-                    <div className="flex-1 min-h-[350px]">
-                        {activeStock && <SentimentTrend symbol={activeStock.symbol} date={selectedDate} />}
-                    </div>
+                    <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
                 </div>
             </div>
         </div>

@@ -99,3 +99,26 @@ def test_get_market_context_lunch_break_uses_today_without_realtime(monkeypatch)
     assert context["market_status"] == "lunch_break"
     assert context["default_display_date"] == "2026-03-11"
     assert context["should_use_realtime_path"] is False
+
+
+def test_get_market_context_after_midnight_uses_previous_trade_day_review(monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.core.http_client.MarketClock._now_china",
+        lambda: datetime(2026, 3, 19, 0, 30, tzinfo=CN_TZ),
+    )
+    monkeypatch.setattr(
+        "backend.app.core.http_client.TradeCalendar.is_trade_day",
+        lambda d: d == "2026-03-19",
+    )
+    monkeypatch.setattr(
+        "backend.app.core.http_client.TradeCalendar.get_last_trading_day",
+        lambda _base: "2026-03-18",
+    )
+
+    context = MarketClock.get_market_context()
+
+    assert context["market_status"] == "post_close"
+    assert context["market_status_label"] == "盘后复盘"
+    assert context["default_display_date"] == "2026-03-18"
+    assert context["default_display_scope"] == "previous_trade_day"
+    assert context["should_use_realtime_path"] is False
