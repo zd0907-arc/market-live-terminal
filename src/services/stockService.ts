@@ -7,6 +7,7 @@ import {
   HistoryTrendData,
   HistoryMultiframeGranularity,
   HistoryMultiframeItem,
+  IntradayFusionData,
   RealtimeDashboardData,
   SandboxPoolItem,
   SandboxReviewBar,
@@ -266,6 +267,22 @@ export const fetchRealtimeDashboard = async (symbol: string, date?: string): Pro
     return null;
   } catch (e) {
     console.error("Realtime dashboard fetch error:", e);
+    return null;
+  }
+};
+
+export const fetchIntradayFusion = async (symbol: string, date?: string): Promise<IntradayFusionData | null> => {
+  const url = `${API_BASE_URL}/realtime/intraday_fusion?symbol=${symbol}${date ? `&date=${date}` : ''}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const json = await response.json();
+    if (json.code === 200) {
+      return json.data;
+    }
+    return null;
+  } catch (e) {
+    console.error("Intraday fusion fetch error:", e);
     return null;
   }
 };

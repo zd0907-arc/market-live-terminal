@@ -39,6 +39,11 @@ def test_l2_history_schema_created_by_init_db(monkeypatch, tmp_path):
     assert "history_daily_l2" in tables
     assert "l2_daily_ingest_runs" in tables
     assert "l2_daily_ingest_failures" in tables
+    assert "total_volume" in history_5m_columns
+    assert "l2_add_buy_amount" in history_5m_columns
+    assert "l2_cancel_sell_amount" in history_5m_columns
+    assert "l2_cvd_delta" in history_5m_columns
+    assert "l2_oib_delta" in history_5m_columns
     assert "quality_info" in history_5m_columns
     assert "quality_info" in history_daily_columns
 

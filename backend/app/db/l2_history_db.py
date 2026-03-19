@@ -16,6 +16,7 @@ History5mRow = Tuple[
     float,  # low
     float,  # close
     float,  # total_amount
+    float,  # total_volume
     float,  # l1_main_buy
     float,  # l1_main_sell
     float,  # l1_super_buy
@@ -24,6 +25,12 @@ History5mRow = Tuple[
     float,  # l2_main_sell
     float,  # l2_super_buy
     float,  # l2_super_sell
+    Optional[float],  # l2_add_buy_amount
+    Optional[float],  # l2_add_sell_amount
+    Optional[float],  # l2_cancel_buy_amount
+    Optional[float],  # l2_cancel_sell_amount
+    Optional[float],  # l2_cvd_delta
+    Optional[float],  # l2_oib_delta
     Optional[str],  # quality_info
 ]
 
@@ -88,6 +95,7 @@ def ensure_l2_history_schema() -> None:
                 low REAL NOT NULL,
                 close REAL NOT NULL,
                 total_amount REAL NOT NULL,
+                total_volume REAL NULL,
                 l1_main_buy REAL NOT NULL,
                 l1_main_sell REAL NOT NULL,
                 l1_super_buy REAL NOT NULL,
@@ -96,6 +104,12 @@ def ensure_l2_history_schema() -> None:
                 l2_main_sell REAL NOT NULL,
                 l2_super_buy REAL NOT NULL,
                 l2_super_sell REAL NOT NULL,
+                l2_add_buy_amount REAL NULL,
+                l2_add_sell_amount REAL NULL,
+                l2_cancel_buy_amount REAL NULL,
+                l2_cancel_sell_amount REAL NULL,
+                l2_cvd_delta REAL NULL,
+                l2_oib_delta REAL NULL,
                 quality_info TEXT NULL,
                 PRIMARY KEY(symbol, datetime)
             );
@@ -165,6 +179,13 @@ def ensure_l2_history_schema() -> None:
             ON l2_daily_ingest_failures(run_id);
             """
         )
+        _ensure_column(conn, "history_5m_l2", "total_volume", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_add_buy_amount", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_add_sell_amount", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_cancel_buy_amount", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_cancel_sell_amount", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_cvd_delta", "REAL NULL")
+        _ensure_column(conn, "history_5m_l2", "l2_oib_delta", "REAL NULL")
         _ensure_column(conn, "history_5m_l2", "quality_info", "TEXT NULL")
         _ensure_column(conn, "history_daily_l2", "quality_info", "TEXT NULL")
         conn.commit()
@@ -182,19 +203,30 @@ def replace_history_5m_l2_rows(symbol: str, source_date: str, rows: Sequence[His
                 (symbol, source_date),
             )
             if rows:
-                normalized_rows = [
-                    tuple(row) if len(tuple(row)) >= 17 else tuple(list(row) + [None])
-                    for row in rows
-                ]
+                normalized_rows = []
+                for row in rows:
+                    normalized = list(tuple(row))
+                    if len(normalized) == 16:
+                        normalized = normalized[:8] + [None] + normalized[8:16] + [None, None, None, None, None, None, None]
+                    elif len(normalized) == 17:
+                        normalized = normalized[:8] + [None] + normalized[8:16] + [None, None, None, None, None, None, normalized[16]]
+                    elif len(normalized) == 18:
+                        normalized = normalized[:8] + [normalized[8]] + normalized[9:17] + [None, None, None, None, None, None, normalized[17]]
+                    elif len(normalized) < 24:
+                        normalized = normalized + [None] * (24 - len(normalized))
+                    normalized_rows.append(tuple(normalized[:24]))
                 conn.executemany(
                     """
                     INSERT INTO history_5m_l2 (
                         symbol, datetime, source_date,
-                        open, high, low, close, total_amount,
+                        open, high, low, close, total_amount, total_volume,
                         l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
                         l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell,
+                        l2_add_buy_amount, l2_add_sell_amount,
+                        l2_cancel_buy_amount, l2_cancel_sell_amount,
+                        l2_cvd_delta, l2_oib_delta,
                         quality_info
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     normalized_rows,
                 )
@@ -404,15 +436,22 @@ def _row_to_history_5m_dict(row: Sequence) -> Dict[str, object]:
         "low": float(row[5]),
         "close": float(row[6]),
         "total_amount": float(row[7]),
-        "l1_main_buy": float(row[8]),
-        "l1_main_sell": float(row[9]),
-        "l1_super_buy": float(row[10]),
-        "l1_super_sell": float(row[11]),
-        "l2_main_buy": float(row[12]),
-        "l2_main_sell": float(row[13]),
-        "l2_super_buy": float(row[14]),
-        "l2_super_sell": float(row[15]),
-        "quality_info": row[16],
+        "total_volume": _to_optional_float(row[8]),
+        "l1_main_buy": float(row[9]),
+        "l1_main_sell": float(row[10]),
+        "l1_super_buy": float(row[11]),
+        "l1_super_sell": float(row[12]),
+        "l2_main_buy": float(row[13]),
+        "l2_main_sell": float(row[14]),
+        "l2_super_buy": float(row[15]),
+        "l2_super_sell": float(row[16]),
+        "l2_add_buy_amount": _to_optional_float(row[17]),
+        "l2_add_sell_amount": _to_optional_float(row[18]),
+        "l2_cancel_buy_amount": _to_optional_float(row[19]),
+        "l2_cancel_sell_amount": _to_optional_float(row[20]),
+        "l2_cvd_delta": _to_optional_float(row[21]),
+        "l2_oib_delta": _to_optional_float(row[22]),
+        "quality_info": row[23],
     }
 
 
@@ -467,9 +506,12 @@ def query_l2_history_5m_rows(
             f"""
             SELECT
                 symbol, datetime, source_date,
-                open, high, low, close, total_amount,
+                open, high, low, close, total_amount, total_volume,
                 l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
                 l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell,
+                l2_add_buy_amount, l2_add_sell_amount,
+                l2_cancel_buy_amount, l2_cancel_sell_amount,
+                l2_cvd_delta, l2_oib_delta,
                 quality_info
             FROM history_5m_l2
             WHERE {' AND '.join(clauses)}
@@ -564,6 +606,7 @@ def aggregate_l2_history_5m_rows(
                 "low": None,
                 "close": None,
                 "total_amount": 0.0,
+                "total_volume": 0.0,
                 "l1_main_buy": 0.0,
                 "l1_main_sell": 0.0,
                 "l1_super_buy": 0.0,
@@ -572,11 +615,26 @@ def aggregate_l2_history_5m_rows(
                 "l2_main_sell": 0.0,
                 "l2_super_buy": 0.0,
                 "l2_super_sell": 0.0,
+                "l2_add_buy_amount": None,
+                "l2_add_sell_amount": None,
+                "l2_cancel_buy_amount": None,
+                "l2_cancel_sell_amount": None,
+                "l2_cvd_delta": None,
+                "l2_oib_delta": None,
                 "quality_info": None,
                 "is_placeholder": False,
                 "_quality_messages": [],
                 "_placeholder_count": 0,
                 "_numeric_count": 0,
+                "_extra_numeric_count": {
+                    "total_volume": 0,
+                    "l2_add_buy_amount": 0,
+                    "l2_add_sell_amount": 0,
+                    "l2_cancel_buy_amount": 0,
+                    "l2_cancel_sell_amount": 0,
+                    "l2_cvd_delta": 0,
+                    "l2_oib_delta": 0,
+                },
             }
             bucket_order.append(bucket_key)
         item = aggregated[bucket_key]
@@ -600,6 +658,9 @@ def aggregate_l2_history_5m_rows(
             item["low"] = low_value
             item["close"] = close_value
             item["total_amount"] = float(_to_optional_float(row.get("total_amount")) or 0.0)
+            total_volume_value = _to_optional_float(row.get("total_volume"))
+            item["total_volume"] = total_volume_value
+            item["_extra_numeric_count"]["total_volume"] = 1 if total_volume_value is not None else 0
             item["l1_main_buy"] = float(_to_optional_float(row.get("l1_main_buy")) or 0.0)
             item["l1_main_sell"] = float(_to_optional_float(row.get("l1_main_sell")) or 0.0)
             item["l1_super_buy"] = float(_to_optional_float(row.get("l1_super_buy")) or 0.0)
@@ -608,6 +669,17 @@ def aggregate_l2_history_5m_rows(
             item["l2_main_sell"] = float(_to_optional_float(row.get("l2_main_sell")) or 0.0)
             item["l2_super_buy"] = float(_to_optional_float(row.get("l2_super_buy")) or 0.0)
             item["l2_super_sell"] = float(_to_optional_float(row.get("l2_super_sell")) or 0.0)
+            for key in [
+                "l2_add_buy_amount",
+                "l2_add_sell_amount",
+                "l2_cancel_buy_amount",
+                "l2_cancel_sell_amount",
+                "l2_cvd_delta",
+                "l2_oib_delta",
+            ]:
+                value = _to_optional_float(row.get(key))
+                item[key] = value
+                item["_extra_numeric_count"][key] = 1 if value is not None else 0
             item["_numeric_count"] = 1
             continue
 
@@ -615,6 +687,10 @@ def aggregate_l2_history_5m_rows(
         item["low"] = min(float(item["low"]), low_value)
         item["close"] = close_value
         item["total_amount"] = float(item["total_amount"]) + float(_to_optional_float(row.get("total_amount")) or 0.0)
+        total_volume_value = _to_optional_float(row.get("total_volume"))
+        if total_volume_value is not None:
+            item["total_volume"] = float(item["total_volume"] or 0.0) + total_volume_value
+            item["_extra_numeric_count"]["total_volume"] = int(item["_extra_numeric_count"]["total_volume"]) + 1
         item["l1_main_buy"] = float(item["l1_main_buy"]) + float(_to_optional_float(row.get("l1_main_buy")) or 0.0)
         item["l1_main_sell"] = float(item["l1_main_sell"]) + float(_to_optional_float(row.get("l1_main_sell")) or 0.0)
         item["l1_super_buy"] = float(item["l1_super_buy"]) + float(_to_optional_float(row.get("l1_super_buy")) or 0.0)
@@ -623,6 +699,18 @@ def aggregate_l2_history_5m_rows(
         item["l2_main_sell"] = float(item["l2_main_sell"]) + float(_to_optional_float(row.get("l2_main_sell")) or 0.0)
         item["l2_super_buy"] = float(item["l2_super_buy"]) + float(_to_optional_float(row.get("l2_super_buy")) or 0.0)
         item["l2_super_sell"] = float(item["l2_super_sell"]) + float(_to_optional_float(row.get("l2_super_sell")) or 0.0)
+        for key in [
+            "l2_add_buy_amount",
+            "l2_add_sell_amount",
+            "l2_cancel_buy_amount",
+            "l2_cancel_sell_amount",
+            "l2_cvd_delta",
+            "l2_oib_delta",
+        ]:
+            value = _to_optional_float(row.get(key))
+            if value is not None:
+                item[key] = float(item[key] or 0.0) + value
+                item["_extra_numeric_count"][key] = int(item["_extra_numeric_count"][key]) + 1
         item["_numeric_count"] = int(item["_numeric_count"]) + 1
 
     result: List[Dict[str, object]] = []
@@ -630,6 +718,7 @@ def aggregate_l2_history_5m_rows(
         item = aggregated[key]
         numeric_count = int(item.pop("_numeric_count"))
         placeholder_count = int(item.pop("_placeholder_count"))
+        extra_numeric_count = dict(item.pop("_extra_numeric_count"))
         quality_messages = [msg for msg in item.pop("_quality_messages") if msg]
         unique_messages = list(dict.fromkeys(quality_messages))
         if placeholder_count > 0:
@@ -653,6 +742,7 @@ def aggregate_l2_history_5m_rows(
             item["low"] = None
             item["close"] = None
             item["total_amount"] = None
+            item["total_volume"] = None
             item["l1_main_buy"] = None
             item["l1_main_sell"] = None
             item["l1_super_buy"] = None
@@ -661,8 +751,17 @@ def aggregate_l2_history_5m_rows(
             item["l2_main_sell"] = None
             item["l2_super_buy"] = None
             item["l2_super_sell"] = None
+            item["l2_add_buy_amount"] = None
+            item["l2_add_sell_amount"] = None
+            item["l2_cancel_buy_amount"] = None
+            item["l2_cancel_sell_amount"] = None
+            item["l2_cvd_delta"] = None
+            item["l2_oib_delta"] = None
             item["is_placeholder"] = True
         else:
+            for field, count in extra_numeric_count.items():
+                if int(count) <= 0:
+                    item[field] = None
             item["is_placeholder"] = False
         result.append(item)
 

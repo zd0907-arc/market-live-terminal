@@ -96,6 +96,16 @@
 > - `net` 字段允许查询时按 `buy-sell` 派生，避免重复存储；
 > - `15m/30m/1h` 统一由本表聚合，不单独落库。
 > - `quality_info` 仅服务新版历史多维轻量质量提示；无问题时保持为空。
+>
+> **已落地（`CHG-20260319-01`）**：
+> - 为支持当日分时页 L1/L2 双轨重构，`history_5m_l2` 计划新增：
+>   - `total_volume`
+>   - `l2_add_buy_amount` / `l2_add_sell_amount`
+>   - `l2_cancel_buy_amount` / `l2_cancel_sell_amount`
+>   - `l2_cvd_delta`
+>   - `l2_oib_delta`
+> - 事件来源固定为 `逐笔成交 + 逐笔委托`；其中 `逐笔委托` v1 解释冻结为：`委托类型=0 => add`，`委托类型 in {1,U} => cancel-like`。
+> - 当前 schema/查询/回补脚本均已按该组字段完成落地。
 
 ### 6. `history_daily_l2`（生产正式 L2 历史日线底座）
 > **生产正式层**：服务历史日K资金博弈分析，并为后续 L1/L2 对比提供统一日线事实表。
@@ -158,6 +168,10 @@
 > - 当前只落 L1 preview，不伪造 L2；
 > - 写入方式为同一 `symbol+trade_date` 覆盖重写；
 > - 后续 `30m/1h` 统一由本表在“今日场景”下聚合。
+>
+> **已落地（`CHG-20260319-01`）**：
+> - 为支持前端统一计算当日 VWAP，`realtime_5m_preview` 计划补 `total_volume`；
+> - 盘中 `intraday_l1_only` 模式下，统一双轨接口允许继续返回 `l2_* / add_* / cancel_* / l2_cvd_delta / l2_oib_delta = null`，不得伪造零值当成真实 L2。
 
 ### 9. `realtime_daily_preview`（盘中日线预览层）
 > **盘中预览层**：服务新版“历史多维=日”在今日未结算场景下的 L1-only 日线。
@@ -281,6 +295,26 @@
 *   **`GET /api/realtime/dashboard?symbol=sh600519&date=YYYY-MM-DD`**: 分时仪表盘，`date` 缺省时自动使用 `MarketClock.get_display_date()`。
     - 路径规则：仅当 `query_date == 自然日当天` 且当天为交易日时，后端才走实时 ticks 聚合；若进入历史/回溯日期，则优先走 `history_1m` 静态回放；若该日 `history_1m` 缺失，则继续尝试 `history_5m_l2`；若仍缺失但 `trade_ticks` 已存在，则回退为该日 ticks 现场聚合。
     - 响应补充字段：`source`、`is_finalized`、`bucket_granularity`，供前端准确标记“实时 / 历史1m / 正式L2历史5m”。
+*   **`GET /api/realtime/intraday_fusion?symbol=sh600519&date=2026-03-18`** （`CHG-20260319-01`，已实现）:
+    - 描述：当日分时页统一双轨接口，正式服务 `主力动态 + 资金博弈分析`；
+    - 支持参数：`symbol`、`date`、`include_today_preview`；
+    - 顶层返回：`APIResponse.data={symbol,trade_date,mode,mode_label,bucket_granularity,is_l2_finalized,source,fallback_used,bars:[...]}`；
+    - `mode` 枚举固定为：
+      - `intraday_l1_only`
+      - `postclose_dual_track`
+      - `historical_dual_track`
+    - `bars[*]` 统一字段：
+      - 基础量价：`datetime/open/high/low/close/total_amount/total_volume`
+      - L1：`l1_main_buy/sell`, `l1_super_buy/sell`, `l1_net_inflow`
+      - L2：`l2_main_buy/sell`, `l2_super_buy/sell`, `l2_net_inflow`
+      - 订单事件：`add_buy_amount/add_sell_amount/cancel_buy_amount/cancel_sell_amount`
+      - 资金博弈：`l2_cvd_delta/l2_oib_delta`
+      - 元数据：`is_finalized/preview_level/source/fallback_used`
+    - 规则：
+      - 盘中 `intraday_l1_only` 只允许返回真实 L1；L2 与 add/cancel 字段不可用时必须返回 `null`，不得伪造零值；
+      - 当天盘后若 finalized L2 已到位，必须自动切 `postclose_dual_track`；
+      - 历史日期必须返回 `historical_dual_track`；
+      - 该接口上线后，旧 `/api/sentiment`、`/api/sentiment/history` 不再作为当日分时页正式主路径。
 *   **`POST /api/monitor/heartbeat?symbol=sh600519&mode=focus|warm`**:
     - 描述：登记实时页活跃心跳。
     - 规则：`mode` 仅允许 `focus/warm`；非法值按 `warm` 降级。
@@ -302,6 +336,7 @@
 > - 内部高速 ingest 接口继续使用 `INGEST_TOKEN`，且服务端不再提供默认 token。
 
 ### 2. 散户情绪类 (Retail Sentiment)
+> 说明：`/api/sentiment*` 保留给散户情绪/旧情绪链路使用；自 `CHG-20260319-01` 起，它们**不再是当日分时页资金博弈分析的正式主路径**。
 *   **`POST /api/sentiment/crawl/{symbol}`**: 触发云端无头请求，抓取股吧增量数据。返回 `{"code": 200, "data": {"new_count": 50}}`。
 *   **`GET /api/sentiment/dashboard/{symbol}`**: 返回情绪全息版。结构: `{"score": 8, "bull_bear_ratio": 2.5, "risk_warning": "高"}`
 *   **`POST /api/sentiment/summary/{symbol}`**: 召唤 LLM 生成摘要。

@@ -16,6 +16,7 @@ Realtime5mPreviewRow = Tuple[
     float, # low
     float, # close
     float, # total_amount
+    float, # total_volume
     float, # l1_main_buy
     float, # l1_main_sell
     float, # l1_super_buy
@@ -68,6 +69,7 @@ def ensure_realtime_preview_schema() -> None:
                 low REAL NOT NULL,
                 close REAL NOT NULL,
                 total_amount REAL NOT NULL,
+                total_volume REAL NULL,
                 l1_main_buy REAL NOT NULL,
                 l1_main_sell REAL NOT NULL,
                 l1_super_buy REAL NOT NULL,
@@ -103,6 +105,12 @@ def ensure_realtime_preview_schema() -> None:
             ON realtime_daily_preview(date);
             """
         )
+        columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(realtime_5m_preview)").fetchall()
+        }
+        if "total_volume" not in columns:
+            conn.execute("ALTER TABLE realtime_5m_preview ADD COLUMN total_volume REAL NULL")
         conn.commit()
     finally:
         conn.close()
@@ -127,10 +135,10 @@ def replace_realtime_5m_preview_rows(symbol: str, trade_date: str, rows: Sequenc
                     """
                     INSERT INTO realtime_5m_preview (
                         symbol, datetime, trade_date,
-                        open, high, low, close, total_amount,
+                        open, high, low, close, total_amount, total_volume,
                         l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
                         source, preview_level, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     rows,
                 )
@@ -214,7 +222,7 @@ def query_realtime_5m_preview_rows(
             f"""
             SELECT
                 symbol, datetime, trade_date,
-                open, high, low, close, total_amount,
+                open, high, low, close, total_amount, total_volume,
                 l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
                 source, preview_level, updated_at
             FROM realtime_5m_preview
@@ -311,6 +319,7 @@ def aggregate_realtime_5m_preview_rows(
                 "low": float(row["low"]),
                 "close": float(row["close"]),
                 "total_amount": float(row["total_amount"]),
+                "total_volume": float(row["total_volume"]) if row.get("total_volume") is not None else None,
                 "l1_main_buy": float(row["l1_main_buy"]),
                 "l1_main_sell": float(row["l1_main_sell"]),
                 "l1_super_buy": float(row["l1_super_buy"]),
@@ -327,6 +336,9 @@ def aggregate_realtime_5m_preview_rows(
         item["low"] = min(float(item["low"]), float(row["low"]))
         item["close"] = float(row["close"])
         item["total_amount"] = float(item["total_amount"]) + float(row["total_amount"])
+        row_total_volume = row.get("total_volume")
+        if row_total_volume is not None:
+            item["total_volume"] = float(item["total_volume"] or 0.0) + float(row_total_volume)
         item["l1_main_buy"] = float(item["l1_main_buy"]) + float(row["l1_main_buy"])
         item["l1_main_sell"] = float(item["l1_main_sell"]) + float(row["l1_main_sell"])
         item["l1_super_buy"] = float(item["l1_super_buy"]) + float(row["l1_super_buy"])

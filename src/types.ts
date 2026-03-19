@@ -90,6 +90,62 @@ export interface RealtimeDashboardData extends DashboardSourceMeta {
   latest_ticks: TickData[];
 }
 
+export type IntradayFusionMode =
+  | 'intraday_l1_only'
+  | 'postclose_dual_track'
+  | 'historical_dual_track';
+
+export interface IntradayFusionBar {
+  datetime: string;
+  trade_date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  total_amount: number | null;
+  total_volume: number | null;
+  l1_main_buy: number | null;
+  l1_main_sell: number | null;
+  l1_super_buy: number | null;
+  l1_super_sell: number | null;
+  l1_net_inflow: number | null;
+  l2_main_buy: number | null;
+  l2_main_sell: number | null;
+  l2_super_buy: number | null;
+  l2_super_sell: number | null;
+  l2_net_inflow: number | null;
+  add_buy_amount: number | null;
+  add_sell_amount: number | null;
+  cancel_buy_amount: number | null;
+  cancel_sell_amount: number | null;
+  l2_cvd_delta: number | null;
+  l2_oib_delta: number | null;
+  source?: string;
+  is_finalized?: boolean;
+  preview_level?: string | null;
+  fallback_used?: boolean;
+}
+
+export interface IntradayFusionData {
+  symbol: string;
+  trade_date: string;
+  mode: IntradayFusionMode;
+  mode_label: string;
+  bucket_granularity: string;
+  is_l2_finalized: boolean;
+  source: string;
+  fallback_used: boolean;
+  bars: IntradayFusionBar[];
+}
+
+export interface FundsBattleSignalTuning {
+  diffThreshold: number;
+  cancelThreshold: number;
+  vwapDistanceThreshold: number;
+  volatilityChannelRatio: number;
+  volumeResonanceRatio: number;
+}
+
 // 新增：历史分析数据结构
 export interface HistoryAnalysisData {
   date: string;

@@ -5,6 +5,62 @@
 
 ---
 
+## 2026-03-19 02:40 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已把资金博弈调参从“当前页面临时态”升级为“按股票 `symbol` 写入浏览器本地持久化”：同一只股票刷新后继续沿用上次参数，切换到其他股票则自动载入各自保存值；点击“恢复默认”会清除当前股票的本地覆盖值。
+- 风险: 当前持久化仅限浏览器本地 `localStorage`，不做跨设备同步；若未来需要把调参结果共享给别的终端或用户，仍需单独冻结后端配置口径。
+- 链接: `src/components/dashboard/FundsBattleSection.tsx`, `docs/changes/REQ-20260318-06-funds-battle-dual-track-and-signal-engine.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-19 02:32 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续补强资金博弈调参体验：5 个参数控件旁均新增 `!` 浮窗解释，并在面板内加入“老 finalized 样本缺 `total_volume` 时，VWAP 会退化为 close”的专项提示；对 `粤桂股份(sz000833) 2026-03-18` 本地样本已验证，若想先看到信号，优先把 `VWAP 偏离阈值` 调到 `0`，必要时再把 `吃/出 差值阈值` 下调到 `100万`。
+- 风险: 当前这类旧 finalized 样本缺少 `total_volume/cancel_*` 时，仍不适合拿来验证完整的 `诱空/诱多` 逻辑；页面只做了显式提示，没有伪造缺失因子。
+- 链接: `src/components/dashboard/FundsBattleSection.tsx`, `src/components/dashboard/fundsBattleUtils.ts`
+
+## 2026-03-19 02:18 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已为资金博弈模块落地首期前端调参 UI：页面内新增折叠式“高级设置”，开放 `diff/cancel/VWAP偏离/通道/共振` 五项参数，默认使用放宽后的联调值，并即时重算 L1/L2 的 `吃/出/诱空/诱多` 标签与计数；调参仅作用于当前页面会话，不写后端也不持久化。
+- 风险: 当前本地 `2026-03-18` 旧 finalized 样本仍缺完整 order-event 扩展因子，因此调参主要先改善差值类信号可见性；若要让 `诱空/诱多` 在老样本上完整恢复，仍需补历史字段级重算。
+- 链接: `src/components/dashboard/FundsBattleSection.tsx`, `src/components/dashboard/FundsBattleL1Panel.tsx`, `src/components/dashboard/FundsBattleL2Panel.tsx`, `src/components/dashboard/fundsBattleUtils.ts`, `docs/changes/REQ-20260318-06-funds-battle-dual-track-and-signal-engine.md`
+
+## 2026-03-19 01:35 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已把 `粤桂股份(sz000833)` 与 `利通电子(sh603629)` 的 `2026-03-18` finalized L2 样本从 production 同步到本地库用于联调；同时按你的反馈把当日分时页主力动态恢复为原 L1 上下双图样式，并将资金博弈恢复原 L1 模块后，在其下新增一块上下结构的 `L2 真实资金博弈` 面板。
+- 风险: 当前这两只票同步到本地的 `2026-03-18` finalized L2 仍属于旧版存量结果，只含 L2 买卖事实，不含 `add/cancel/l2_cvd_delta/l2_oib_delta` 扩展因子；因此 L2 面板可用于看对比曲线，但新信号引擎暂不能在这天完整发挥。
+- 链接: `src/components/dashboard/RealtimeView.tsx`, `src/components/dashboard/FundsBattleL2Panel.tsx`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-19 01:52 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续按 UI 反馈收口资金博弈：L1 不再复用旧分钟级 `SentimentTrend`，改为使用统一 `intraday_fusion` 的 5m L1 数据重绘原风格 CVD/OIB，并把原火球/盾牌替换为 L2 推导出的 `吃/出/诱空/诱多` 文字标签；L2 面板也补了同宽右侧摘要条，修正了 Y 轴负号可见性与高度压缩。
+- 风险: 盘后/复盘态已停止 30s 轮询，但当前停轮询判断仍基于前端交易时段推断；若后续要精确覆盖跨时段长开页场景，可再补“状态切换时自动重建轮询”的细化逻辑。
+- 链接: `src/components/dashboard/FundsBattleL1Panel.tsx`, `src/components/dashboard/FundsBattleL2Panel.tsx`, `src/components/dashboard/fundsBattleUtils.ts`, `src/components/dashboard/RealtimeView.tsx`
+
+## 2026-03-19 00:58 | Codex
+- Task ID: `CHG-20260319-02`
+- CAP: `CAP-MKT-TIME`
+- 结论: 已把交易日北京时间 `00:00 ~ 09:15` 的本地展示语义从“盘前未开盘”调整为“隔夜复盘”：后端 `MarketClock.get_market_context()` 现在返回 `market_status=post_close` 且默认展示上一交易日；前端本地 provisional 状态也同步改为复盘态，避免页面在 `2026-03-19 00:xx` 这类时点错误显示盘前心智。
+- 风险: 当前只是状态机与本地展示语义修正，不改变默认仍查看上一交易日这一事实；若后续要把凌晨也展示为“今天占位态”，需另开需求卡。
+- 链接: `backend/app/core/http_client.py`, `src/components/dashboard/RealtimeView.tsx`, `backend/tests/test_market_clock.py`, `docs/02_BUSINESS_DOMAIN.md`
+
+## 2026-03-19 01:05 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成当日分时页 L1/L2 双轨首轮实现：后端为 `history_5m_l2/realtime_5m_preview` 补齐 `total_volume + add/cancel + l2_cvd_delta + l2_oib_delta`，新增统一接口 `/api/realtime/intraday_fusion`；前端当日分时页已把 `主力动态 + 资金博弈分析` 改为 5m 单轨/双轨自适应，并用前端 VWAP + 极简文字标签替换旧 `SentimentTrend` 主链路。
+- 风险: 当前 `委托类型=U` 仍按 cancel-like v1 假设处理；信号阈值虽已预留常量但尚未开放 UI，复盘页也尚未复用统一双轨接口。
+- 链接: `backend/app/db/l2_history_db.py`, `backend/app/db/realtime_preview_db.py`, `backend/scripts/l2_daily_backfill.py`, `backend/app/routers/market.py`, `src/components/dashboard/IntradayDualTrackPanels.tsx`, `src/components/dashboard/RealtimeView.tsx`, `backend/tests/test_l2_daily_backfill.py`, `backend/tests/test_realtime_dashboard_router.py`
+
+## 2026-03-19 00:07 | Codex
+- Task ID: `CHG-20260319-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已按 STRICT 文档先行流程冻结“当日分时页 L1/L2 双轨重构”需求：新增 `STG-20260318-03` 母卡与 `REQ-20260318-03~06` 四张分期卡，并同步 core docs，明确范围覆盖 `主力动态 + 资金博弈分析`、统一 `5m`、盘后自动切双轨、`逐笔委托 0/1/U` 的 v1 事件解释，以及新正式主路径 `/api/realtime/intraday_fusion`。
+- 风险: 当前仍停留在文档阶段；`委托类型=U` 仍是 v1 假设，且调参 UI / 复盘页并库均后置到实现后续阶段。
+- 链接: `docs/changes/STG-20260318-03-intraday-l1-l2-dual-track-rebuild.md`, `docs/changes/REQ-20260318-03-order-event-factors-and-5m-contract.md`, `docs/changes/REQ-20260318-04-intraday-dual-track-api-and-mode-switch.md`, `docs/changes/REQ-20260318-05-monitor-mainflow-dual-track-ui.md`, `docs/changes/REQ-20260318-06-funds-battle-dual-track-and-signal-engine.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`
+
 ## 2026-03-18 22:15 | Codex
 - Task ID: `CHG-20260318-02`
 - CAP: `CAP-MKT-TIME`, `CAP-REALTIME-FLOW`

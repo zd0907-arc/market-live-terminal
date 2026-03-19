@@ -63,10 +63,12 @@ def test_refresh_realtime_preview_persists_5m_and_daily_rows(monkeypatch, tmp_pa
     assert result == {"rows_5m": 2, "rows_daily": 1}
     assert len(rows_5m) == 2
     assert rows_5m[0]["datetime"] == "2026-03-12 09:30:00"
+    assert rows_5m[0]["total_volume"] == 200.0
     assert rows_5m[0]["l1_main_buy"] == 250000.0
     assert rows_5m[0]["l1_main_sell"] == 1200000.0
     assert rows_5m[0]["l1_super_sell"] == 1200000.0
     assert rows_5m[1]["datetime"] == "2026-03-12 09:35:00"
+    assert rows_5m[1]["total_volume"] == 100.0
     assert rows_5m[1]["l1_main_buy"] == 400000.0
     assert rows_5m[1]["preview_level"] == "l1_only"
 
