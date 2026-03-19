@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp } from 'lucide-react';
 import { Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
 import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta, IntradayFusionData } from '../../types';
 import * as StockService from '../../services/stockService';
@@ -681,10 +680,6 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
             {/* Bottom Row: Sentiment (Full Width Now) */}
             <div>
                 <div className="min-w-0 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
-                    <h3 className="text-base font-bold text-white flex items-center gap-2 mb-2 shrink-0">
-                        <TrendingUp className="w-4 h-4 text-purple-400" />
-                        资金博弈分析
-                    </h3>
                     <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
                 </div>
             </div>
