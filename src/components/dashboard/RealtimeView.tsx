@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { TrendingUp } from 'lucide-react';
 import { Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
 import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta, IntradayFusionData } from '../../types';
 import * as StockService from '../../services/stockService';
@@ -9,6 +10,38 @@ interface RealtimeViewProps {
     isTradingHours: () => boolean;
     configVersion?: number;
     focusMode?: 'normal' | 'focus';
+}
+
+class PanelErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error: Error) {
+        console.error('Panel render failed:', error);
+    }
+
+    componentDidUpdate(prevProps: { children: React.ReactNode }) {
+        if (this.state.hasError && prevProps.children !== this.props.children) {
+            this.setState({ hasError: false });
+        }
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-sm text-amber-200">
+                    资金博弈分析模块渲染异常，已自动降级；刷新页面或切换股票后会重试。
+                </div>
+            );
+        }
+        return this.props.children;
+    }
 }
 
 const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion, focusMode = 'normal' }) => {
@@ -680,7 +713,9 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
             {/* Bottom Row: Sentiment (Full Width Now) */}
             <div>
                 <div className="min-w-0 bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative">
-                    <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
+                    <PanelErrorBoundary>
+                        <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
+                    </PanelErrorBoundary>
                 </div>
             </div>
         </div>

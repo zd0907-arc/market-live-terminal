@@ -3,6 +3,7 @@ from typing import List, Optional
 import asyncio
 import threading
 import time
+import logging
 from backend.app.models.schemas import TickData, VerifyResult, APIResponse
 from backend.app.services.market import fetch_live_ticks, fetch_tencent_snapshot
 from backend.app.db.crud import get_ticks_by_date, get_sentiment_history_aggregated
@@ -19,6 +20,7 @@ router = APIRouter()
 _STALE_HYDRATE_ATTEMPTS = {}
 _STALE_HYDRATE_LOCK = threading.Lock()
 _STALE_HYDRATE_COOLDOWN_SECONDS = 120
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value):
@@ -205,23 +207,64 @@ def _is_today_payload_stale(data, market_context: dict, query_date: str, natural
     return latest_time < floor_time
 
 
-def _mark_stale_hydrate_attempt(symbol: str, trade_date: str) -> bool:
+def _mark_stale_hydrate_attempt(symbol: str, trade_date: str, force: bool = False) -> bool:
     key = (str(symbol), str(trade_date))
     now_ts = time.time()
     with _STALE_HYDRATE_LOCK:
         last_ts = _STALE_HYDRATE_ATTEMPTS.get(key, 0.0)
-        if now_ts - last_ts < _STALE_HYDRATE_COOLDOWN_SECONDS:
+        if (not force) and now_ts - last_ts < _STALE_HYDRATE_COOLDOWN_SECONDS:
             return False
         _STALE_HYDRATE_ATTEMPTS[key] = now_ts
         return True
 
 
-async def _rehydrate_today_if_stale(symbol: str, query_date: str, natural_today: str, market_context: dict) -> bool:
+def _needs_postclose_forced_retry(market_context: dict) -> bool:
+    return str(market_context.get("market_status") or "") == "post_close"
+
+
+async def _rehydrate_today_if_stale(
+    symbol: str,
+    query_date: str,
+    natural_today: str,
+    market_context: dict,
+    *,
+    force: bool = False,
+    max_attempts: int = 1,
+) -> bool:
     if query_date != natural_today:
         return False
-    if not _mark_stale_hydrate_attempt(symbol, query_date):
+    if not _mark_stale_hydrate_attempt(symbol, query_date, force=force):
         return False
-    return await _hydrate_today_ticks_on_demand(symbol, query_date)
+
+    attempts = max(1, int(max_attempts))
+    for attempt in range(1, attempts + 1):
+        try:
+            hydrated = await _hydrate_today_ticks_on_demand(symbol, query_date)
+        except Exception as exc:
+            logger.warning(
+                "stale intraday rehydrate failed: symbol=%s date=%s attempt=%s/%s err=%s",
+                symbol,
+                query_date,
+                attempt,
+                attempts,
+                exc,
+            )
+            hydrated = False
+
+        if hydrated:
+            logger.info(
+                "stale intraday rehydrate success: symbol=%s date=%s attempt=%s/%s",
+                symbol,
+                query_date,
+                attempt,
+                attempts,
+            )
+            return True
+
+        if attempt < attempts:
+            await asyncio.sleep(1)
+
+    return False
 
 
 async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
@@ -350,7 +393,14 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
         from backend.app.services.analysis import calculate_realtime_aggregation, get_sentiment_fallback_dashboard
         data = calculate_realtime_aggregation(symbol, natural_today_str)
         if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
-            hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today_str, market_context)
+            hydrated = await _rehydrate_today_if_stale(
+                symbol,
+                query_date,
+                natural_today_str,
+                market_context,
+                force=_needs_postclose_forced_retry(market_context),
+                max_attempts=2 if _needs_postclose_forced_retry(market_context) else 1,
+            )
             if hydrated:
                 data = calculate_realtime_aggregation(symbol, natural_today_str)
         if not _has_dashboard_payload(data):
@@ -378,7 +428,14 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
             if _has_dashboard_payload(fallback):
                 data = fallback
             if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
-                hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today_str, market_context)
+                hydrated = await _rehydrate_today_if_stale(
+                    symbol,
+                    query_date,
+                    natural_today_str,
+                    market_context,
+                    force=_needs_postclose_forced_retry(market_context),
+                    max_attempts=2 if _needs_postclose_forced_retry(market_context) else 1,
+                )
                 if hydrated:
                     data = calculate_realtime_aggregation(symbol, query_date)
         if data is None:
@@ -472,7 +529,14 @@ async def get_intraday_fusion(symbol: str, date: str = Query(None), include_toda
         )
         preview_payload = {"bars": [_map_preview_fusion_bar(row) for row in preview_rows]}
         if include_today_preview and _is_today_payload_stale(preview_payload, market_context, query_date, natural_today):
-            hydrated = await _rehydrate_today_if_stale(symbol, query_date, natural_today, market_context)
+            hydrated = await _rehydrate_today_if_stale(
+                symbol,
+                query_date,
+                natural_today,
+                market_context,
+                force=_needs_postclose_forced_retry(market_context),
+                max_attempts=2 if _needs_postclose_forced_retry(market_context) else 1,
+            )
             if hydrated:
                 await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
                 preview_rows = await asyncio.to_thread(

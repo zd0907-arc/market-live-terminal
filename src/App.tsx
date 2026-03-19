@@ -12,6 +12,42 @@ const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/Hi
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 
+class ViewErrorBoundary extends React.Component<{ title: string; children: React.ReactNode }, { hasError: boolean; message: string }> {
+  constructor(props: { title: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      message: error?.message || 'Unknown render error',
+    };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(`[ViewErrorBoundary] ${this.props.title}`, error);
+  }
+
+  componentDidUpdate(prevProps: { title: string; children: React.ReactNode }) {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false, message: '' });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-900/20 border border-red-800 rounded-xl p-4 text-sm text-red-200">
+          <div className="font-semibold">{this.props.title} 渲染失败</div>
+          <div className="mt-1 text-xs text-red-300/90 break-all">{this.state.message}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const App: React.FC = () => {
   const isSandboxRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/sandbox-review');
   if (isSandboxRoute) {
@@ -566,65 +602,77 @@ const App: React.FC = () => {
 
         {/* Content Views */}
         {activeStock && pageVersion === 'legacy' && legacyViewMode === 'intraday_live' && (
-          <Suspense fallback={sectionLoading}>
-            <RealtimeView
-              activeStock={activeStock}
-              isTradingHours={isTradingHours}
-              configVersion={configVersion}
-              focusMode={focusMode}
-            />
-          </Suspense>
+          <ViewErrorBoundary title="当日分时">
+            <Suspense fallback={sectionLoading}>
+              <RealtimeView
+                activeStock={activeStock}
+                isTradingHours={isTradingHours}
+                configVersion={configVersion}
+                focusMode={focusMode}
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
         {quote && pageVersion === 'legacy' && legacyViewMode === 'intraday_30m' && (
-          <Suspense fallback={sectionLoading}>
-            <HistoryView
-              activeStock={activeStock}
-              backendStatus={backendStatus}
-              configVersion={configVersion}
-              forceViewMode="intraday"
-            />
-          </Suspense>
+          <ViewErrorBoundary title="30分钟线">
+            <Suspense fallback={sectionLoading}>
+              <HistoryView
+                activeStock={activeStock}
+                backendStatus={backendStatus}
+                configVersion={configVersion}
+                forceViewMode="intraday"
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
         {quote && pageVersion === 'legacy' && legacyViewMode === 'daily' && (
-          <Suspense fallback={sectionLoading}>
-            <HistoryView
-              activeStock={activeStock}
-              backendStatus={backendStatus}
-              configVersion={configVersion}
-              forceViewMode="daily"
-            />
-          </Suspense>
+          <ViewErrorBoundary title="日线">
+            <Suspense fallback={sectionLoading}>
+              <HistoryView
+                activeStock={activeStock}
+                backendStatus={backendStatus}
+                configVersion={configVersion}
+                forceViewMode="daily"
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
         {activeStock && pageVersion === 'fusion_v1' && fusionSection === 'intraday_live' && (
-          <Suspense fallback={sectionLoading}>
-            <RealtimeView
-              activeStock={activeStock}
-              isTradingHours={isTradingHours}
-              configVersion={configVersion}
-              focusMode={focusMode}
-            />
-          </Suspense>
+          <ViewErrorBoundary title="当日分时">
+            <Suspense fallback={sectionLoading}>
+              <RealtimeView
+                activeStock={activeStock}
+                isTradingHours={isTradingHours}
+                configVersion={configVersion}
+                focusMode={focusMode}
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
         {quote && pageVersion === 'fusion_v1' && fusionSection === 'history_multiframe' && (
-          <Suspense fallback={sectionLoading}>
-            <HistoryMultiframeFusionView
-              activeStock={activeStock}
-              backendStatus={backendStatus}
-              granularity={fusionGranularity}
-              onGranularityChange={setFusionGranularity}
-            />
-          </Suspense>
+          <ViewErrorBoundary title="历史多维">
+            <Suspense fallback={sectionLoading}>
+              <HistoryMultiframeFusionView
+                activeStock={activeStock}
+                backendStatus={backendStatus}
+                granularity={fusionGranularity}
+                onGranularityChange={setFusionGranularity}
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
         {/* Retail Sentiment Dashboard (Moved to Bottom) */}
         {activeStock && (
-          <Suspense fallback={sectionLoading}>
-            <SentimentDashboard symbol={activeStock.code} />
-          </Suspense>
+          <ViewErrorBoundary title="散户情绪仪表盘">
+            <Suspense fallback={sectionLoading}>
+              <SentimentDashboard symbol={activeStock.code} />
+            </Suspense>
+          </ViewErrorBoundary>
         )}
 
       </main>

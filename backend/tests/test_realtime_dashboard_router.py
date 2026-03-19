@@ -1,6 +1,7 @@
 import asyncio
 
 from backend.app.routers.market import get_intraday_fusion, get_realtime_dashboard
+import backend.app.routers.market as market_router
 
 
 def test_realtime_dashboard_prefers_history_on_weekend_backfill(monkeypatch):
@@ -534,7 +535,7 @@ def test_realtime_dashboard_rehydrates_stale_today_payload_during_trading(monkey
     rehydrate_called = {"count": 0}
     aggregation_calls = {"count": 0}
 
-    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context, **kwargs):
         rehydrate_called["count"] += 1
         return True
 
@@ -578,7 +579,7 @@ def test_realtime_dashboard_rehydrates_stale_today_review_payload_during_lunch_b
     rehydrate_called = {"count": 0}
     aggregation_calls = {"count": 0}
 
-    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context, **kwargs):
         rehydrate_called["count"] += 1
         return True
 
@@ -632,7 +633,7 @@ def test_intraday_fusion_rehydrates_stale_today_preview(monkeypatch):
     query_calls = {"count": 0}
     rehydrate_called = {"count": 0}
 
-    async def fake_rehydrate(symbol, query_date, natural_today, market_context):
+    async def fake_rehydrate(symbol, query_date, natural_today, market_context, **kwargs):
         rehydrate_called["count"] += 1
         return True
 
@@ -689,3 +690,63 @@ def test_intraday_fusion_rehydrates_stale_today_preview(monkeypatch):
     assert resp.data["bars"][-1]["datetime"] == "2026-03-19 10:05:00"
     assert rehydrate_called["count"] == 1
     assert query_calls["count"] == 2
+
+
+def test_rehydrate_today_if_stale_postclose_force_bypasses_cooldown(monkeypatch):
+    mark_calls = {"count": 0}
+    hydrate_calls = {"count": 0}
+
+    def fake_mark(symbol, trade_date, force=False):
+        mark_calls["count"] += 1
+        assert symbol == "sz000759"
+        assert trade_date == "2026-03-19"
+        assert force is True
+        return True
+
+    async def fake_hydrate(symbol, date_str):
+        hydrate_calls["count"] += 1
+        return True
+
+    monkeypatch.setattr("backend.app.routers.market._mark_stale_hydrate_attempt", fake_mark)
+    monkeypatch.setattr("backend.app.routers.market._hydrate_today_ticks_on_demand", fake_hydrate)
+
+    result = asyncio.run(
+        market_router._rehydrate_today_if_stale(
+            "sz000759",
+            "2026-03-19",
+            "2026-03-19",
+            {"market_status": "post_close"},
+            force=True,
+            max_attempts=2,
+        )
+    )
+
+    assert result is True
+    assert mark_calls["count"] == 1
+    assert hydrate_calls["count"] == 1
+
+
+def test_rehydrate_today_if_stale_postclose_retries_twice(monkeypatch):
+    hydrate_calls = {"count": 0}
+
+    monkeypatch.setattr("backend.app.routers.market._mark_stale_hydrate_attempt", lambda symbol, trade_date, force=False: True)
+
+    async def fake_hydrate(symbol, date_str):
+        hydrate_calls["count"] += 1
+        return hydrate_calls["count"] >= 2
+
+    monkeypatch.setattr("backend.app.routers.market._hydrate_today_ticks_on_demand", fake_hydrate)
+
+    result = asyncio.run(
+        market_router._rehydrate_today_if_stale(
+            "sz000759",
+            "2026-03-19",
+            "2026-03-19",
+            {"market_status": "post_close"},
+            force=True,
+            max_attempts=2,
+        )
+    )
+
+    assert result is True
+    assert hydrate_calls["count"] == 2

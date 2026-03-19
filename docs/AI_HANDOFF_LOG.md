@@ -580,3 +580,10 @@
 - 结论: 已修复“当日分时今日已有部分数据但已陈旧时，页面继续复用旧数据而不补拉”的链路缺口：`/api/realtime/dashboard` 与 `/api/realtime/intraday_fusion` 现在会在盘中/午休/盘后对今日陈旧 payload 做节流补拉，避免个别股票因为 Windows 逐笔超时而长期停在 `09:31` 之类旧时间点。
 - 风险: 当前 Windows `live_crawler_win.py` 仍可能出现 AkShare 逐笔超时，热修只能保证“页面打开时尝试自救”，不能替代 Windows 采集稳态化本身。
 - 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`
+
+## 2026-03-19 14:55 | 前后端 AI
+- Task ID: `CHG-20260319-03`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已继续收口当日分时稳定性与资金博弈 UI：资金博弈调参入口已收回标题栏右侧，盘中无 finalized L2 时不再留空白 L2 面板；同时对“盘后仍陈旧”的 today payload 增补了强制二次补拉与重算，避免盘中失败冷却直接延续到收盘后。
+- 风险: 云端盘后自愈虽已增强，但根因仍是 Windows / AkShare 个股逐笔超时；若上游持续不可用，最终仍可能需要云端或 Windows 侧再做抓取源 fallback。
+- 链接: `src/components/dashboard/FundsBattleSection.tsx`, `src/components/dashboard/RealtimeView.tsx`, `src/App.tsx`, `src/index.tsx`, `backend/app/routers/market.py`
