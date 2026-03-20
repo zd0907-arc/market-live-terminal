@@ -77,6 +77,17 @@ def get_ticks_by_date(symbol: str, date_str: str):
     conn.close()
     return rows
 
+def get_latest_tick_time(symbol: str, date_str: str):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT MAX(time) FROM trade_ticks WHERE symbol=? AND date=?",
+        (symbol, date_str),
+    )
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row and row[0] else None
+
 def get_ticks_for_aggregation(symbol: str, date: str):
     conn = get_db_connection()
     c = conn.cursor()

@@ -142,6 +142,7 @@
 - 实时页心跳已升级为 `focus/warm` 分层；Windows crawler 按 `focus=5秒 tick / warm=30秒 tick / watchlist=15分钟兜底` 执行。
 - 前端实时页改为二态盯盘按钮，并在轮询时保留旧数据，避免“闪空白”。
 - 当用户查看“今天”的分时但本地尚无该股票数据时，后端允许按需抓取 full-day ticks 并写回本地，再补 `history_1m` 聚合，避免盘后查看新股票时一直空白。
+- 当 today payload 已存在但个别股票停在 `14:45` / `14:50` 等陈旧时间点时，后端仍保留“页面访问触发的 stale rehydrate”；同时从 `2026-03-20` 起，云端 scheduler 会在交易日盘后 `15:02 / 15:07 / 15:12 / 15:17` 主动扫描自选股，若最新 tick 时间 `< 14:55:00`，则自动补抓、覆盖写回并刷新 `history_1m + realtime_5m_preview`。
 
 4. **验收案例（Given / When / Then）**
 - **正常**：Given `2026-03-09 10:30` 且 watchlist 已采集，When 请求 `/api/realtime/dashboard?symbol=sz000833`，Then `chart_data` 非空且 `latest_ticks` 至少 1 条。
@@ -162,6 +163,7 @@
 - `CHG-20260310-01`：修复生产当日分时无数据（Windows 依赖缺失 + ingest 目标地址错误），恢复持续上报与实时分时展示。
 - `CHG-20260312-02`：盯盘三态收敛为二态（5s/30s），实时页改为静默刷新，并将 heartbeat / crawler 升级为 `focus/warm` 分层抓取。
 - `CHG-20260318-02`：新增“交易日当天但盘后查看新股票”按需补抓与聚合逻辑，并把实时页状态展示改为以后端权威状态为准。
+- `CHG-20260320-01`：新增盘后主动自愈扫盘，不再只依赖用户打开页面时才触发 today stale rehydrate。
 
 ---
 

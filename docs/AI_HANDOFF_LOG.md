@@ -587,3 +587,10 @@
 - 结论: 已继续收口当日分时稳定性与资金博弈 UI：资金博弈调参入口已收回标题栏右侧，盘中无 finalized L2 时不再留空白 L2 面板；同时对“盘后仍陈旧”的 today payload 增补了强制二次补拉与重算，避免盘中失败冷却直接延续到收盘后。
 - 风险: 云端盘后自愈虽已增强，但根因仍是 Windows / AkShare 个股逐笔超时；若上游持续不可用，最终仍可能需要云端或 Windows 侧再做抓取源 fallback。
 - 链接: `src/components/dashboard/FundsBattleSection.tsx`, `src/components/dashboard/RealtimeView.tsx`, `src/App.tsx`, `src/index.tsx`, `backend/app/routers/market.py`
+
+## 2026-03-20 09:10 | 发布 AI
+- Task ID: `CHG-20260320-01`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已完成 `v4.2.27` 发布准备与归档；针对个别股票当日分时停在 `14:45/14:50` 的问题，新增云端盘后主动自愈扫盘，固定在交易日 `15:02 / 15:07 / 15:12 / 15:17` 自动扫描自选股，若 today ticks 最新时间 `< 14:55:00` 则补抓、覆盖写回并刷新 `history_1m + realtime_5m_preview`，不再只依赖“打开页面时才自救”。
+- 风险: 当前主动自愈仍调用 AkShare 单源 `fetch_live_ticks`；若上游源持续超时，盘后扫盘仍可能失败，后续需考虑多源 fallback 与更强告警。
+- 链接: `backend/app/scheduler.py`, `backend/app/db/crud.py`, `backend/tests/test_scheduler_postclose_self_heal.py`, `docs/archive/changes/ARC-CHG-20260320-postclose-stale-self-heal-release.md`
