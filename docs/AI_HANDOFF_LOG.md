@@ -702,3 +702,10 @@
 - 结论: 已补齐首页/复盘页切换时的当前股票透传：两页都会把当前股票写入 URL `?symbol=`，互相跳转时自动带过去，刷新页面也能回到同一只股票。
 - 风险: 首页初次用 URL symbol 引导时会优先尝试拉一次 quote 反查名称；若外部行情源瞬时失败，仍会回退到 symbol 占位后再由后续 quote 刷新纠正。
 - 链接: `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-22 00:30 | 发布 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 本轮“复盘页操作栏/共享壳层/股票透传”改动已随 `v4.2.30` 发版，`main` 发布提交为 `a281275`，生产部署完成；云端健康检查 `GET /api/health` 返回 `ok`。
+- 风险: 当前发布只完成本轮已冻结范围；如后续还需继续统一首页与复盘页的非头部操作区，建议另起新卡继续收口，避免把后续视觉微调继续叠加到本卡。
+- 链接: `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`, `package.json`, `src/version.ts`, `backend/app/main.py`
