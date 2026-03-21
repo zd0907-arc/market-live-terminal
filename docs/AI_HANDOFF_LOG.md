@@ -709,3 +709,10 @@
 - 结论: 本轮“复盘页操作栏/共享壳层/股票透传”改动已随 `v4.2.30` 发版，`main` 发布提交为 `a281275`，生产部署完成；云端健康检查 `GET /api/health` 返回 `ok`。
 - 风险: 当前发布只完成本轮已冻结范围；如后续还需继续统一首页与复盘页的非头部操作区，建议另起新卡继续收口，避免把后续视觉微调继续叠加到本卡。
 - 链接: `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`, `package.json`, `src/version.ts`, `backend/app/main.py`
+
+## 2026-03-22 00:40 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已修复首页/复盘页来回切换时搜索历史丢失：首页在 URL `?symbol=` 初始化选股时，改为使用函数式历史更新，避免先于 `localStorage` 回填时用空历史覆盖已有最近记录。
+- 风险: 当前最近搜索仍为首页与复盘页共用同一个 `localStorage` key；这是符合预期的统一体验，但若未来要做页面级隔离历史，需要再拆 key 并补迁移逻辑。
+- 链接: `src/App.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`

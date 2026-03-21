@@ -221,9 +221,11 @@ const App: React.FC = () => {
     });
 
     // Update History
-    const newHistory = [stock, ...searchHistory.filter(s => s.symbol !== stock.symbol)].slice(0, 10);
-    setSearchHistory(newHistory);
-    localStorage.setItem('stock_search_history', JSON.stringify(newHistory));
+    setSearchHistory((prev) => {
+      const newHistory = [stock, ...prev.filter((s) => s.symbol !== stock.symbol)].slice(0, 10);
+      localStorage.setItem('stock_search_history', JSON.stringify(newHistory));
+      return newHistory;
+    });
   };
 
   const toggleWatchlist = async () => {
