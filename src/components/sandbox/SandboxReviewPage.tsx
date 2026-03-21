@@ -1,13 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts';
 import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { Calendar, RefreshCw, Target } from 'lucide-react';
 
-import { ReviewPoolItem, ReviewBar } from '../../types';
+import { RealTimeQuote, ReviewPoolItem, ReviewBar, SearchResult } from '../../types';
 import * as StockService from '../../services/stockService';
+import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
+import ThresholdConfig from '../dashboard/ThresholdConfig';
+import MarketTopHeader from '../common/MarketTopHeader';
+import QuoteMetaRow from '../common/QuoteMetaRow';
+import { isCurrentCnTradingSession } from '../../utils/marketTime';
 
 echarts.use([
   BarChart,
@@ -22,26 +27,27 @@ echarts.use([
 ]);
 
 type Granularity = '5m' | '15m' | '30m' | '60m' | '1d';
-type GranularityMode = 'auto' | Granularity;
-type WindowPreset = '1d' | '3d' | '5d' | '20d' | '60d' | 'all';
+type GranularityMode = Granularity;
+type RangeShortcut = '10d' | '30d' | '60d' | '90d' | '180d' | 'all';
 
 const DEFAULT_SYMBOL = 'sh603629';
 const DEFAULT_START = '';
 const DEFAULT_END = '';
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_VISIBLE_POINTS = 240;
+const RECENT_RANGE_DAYS = 90;
+const SEARCH_DEBOUNCE_MS = 300;
+const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
-const PRESET_OPTIONS: Array<{ key: WindowPreset; label: string; days: number | null }> = [
-  { key: '1d', label: '1日', days: 1 },
-  { key: '3d', label: '3日', days: 3 },
-  { key: '5d', label: '5日', days: 5 },
-  { key: '20d', label: '20日', days: 20 },
-  { key: '60d', label: '60日', days: 60 },
+const RANGE_SHORTCUT_OPTIONS: Array<{ key: RangeShortcut; label: string; days: number | null }> = [
+  { key: '10d', label: '10天', days: 10 },
+  { key: '30d', label: '30天', days: 30 },
+  { key: '60d', label: '60天', days: 60 },
+  { key: '90d', label: '90天', days: 90 },
+  { key: '180d', label: '180天', days: 180 },
   { key: 'all', label: '全部', days: null },
 ];
 
 const GRANULARITY_OPTIONS: Array<{ key: GranularityMode; label: string }> = [
-  { key: 'auto', label: '自动' },
   { key: '5m', label: '5m' },
   { key: '15m', label: '15m' },
   { key: '30m', label: '30m' },
@@ -56,12 +62,16 @@ const GRANULARITY_MINUTES: Record<Exclude<Granularity, '1d'>, number> = {
   '60m': 60,
 };
 
-const GRANULARITY_ORDER: Granularity[] = ['5m', '15m', '30m', '60m', '1d'];
-
-const nextGranularity = (value: Granularity): Granularity => {
-  const index = GRANULARITY_ORDER.indexOf(value);
-  if (index < 0 || index >= GRANULARITY_ORDER.length - 1) return '1d';
-  return GRANULARITY_ORDER[index + 1];
+const REVIEW_COLORS = {
+  mainL2Buy: '#D32F2F',
+  mainL1Buy: '#EF9A9A',
+  mainL2Sell: '#388E3C',
+  mainL1Sell: '#81C784',
+  superL2Buy: '#7B1FA2',
+  superL1Buy: '#BA68C8',
+  superL2Sell: '#00796B',
+  superL1Sell: '#4DB6AC',
+  closeLine: '#FBBF24',
 };
 
 const parseLocalDateTime = (datetimeText: string): Date => {
@@ -216,17 +226,6 @@ const aggregateRows = (rows: ReviewBar[], granularity: Granularity): ReviewBar[]
     .map((acc) => toBar(acc, formatLocalDateTime(new Date(acc.ts)), granularity));
 };
 
-const calcRangeByDays = (rows: ReviewBar[], days: number | null): [number, number] => {
-  if (!rows.length || days === null) return [0, 100];
-
-  const timestamps = rows.map((row) => parseLocalDateTime(row.datetime).getTime());
-  const endTs = timestamps[timestamps.length - 1];
-  const startTs = endTs - days * DAY_MS;
-  const startIdx = Math.max(0, timestamps.findIndex((ts) => ts >= startTs));
-  const denominator = Math.max(1, timestamps.length - 1);
-  return [(startIdx / denominator) * 100, 100];
-};
-
 const calcVisibleDays = (rows: ReviewBar[], zoomRange: [number, number]): number => {
   if (rows.length <= 1) return 0;
 
@@ -238,10 +237,19 @@ const calcVisibleDays = (rows: ReviewBar[], zoomRange: [number, number]): number
   return Math.max(0, (end - start) / DAY_MS);
 };
 
-const chooseGranularityByDays = (visibleDays: number): Granularity => {
-  if (visibleDays <= 1) return '5m';
-  if (visibleDays <= 5) return '15m';
-  if (visibleDays <= 20) return '60m';
+const calcRangeDaysInclusive = (startDate: string, endDate: string): number => {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  if (!start || !end) return 0;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1);
+};
+
+const chooseGranularityForDateRange = (startDate: string, endDate: string): Granularity => {
+  const days = calcRangeDaysInclusive(startDate, endDate);
+  if (days <= 1) return '5m';
+  if (days <= 5) return '15m';
+  if (days <= 20) return '30m';
+  if (days <= 30) return '60m';
   return '1d';
 };
 
@@ -277,6 +285,11 @@ const formatPercentAxis = (value: number): string => {
   return `${Math.round(value)}%`;
 };
 
+const formatMarketCapYi = (marketCap?: number): string | null => {
+  if (!Number.isFinite(marketCap) || (marketCap || 0) <= 0) return null;
+  return `${trimTrailingZeros(((marketCap || 0) / 100000000).toFixed(2))}亿`;
+};
+
 const isDateInReviewWindow = (
   startDate: string,
   endDate: string,
@@ -289,21 +302,10 @@ const isDateInReviewWindow = (
   return true;
 };
 
-const formatMarketCapYi = (marketCap: number): string => {
-  if (!Number.isFinite(marketCap) || marketCap <= 0) return '--';
-  return `${trimTrailingZeros((marketCap / 100000000).toFixed(2))}亿`;
-};
-
 const calcRatioPercent = (numerator: number, denominator: number): number | null => {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
   return (numerator / denominator) * 100;
 };
-
-const splitSignedSeries = (values: number[]): { positive: number[]; negative: number[] } => ({
-  // Use zero fill instead of null to keep area charts continuously visible.
-  positive: values.map((value) => (value > 0 ? value : 0)),
-  negative: values.map((value) => (value < 0 ? value : 0)),
-});
 
 const splitSignedSeriesNullable = (
   values: Array<number | null>
@@ -312,26 +314,79 @@ const splitSignedSeriesNullable = (
   negative: values.map((value) => (value === null ? null : value < 0 ? value : 0)),
 });
 
+const parseDateOnly = (dateText: string): Date | null => {
+  if (!dateText) return null;
+  const [year, month, day] = dateText.split('-').map((value) => parseInt(value, 10));
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+
+const formatDateOnly = (date: Date): string => {
+  const pad = (value: number) => `${value}`.padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const minusDays = (dateText: string, days: number): string => {
+  const date = parseDateOnly(dateText);
+  if (!date) return dateText;
+  date.setDate(date.getDate() - days);
+  return formatDateOnly(date);
+};
+
+const buildRecentRange = (maxDate: string, minDate?: string, days = RECENT_RANGE_DAYS) => {
+  const endDate = maxDate;
+  const shiftedStart = minusDays(endDate, Math.max(0, days - 1));
+  const startDate = minDate && shiftedStart < minDate ? minDate : shiftedStart;
+  return { startDate, endDate };
+};
+
+const normalizeSymbolText = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return VALID_SYMBOL_RE.test(normalized) ? normalized : '';
+};
+
+const getInitialReviewSymbol = (): string => {
+  if (typeof window === 'undefined') return DEFAULT_SYMBOL;
+  const value = new URLSearchParams(window.location.search).get('symbol') || '';
+  return normalizeSymbolText(value) || DEFAULT_SYMBOL;
+};
+
+const buildStockDisplayName = (symbol: string, name?: string) => {
+  if (name && name.trim()) return name.trim();
+  return symbol;
+};
+
 const SandboxReviewPage: React.FC = () => {
   const [poolItems, setPoolItems] = useState<ReviewPoolItem[]>([]);
-  const [poolTotal, setPoolTotal] = useState(0);
-  const [poolAsOfDate, setPoolAsOfDate] = useState('');
   const [poolLatestDate, setPoolLatestDate] = useState('');
-  const [symbolInput, setSymbolInput] = useState(DEFAULT_SYMBOL);
+  const [symbolInput, setSymbolInput] = useState(() => getInitialReviewSymbol());
+  const [searchQuery, setSearchQuery] = useState(DEFAULT_SYMBOL);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<SearchResult[]>([]);
+  const [isSearchDirty, setIsSearchDirty] = useState(false);
+  const [selectedSearchStock, setSelectedSearchStock] = useState<SearchResult | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<RealTimeQuote | null>(null);
+  const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
   const [startDateInput, setStartDateInput] = useState(DEFAULT_START);
   const [endDateInput, setEndDateInput] = useState(DEFAULT_END);
-  const [querySymbol, setQuerySymbol] = useState(DEFAULT_SYMBOL);
-  const [queryStartDate, setQueryStartDate] = useState(DEFAULT_START);
-  const [queryEndDate, setQueryEndDate] = useState(DEFAULT_END);
+  const [isRangePickerOpen, setIsRangePickerOpen] = useState(false);
+  const [draftStartDate, setDraftStartDate] = useState(DEFAULT_START);
+  const [draftEndDate, setDraftEndDate] = useState(DEFAULT_END);
+  const [activeRangeShortcut, setActiveRangeShortcut] = useState<RangeShortcut>('90d');
   const [rawData, setRawData] = useState<ReviewBar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [emptyMessage, setEmptyMessage] = useState('');
-  const [activePreset, setActivePreset] = useState<WindowPreset>('20d');
   const [zoomRange, setZoomRange] = useState<[number, number]>([0, 100]);
-  const [granularityMode, setGranularityMode] = useState<GranularityMode>('auto');
+  const [granularityMode, setGranularityMode] = useState<GranularityMode>('60m');
+  const [isWatchlisted, setIsWatchlisted] = useState(false);
+  const [backendStatus, setBackendStatus] = useState(false);
+  const [focusMode, setFocusMode] = useState<'normal' | 'focus'>('normal');
   const [anchorModeEnabled, setAnchorModeEnabled] = useState(false);
   const [anchorTs, setAnchorTs] = useState<number | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
+  const rangePickerRef = useRef<HTMLDivElement | null>(null);
 
   const fetchData = useCallback(async (symbol: string, startDate: string, endDate: string) => {
     setLoading(true);
@@ -341,19 +396,14 @@ const SandboxReviewPage: React.FC = () => {
       const rows = await StockService.fetchReviewData(symbol, startDate, endDate, '5m');
       if (!rows.length) {
         setRawData([]);
-        setActivePreset('20d');
         setZoomRange([0, 100]);
-        setEmptyMessage(`接口返回空数据：${symbol} ${startDate} ~ ${endDate}`);
+        setEmptyMessage(`正式复盘暂未覆盖 ${symbol} 在 ${startDate} ~ ${endDate} 的数据。`);
         return;
       }
 
       const sortedRows = normalizeRows(rows);
       setRawData(sortedRows);
-      setActivePreset('20d');
-      setZoomRange(calcRangeByDays(sortedRows, 20));
-      setQuerySymbol(symbol);
-      setQueryStartDate(startDate);
-      setQueryEndDate(endDate);
+      setZoomRange([0, 100]);
     } catch (err: any) {
       setRawData([]);
       setError(err?.message || '查询失败，请检查正式复盘接口与生产历史库。');
@@ -362,20 +412,84 @@ const SandboxReviewPage: React.FC = () => {
     }
   }, []);
 
+  const resolveDefaultRange = useCallback(
+    (symbol: string) => {
+      const matched = poolItems.find((item) => item.symbol === symbol);
+      if (matched) return buildRecentRange(matched.max_date, matched.min_date, RECENT_RANGE_DAYS);
+      const fallbackEnd = poolLatestDate || formatDateOnly(new Date());
+      return buildRecentRange(fallbackEnd, undefined, RECENT_RANGE_DAYS);
+    },
+    [poolItems, poolLatestDate]
+  );
+
+  const applySelectedStock = useCallback(
+    async (stock: Pick<SearchResult, 'symbol' | 'name' | 'code' | 'market'> | { symbol: string; name?: string }) => {
+      const normalizedSymbol = stock.symbol.trim().toLowerCase();
+      if (!normalizedSymbol) return;
+      const matched = poolItems.find((item) => item.symbol === normalizedSymbol);
+      const displayName = stock.name || matched?.name || '';
+      const range = matched
+        ? buildRecentRange(matched.max_date, matched.min_date, RECENT_RANGE_DAYS)
+        : resolveDefaultRange(normalizedSymbol);
+
+      setSymbolInput(normalizedSymbol);
+      setSearchQuery('');
+      setIsSearchDirty(false);
+      setIsSearchFocused(false);
+      setSearchResults([]);
+      setSelectedSearchStock({
+        symbol: normalizedSymbol,
+        name: displayName || normalizedSymbol,
+        code: 'code' in stock && stock.code ? stock.code : normalizedSymbol.slice(2),
+        market: 'market' in stock && stock.market ? stock.market : normalizedSymbol.slice(0, 2),
+      });
+      setStartDateInput(range.startDate);
+      setEndDateInput(range.endDate);
+      setDraftStartDate(range.startDate);
+      setDraftEndDate(range.endDate);
+      setActiveRangeShortcut('90d');
+      setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
+      setAnchorTs(null);
+      const historyItem = {
+        symbol: normalizedSymbol,
+        name: displayName || normalizedSymbol,
+        code: 'code' in stock && stock.code ? stock.code : normalizedSymbol.slice(2),
+        market: 'market' in stock && stock.market ? stock.market : normalizedSymbol.slice(0, 2),
+      };
+      setSearchHistory((prev) => {
+        const next = [historyItem, ...prev.filter((item) => item.symbol !== historyItem.symbol)].slice(0, 10);
+        localStorage.setItem('stock_search_history', JSON.stringify(next));
+        return next;
+      });
+      await fetchData(normalizedSymbol, range.startDate, range.endDate);
+    },
+    [fetchData, poolItems, resolveDefaultRange]
+  );
+
   useEffect(() => {
     const init = async () => {
       try {
         const pool = await StockService.fetchReviewPool('', 5000);
         setPoolItems(pool.items);
-        setPoolTotal(pool.total);
-        setPoolAsOfDate(pool.as_of_date || '');
         setPoolLatestDate(pool.latest_date || '');
         if (pool.items.length > 0) {
-          const picked = pool.items.find((item) => item.symbol === DEFAULT_SYMBOL) || pool.items[0];
+          const preferredSymbol = getInitialReviewSymbol();
+          const picked = pool.items.find((item) => item.symbol === preferredSymbol) || pool.items.find((item) => item.symbol === DEFAULT_SYMBOL) || pool.items[0];
+          const range = buildRecentRange(picked.max_date, picked.min_date, RECENT_RANGE_DAYS);
           setSymbolInput(picked.symbol);
-          setStartDateInput(picked.min_date);
-          setEndDateInput(picked.max_date);
-          await fetchData(picked.symbol, picked.min_date, picked.max_date);
+          setSearchQuery('');
+          setSelectedSearchStock({
+            symbol: picked.symbol,
+            name: picked.name,
+            code: picked.symbol.slice(2),
+            market: picked.symbol.slice(0, 2),
+          });
+          setStartDateInput(range.startDate);
+          setEndDateInput(range.endDate);
+          setDraftStartDate(range.startDate);
+          setDraftEndDate(range.endDate);
+          setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
+          await fetchData(picked.symbol, range.startDate, range.endDate);
           return;
         }
         setError('正式复盘股票池为空，请先迁移历史数据并刷新股票元数据。');
@@ -385,6 +499,27 @@ const SandboxReviewPage: React.FC = () => {
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('stock_search_history');
+      if (saved) {
+        setSearchHistory(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.warn('Failed to load search history');
+    }
+  }, []);
+
+  useEffect(() => {
+    const check = async () => {
+      const isHealthy = await StockService.checkBackendHealth();
+      setBackendStatus(isHealthy);
+    };
+    check();
+    const interval = setInterval(check, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -401,6 +536,119 @@ const SandboxReviewPage: React.FC = () => {
     });
   }, [poolItems, symbolInput]);
 
+  useEffect(() => {
+    if (!isSearchDirty) {
+      setSearchResults([]);
+      return;
+    }
+
+    const keyword = searchQuery.trim();
+    if (keyword.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      const results = await StockService.searchStock(keyword);
+      setSearchResults(results);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [isSearchDirty, searchQuery]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setIsSearchFocused(false);
+        setSearchResults([]);
+      }
+      if (rangePickerRef.current && !rangePickerRef.current.contains(target)) {
+        setIsRangePickerOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    const symbol = symbolInput.trim().toLowerCase();
+    if (!symbol) {
+      setSelectedQuote(null);
+      return;
+    }
+    let cancelled = false;
+    StockService.fetchQuote(symbol)
+      .then((quote) => {
+        if (cancelled) return;
+        setSelectedQuote(quote);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedQuote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbolInput]);
+
+  useEffect(() => {
+    const symbol = symbolInput.trim().toLowerCase();
+    if (!symbol) {
+      setTurnoverRate(null);
+      return;
+    }
+    let cancelled = false;
+    StockService.fetchSentimentData(symbol)
+      .then((data) => {
+        if (cancelled) return;
+        const value = Number(data?.turnover_rate);
+        setTurnoverRate(Number.isFinite(value) ? value : null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTurnoverRate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbolInput]);
+
+  useEffect(() => {
+    const symbol = symbolInput.trim().toLowerCase();
+    if (!symbol) {
+      setIsWatchlisted(false);
+      return;
+    }
+    StockService.getWatchlist().then((list) => {
+      setIsWatchlisted(Boolean(list.find((item) => item.symbol === symbol)));
+    });
+  }, [symbolInput]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (symbolInput) {
+      url.searchParams.set('symbol', symbolInput.toLowerCase());
+    } else {
+      url.searchParams.delete('symbol');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [symbolInput]);
+
+  const toggleWatchlist = async () => {
+    if (!symbolInput) return;
+    const symbol = symbolInput.trim().toLowerCase();
+    if (isWatchlisted) {
+      await StockService.removeFromWatchlist(symbol);
+      setIsWatchlisted(false);
+    } else {
+      await StockService.addToWatchlist(symbol, selectedDisplayName);
+      setIsWatchlisted(true);
+    }
+  };
+
   const aggregatedByGranularity = useMemo(() => {
     const sortedRaw = normalizeRows(rawData);
     return {
@@ -415,15 +663,7 @@ const SandboxReviewPage: React.FC = () => {
   const viewState = useMemo(() => {
     const baseRows = aggregatedByGranularity['5m'];
     const visibleDays = calcVisibleDays(baseRows, zoomRange);
-    let granularity: Granularity = granularityMode === 'auto' ? chooseGranularityByDays(visibleDays) : granularityMode;
-
-    while (
-      granularityMode === 'auto' &&
-      granularity !== '1d' &&
-      estimateVisibleCount(aggregatedByGranularity[granularity], zoomRange) > MAX_VISIBLE_POINTS
-    ) {
-      granularity = nextGranularity(granularity);
-    }
+    const granularity: Granularity = granularityMode;
 
     return {
       bars: aggregatedByGranularity[granularity],
@@ -631,43 +871,154 @@ const SandboxReviewPage: React.FC = () => {
     [makeScatterOption, scatterData.l2]
   );
 
-  const rawRangeText = useMemo(() => {
-    if (!rawData.length) return '--';
-    return `${rawData[0].datetime} ~ ${rawData[rawData.length - 1].datetime}`;
-  }, [rawData]);
-
-  const activePoolItem = useMemo(
-    () => poolItems.find((item) => item.symbol === querySymbol) || null,
-    [poolItems, querySymbol]
-  );
-
   const selectedInputPoolItem = useMemo(
     () => poolItems.find((item) => item.symbol === symbolInput.trim().toLowerCase()) || null,
     [poolItems, symbolInput]
   );
 
+  const selectedDisplayName = useMemo(() => {
+    const normalizedSymbol = symbolInput.trim().toLowerCase();
+    if (selectedQuote?.symbol === normalizedSymbol && selectedQuote?.name) return selectedQuote.name;
+    if (selectedInputPoolItem?.name) return buildStockDisplayName(normalizedSymbol, selectedInputPoolItem.name);
+    if (selectedSearchStock?.symbol === normalizedSymbol) return buildStockDisplayName(normalizedSymbol, selectedSearchStock.name);
+    return normalizedSymbol || DEFAULT_SYMBOL;
+  }, [selectedInputPoolItem?.name, selectedQuote, selectedSearchStock, symbolInput]);
+
+  const latestDailySummary = useMemo(() => {
+    const dailyBars = aggregatedByGranularity['1d'];
+    if (!dailyBars.length) return null;
+    const latest = dailyBars[dailyBars.length - 1];
+    const previous = dailyBars.length > 1 ? dailyBars[dailyBars.length - 2] : null;
+    const previousClose = previous?.close ?? latest.open;
+    const delta = latest.close - previousClose;
+    const pct = previousClose > 0 ? (delta / previousClose) * 100 : 0;
+    return {
+      latest,
+      previousClose,
+      delta,
+      pct,
+    };
+  }, [aggregatedByGranularity]);
+
+  const searchDropdownVisible = isSearchFocused && isSearchDirty && searchResults.length > 0;
+
+  const resolveShortcutRange = useCallback(
+    (shortcut: RangeShortcut) => {
+      if (shortcut === 'all') {
+        if (selectedInputPoolItem) {
+          return {
+            startDate: selectedInputPoolItem.min_date,
+            endDate: selectedInputPoolItem.max_date,
+          };
+        }
+        const fallbackEnd = poolLatestDate || formatDateOnly(new Date());
+        return {
+          startDate: minusDays(fallbackEnd, RECENT_RANGE_DAYS - 1),
+          endDate: fallbackEnd,
+        };
+      }
+
+      const option = RANGE_SHORTCUT_OPTIONS.find((item) => item.key === shortcut);
+      const days = option?.days ?? RECENT_RANGE_DAYS;
+      if (selectedInputPoolItem) {
+        return buildRecentRange(selectedInputPoolItem.max_date, selectedInputPoolItem.min_date, days || RECENT_RANGE_DAYS);
+      }
+
+      const fallbackEnd = poolLatestDate || formatDateOnly(new Date());
+      return buildRecentRange(fallbackEnd, undefined, days || RECENT_RANGE_DAYS);
+    },
+    [poolLatestDate, selectedInputPoolItem]
+  );
+
+  const executeReviewQuery = useCallback(
+    async (symbol: string, startDate: string, endDate: string, minDate?: string, maxDate?: string) => {
+      if (!symbol) {
+        setError('请先选择股票');
+        return;
+      }
+      if (!isDateInReviewWindow(startDate, endDate, minDate, maxDate)) {
+        if (minDate && maxDate) {
+          setError(`日期范围仅支持 ${minDate} ~ ${maxDate}`);
+        } else {
+          setError('日期范围无效，请确认开始/结束日期');
+        }
+        return;
+      }
+      setAnchorTs(null);
+      await fetchData(symbol, startDate, endDate);
+    },
+    [fetchData]
+  );
+
   const handleExecuteQuery = useCallback(async () => {
+    const normalizedFromInput = normalizeSymbolText(searchQuery);
+    const symbol = isSearchDirty ? normalizedFromInput : symbolInput.trim().toLowerCase();
+    if (isSearchDirty && searchResults.length > 0) {
+      await applySelectedStock(searchResults[0]);
+      return;
+    }
+    if (!symbol) {
+      setError('请先从搜索结果选择股票，或输入完整代码（如 sh603629）');
+      return;
+    }
+    if (isSearchDirty) {
+      if (symbol !== symbolInput.trim().toLowerCase()) {
+        const matched = poolItems.find((item) => item.symbol === symbol);
+        await applySelectedStock({ symbol, name: matched?.name });
+        return;
+      }
+      const matched = poolItems.find((item) => item.symbol === symbol) || null;
+      setSearchQuery(buildStockDisplayName(symbol, matched?.name || selectedSearchStock?.name));
+      setIsSearchDirty(false);
+    }
+    const matched = poolItems.find((item) => item.symbol === symbol) || null;
+    await executeReviewQuery(symbol, startDateInput, endDateInput, matched?.min_date, matched?.max_date);
+  }, [applySelectedStock, endDateInput, executeReviewQuery, isSearchDirty, poolItems, searchQuery, searchResults, selectedSearchStock?.name, startDateInput, symbolInput]);
+
+  const handleSelectSearchResult = useCallback(
+    async (stock: SearchResult) => {
+      await applySelectedStock(stock);
+    },
+    [applySelectedStock]
+  );
+
+  const openRangePicker = useCallback(() => {
+    setDraftStartDate(startDateInput);
+    setDraftEndDate(endDateInput);
+    setIsRangePickerOpen((prev) => !prev);
+  }, [endDateInput, startDateInput]);
+
+  const handleQuickRangeShortcut = useCallback(
+    async (shortcut: RangeShortcut) => {
+      const symbol = symbolInput.trim().toLowerCase();
+      if (!symbol) {
+        setError('请先选择股票');
+        return;
+      }
+      const range = resolveShortcutRange(shortcut);
+      setActiveRangeShortcut(shortcut);
+      setStartDateInput(range.startDate);
+      setEndDateInput(range.endDate);
+      setDraftStartDate(range.startDate);
+      setDraftEndDate(range.endDate);
+      setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
+      await executeReviewQuery(symbol, range.startDate, range.endDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date);
+    },
+    [executeReviewQuery, resolveShortcutRange, selectedInputPoolItem?.max_date, selectedInputPoolItem?.min_date, symbolInput]
+  );
+
+  const handleConfirmRange = useCallback(async () => {
     const symbol = symbolInput.trim().toLowerCase();
     if (!symbol) {
-      setError('请先输入股票代码');
+      setError('请先选择股票');
       return;
     }
-    if (!isDateInReviewWindow(startDateInput, endDateInput, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date)) {
-      if (selectedInputPoolItem) {
-        setError(`日期范围仅支持 ${selectedInputPoolItem.min_date} ~ ${selectedInputPoolItem.max_date}`);
-      } else {
-        setError('日期范围无效，请确认开始/结束日期');
-      }
-      return;
-    }
-    setAnchorTs(null);
-    await fetchData(symbol, startDateInput, endDateInput);
-  }, [symbolInput, startDateInput, endDateInput, selectedInputPoolItem, fetchData]);
-
-  const handleSelectPreset = (preset: WindowPreset, days: number | null) => {
-    setActivePreset(preset);
-    setZoomRange(calcRangeByDays(aggregatedByGranularity['5m'], days));
-  };
+    setStartDateInput(draftStartDate);
+    setEndDateInput(draftEndDate);
+    setGranularityMode(chooseGranularityForDateRange(draftStartDate, draftEndDate));
+    setIsRangePickerOpen(false);
+    await executeReviewQuery(symbol, draftStartDate, draftEndDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date);
+  }, [draftEndDate, draftStartDate, executeReviewQuery, selectedInputPoolItem?.max_date, selectedInputPoolItem?.min_date, symbolInput]);
 
   const handleDataZoom = useCallback((event: any) => {
     const payload = event?.batch?.[0] ?? event;
@@ -717,15 +1068,16 @@ const SandboxReviewPage: React.FC = () => {
     const l2SuperSell = data.map((row) => -row.l2_super_sell);
     const l2MainNet = data.map((row) => row.l2_main_net);
     const l2SuperNet = data.map((row) => row.l2_super_net);
+
     const resolvedTotalAmount = data.map((row) => {
       if (row.total_amount > 0) return row.total_amount;
-      // Fallback for old/abnormal rows missing total_amount to avoid empty charts.
       return Math.max(
         0,
         row.l1_main_buy + row.l1_main_sell + row.l1_super_buy + row.l1_super_sell,
         row.l2_main_buy + row.l2_main_sell + row.l2_super_buy + row.l2_super_sell
       );
     });
+
     const l1MainActivity = data.map((row, idx) => calcRatioPercent(row.l1_main_buy + row.l1_main_sell, resolvedTotalAmount[idx]));
     const l2MainActivity = data.map((row, idx) => calcRatioPercent(row.l2_main_buy + row.l2_main_sell, resolvedTotalAmount[idx]));
     const l1SuperActivity = data.map((row, idx) => calcRatioPercent(row.l1_super_buy + row.l1_super_sell, resolvedTotalAmount[idx]));
@@ -733,33 +1085,24 @@ const SandboxReviewPage: React.FC = () => {
     const l1NetRatio = data.map((row, idx) => calcRatioPercent(row.l1_main_net + row.l1_super_net, resolvedTotalAmount[idx]));
     const l2NetRatio = data.map((row, idx) => calcRatioPercent(row.l2_main_net + row.l2_super_net, resolvedTotalAmount[idx]));
 
-    const l1MainNetSplit = splitSignedSeries(l1MainNet);
-    const l2MainNetSplit = splitSignedSeries(l2MainNet);
-    const l1SuperNetSplit = splitSignedSeries(l1SuperNet);
-    const l2SuperNetSplit = splitSignedSeries(l2SuperNet);
-
     const timestamps = data.map((row) => parseLocalDateTime(row.datetime).getTime());
     const anchorIndex = anchorModeEnabled && anchorTs !== null ? timestamps.findIndex((ts) => ts >= anchorTs) : -1;
-    const anchorCategory = anchorIndex >= 0 ? category[anchorIndex] : null;
+    const hasAnchorSelection = anchorModeEnabled && anchorIndex >= 0;
+    const anchorCategory = hasAnchorSelection ? category[anchorIndex] : null;
 
     const buildCumulative = (series: number[]): Array<number | null> => {
       let cumulative = 0;
       return series.map((value, idx) => {
-        if (anchorIndex < 0 || idx < anchorIndex) return null;
+        if (!hasAnchorSelection || idx < anchorIndex) return null;
         cumulative += Number.isFinite(value) ? value : 0;
         return cumulative;
       });
     };
 
     const l1MainCum = buildCumulative(l1MainNet);
-    const l2MainCum = buildCumulative(l2MainNet);
     const l1SuperCum = buildCumulative(l1SuperNet);
+    const l2MainCum = buildCumulative(l2MainNet);
     const l2SuperCum = buildCumulative(l2SuperNet);
-
-    const l1MainCumSplit = splitSignedSeriesNullable(l1MainCum);
-    const l2MainCumSplit = splitSignedSeriesNullable(l2MainCum);
-    const l1SuperCumSplit = splitSignedSeriesNullable(l1SuperCum);
-    const l2SuperCumSplit = splitSignedSeriesNullable(l2SuperCum);
 
     const anchorMarkLine = anchorCategory
       ? {
@@ -780,61 +1123,300 @@ const SandboxReviewPage: React.FC = () => {
       return maxAbs === 0 ? 1 : maxAbs;
     };
 
+    type RowMeta = {
+      key: string;
+      title: string;
+      top: number;
+      height: number;
+      kind: 'price' | 'abs' | 'net' | 'ratio' | 'cum';
+      labelColor: string;
+      axisName: string;
+    };
+
+    const rowMetas: RowMeta[] = anchorModeEnabled
+      ? [
+          { key: 'price', title: '股价K线', top: 4, height: 13, kind: 'price', labelColor: REVIEW_COLORS.closeLine, axisName: '价格' },
+          { key: 'mainAbs', title: '主力绝对资金 + 活跃度', top: 20, height: 7.5, kind: 'abs', labelColor: '#fca5a5', axisName: '主力资金' },
+          { key: 'superAbs', title: '超大绝对资金 + 活跃度', top: 30.5, height: 7.5, kind: 'abs', labelColor: '#c4b5fd', axisName: '超大资金' },
+          { key: 'mainNet', title: '主力净流入对比', top: 41, height: 7.5, kind: 'net', labelColor: '#fca5a5', axisName: '主力净流' },
+          { key: 'superNet', title: '超大净流入对比', top: 51.5, height: 7.5, kind: 'net', labelColor: '#c4b5fd', axisName: '超大净流' },
+          { key: 'netRatio', title: '净流比对比', top: 62, height: 7, kind: 'ratio', labelColor: '#fca5a5', axisName: '净流比' },
+          { key: 'l2Cum', title: 'L2锚点累计净流入（主力 + 超大）', top: 72, height: 9, kind: 'cum', labelColor: '#c4b5fd', axisName: 'L2累计' },
+          { key: 'l1Cum', title: 'L1锚点累计净流入（主力 + 超大）', top: 84, height: 9, kind: 'cum', labelColor: '#86efac', axisName: 'L1累计' },
+        ]
+      : [
+          { key: 'price', title: '股价K线', top: 4, height: 14, kind: 'price', labelColor: REVIEW_COLORS.closeLine, axisName: '价格' },
+          { key: 'mainAbs', title: '主力绝对资金 + 活跃度', top: 21, height: 10, kind: 'abs', labelColor: '#fca5a5', axisName: '主力资金' },
+          { key: 'superAbs', title: '超大绝对资金 + 活跃度', top: 34, height: 10, kind: 'abs', labelColor: '#c4b5fd', axisName: '超大资金' },
+          { key: 'mainNet', title: '主力净流入对比', top: 47, height: 10, kind: 'net', labelColor: '#fca5a5', axisName: '主力净流' },
+          { key: 'superNet', title: '超大净流入对比', top: 60, height: 10, kind: 'net', labelColor: '#c4b5fd', axisName: '超大净流' },
+          { key: 'netRatio', title: '净流比对比', top: 73, height: 9, kind: 'ratio', labelColor: '#fca5a5', axisName: '净流比' },
+        ];
+
+    const gridIndexMap = Object.fromEntries(rowMetas.map((row, index) => [row.key, index]));
+
+    const xAxis = rowMetas.map((row, index) => ({
+      type: 'category',
+      data: category,
+      boundaryGap: true,
+      gridIndex: index,
+      min: 'dataMin',
+      max: 'dataMax',
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#334155' } },
+      axisLabel:
+        index === rowMetas.length - 1
+          ? { color: '#64748b', fontSize: 10, margin: 10 }
+          : { show: false },
+    }));
+
+    const yAxis: any[] = [];
+    const yIndexMap: Record<string, { primary: number; secondary?: number }> = {};
+    rowMetas.forEach((row) => {
+      const primaryIndex = yAxis.length;
+      if (row.kind === 'price') {
+        yAxis.push({
+          type: 'value',
+          scale: true,
+          name: row.axisName,
+          nameLocation: 'middle',
+          nameGap: 42,
+          nameTextStyle: { color: row.labelColor, fontSize: 11 },
+          axisLabel: { color: row.labelColor },
+          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+        });
+        yIndexMap[row.key] = { primary: primaryIndex };
+        return;
+      }
+
+      if (row.kind === 'abs') {
+        yAxis.push({
+          type: 'value',
+          scale: true,
+          gridIndex: gridIndexMap[row.key],
+          name: row.axisName,
+          nameLocation: 'middle',
+          nameGap: 48,
+          nameTextStyle: { color: row.labelColor, fontSize: 11 },
+          min: symmetricMin,
+          max: symmetricMax,
+          axisLabel: { color: row.labelColor, formatter: (v: number) => formatAmountCompact(v) },
+          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+        });
+        yAxis.push({
+          type: 'value',
+          scale: true,
+          gridIndex: gridIndexMap[row.key],
+          position: 'right',
+          show: false,
+          min: 0,
+        });
+        yIndexMap[row.key] = { primary: primaryIndex, secondary: primaryIndex + 1 };
+        return;
+      }
+
+      yAxis.push({
+        type: 'value',
+        scale: true,
+        gridIndex: gridIndexMap[row.key],
+        name: row.axisName,
+        nameLocation: 'middle',
+        nameGap: 44,
+        nameTextStyle: { color: row.labelColor, fontSize: 11 },
+        min: row.kind === 'ratio' ? symmetricMin : symmetricMin,
+        max: row.kind === 'ratio' ? symmetricMax : symmetricMax,
+        axisLabel: {
+          color: row.labelColor,
+          formatter: (v: number) => (row.kind === 'ratio' ? formatPercentAxis(v) : formatAmountCompact(v)),
+        },
+        axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
+        splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+      });
+      yIndexMap[row.key] = { primary: primaryIndex };
+    });
+
+    const series: any[] = [
+      {
+        name: 'K线',
+        type: 'candlestick',
+        xAxisIndex: gridIndexMap.price,
+        yAxisIndex: yIndexMap.price.primary,
+        data: candles,
+        itemStyle: {
+          color: '#ef4444',
+          color0: '#22c55e',
+          borderColor: '#ef4444',
+          borderColor0: '#22c55e',
+        },
+        markLine: anchorMarkLine,
+      },
+      { name: 'L2主力买', type: 'bar', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.primary, data: l2MainBuy, itemStyle: { color: REVIEW_COLORS.mainL2Buy }, z: 2, markLine: anchorMarkLine },
+      { name: 'L1主力买', type: 'bar', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.primary, data: l1MainBuy, itemStyle: { color: REVIEW_COLORS.mainL1Buy }, barGap: '-100%', z: 3 },
+      { name: 'L2主力卖', type: 'bar', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.primary, data: l2MainSell, itemStyle: { color: REVIEW_COLORS.mainL2Sell }, z: 2 },
+      { name: 'L1主力卖', type: 'bar', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.primary, data: l1MainSell, itemStyle: { color: REVIEW_COLORS.mainL1Sell }, barGap: '-100%', z: 3 },
+      { name: 'L2主力活跃度', type: 'line', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.secondary, data: l2MainActivity, showSymbol: false, lineStyle: { color: '#991B1B', width: 1.4 }, itemStyle: { color: '#991B1B' }, z: 5 },
+      { name: 'L1主力活跃度', type: 'line', xAxisIndex: gridIndexMap.mainAbs, yAxisIndex: yIndexMap.mainAbs.secondary, data: l1MainActivity, showSymbol: false, lineStyle: { color: '#FCA5A5', width: 1.4 }, itemStyle: { color: '#FCA5A5' }, z: 5 },
+      { name: 'L2超大买', type: 'bar', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.primary, data: l2SuperBuy, itemStyle: { color: REVIEW_COLORS.superL2Buy }, z: 2, markLine: anchorMarkLine },
+      { name: 'L1超大买', type: 'bar', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.primary, data: l1SuperBuy, itemStyle: { color: REVIEW_COLORS.superL1Buy }, barGap: '-100%', z: 3 },
+      { name: 'L2超大卖', type: 'bar', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.primary, data: l2SuperSell, itemStyle: { color: REVIEW_COLORS.superL2Sell }, z: 2 },
+      { name: 'L1超大卖', type: 'bar', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.primary, data: l1SuperSell, itemStyle: { color: REVIEW_COLORS.superL1Sell }, barGap: '-100%', z: 3 },
+      { name: 'L2超大活跃度', type: 'line', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.secondary, data: l2SuperActivity, showSymbol: false, lineStyle: { color: '#991B1B', width: 1.4 }, itemStyle: { color: '#991B1B' }, z: 5 },
+      { name: 'L1超大活跃度', type: 'line', xAxisIndex: gridIndexMap.superAbs, yAxisIndex: yIndexMap.superAbs.secondary, data: l1SuperActivity, showSymbol: false, lineStyle: { color: '#FCA5A5', width: 1.4 }, itemStyle: { color: '#FCA5A5' }, z: 5 },
+      {
+        name: 'L2主力净',
+        type: 'bar',
+        xAxisIndex: gridIndexMap.mainNet,
+        yAxisIndex: yIndexMap.mainNet.primary,
+        data: l2MainNet,
+        itemStyle: {
+          color: (params: any) =>
+            Number(params?.value || 0) >= 0 ? REVIEW_COLORS.mainL2Buy : REVIEW_COLORS.mainL2Sell,
+        },
+        barWidth: '32%',
+        z: 2,
+        markLine: anchorMarkLine,
+      },
+      {
+        name: 'L1主力净',
+        type: 'bar',
+        xAxisIndex: gridIndexMap.mainNet,
+        yAxisIndex: yIndexMap.mainNet.primary,
+        data: l1MainNet,
+        itemStyle: {
+          color: (params: any) =>
+            Number(params?.value || 0) >= 0 ? REVIEW_COLORS.mainL1Buy : REVIEW_COLORS.mainL1Sell,
+        },
+        barWidth: '32%',
+        z: 3,
+      },
+      {
+        name: 'L2超大净',
+        type: 'bar',
+        xAxisIndex: gridIndexMap.superNet,
+        yAxisIndex: yIndexMap.superNet.primary,
+        data: l2SuperNet,
+        itemStyle: {
+          color: (params: any) =>
+            Number(params?.value || 0) >= 0 ? REVIEW_COLORS.superL2Buy : REVIEW_COLORS.superL2Sell,
+        },
+        barWidth: '32%',
+        z: 2,
+        markLine: anchorMarkLine,
+      },
+      {
+        name: 'L1超大净',
+        type: 'bar',
+        xAxisIndex: gridIndexMap.superNet,
+        yAxisIndex: yIndexMap.superNet.primary,
+        data: l1SuperNet,
+        itemStyle: {
+          color: (params: any) =>
+            Number(params?.value || 0) >= 0 ? REVIEW_COLORS.superL1Buy : REVIEW_COLORS.superL1Sell,
+        },
+        barWidth: '32%',
+        z: 3,
+      },
+      { name: 'L2净流比', type: 'line', xAxisIndex: gridIndexMap.netRatio, yAxisIndex: yIndexMap.netRatio.primary, data: l2NetRatio, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.7 }, itemStyle: { color: '#6D28D9' }, z: 4, markLine: anchorMarkLine },
+      { name: 'L1净流比', type: 'line', xAxisIndex: gridIndexMap.netRatio, yAxisIndex: yIndexMap.netRatio.primary, data: l1NetRatio, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.6 }, itemStyle: { color: '#DC2626' }, z: 4 },
+    ];
+
+    if (anchorModeEnabled) {
+      series.push(
+        {
+          name: 'L2主力累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l2Cum,
+          yAxisIndex: yIndexMap.l2Cum.primary,
+          data: l2MainCum,
+          showSymbol: false,
+          lineStyle: { color: REVIEW_COLORS.mainL2Buy, width: 1.4 },
+          itemStyle: { color: REVIEW_COLORS.mainL2Buy },
+          areaStyle: { color: 'rgba(211,47,47,0.10)' },
+          z: 4,
+          markLine: anchorMarkLine,
+        },
+        {
+          name: 'L2超大累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l2Cum,
+          yAxisIndex: yIndexMap.l2Cum.primary,
+          data: l2SuperCum,
+          showSymbol: false,
+          lineStyle: { color: REVIEW_COLORS.superL2Buy, width: 1.3 },
+          itemStyle: { color: REVIEW_COLORS.superL2Buy },
+          areaStyle: { color: 'rgba(123,31,162,0.08)' },
+          z: 4,
+        },
+        {
+          name: 'L1主力累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l1Cum,
+          yAxisIndex: yIndexMap.l1Cum.primary,
+          data: l1MainCum,
+          showSymbol: false,
+          lineStyle: { color: REVIEW_COLORS.mainL1Sell, width: 1.4 },
+          itemStyle: { color: REVIEW_COLORS.mainL1Sell },
+          areaStyle: { color: 'rgba(129,199,132,0.10)' },
+          z: 4,
+          markLine: anchorMarkLine,
+        },
+        {
+          name: 'L1超大累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l1Cum,
+          yAxisIndex: yIndexMap.l1Cum.primary,
+          data: l1SuperCum,
+          showSymbol: false,
+          lineStyle: { color: REVIEW_COLORS.superL2Sell, width: 1.3 },
+          itemStyle: { color: REVIEW_COLORS.superL2Sell },
+          areaStyle: { color: 'rgba(0,121,107,0.08)' },
+          z: 4,
+        }
+      );
+    }
+
+    const anchorPromptRows = anchorModeEnabled
+      ? rowMetas.filter((row) => row.key === 'l2Cum' || row.key === 'l1Cum')
+      : [];
+
     return {
       animation: false,
       backgroundColor: 'transparent',
       legend: {
         type: 'scroll',
         top: 0,
-        textStyle: { color: '#94a3b8' },
-        data: [
-          'K线',
-          'L2主力买',
-          'L1主力买',
-          'L2主力卖',
-          'L1主力卖',
-          'L2主力活跃度',
-          'L1主力活跃度',
-          'L2超大买',
-          'L1超大买',
-          'L2超大卖',
-          'L1超大卖',
-          'L2超大活跃度',
-          'L1超大活跃度',
-          'L2主力净',
-          'L1主力净',
-          'L2超大净',
-          'L1超大净',
-          'L2净流比',
-          'L1净流比',
-          'L2主力累计净',
-          'L1主力累计净',
-          'L2超大累计净',
-          'L1超大累计净',
-        ],
+        textStyle: { color: '#94a3b8', fontSize: 11 },
+        data: series.map((item) => item.name),
       },
-      title: [
-        { text: '股价K线', left: '6.2%', top: 20, textStyle: { color: '#fbbf24', fontSize: 11, fontWeight: 'normal' } },
-        { text: '主力绝对资金 + 活跃度', left: '6.2%', top: '20%', textStyle: { color: '#fca5a5', fontSize: 11, fontWeight: 'normal' } },
-        { text: '超大绝对资金 + 活跃度', left: '6.2%', top: '29%', textStyle: { color: '#fdba74', fontSize: 11, fontWeight: 'normal' } },
-        { text: '主力净流入对比', left: '6.2%', top: '38%', textStyle: { color: '#c4b5fd', fontSize: 11, fontWeight: 'normal' } },
-        { text: '超大净流入对比', left: '6.2%', top: '47%', textStyle: { color: '#a78bfa', fontSize: 11, fontWeight: 'normal' } },
-        { text: '净流比对比', left: '6.2%', top: '56%', textStyle: { color: '#fca5a5', fontSize: 11, fontWeight: 'normal' } },
-        { text: '主力累计净流入（L2，锚点起算）', left: '6.2%', top: '64%', textStyle: { color: '#c4b5fd', fontSize: 11, fontWeight: 'normal' } },
-        { text: '主力累计净流入（L1，锚点起算）', left: '6.2%', top: '71%', textStyle: { color: '#fca5a5', fontSize: 11, fontWeight: 'normal' } },
-        { text: '超大累计净流入（L2，锚点起算）', left: '6.2%', top: '78%', textStyle: { color: '#a78bfa', fontSize: 11, fontWeight: 'normal' } },
-        { text: '超大累计净流入（L1，锚点起算）', left: '6.2%', top: '85%', textStyle: { color: '#fca5a5', fontSize: 11, fontWeight: 'normal' } },
-      ],
+      title: rowMetas.map((row) => ({
+        text: row.title,
+        left: '6.2%',
+        top: `${Math.max(0, row.top - 2.3)}%`,
+        textStyle: { color: row.labelColor, fontSize: 11, fontWeight: 'normal' },
+      })),
       tooltip: {
         trigger: 'axis',
+        confine: true,
         backgroundColor: 'rgba(15, 23, 42, 0.96)',
         borderColor: '#334155',
         borderWidth: 1,
         textStyle: { color: '#e2e8f0', fontSize: 12 },
-        extraCssText: 'box-shadow: 0 10px 24px rgba(2,6,23,0.45);',
-        axisPointer: {
-          type: 'cross',
+        extraCssText: 'box-shadow: 0 10px 24px rgba(2,6,23,0.45); max-width: 340px; white-space: normal;',
+        position: (point: number[], _params: any, _dom: HTMLElement, _rect: any, size: any) => {
+          const contentWidth = size?.contentSize?.[0] || 0;
+          const contentHeight = size?.contentSize?.[1] || 0;
+          const viewWidth = size?.viewSize?.[0] || 0;
+          const viewHeight = size?.viewSize?.[1] || 0;
+          let x = (point?.[0] || 0) + 18;
+          if (x + contentWidth > viewWidth - 12) {
+            x = (point?.[0] || 0) - contentWidth - 18;
+          }
+          x = Math.max(12, Math.min(x, viewWidth - contentWidth - 12));
+          let y = (point?.[1] || 0) - contentHeight / 2;
+          y = Math.max(12, Math.min(y, viewHeight - contentHeight - 12));
+          return [x, y];
         },
+        axisPointer: { type: 'line' },
         formatter: (params: any) => {
           const items = Array.isArray(params) ? params : [params];
           if (!items.length) return '';
@@ -845,528 +1427,289 @@ const SandboxReviewPage: React.FC = () => {
 
           const marker = (color: string) =>
             `<span style="display:inline-block;margin-right:6px;border-radius:50%;width:8px;height:8px;background:${color};"></span>`;
-
           const section = (title: string, lines: string[]) =>
             [`<div style="margin-top:6px;color:#cbd5e1;font-weight:600;">${title}</div>`, ...lines].join('<br/>');
 
           const blocks: string[] = [
             `<div style="font-weight:700;color:#f8fafc;">${axisLabel}</div>`,
             section('股价K线', [
-              `${marker('#fbbf24')}开: ${row.open.toFixed(2)}  高: ${row.high.toFixed(2)}  低: ${row.low.toFixed(2)}  收: ${row.close.toFixed(2)}`,
+              `${marker('#fbbf24')}开 ${row.open.toFixed(2)} / 高 ${row.high.toFixed(2)} / 低 ${row.low.toFixed(2)} / 收 ${row.close.toFixed(2)}`,
+              `${marker('#94a3b8')}成交额: ${formatAmountCompact(resolvedTotalAmount[idx])}`,
             ]),
-            section('主力绝对资金 + 活跃度', [
-              `${marker('#D32F2F')}L2主力买: ${formatAmountCompact(row.l2_main_buy)}`,
-              `${marker('#388E3C')}L2主力卖: ${formatAmountCompact(row.l2_main_sell)}`,
-              `${marker('#F4B7C0')}L1主力买: ${formatAmountCompact(row.l1_main_buy)}`,
-              `${marker('#B7DDB8')}L1主力卖: ${formatAmountCompact(row.l1_main_sell)}`,
-              `${marker('#991B1B')}L2主力活跃度: ${formatPercentValue(l2MainActivity[idx] ?? NaN)}`,
-              `${marker('#FCA5A5')}L1主力活跃度: ${formatPercentValue(l1MainActivity[idx] ?? NaN)}`,
+            section('主力', [
+              `${marker('#6D28D9')}L2净: ${formatAmountCompact(row.l2_main_net)} ｜ 活跃度 ${formatPercentValue(l2MainActivity[idx] ?? NaN)}`,
+              `${marker('#DC2626')}L1净: ${formatAmountCompact(row.l1_main_net)} ｜ 活跃度 ${formatPercentValue(l1MainActivity[idx] ?? NaN)}`,
             ]),
-            section('超大绝对资金 + 活跃度', [
-              `${marker('#D32F2F')}L2超大买: ${formatAmountCompact(row.l2_super_buy)}`,
-              `${marker('#388E3C')}L2超大卖: ${formatAmountCompact(row.l2_super_sell)}`,
-              `${marker('#F4B7C0')}L1超大买: ${formatAmountCompact(row.l1_super_buy)}`,
-              `${marker('#B7DDB8')}L1超大卖: ${formatAmountCompact(row.l1_super_sell)}`,
-              `${marker('#991B1B')}L2超大活跃度: ${formatPercentValue(l2SuperActivity[idx] ?? NaN)}`,
-              `${marker('#FCA5A5')}L1超大活跃度: ${formatPercentValue(l1SuperActivity[idx] ?? NaN)}`,
+            section('超大单', [
+              `${marker('#F59E0B')}L2净: ${formatAmountCompact(row.l2_super_net)} ｜ 活跃度 ${formatPercentValue(l2SuperActivity[idx] ?? NaN)}`,
+              `${marker('#10B981')}L1净: ${formatAmountCompact(row.l1_super_net)} ｜ 活跃度 ${formatPercentValue(l1SuperActivity[idx] ?? NaN)}`,
             ]),
-            section('主力净流入对比', [
-              `${marker('#6D28D9')}L2主力净: ${formatAmountCompact(row.l2_main_net)}`,
-              `${marker('#DC2626')}L1主力净: ${formatAmountCompact(row.l1_main_net)}`,
-            ]),
-            section('超大净流入对比', [
-              `${marker('#6D28D9')}L2超大净: ${formatAmountCompact(row.l2_super_net)}`,
-              `${marker('#DC2626')}L1超大净: ${formatAmountCompact(row.l1_super_net)}`,
-            ]),
-            section('净流比对比', [
+            section('净流比', [
               `${marker('#6D28D9')}L2净流比: ${formatPercentValue(l2NetRatio[idx] ?? NaN)}`,
               `${marker('#DC2626')}L1净流比: ${formatPercentValue(l1NetRatio[idx] ?? NaN)}`,
             ]),
-            section('主力累计净流入（L2，锚点起算）', [
-              `${marker('#6D28D9')}L2主力累计净: ${l2MainCum[idx] === null ? '--' : formatAmountCompact(l2MainCum[idx] ?? NaN)}`,
-            ]),
-            section('主力累计净流入（L1，锚点起算）', [
-              `${marker('#DC2626')}L1主力累计净: ${l1MainCum[idx] === null ? '--' : formatAmountCompact(l1MainCum[idx] ?? NaN)}`,
-            ]),
-            section('超大累计净流入（L2，锚点起算）', [
-              `${marker('#6D28D9')}L2超大累计净: ${l2SuperCum[idx] === null ? '--' : formatAmountCompact(l2SuperCum[idx] ?? NaN)}`,
-            ]),
-            section('超大累计净流入（L1，锚点起算）', [
-              `${marker('#DC2626')}L1超大累计净: ${l1SuperCum[idx] === null ? '--' : formatAmountCompact(l1SuperCum[idx] ?? NaN)}`,
-            ]),
           ];
+
+          if (anchorModeEnabled) {
+            blocks.push(
+              section('锚点累计', [
+                `${marker('#6D28D9')}L2主力/超大: ${l2MainCum[idx] === null ? '--' : formatAmountCompact(l2MainCum[idx] ?? NaN)} / ${l2SuperCum[idx] === null ? '--' : formatAmountCompact(l2SuperCum[idx] ?? NaN)}`,
+                `${marker('#DC2626')}L1主力/超大: ${l1MainCum[idx] === null ? '--' : formatAmountCompact(l1MainCum[idx] ?? NaN)} / ${l1SuperCum[idx] === null ? '--' : formatAmountCompact(l1SuperCum[idx] ?? NaN)}`,
+              ])
+            );
+          }
 
           return blocks.join('<br/>');
         },
       },
-      axisPointer: {
-        link: [{ xAxisIndex: 'all' }],
-      },
-      grid: [
-        { left: '6%', right: '4%', top: 40, height: '15%' },
-        { left: '6%', right: '4%', top: '20%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '27.5%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '35%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '42.5%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '50%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '57.5%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '65%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '72.5%', height: '6.5%' },
-        { left: '6%', right: '4%', top: '80%', height: '6.5%' },
-      ],
-      xAxis: [
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 1, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 2, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 3, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 4, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 5, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 6, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 7, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { show: false }, gridIndex: 8, min: 'dataMin', max: 'dataMax' },
-        { type: 'category', data: category, boundaryGap: true, axisLabel: { color: '#64748b', fontSize: 10 }, gridIndex: 9, min: 'dataMin', max: 'dataMax' },
-      ],
-      yAxis: [
-        {
-          type: 'value',
-          scale: true,
-          name: '价格',
-          nameLocation: 'middle',
-          nameGap: 44,
-          nameTextStyle: { color: '#fbbf24', fontSize: 11 },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fbbf24' },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 1,
-          name: '主力绝对资金(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#fca5a5', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fca5a5', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 1,
-          position: 'right',
-          show: false,
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 2,
-          name: '超大绝对资金(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#fdba74', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fdba74', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 2,
-          position: 'right',
-          show: false,
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 3,
-          name: '主力净流入(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#93c5fd', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#93c5fd', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 4,
-          name: '超大净流入(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#a78bfa', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#a78bfa', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 5,
-          name: '净流比(%)',
-          nameLocation: 'middle',
-          nameGap: 44,
-          nameTextStyle: { color: '#fca5a5', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fca5a5', formatter: (v: number) => formatPercentAxis(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 6,
-          name: '主力累计净流入L2(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#c4b5fd', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#c4b5fd', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 7,
-          name: '主力累计净流入L1(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#fca5a5', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fca5a5', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 8,
-          name: '超大累计净流入L2(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#a78bfa', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#a78bfa', formatter: (v: number) => formatAmountCompact(v) },
-        },
-        {
-          type: 'value',
-          scale: true,
-          gridIndex: 9,
-          name: '超大累计净流入L1(w)',
-          nameLocation: 'middle',
-          nameGap: 50,
-          nameTextStyle: { color: '#fca5a5', fontSize: 11 },
-          min: symmetricMin,
-          max: symmetricMax,
-          axisLine: { show: true, lineStyle: { color: '#111827', width: 1.2 } },
-          splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
-          axisLabel: { color: '#fca5a5', formatter: (v: number) => formatAmountCompact(v) },
-        },
-      ],
+      axisPointer: { link: [{ xAxisIndex: 'all' }] },
+      grid: rowMetas.map((row) => ({ left: '6%', right: '4%', top: `${row.top}%`, height: `${row.height}%` })),
+      xAxis,
+      yAxis,
       dataZoom: [
         {
           type: 'slider',
-          xAxisIndex: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+          xAxisIndex: rowMetas.map((_, index) => index),
           start: zoomRange[0],
           end: zoomRange[1],
           realtime: true,
-          bottom: 2,
-          height: 18,
+          bottom: '1.4%',
+          height: 16,
           showDetail: false,
           brushSelect: false,
           zoomLock: false,
           filterMode: 'filter',
-          handleSize: '120%',
+          handleSize: '105%',
         },
       ],
-      series: [
-        {
-          name: 'K线',
-          type: 'candlestick',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: candles,
-          itemStyle: {
-            color: '#ef4444',
-            color0: '#22c55e',
-            borderColor: '#ef4444',
-            borderColor0: '#22c55e',
-          },
-          markLine: anchorMarkLine,
-        },
-        { name: 'L2主力买', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: l2MainBuy, itemStyle: { color: '#D32F2F' }, z: 2, markLine: anchorMarkLine },
-        { name: 'L1主力买', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: l1MainBuy, itemStyle: { color: '#F4B7C0' }, barGap: '-100%', z: 3 },
-        { name: 'L2主力卖', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: l2MainSell, itemStyle: { color: '#388E3C' }, z: 2 },
-        { name: 'L1主力卖', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: l1MainSell, itemStyle: { color: '#B7DDB8' }, barGap: '-100%', z: 3 },
-        { name: 'L2主力活跃度', type: 'line', xAxisIndex: 1, yAxisIndex: 2, data: l2MainActivity, showSymbol: false, lineStyle: { color: '#991B1B', width: 1.5 }, itemStyle: { color: '#991B1B' }, z: 5 },
-        { name: 'L1主力活跃度', type: 'line', xAxisIndex: 1, yAxisIndex: 2, data: l1MainActivity, showSymbol: false, lineStyle: { color: '#FCA5A5', width: 1.5 }, itemStyle: { color: '#FCA5A5' }, z: 5 },
-
-        { name: 'L2超大买', type: 'bar', xAxisIndex: 2, yAxisIndex: 3, data: l2SuperBuy, itemStyle: { color: '#D32F2F' }, z: 2, markLine: anchorMarkLine },
-        { name: 'L1超大买', type: 'bar', xAxisIndex: 2, yAxisIndex: 3, data: l1SuperBuy, itemStyle: { color: '#F4B7C0' }, barGap: '-100%', z: 3 },
-        { name: 'L2超大卖', type: 'bar', xAxisIndex: 2, yAxisIndex: 3, data: l2SuperSell, itemStyle: { color: '#388E3C' }, z: 2 },
-        { name: 'L1超大卖', type: 'bar', xAxisIndex: 2, yAxisIndex: 3, data: l1SuperSell, itemStyle: { color: '#B7DDB8' }, barGap: '-100%', z: 3 },
-        { name: 'L2超大活跃度', type: 'line', xAxisIndex: 2, yAxisIndex: 4, data: l2SuperActivity, showSymbol: false, lineStyle: { color: '#991B1B', width: 1.5 }, itemStyle: { color: '#991B1B' }, z: 5 },
-        { name: 'L1超大活跃度', type: 'line', xAxisIndex: 2, yAxisIndex: 4, data: l1SuperActivity, showSymbol: false, lineStyle: { color: '#FCA5A5', width: 1.5 }, itemStyle: { color: '#FCA5A5' }, z: 5 },
-
-        { name: 'L2主力净', type: 'line', xAxisIndex: 3, yAxisIndex: 5, data: l2MainNetSplit.positive, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.2 }, areaStyle: { color: 'rgba(109,40,217,0.25)' }, z: 2, markLine: anchorMarkLine },
-        { name: 'L2主力净', type: 'line', xAxisIndex: 3, yAxisIndex: 5, data: l2MainNetSplit.negative, showSymbol: false, lineStyle: { color: '#B45309', width: 1.2 }, areaStyle: { color: 'rgba(180,83,9,0.25)' }, z: 2 },
-        { name: 'L1主力净', type: 'line', xAxisIndex: 3, yAxisIndex: 5, data: l1MainNetSplit.positive, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.2 }, areaStyle: { color: 'rgba(220,38,38,0.18)' }, z: 3 },
-        { name: 'L1主力净', type: 'line', xAxisIndex: 3, yAxisIndex: 5, data: l1MainNetSplit.negative, showSymbol: false, lineStyle: { color: '#16A34A', width: 1.2 }, areaStyle: { color: 'rgba(22,163,74,0.18)' }, z: 3 },
-
-        { name: 'L2超大净', type: 'line', xAxisIndex: 4, yAxisIndex: 6, data: l2SuperNetSplit.positive, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.2 }, areaStyle: { color: 'rgba(109,40,217,0.25)' }, z: 2, markLine: anchorMarkLine },
-        { name: 'L2超大净', type: 'line', xAxisIndex: 4, yAxisIndex: 6, data: l2SuperNetSplit.negative, showSymbol: false, lineStyle: { color: '#B45309', width: 1.2 }, areaStyle: { color: 'rgba(180,83,9,0.25)' }, z: 2 },
-        { name: 'L1超大净', type: 'line', xAxisIndex: 4, yAxisIndex: 6, data: l1SuperNetSplit.positive, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.2 }, areaStyle: { color: 'rgba(220,38,38,0.18)' }, z: 3 },
-        { name: 'L1超大净', type: 'line', xAxisIndex: 4, yAxisIndex: 6, data: l1SuperNetSplit.negative, showSymbol: false, lineStyle: { color: '#16A34A', width: 1.2 }, areaStyle: { color: 'rgba(22,163,74,0.18)' }, z: 3 },
-
-        { name: 'L2净流比', type: 'line', xAxisIndex: 5, yAxisIndex: 7, data: l2NetRatio, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.7 }, itemStyle: { color: '#6D28D9' }, z: 4, markLine: anchorMarkLine },
-        { name: 'L1净流比', type: 'line', xAxisIndex: 5, yAxisIndex: 7, data: l1NetRatio, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.6 }, itemStyle: { color: '#DC2626' }, z: 4 },
-
-        { name: 'L2主力累计净', type: 'line', xAxisIndex: 6, yAxisIndex: 8, data: l2MainCum, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.3 }, z: 4, markLine: anchorMarkLine },
-        { name: '_L2主力累计净正', type: 'line', xAxisIndex: 6, yAxisIndex: 8, data: l2MainCumSplit.positive, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(109,40,217,0.25)' }, emphasis: { disabled: true }, z: 2 },
-        { name: '_L2主力累计净负', type: 'line', xAxisIndex: 6, yAxisIndex: 8, data: l2MainCumSplit.negative, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(180,83,9,0.25)' }, emphasis: { disabled: true }, z: 2 },
-
-        { name: 'L1主力累计净', type: 'line', xAxisIndex: 7, yAxisIndex: 9, data: l1MainCum, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.3 }, z: 4, markLine: anchorMarkLine },
-        { name: '_L1主力累计净正', type: 'line', xAxisIndex: 7, yAxisIndex: 9, data: l1MainCumSplit.positive, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(220,38,38,0.18)' }, emphasis: { disabled: true }, z: 2 },
-        { name: '_L1主力累计净负', type: 'line', xAxisIndex: 7, yAxisIndex: 9, data: l1MainCumSplit.negative, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(22,163,74,0.18)' }, emphasis: { disabled: true }, z: 2 },
-
-        { name: 'L2超大累计净', type: 'line', xAxisIndex: 8, yAxisIndex: 10, data: l2SuperCum, showSymbol: false, lineStyle: { color: '#6D28D9', width: 1.3 }, z: 4, markLine: anchorMarkLine },
-        { name: '_L2超大累计净正', type: 'line', xAxisIndex: 8, yAxisIndex: 10, data: l2SuperCumSplit.positive, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(109,40,217,0.25)' }, emphasis: { disabled: true }, z: 2 },
-        { name: '_L2超大累计净负', type: 'line', xAxisIndex: 8, yAxisIndex: 10, data: l2SuperCumSplit.negative, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(180,83,9,0.25)' }, emphasis: { disabled: true }, z: 2 },
-
-        { name: 'L1超大累计净', type: 'line', xAxisIndex: 9, yAxisIndex: 11, data: l1SuperCum, showSymbol: false, lineStyle: { color: '#DC2626', width: 1.3 }, z: 4, markLine: anchorMarkLine },
-        { name: '_L1超大累计净正', type: 'line', xAxisIndex: 9, yAxisIndex: 11, data: l1SuperCumSplit.positive, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(220,38,38,0.18)' }, emphasis: { disabled: true }, z: 2 },
-        { name: '_L1超大累计净负', type: 'line', xAxisIndex: 9, yAxisIndex: 11, data: l1SuperCumSplit.negative, showSymbol: false, symbol: 'none', lineStyle: { opacity: 0, width: 0 }, itemStyle: { opacity: 0 }, areaStyle: { color: 'rgba(22,163,74,0.18)' }, emphasis: { disabled: true }, z: 2 },
-      ],
+      series,
       graphic:
-        !anchorModeEnabled || anchorIndex < 0
-          ? [
-              {
-                type: 'text',
-                left: '50%',
-                top: '68%',
-                z: 100,
-                style: {
-                  text: '请先开启锚点累计模式并点选K线',
-                  fill: '#64748b',
-                  font: '12px sans-serif',
-                  textAlign: 'center',
-                },
+        anchorModeEnabled && !hasAnchorSelection
+          ? anchorPromptRows.map((row) => ({
+              type: 'text',
+              left: '50%',
+              top: `${row.top + row.height / 2 - 1.5}%`,
+              z: 100,
+              style: {
+                text: '点击K线设置锚点',
+                fill: '#64748b',
+                font: '12px sans-serif',
+                textAlign: 'center',
               },
-              {
-                type: 'text',
-                left: '50%',
-                top: '75%',
-                z: 100,
-                style: {
-                  text: '请先开启锚点累计模式并点选K线',
-                  fill: '#64748b',
-                  font: '12px sans-serif',
-                  textAlign: 'center',
-                },
-              },
-              {
-                type: 'text',
-                left: '50%',
-                top: '82%',
-                z: 100,
-                style: {
-                  text: '请先开启锚点累计模式并点选K线',
-                  fill: '#64748b',
-                  font: '12px sans-serif',
-                  textAlign: 'center',
-                },
-              },
-              {
-                type: 'text',
-                left: '50%',
-                top: '89%',
-                z: 100,
-                style: {
-                  text: '请先开启锚点累计模式并点选K线',
-                  fill: '#64748b',
-                  font: '12px sans-serif',
-                  textAlign: 'center',
-                },
-              },
-            ]
+            }))
           : [],
     };
   }, [viewState, zoomRange, anchorModeEnabled, anchorTs]);
 
-  const anchorText = useMemo(() => {
-    if (anchorTs === null) return '未设置';
-    return formatLocalDateTime(new Date(anchorTs));
-  }, [anchorTs]);
+  const rangeTriggerText = startDateInput && endDateInput ? `${startDateInput} ~ ${endDateInput}` : '选择日期区间';
+  const queryDisabled =
+    loading ||
+    !startDateInput ||
+    !endDateInput ||
+    endDateInput < startDateInput ||
+    (isSearchDirty && !normalizeSymbolText(searchQuery) && searchResults.length === 0) ||
+    (!isSearchDirty && !symbolInput);
+  const chartHeight = '108vh';
+  const shouldShowQuoteCard = Boolean(selectedQuote || latestDailySummary);
+  const homeHref = symbolInput ? `/?symbol=${symbolInput.toLowerCase()}` : '/';
 
   return (
-    <div className="min-h-screen bg-[#0a0f1c] text-slate-200 p-4 md:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-4">
-        <div className="flex items-center justify-between">
-          <a href="/" className="inline-flex items-center gap-2 text-slate-300 hover:text-white text-sm">
-            <ArrowLeft className="w-4 h-4" />
-            返回首页
-          </a>
-          <div className="text-xs text-slate-400">正式复盘 / L1-L2 历史</div>
-        </div>
+    <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-16 overflow-x-hidden">
+      <MarketTopHeader
+        routeHref={homeHref}
+        routeLabel="回到首页"
+        routeTitle="返回首页"
+        searchValue={searchQuery}
+        isSearchFocused={isSearchFocused}
+        searchResults={searchDropdownVisible ? searchResults : []}
+        searchHistory={searchHistory}
+        searchContainerRef={searchRef}
+        onSearchChange={(value) => {
+          setSearchQuery(value);
+          setIsSearchDirty(true);
+          setIsSearchFocused(true);
+        }}
+        onSearchFocus={() => setIsSearchFocused(true)}
+        onSearchBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+        onSearchKeyDown={async (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          if (searchResults.length > 0) {
+            await handleSelectSearchResult(searchResults[0]);
+            return;
+          }
+          await handleExecuteQuery();
+        }}
+        onClearSearch={() => {
+          setSearchQuery('');
+          setIsSearchDirty(true);
+          setSearchResults([]);
+        }}
+        onSelectSearchResult={handleSelectSearchResult}
+        onSelectHistory={handleSelectSearchResult}
+        rightSlot={<ThresholdConfig onConfigUpdate={() => {}} />}
+      />
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-wrap items-end gap-3">
-          <div className="w-full grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
-            <label className="flex flex-col gap-1">
-              <span className="text-slate-400 text-xs">股票代码（股票池内）</span>
-              <input
-                list="sandbox-pool-options"
-                value={symbolInput}
-                onChange={(e) => setSymbolInput(e.target.value)}
-                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
-                placeholder="如 sh603629"
+      <main className="max-w-[1600px] mx-auto p-2 md:p-6 space-y-4">
+        {shouldShowQuoteCard && (
+          <StockQuoteHeroCard
+            name={selectedDisplayName}
+            symbol={symbolInput.toUpperCase()}
+            price={selectedQuote?.price ?? latestDailySummary?.latest.close ?? 0}
+            previousClose={selectedQuote?.lastClose ?? latestDailySummary?.previousClose ?? latestDailySummary?.latest.open ?? 0}
+            open={selectedQuote?.open ?? latestDailySummary?.latest.open ?? 0}
+            high={selectedQuote?.high ?? latestDailySummary?.latest.high ?? 0}
+            low={selectedQuote?.low ?? latestDailySummary?.latest.low ?? 0}
+            volume={selectedQuote?.volume}
+            amount={selectedQuote?.amount ?? latestDailySummary?.latest.total_amount}
+            turnoverRate={turnoverRate}
+            latestLabel={!isCurrentCnTradingSession() ? (selectedQuote?.date ? `最新 ${selectedQuote.date}` : latestDailySummary ? `最新 ${latestDailySummary.latest.source_date}` : undefined) : undefined}
+            marketCapLabel={formatMarketCapYi(selectedInputPoolItem?.market_cap) ?? '--'}
+            metaRow={
+              <QuoteMetaRow
+                isWatchlisted={isWatchlisted}
+                onToggleWatchlist={toggleWatchlist}
+                backendStatus={backendStatus}
               />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-slate-400 text-xs">开始日期</span>
-              <input
-                type="date"
-                min={selectedInputPoolItem?.min_date || ''}
-                max={selectedInputPoolItem?.max_date || ''}
-                value={startDateInput}
-                onChange={(e) => setStartDateInput(e.target.value)}
-                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-slate-400 text-xs">结束日期</span>
-              <input
-                type="date"
-                min={selectedInputPoolItem?.min_date || ''}
-                max={selectedInputPoolItem?.max_date || ''}
-                value={endDateInput}
-                onChange={(e) => setEndDateInput(e.target.value)}
-                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
-              />
-            </label>
-            <div className="flex flex-col gap-1">
-              <span className="text-slate-400 text-xs">股票池</span>
-              <div className="px-2 py-1 bg-slate-950 border border-slate-700 rounded text-slate-200">
-                {poolTotal > 0 ? `${poolTotal} 只` : '--'}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-slate-400 text-xs">操作</span>
+            }
+          />
+        )}
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-3">
+          <div className="flex flex-col xl:flex-row xl:flex-wrap xl:items-center gap-2.5">
+            <div ref={rangePickerRef} className="relative min-w-[220px] xl:w-[280px] xl:flex-none">
               <button
-                onClick={handleExecuteQuery}
-                disabled={loading}
-                className={`px-3 py-1 rounded border ${
-                  loading
-                    ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-cyan-700/30 border-cyan-500 text-cyan-200 hover:bg-cyan-700/40'
+                onClick={openRangePicker}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm text-slate-100 hover:border-slate-600"
+              >
+                <span className="inline-flex items-center gap-2 min-w-0">
+                  <Calendar className="h-4 w-4 text-slate-500 shrink-0" />
+                  <span className="truncate">{rangeTriggerText}</span>
+                </span>
+              </button>
+              {isRangePickerOpen && (
+                <div className="absolute right-0 z-30 mt-2 w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-2xl backdrop-blur">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <span>开始日期</span>
+                      <input
+                        type="date"
+                        min={selectedInputPoolItem?.min_date || ''}
+                        max={selectedInputPoolItem?.max_date || ''}
+                        value={draftStartDate}
+                        onChange={(e) => {
+                          setDraftStartDate(e.target.value);
+                          setActiveRangeShortcut('all');
+                        }}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-400">
+                      <span>结束日期</span>
+                      <input
+                        type="date"
+                        min={selectedInputPoolItem?.min_date || ''}
+                        max={selectedInputPoolItem?.max_date || ''}
+                        value={draftEndDate}
+                        onChange={(e) => {
+                          setDraftEndDate(e.target.value);
+                          setActiveRangeShortcut('all');
+                        }}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-3 text-[11px] text-slate-500">默认粒度会按区间自动落档，60天 / 90天 默认优先 1d。</div>
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setDraftStartDate(startDateInput);
+                        setDraftEndDate(endDateInput);
+                        setIsRangePickerOpen(false);
+                      }}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-300"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleConfirmRange}
+                      className="rounded-lg border border-cyan-500 bg-cyan-700/30 px-3 py-1.5 text-sm text-cyan-200"
+                    >
+                      确认
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 xl:flex-none">
+              {RANGE_SHORTCUT_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  onClick={async () => handleQuickRangeShortcut(option.key)}
+                  className={`rounded-md border px-1.5 py-1 text-[11px] leading-none ${
+                    activeRangeShortcut === option.key
+                      ? 'border-cyan-500 bg-cyan-700/30 text-cyan-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-300'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 xl:flex-1">
+              {GRANULARITY_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  onClick={() => setGranularityMode(option.key)}
+                  className={`rounded-md border px-1.5 py-1 text-[11px] leading-none ${
+                    granularityMode === option.key
+                      ? 'border-violet-500 bg-violet-700/30 text-violet-200'
+                      : 'border-slate-700 bg-slate-950 text-slate-300'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => setAnchorModeEnabled((prev) => !prev)}
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] leading-none ${
+                  anchorModeEnabled
+                    ? 'border-amber-500 bg-amber-700/30 text-amber-200'
+                    : 'border-slate-700 bg-slate-950 text-slate-300'
                 }`}
               >
+                <Target className="h-3.5 w-3.5" />
+                {anchorModeEnabled ? '锚点累计开' : '锚点累计关'}
+              </button>
+              <button
+                onClick={() => setAnchorTs(null)}
+                disabled={anchorTs === null}
+                className={`rounded-md border px-2 py-1 text-[11px] leading-none ${
+                  anchorTs === null
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900 text-slate-600'
+                    : 'border-slate-700 bg-slate-950 text-slate-300'
+                }`}
+              >
+                清除锚点
+              </button>
+              <button
+                onClick={handleExecuteQuery}
+                disabled={queryDisabled}
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] leading-none ${
+                  queryDisabled
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900 text-slate-600'
+                    : 'border-cyan-500 bg-cyan-700/30 text-cyan-200 hover:bg-cyan-700/40'
+                }`}
+              >
+                {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
                 执行查询
               </button>
             </div>
-          </div>
-          <datalist id="sandbox-pool-options">
-            {poolItems.map((item) => (
-              <option key={item.symbol} value={item.symbol}>
-                {item.name}
-              </option>
-            ))}
-          </datalist>
-          <div className="w-full flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-slate-300">正式复盘：</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
-              股票 {querySymbol} {activePoolItem ? `(${activePoolItem.name})` : ''}
-            </span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
-              区间 {queryStartDate} ~ {queryEndDate}
-            </span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-cyan-300">数据源 /api/review/*</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-emerald-300">当前粒度 {viewState.granularity}</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-violet-300">当前窗口约 {viewState.visibleDays.toFixed(1)} 天 / {viewState.visibleCount} 点</span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300">接口返回 {rawData.length} 条</span>
-            {poolAsOfDate && (
-              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
-                元数据快照 {poolAsOfDate}
-              </span>
-            )}
-            {poolLatestDate && (
-              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
-                正式库最新 {poolLatestDate}
-              </span>
-            )}
-            {activePoolItem && (
-              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
-                市值 {formatMarketCapYi(activePoolItem.market_cap)}
-              </span>
-            )}
-            {loading && (
-              <span className="inline-flex items-center gap-1 text-slate-400">
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                数据加载中
-              </span>
-            )}
-          </div>
-          <div className="w-full text-xs text-slate-500">
-            数据范围：{rawRangeText}
-            {selectedInputPoolItem ? `（当前股票可查 ${selectedInputPoolItem.min_date} ~ ${selectedInputPoolItem.max_date}）` : ''}
-          </div>
-          <div className="w-full flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400">窗口快捷：</span>
-            {PRESET_OPTIONS.map((preset) => (
-              <button
-                key={preset.key}
-                onClick={() => handleSelectPreset(preset.key, preset.days)}
-                className={`px-2 py-1 rounded border ${activePreset === preset.key ? 'bg-cyan-700/40 border-cyan-500 text-cyan-200' : 'bg-slate-950 border-slate-700 text-slate-300'}`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-          <div className="w-full flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400">粒度切换：</span>
-            {GRANULARITY_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                onClick={() => setGranularityMode(option.key)}
-                className={`px-2 py-1 rounded border ${granularityMode === option.key ? 'bg-violet-700/40 border-violet-500 text-violet-200' : 'bg-slate-950 border-slate-700 text-slate-300'}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <div className="w-full text-xs text-slate-500">
-            自动规则：1日=5m，3/5日=15m，20日=60m，60日/全部=1d；拖动滑块时仅“自动”模式会动态换粒度。
-          </div>
-          <div className="w-full flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400">锚点累计：</span>
-            <button
-              onClick={() => setAnchorModeEnabled((prev) => !prev)}
-              className={`px-2 py-1 rounded border ${anchorModeEnabled ? 'bg-amber-700/40 border-amber-500 text-amber-200' : 'bg-slate-950 border-slate-700 text-slate-300'}`}
-            >
-              {anchorModeEnabled ? '已开启（点K线设锚点）' : '未开启'}
-            </button>
-            <button
-              onClick={() => setAnchorTs(null)}
-              disabled={anchorTs === null}
-              className={`px-2 py-1 rounded border ${anchorTs === null ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-950 border-slate-700 text-slate-300'}`}
-            >
-              清除锚点
-            </button>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
-              当前锚点 {anchorText}
-            </span>
           </div>
         </div>
 
@@ -1387,11 +1730,11 @@ const SandboxReviewPage: React.FC = () => {
             <ReactEChartsCore
               echarts={echarts}
               option={option}
-              style={{ width: '100%', height: '276vh' }}
+              style={{ width: '100%', height: chartHeight }}
               onEvents={{ datazoom: handleDataZoom, click: handleChartClick }}
             />
           ) : (
-            <div className="h-[70vh] flex items-center justify-center text-slate-500 text-sm">
+            <div className="h-[58vh] flex items-center justify-center text-slate-500 text-sm">
               {error || emptyMessage || '暂无可视化数据。'}
             </div>
           )}
@@ -1431,23 +1774,15 @@ const SandboxReviewPage: React.FC = () => {
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-2">
-                <ReactEChartsCore
-                  echarts={echarts}
-                  option={scatterOptionL1}
-                  style={{ width: '100%', height: '320px' }}
-                />
+                <ReactEChartsCore echarts={echarts} option={scatterOptionL1} style={{ width: '100%', height: '320px' }} />
               </div>
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-2">
-                <ReactEChartsCore
-                  echarts={echarts}
-                  option={scatterOptionL2}
-                  style={{ width: '100%', height: '320px' }}
-                />
+                <ReactEChartsCore echarts={echarts} option={scatterOptionL2} style={{ width: '100%', height: '320px' }} />
               </div>
             </div>
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 };

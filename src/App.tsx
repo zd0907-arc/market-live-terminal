@@ -1,15 +1,26 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Search, Activity, ArrowUp, ArrowDown, Clock, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Star, Server, Target } from 'lucide-react';
-import { HistoryMultiframeGranularity, RealTimeQuote, SearchResult } from './types';
+import { Activity, ArrowUp, ArrowDown, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Target } from 'lucide-react';
+import { HistoryMultiframeGranularity, RealTimeQuote, ReviewPoolItem, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
-import RealTimeClock from './components/common/RealTimeClock';
-import { APP_VERSION } from './version';
+import StockQuoteHeroCard from './components/common/StockQuoteHeroCard';
+import MarketTopHeader from './components/common/MarketTopHeader';
+import QuoteMetaRow from './components/common/QuoteMetaRow';
+import { isCurrentCnTradingSession } from './utils/marketTime';
 
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
+
+const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
+
+const getSymbolFromLocation = (): string => {
+  if (typeof window === 'undefined') return '';
+  const value = new URLSearchParams(window.location.search).get('symbol') || '';
+  const normalized = value.trim().toLowerCase();
+  return VALID_SYMBOL_RE.test(normalized) ? normalized : '';
+};
 
 class ViewErrorBoundary extends React.Component<{ title: string; children: React.ReactNode }, { hasError: boolean; message: string }> {
   constructor(props: { title: string; children: React.ReactNode }) {
@@ -65,6 +76,7 @@ const App: React.FC = () => {
   // Search History
   const [searchHistory, setSearchHistory] = useState<SearchResult[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [initialSymbol] = useState<string>(() => getSymbolFromLocation());
 
   // Fusion Navigation
   const [fusionSection, setFusionSection] = useState<'intraday_live' | 'history_multiframe'>('intraday_live');
@@ -72,6 +84,8 @@ const App: React.FC = () => {
 
   // Shared Data
   const [quote, setQuote] = useState<RealTimeQuote | null>(null);
+  const [reviewMeta, setReviewMeta] = useState<ReviewPoolItem | null>(null);
+  const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -117,6 +131,30 @@ const App: React.FC = () => {
       console.warn('Failed to load search history');
     }
   }, []);
+
+  useEffect(() => {
+    if (!initialSymbol || activeStock) return;
+    const bootstrap = async () => {
+      try {
+        const quote = await StockService.fetchQuote(initialSymbol);
+        handleSelectStock({
+          symbol: initialSymbol,
+          code: initialSymbol.slice(2),
+          market: initialSymbol.slice(0, 2),
+          name: quote.name || initialSymbol,
+        });
+      } catch {
+        handleSelectStock({
+          symbol: initialSymbol,
+          code: initialSymbol.slice(2),
+          market: initialSymbol.slice(0, 2),
+          name: initialSymbol,
+        });
+      }
+    };
+    bootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSymbol, activeStock]);
 
   // Backend Health Check
   useEffect(() => {
@@ -237,8 +275,62 @@ const App: React.FC = () => {
     };
   }, [activeStock, focusMode]);
 
+  useEffect(() => {
+    if (!activeStock?.symbol) {
+      setReviewMeta(null);
+      return;
+    }
+    let cancelled = false;
+    StockService.fetchReviewPool(activeStock.symbol, 20)
+      .then((pool) => {
+        if (cancelled) return;
+        const matched = pool.items.find((item) => item.symbol === activeStock.symbol) || null;
+        setReviewMeta(matched);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReviewMeta(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStock]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (activeStock?.symbol) {
+      url.searchParams.set('symbol', activeStock.symbol.toLowerCase());
+    } else {
+      url.searchParams.delete('symbol');
+    }
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [activeStock]);
+
+  useEffect(() => {
+    if (!activeStock?.symbol) {
+      setTurnoverRate(null);
+      return;
+    }
+    let cancelled = false;
+    StockService.fetchSentimentData(activeStock.symbol)
+      .then((data) => {
+        if (cancelled) return;
+        const value = Number(data?.turnover_rate);
+        setTurnoverRate(Number.isFinite(value) ? value : null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTurnoverRate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStock]);
+
   // Scroll State for Sticky Header
   const [isScrolled, setIsScrolled] = useState(false);
+  const searchContainerRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -268,106 +360,53 @@ const App: React.FC = () => {
     return num.toFixed(0);
   };
 
+  const trimTrailingZeros = (valueText: string) => valueText.replace(/\.0+$|(\.\d*[1-9])0+$/, '$1');
+  const formatMarketCapYi = (marketCap?: number): string | null => {
+    if (!Number.isFinite(marketCap) || (marketCap || 0) <= 0) return null;
+    return `${trimTrailingZeros(((marketCap || 0) / 100000000).toFixed(2))}亿`;
+  };
+
   const sectionLoading = (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs text-slate-500">
       组件加载中...
     </div>
   );
+  const reviewHref = activeStock?.symbol ? `/sandbox-review?symbol=${activeStock.symbol.toLowerCase()}` : '/sandbox-review';
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-20 overflow-x-hidden">
+      <MarketTopHeader
+        routeHref={reviewHref}
+        routeLabel="去复盘"
+        routeTitle="打开沙盒复盘页面"
+        searchValue={query}
+        isSearchFocused={isSearchFocused}
+        searchResults={results}
+        searchHistory={searchHistory}
+        searchContainerRef={searchContainerRef}
+        onSearchChange={(value) => setQuery(value)}
+        onSearchFocus={() => setIsSearchFocused(true)}
+        onSearchBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+        onSearchKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          if (results.length > 0) {
+            handleSelectStock(results[0]);
+          }
+        }}
+        onClearSearch={() => setQuery('')}
+        onSelectSearchResult={(res) => handleSelectStock(res)}
+        onSelectHistory={(res) => handleSelectStock(res)}
+        rightSlot={<ThresholdConfig onConfigUpdate={handleConfigUpdate} />}
+      />
+
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#0f1623]/95 backdrop-blur border-b border-slate-800 shadow-md transition-all duration-300">
-        <div className="max-w-6xl mx-auto p-3 md:p-4 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
-
-          {/* Top Row: Logo & Search */}
-          <div className="w-full flex items-center justify-between gap-3 md:gap-4">
-            <div className="flex items-center gap-2 font-bold text-lg text-red-500 shrink-0">
-              <Activity className="w-6 h-6" />
-              <span className="hidden sm:inline">ZhangData</span>
-              <span className="text-[10px] md:text-xs text-slate-500 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded font-mono">v{APP_VERSION}</span>
-              <a
-                href="/sandbox-review"
-                className="text-[10px] md:text-xs text-cyan-300 bg-cyan-900/30 border border-cyan-700/50 px-1.5 py-0.5 rounded hover:bg-cyan-800/40 transition-colors"
-                title="打开沙盒复盘页面"
-              >
-                复盘
-              </a>
-            </div>
-
-            <div className="relative flex-1 max-w-3xl flex items-center gap-2 md:gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4 md:w-5 md:h-5" />
-                <input
-                  type="text"
-                  placeholder="代码(600519) 或 简称(茅台)"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 md:pl-10 md:pr-4 md:py-2 text-sm md:text-base text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                  value={query}
-                  onChange={handleSearch}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                />
-
-                {/* Search History Dropdown */}
-                {isSearchFocused && !query && searchHistory.length > 0 && (
-                  <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-80 overflow-y-auto z-50">
-                    <div className="px-3 py-2 text-[10px] md:text-xs text-slate-500 bg-slate-900/50 border-b border-slate-700 flex justify-between items-center">
-                      <span>最近访问</span>
-                      <span className="bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">History</span>
-                    </div>
-                    {searchHistory.map((res) => (
-                      <button
-                        key={res.symbol}
-                        onClick={() => handleSelectStock(res)}
-                        className="w-full text-left px-3 py-2 md:px-4 md:py-2 hover:bg-slate-700 flex justify-between items-center group transition-colors border-b border-slate-800/50 last:border-0"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />
-                          <span className="font-medium text-slate-300 text-sm md:text-base">{res.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 font-mono">{res.code}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Search Results Dropdown */}
-                {results.length > 0 && (
-                  <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto z-50">
-                    {results.map((res) => (
-                      <button
-                        key={res.symbol}
-                        onClick={() => handleSelectStock(res)}
-                        className="w-full text-left px-3 py-2 md:px-4 md:py-3 hover:bg-slate-700 flex justify-between items-center group transition-colors"
-                      >
-                        <div>
-                          <span className="font-bold text-white text-sm md:text-base">{res.name}</span>
-                          <span className="ml-2 text-[10px] md:text-xs text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded">{res.code}</span>
-                        </div>
-                        <span className="text-[10px] md:text-xs text-slate-500 group-hover:text-blue-400 uppercase">{res.market}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Spacer for centering */}
-            <div className="hidden md:flex items-center gap-4 w-48 justify-end">
-              <ThresholdConfig onConfigUpdate={handleConfigUpdate} />
-            </div>
-          </div>
-        </div>
-
+      <div>
         {/* --- Mobile Sticky Stock Info Bar (Appears on Scroll) --- */}
         {isScrolled && activeStock && quote && (
           <div className="md:hidden border-t border-slate-800 bg-[#0a0f1c]/95 backdrop-blur px-3 py-2 flex items-center justify-between shadow-xl mt-2 animate-in slide-in-from-top-2">
             <div className="flex items-center gap-2">
               <span className="font-bold text-sm text-white">{quote.name}</span>
-              <span className="text-[10px] bg-slate-800 text-slate-400 px-1 rounded">{quote.symbol.toUpperCase()}</span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <span className={`font-mono font-bold ${getPriceColor(quote.price, quote.lastClose)}`}>
@@ -380,9 +419,9 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-      </header>
+      </div>
 
-      <main className="max-w-6xl mx-auto p-2 md:p-6 space-y-4 md:space-y-6">
+      <main className="max-w-[1600px] mx-auto p-2 md:p-6 space-y-4 md:space-y-6">
 
         {/* No Active Stock State */}
         {!activeStock && !loading && !quote && (
@@ -411,145 +450,63 @@ const App: React.FC = () => {
 
         {/* Quote Header Card */}
         {quote && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative overflow-hidden mb-6">
-            <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full blur-[80px] opacity-20 pointer-events-none ${quote.price >= quote.lastClose ? 'bg-red-500' : 'bg-green-500'}`}></div>
-
-            <div className="flex justify-between items-start md:items-center relative z-10 flex-col md:flex-row gap-4">
-              {/* Left Section: Stock Info + Indicators */}
-              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-8 flex-1 w-full relative">
-
-                {/* 1. Name & Status (Left/Top) */}
-                <div className="flex flex-col gap-1 w-full md:w-auto flex-shrink-0">
-                  <div className="flex justify-between md:justify-start items-center gap-3">
-                    <div className="flex items-center gap-2 md:gap-3">
-                      <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-                        {quote.name}
-                      </h1>
-                      <span className="text-[10px] md:text-xs font-mono text-slate-400 font-normal bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                        {quote.symbol.toUpperCase()}
-                      </span>
-                    </div>
-
-                    {/* Move Price here on mobile only */}
-                    <div className="md:hidden text-right pl-2 shrink-0">
-                      <div className={`text-xl font-mono font-bold tracking-tight leading-none ${getPriceColor(quote.price, quote.lastClose)}`}>
-                        {quote.price.toFixed(2)}
-                      </div>
-                      <div className={`text-[10px] font-mono flex items-center justify-end gap-1 mt-1 leading-none ${getPriceColor(quote.price, quote.lastClose)}`}>
-                        <span className="flex items-center">
-                          {quote.price >= quote.lastClose ? <ArrowUp className="w-2.5 h-2.5 mr-0.5" /> : <ArrowDown className="w-2.5 h-2.5 mr-0.5" />}
-                          {(quote.price - quote.lastClose).toFixed(2)}
-                        </span>
-                        <span className="bg-slate-800/50 px-1 rounded block">
-                          {((quote.price - quote.lastClose) / quote.lastClose * 100).toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 md:gap-3 text-[10px] text-slate-500 font-mono mt-1 mb-1 md:mb-0">
-                    <button
-                      onClick={toggleWatchlist}
-                      className={`p-1 md:p-1.5 rounded-full transition-colors ${isWatchlisted ? 'text-yellow-400 bg-yellow-400/10' : 'text-slate-600 hover:text-slate-400 hover:bg-slate-800'}`}
-                      title={isWatchlisted ? '取消收藏' : '加入自选'}
-                    >
-                      <Star className={`w-3.5 h-3.5 md:w-4 md:h-4 ${isWatchlisted ? 'fill-yellow-400' : ''}`} />
-                    </button>
-
-                    <button
-                      onClick={() => setFocusMode(prev => prev === 'focus' ? 'normal' : 'focus')}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] md:text-xs transition-colors border ${focusMode === 'focus' ? 'text-red-300 bg-red-400/10 border-red-500/40' : 'text-slate-300 bg-slate-800 border-slate-700 hover:text-white hover:bg-slate-700'}`}
-                      title={focusMode === 'focus' ? '关闭盯盘，恢复 30 秒静默刷新' : '开启盯盘，切换为 5 秒刷新'}
-                    >
-                      {focusMode === 'focus' ? (
-                        <>
-                          <Target className="w-3.5 h-3.5 animate-pulse" />
-                          <span className="font-bold">盯盘中 5s</span>
-                        </>
-                      ) : (
-                        <>
-                          <Activity className="w-3.5 h-3.5" />
-                          <span>盯盘关闭 30s</span>
-                        </>
-                      )}
-                    </button>
-
-                    <RealTimeClock />
-                    <span className={`flex items-center gap-1 ${backendStatus ? 'text-green-500/80' : 'text-red-500/80'}`}>
-                      <Server className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                      {backendStatus ? '核心服务: 正常' : '核心服务: 断开'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* 2. Key Indicators (Grid - Scrollable on mobile) */}
-                <div className="w-full overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                  <div className="flex md:grid md:grid-cols-2 gap-x-4 md:gap-x-6 gap-y-1 text-[10px] md:text-xs font-mono md:border-l md:border-slate-800 md:pl-6 min-w-max">
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <span className="text-slate-500 whitespace-nowrap">成交:</span>
-                      <span className="text-slate-200">{formatAmount(quote.volume)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <span className="text-slate-500 whitespace-nowrap">金额:</span>
-                      <span className="text-slate-200">{formatAmount(quote.amount)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <span className="text-slate-500 whitespace-nowrap">高/低:</span>
-                      <span>
-                        <span className="text-red-400">{quote.high.toFixed(2)}</span>
-                        <span className="text-slate-600 mx-0.5">/</span>
-                        <span className="text-green-400">{quote.low.toFixed(2)}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <span className="text-slate-500 whitespace-nowrap">开/收:</span>
-                      <span>
-                        <span className={quote.open > quote.lastClose ? 'text-red-400' : 'text-green-400'}>{quote.open.toFixed(2)}</span>
-                        <span className="text-slate-600 mx-0.5">/</span>
-                        <span className="text-slate-200">{quote.lastClose.toFixed(2)}</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Right Section: Price (Desktop Only - Mobile Moved up) */}
-              <div className="hidden md:block text-right pl-4 shrink-0 border-l border-slate-800 md:border-none ml-auto">
-                <div className={`text-4xl font-mono font-bold tracking-tight ${getPriceColor(quote.price, quote.lastClose)}`}>
-                  {quote.price.toFixed(2)}
-                </div>
-                <div className={`text-sm font-mono flex items-center justify-end gap-2 mt-1 ${getPriceColor(quote.price, quote.lastClose)}`}>
-                  <span className="flex items-center">
-                    {quote.price >= quote.lastClose ? <ArrowUp className="w-3 h-3 mr-1" /> : <ArrowDown className="w-3 h-3 mr-1" />}
-                    {(quote.price - quote.lastClose).toFixed(2)}
-                  </span>
-                  <span className="bg-slate-800/50 px-1.5 py-0.5 rounded">
-                    {((quote.price - quote.lastClose) / quote.lastClose * 100).toFixed(2)}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <StockQuoteHeroCard
+            name={quote.name}
+            symbol={quote.symbol.toUpperCase()}
+            price={quote.price}
+            previousClose={quote.lastClose}
+            open={quote.open}
+            high={quote.high}
+            low={quote.low}
+            volume={quote.volume}
+            amount={quote.amount}
+            turnoverRate={turnoverRate}
+            latestLabel={!isCurrentCnTradingSession() && quote.date ? `最新 ${quote.date}` : undefined}
+            marketCapLabel={formatMarketCapYi(reviewMeta?.market_cap) ?? '--'}
+            metaRow={
+              <QuoteMetaRow
+                isWatchlisted={isWatchlisted}
+                onToggleWatchlist={toggleWatchlist}
+                backendStatus={backendStatus}
+              />
+            }
+          />
         )}
 
         {/* View Switcher */}
         {quote && (
           <div className="space-y-3">
-            <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+            <div className="flex flex-wrap items-center gap-2 bg-slate-900 rounded-xl p-2 border border-slate-800 shadow-lg">
               <button
                 onClick={() => setFusionSection('intraday_live')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
               >
                 <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 当日分时
               </button>
               <button
                 onClick={() => setFusionSection('history_multiframe')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
               >
                 <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 历史多维
+              </button>
+              <button
+                onClick={() => setFocusMode(prev => prev === 'focus' ? 'normal' : 'focus')}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all border ${focusMode === 'focus' ? 'text-red-300 bg-red-400/10 border-red-500/40' : 'text-slate-300 bg-slate-800 border-slate-700 hover:text-white hover:bg-slate-700'}`}
+                title={focusMode === 'focus' ? '关闭盯盘，恢复 30 秒静默刷新' : '开启盯盘，切换为 5 秒刷新'}
+              >
+                {focusMode === 'focus' ? (
+                  <>
+                    <Target className="w-3.5 h-3.5 animate-pulse" />
+                    <span className="font-bold">盯盘中 5s</span>
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>盯盘关闭 30s</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
