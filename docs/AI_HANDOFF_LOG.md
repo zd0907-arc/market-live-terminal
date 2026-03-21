@@ -716,3 +716,10 @@
 - 结论: 已修复首页/复盘页来回切换时搜索历史丢失：首页在 URL `?symbol=` 初始化选股时，改为使用函数式历史更新，避免先于 `localStorage` 回填时用空历史覆盖已有最近记录。
 - 风险: 当前最近搜索仍为首页与复盘页共用同一个 `localStorage` key；这是符合预期的统一体验，但若未来要做页面级隔离历史，需要再拆 key 并补迁移逻辑。
 - 链接: `src/App.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-22 00:39 | 发布 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 搜索历史覆盖修复已随 `v4.2.31` 发版；发布提交 `c18cd2c`，tag `v4.2.31`，生产部署完成。
+- 风险: 本次为前端状态修复，不涉及后端契约；如用户仍反馈历史记录异常，应优先检查浏览器是否处于隐私模式或是否有扩展拦截 `localStorage`。
+- 链接: `src/App.tsx`, `package.json`, `src/version.ts`, `backend/app/main.py`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
