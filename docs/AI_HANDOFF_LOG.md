@@ -1,4 +1,28 @@
+
+## 2026-03-21 19:10 | Codex
+- Task ID: `CHG-20260321-01`, `CHG-20260321-02`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
+- 结论: 已完成 最后一个支持“旧版 / 新版切换”的生产基线（`v4.2.28`），逐页面写清首页旧版/新版并存、正式复盘并库后的真实链路与数据覆盖；同时已冻结下一阶段“去掉旧版、只保留新版”的 REQ，并准备从新分支推进。
+- 风险: 首页去旧版首期应按“先下入口、后删代码”推进；`HistoryView` 与旧接口若立刻物理删除，会抬高回滚成本。正式复盘元数据 `stock_universe_meta` 仍需后续补自动刷新。
+- 链接: `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`, `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
+
 # AI_HANDOFF_LOG（短日志）
+
+## 2026-03-21 20:05 | Codex
+- Task ID: `CHG-20260321-02`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成首页“只保留新版”发布准备：版本提升到 `v4.2.29`，首页已去掉 `旧版 / 新版` 切换与旧版 `30分钟线 / 日线` 入口，并完成基线检查。
+- 风险: 当前仍保留 `HistoryView` 与旧接口作为一版暗桩回滚缓冲；本轮属于“下入口，不删代码”的安全收敛。
+- 链接: `src/App.tsx`, `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md`, `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
+
+
+## 2026-03-21 19:40 | Codex
+- Task ID: `CHG-20260321-02`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已在分支 `codex/fusion-only-remove-legacy` 完成首页“只保留新版”第一步实现：去掉 `旧版 / 新版` 顶部切换与旧版 `30分钟线 / 日线` 首页入口，首页现只保留 `当日分时 + 历史多维 + 散户情绪监测`。
+- 风险: 当前仅移除入口，尚未物理删除 `HistoryView` 与旧接口；这符合“先下入口、后删代码”的回滚缓冲策略，但正式线上尚未发版。
+- 链接: `src/App.tsx`, `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md`, `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
+
 > 规则：每条日志必须包含 Task ID、CAP ID、结论、阻塞/风险、链接；每条不超过 8 行要点。
 >
 > 历史长日志归档：`docs/archive/AI_HANDOFF_LOG_LEGACY_2026-03-09.md`

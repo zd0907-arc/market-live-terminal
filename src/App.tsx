@@ -7,7 +7,6 @@ import RealTimeClock from './components/common/RealTimeClock';
 import { APP_VERSION } from './version';
 
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
-const HistoryView = lazy(() => import('./components/dashboard/HistoryView'));
 const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
@@ -67,9 +66,7 @@ const App: React.FC = () => {
   const [searchHistory, setSearchHistory] = useState<SearchResult[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // Legacy View Mode
-  const [legacyViewMode, setLegacyViewMode] = useState<'intraday_live' | 'intraday_30m' | 'daily'>('intraday_live');
-  const [pageVersion, setPageVersion] = useState<'legacy' | 'fusion_v1'>('legacy');
+  // Fusion Navigation
   const [fusionSection, setFusionSection] = useState<'intraday_live' | 'history_multiframe'>('intraday_live');
   const [fusionGranularity, setFusionGranularity] = useState<HistoryMultiframeGranularity>('1d');
 
@@ -356,22 +353,6 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800 shrink-0">
-                <button
-                  onClick={() => setPageVersion('legacy')}
-                  className={`px-2.5 py-1.5 rounded-md text-[11px] md:text-xs font-medium transition-colors ${pageVersion === 'legacy' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                  title="切换到旧版页面"
-                >
-                  旧版
-                </button>
-                <button
-                  onClick={() => setPageVersion('fusion_v1')}
-                  className={`px-2.5 py-1.5 rounded-md text-[11px] md:text-xs font-medium transition-colors ${pageVersion === 'fusion_v1' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                  title="切换到新版页面"
-                >
-                  新版
-                </button>
-              </div>
             </div>
 
             {/* Spacer for centering */}
@@ -555,53 +536,27 @@ const App: React.FC = () => {
         {/* View Switcher */}
         {quote && (
           <div className="space-y-3">
-            {pageVersion === 'legacy' ? (
-              <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
-                <button
-                  onClick={() => setLegacyViewMode('intraday_live')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  当日分时
-                </button>
-                <button
-                  onClick={() => setLegacyViewMode('intraday_30m')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'intraday_30m' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  30分钟线
-                </button>
-                <button
-                  onClick={() => setLegacyViewMode('daily')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${legacyViewMode === 'daily' ? 'bg-amber-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  日线
-                </button>
-              </div>
-            ) : (
-              <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
-                <button
-                  onClick={() => setFusionSection('intraday_live')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  当日分时
-                </button>
-                <button
-                  onClick={() => setFusionSection('history_multiframe')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                >
-                  <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  历史多维
-                </button>
-              </div>
-            )}
+            <div className="flex bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-lg">
+              <button
+                onClick={() => setFusionSection('intraday_live')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'intraday_live' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              >
+                <Activity className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                当日分时
+              </button>
+              <button
+                onClick={() => setFusionSection('history_multiframe')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all ${fusionSection === 'history_multiframe' ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                历史多维
+              </button>
+            </div>
           </div>
         )}
 
         {/* Content Views */}
-        {activeStock && pageVersion === 'legacy' && legacyViewMode === 'intraday_live' && (
+        {activeStock && fusionSection === 'intraday_live' && (
           <ViewErrorBoundary title="当日分时">
             <Suspense fallback={sectionLoading}>
               <RealtimeView
@@ -614,46 +569,7 @@ const App: React.FC = () => {
           </ViewErrorBoundary>
         )}
 
-        {quote && pageVersion === 'legacy' && legacyViewMode === 'intraday_30m' && (
-          <ViewErrorBoundary title="30分钟线">
-            <Suspense fallback={sectionLoading}>
-              <HistoryView
-                activeStock={activeStock}
-                backendStatus={backendStatus}
-                configVersion={configVersion}
-                forceViewMode="intraday"
-              />
-            </Suspense>
-          </ViewErrorBoundary>
-        )}
-
-        {quote && pageVersion === 'legacy' && legacyViewMode === 'daily' && (
-          <ViewErrorBoundary title="日线">
-            <Suspense fallback={sectionLoading}>
-              <HistoryView
-                activeStock={activeStock}
-                backendStatus={backendStatus}
-                configVersion={configVersion}
-                forceViewMode="daily"
-              />
-            </Suspense>
-          </ViewErrorBoundary>
-        )}
-
-        {activeStock && pageVersion === 'fusion_v1' && fusionSection === 'intraday_live' && (
-          <ViewErrorBoundary title="当日分时">
-            <Suspense fallback={sectionLoading}>
-              <RealtimeView
-                activeStock={activeStock}
-                isTradingHours={isTradingHours}
-                configVersion={configVersion}
-                focusMode={focusMode}
-              />
-            </Suspense>
-          </ViewErrorBoundary>
-        )}
-
-        {quote && pageVersion === 'fusion_v1' && fusionSection === 'history_multiframe' && (
+        {quote && fusionSection === 'history_multiframe' && (
           <ViewErrorBoundary title="历史多维">
             <Suspense fallback={sectionLoading}>
               <HistoryMultiframeFusionView
