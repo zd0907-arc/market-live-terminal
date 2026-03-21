@@ -2,12 +2,12 @@
 
 ## 当前真相
 - 当前权威工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
-- 当前版本：`v4.2.28`
+- 当前版本：`v4.2.29`
 - 当前主线分支：`main`
 - 当前临时工作分支规范：`codex/<feat|fix|chore>-<topic>-YYYYMMDD`
-- 当前产品回退 Tag：`v4.2.28`
+- 当前产品回退 Tag：`v4.2.29`
 - 显式回滚别名 Tag：`baseline-v4.2.28-legacy-toggle`
-- 上一产品版本 Tag：`v4.2.27`
+- 上一产品版本 Tag：`v4.2.28`
 - 当前基线归档：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
 - 深度治理回退 Tag：`snapshot-20260318-pre-governance`
 - 当前回退分支：`codex/archive-pre-governance-20260318`
@@ -51,7 +51,8 @@ git checkout main && git merge --no-ff <branch>
 4. 前端不得持有 `WRITE_API_TOKEN`；写鉴权仅允许通过服务端代理/环境变量注入。
 
 ## 当前回退入口
-- 产品代码回退：优先切回 `v4.2.28`（commit `c1eec34`）或上一版 `v4.2.27`
+- 产品代码回退：优先切回 `v4.2.29`（本次发布 tag）或上一版 `v4.2.28`
+- 最后一版支持“旧版 / 新版切换”的回退：`baseline-v4.2.28-legacy-toggle`（commit `c1eec34`）
 - 当前版本页面/数据基线：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
 - 深度治理回退：`snapshot-20260318-pre-governance` 或 `codex/archive-pre-governance-20260318`
 - 数据/配置回退目录：`/Users/dong/Desktop/AIGC/backups/market-live-terminal/20260318-pre-governance/`

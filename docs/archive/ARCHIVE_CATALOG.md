@@ -31,3 +31,5 @@
 | `docs/archive/retail_sentiment_implementation.md` | 散户情绪模块 (Retail Sentiment) 详细实现说明文档 (v2.7.0) | `LEG` | `ARC-LEG-00000000-retail-sentiment-implementation` | `ARC-LEG-00000000-retail-sentiment-implementation.md` |
 
 | `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` | 最后一个支持“旧版 / 新版切换”的生产基线（`v4.2.28`） | `CHG` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` |
+
+| `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` | 首页去掉旧版入口，只保留新版信息架构 | `CHG` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` |

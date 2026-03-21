@@ -1,8 +1,15 @@
+> Archive-Meta
+- Archive-ID: ARC-CHG-20260321-fusion-only-remove-legacy-entry
+- Archive-Type: CHG
+- Archived-At: 2026-03-21
+- Source-Path: docs/changes/REQ-20260321-02-fusion-only-remove-legacy-entry.md
+- Status: FROZEN
+
 # REQ-20260321-02-fusion-only-remove-legacy-entry
 
 ## 1. 基本信息
 - 标题：首页去掉旧版入口，只保留新版信息架构
-- 状态：ACTIVE
+- 状态：DONE
 - 负责人：Codex
 - 关联 Task ID：`CHG-20260321-02`
 - 关联 CAP：`CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
@@ -90,9 +97,10 @@
   - 当前完整基线说明见：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`。
 
 ## 8. 结果回填
-- 当前状态：已在分支 `codex/fusion-only-remove-legacy` 完成首页入口收敛第一步，正式移除首页 `旧版 / 新版` 按钮与旧版三分支入口；首页现只保留 `当日分时 + 历史多维 + 散户情绪监测`。
+- 当前状态：已完成首页“只保留新版”首轮发布版实现，正式移除首页 `旧版 / 新版` 按钮与旧版 `30分钟线 / 日线` 入口；首页现只保留 `当日分时 + 历史多维 + 散户情绪监测`。
 - 保留策略：当前仅做“下入口”，未物理删除 `HistoryView` 文件与旧接口，继续保留一版暗桩回滚缓冲。
 - 验证结果：
   - `npm run build` 通过；
   - `npm run check:baseline` 通过（`84 passed`）。
-- 下一步：如需发布，再继续走合并 / 发版流程；若后续确认稳定，可另开清理卡物理删除死代码。
+- 发布结果：计划版本 `v4.2.29`。
+- 后续：如新版稳定，可另开清理卡物理删除死代码。
