@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.2.29';
+export const APP_VERSION = '4.2.30';
 export const RELEASE_NOTES = [
+    'v4.2.30: 收口复盘页操作栏与共享股票信息卡，首页/复盘页共用顶栏与信息卡版式，切页自动保留当前股票并统一高密度核心信息展示',
     'v4.2.29: 首页正式去掉旧版/新版切换与旧版30分钟线/日线入口，只保留当日分时+历史多维+散户情绪；保留 HistoryView 与旧接口作为一版回滚缓冲',
     'v4.2.28: 复盘页正式并库首轮上线，新增 /api/review/pool 与 /api/review/data，复盘主链路切到生产 history_5m_l2/history_daily_l2，并补齐正式股票池元数据与单股票后台补历史能力',
     'v4.2.27: 新增盘后主动自愈扫盘，交易日15:02/07/12/17会自动修补停在14:45/14:50等陈旧时间点的today分时，并重建history_1m与5m preview，减少个别股票需靠手动打开页面才恢复的问题',

@@ -8,6 +8,34 @@
 
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-03-21 21:05 | Codex
+- Task ID: `CHG-20260321-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成正式复盘页顶部操作栏重构：股票选择改为首页同款搜索体验，日期改为范围选择器，切股默认回到最近 `90` 天，顶部标签改为两行极简摘要；同时保留平台 logo，删去重复 symbol 与“锚点未设置”等无效信息。
+- 风险: 本地若看到 `HTTP 404` 并非“无数据”，而是当前后端未提供 `/api/review/*` 路由或代理未连通；正式“无数据”应表现为 `HTTP 200 + 空数组`。本轮最初曾误在 `main` 本地工作树改动，现已转移到 `codex/review-toolbar-refactor`。
+- 链接: `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 22:15 | Codex
+- Task ID: `CHG-20260321-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续收口复盘页操作栏：移除整个第二行说明文字、去掉日期按钮固定“最近90天”提示、删除粒度区“自动”按钮，并在日期快捷区间中补 `10天`；当前改为“选定日期范围后自动落到推荐粒度，用户如有需要再手动切换”。
+- 风险: 当前“推荐粒度”是按日期跨度静态落档，不再随图表 dataZoom 动态切换；若后续需要恢复“拖动窗口自动变档”，需再单独冻结交互规则。
+- 链接: `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 22:45 | Codex
+- Task ID: `CHG-20260321-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续优化复盘页视觉与交互：新增横向股票信息卡显示所选股票最新一日基础信息；日期快捷按钮外置；`60/90天` 默认落 `1d`；股价主图高度压缩；两个净流入对比图改为柱状图；tooltip 改为顶部固定且精简，避免随鼠标漂出画面。
+- 风险: 最新一日信息卡当前基于复盘返回的最新日线数据派生，不额外请求实时 quote；若后续要完全复刻首页实时价卡，需要再单独决定是否引入 quote 口径差异。
+- 链接: `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 23:05 | Codex
+- Task ID: `CHG-20260321-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已把首页与复盘页股票信息卡收口为共享组件 `StockQuoteHeroCard`，并让复盘页改用实时 quote 补齐真实股票名称与最新行情日；同时复盘页搜索框在选股后只显示名称，不再把 `symbol` 回填到输入框，快捷区间/粒度按钮也已缩小并改成可换行全量可见。
+- 风险: 首页卡片已切到共享组件，但首页搜索候选列表仍保留代码信息，当前“代码尽量降噪”的调整主要落实在复盘页选股态；若后续要把首页搜索候选也改成纯名称，需要单独再收一轮搜索体验。
+- 链接: `src/components/common/StockQuoteHeroCard.tsx`, `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
 ## 2026-03-21 20:05 | Codex
 - Task ID: `CHG-20260321-02`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
@@ -625,3 +653,52 @@
 - 结论: 已完成复盘页正式并库首轮实现：新增正式元数据表 `stock_universe_meta`、`/api/review/pool`、`/api/review/data`，前端复盘页已切到生产正式库并改为按股票真实 `min_date/max_date` 动态限界；同时新增 `refresh_stock_universe_meta.py` 与 `promote_review_symbol_history.py`，支持正式池元数据刷新与单股票后台补历史。
 - 风险: 当前 `stock_universe_meta` 仍需脚本手动刷新，尚未接定时调度；单股票补历史 slow path 仍依赖本地原始历史包可访问。
 - 链接: `backend/app/routers/review.py`, `backend/app/db/l2_history_db.py`, `backend/scripts/refresh_stock_universe_meta.py`, `backend/scripts/promote_review_symbol_history.py`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/REQ-20260314-06-review-page-prod-l2-unification.md`
+
+## 2026-03-21 16:20 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已继续收口复盘页操作栏/信息卡/锚点图体验：股票信息卡上移到搜索栏下方并与首页共享 `StockQuoteHeroCard`，恢复名称后股票代码且固定展示市值；复盘页卡片最新日期改跟随首页同源 quote；锚点累计图从 4 张收敛为 2 张且仅在锚点开关打开时显示，同时压缩主图高度并把底部 dataZoom 拉近图区。
+- 风险: 复盘页信息卡最新日期依赖腾讯 quote 返回，若外部 quote 拉取失败则会回退到正式历史表最后一日；当前改动仍在功能分支 `codex/review-toolbar-refactor`，尚未发布。
+- 链接: `src/components/sandbox/SandboxReviewPage.tsx`, `src/components/common/StockQuoteHeroCard.tsx`, `src/App.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 16:48 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已继续修正复盘页图表联调细节：锚点开关前后主图高度改为固定，不再出现“开锚点后整体突然拉高”；净流入柱图与锚点累计图已向历史多维配色对齐；tooltip 从固定右上角改为跟随当前点位，并在最右侧自动翻到左边。
+- 风险: 当前 tooltip 仍采用 ECharts 单浮层，极窄窗口下若内容过长仍可能触发二次夹紧；如后续继续精修，可再按移动端单独降简内容。
+- 链接: `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 17:05 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已把首页与复盘页的顶栏结构进一步对齐：首页整体宽度扩到宽屏版式；复盘页搜索移入顶栏并放到 logo 后方，页面顺序调整为“搜索 → 股票信息卡 → 日期功能区 → 图表”；首页顶栏按钮继续显示 `复盘`，复盘页同位置切换为 `首页`。
+- 风险: 当前“首页/复盘页顶栏统一”仍是样式级对齐，尚未抽成共享 header 组件；若后续继续频繁改顶栏，可考虑再抽共用壳层避免双处维护。
+- 链接: `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 17:26 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已继续按“首页/复盘页完全对齐”收口：首页按钮文案改为 `去复盘`，复盘页对应改为 `回到首页`；复盘页顶栏补回首页同款搜索历史下拉与右侧配置按钮区域；复盘页股票信息卡补齐首页同款 meta 行（自选、盯盘态、时钟、核心服务状态）。
+- 风险: 复盘页当前保留了首页同款“盯盘”视觉按钮，但该按钮在复盘页仅作为界面状态，不驱动额外轮询策略；若后续需要严格语义一致，应考虑抽共享卡片同时做页面级行为适配。
+- 链接: `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-21 17:48 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已进一步落到真正共享实现：抽出 `MarketTopHeader` 与 `QuoteMetaRow`，首页/复盘页共用同一顶栏和股票信息 meta 行；同时把首页 `盯盘` 按钮从信息卡移到“当日分时 / 历史多维”小按钮操作栏，复盘页卡片不再带盯盘按钮。
+- 风险: 目前仅顶栏与信息卡 meta 行实现了共享，页面主体内容区仍分别维护；若后续还要统一页头以下的操作区，建议继续抽第二层共用 shell。
+- 链接: `src/components/common/MarketTopHeader.tsx`, `src/components/common/QuoteMetaRow.tsx`, `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-22 00:12 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已按新确认版式把共享股票信息卡改成紧凑左中右结构：左侧保留名称/代码/星标/当前时间/服务状态，中间改成价格两行合并 + 交易两行合并 + 公司信息列，右侧大号价格区保持不动；同时接入 `turnover_rate`，并把“最新日期”限制为仅非交易时段展示。
+- 风险: 换手率当前来自 `/api/sentiment` 腾讯快照链路，若该链路短时失败会回落显示 `--`；公司信息首期仍只有总市值，PE/PB/行业等尚未接入。
+- 链接: `src/components/common/StockQuoteHeroCard.tsx`, `src/components/common/QuoteMetaRow.tsx`, `src/utils/marketTime.ts`, `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-22 00:26 | 前端 AI
+- Task ID: `MOD-20260321-03`
+- CAP: `CAP-SANDBOX-REVIEW`
+- 结论: 已补齐首页/复盘页切换时的当前股票透传：两页都会把当前股票写入 URL `?symbol=`，互相跳转时自动带过去，刷新页面也能回到同一只股票。
+- 风险: 首页初次用 URL symbol 引导时会优先尝试拉一次 quote 反查名称；若外部行情源瞬时失败，仍会回退到 symbol 占位后再由后续 quote 刷新纠正。
+- 链接: `src/App.tsx`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
