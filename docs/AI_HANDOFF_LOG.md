@@ -594,3 +594,10 @@
 - 结论: 已完成 `v4.2.27` 发布准备与归档；针对个别股票当日分时停在 `14:45/14:50` 的问题，新增云端盘后主动自愈扫盘，固定在交易日 `15:02 / 15:07 / 15:12 / 15:17` 自动扫描自选股，若 today ticks 最新时间 `< 14:55:00` 则补抓、覆盖写回并刷新 `history_1m + realtime_5m_preview`，不再只依赖“打开页面时才自救”。
 - 风险: 当前主动自愈仍调用 AkShare 单源 `fetch_live_ticks`；若上游源持续超时，盘后扫盘仍可能失败，后续需考虑多源 fallback 与更强告警。
 - 链接: `backend/app/scheduler.py`, `backend/app/db/crud.py`, `backend/tests/test_scheduler_postclose_self_heal.py`, `docs/archive/changes/ARC-CHG-20260320-postclose-stale-self-heal-release.md`
+
+## 2026-03-21 11:35 | 前后端 AI
+- Task ID: `CHG-20260314-06`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SANDBOX-REVIEW`
+- 结论: 已完成复盘页正式并库首轮实现：新增正式元数据表 `stock_universe_meta`、`/api/review/pool`、`/api/review/data`，前端复盘页已切到生产正式库并改为按股票真实 `min_date/max_date` 动态限界；同时新增 `refresh_stock_universe_meta.py` 与 `promote_review_symbol_history.py`，支持正式池元数据刷新与单股票后台补历史。
+- 风险: 当前 `stock_universe_meta` 仍需脚本手动刷新，尚未接定时调度；单股票补历史 slow path 仍依赖本地原始历史包可访问。
+- 链接: `backend/app/routers/review.py`, `backend/app/db/l2_history_db.py`, `backend/scripts/refresh_stock_universe_meta.py`, `backend/scripts/promote_review_symbol_history.py`, `src/components/sandbox/SandboxReviewPage.tsx`, `docs/changes/REQ-20260314-06-review-page-prod-l2-unification.md`

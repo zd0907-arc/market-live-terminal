@@ -6,7 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } f
 import { CanvasRenderer } from 'echarts/renderers';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 
-import { SandboxPoolItem, SandboxReviewBar } from '../../types';
+import { ReviewPoolItem, ReviewBar } from '../../types';
 import * as StockService from '../../services/stockService';
 
 echarts.use([
@@ -26,10 +26,8 @@ type GranularityMode = 'auto' | Granularity;
 type WindowPreset = '1d' | '3d' | '5d' | '20d' | '60d' | 'all';
 
 const DEFAULT_SYMBOL = 'sh603629';
-const DEFAULT_START = '2025-01-01';
-const DEFAULT_END = '2026-02-28';
-const SANDBOX_MIN_DATE = '2025-01-01';
-const SANDBOX_MAX_DATE = '2026-02-28';
+const DEFAULT_START = '';
+const DEFAULT_END = '';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_VISIBLE_POINTS = 240;
 
@@ -78,7 +76,7 @@ const formatLocalDateTime = (date: Date): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
 };
 
-const normalizeRows = (rows: SandboxReviewBar[]): SandboxReviewBar[] => {
+const normalizeRows = (rows: ReviewBar[]): ReviewBar[] => {
   return [...rows].sort((a, b) => parseLocalDateTime(a.datetime).getTime() - parseLocalDateTime(b.datetime).getTime());
 };
 
@@ -103,7 +101,7 @@ type Acc = {
   l2_super_sell: number;
 };
 
-const createAccFromRow = (row: SandboxReviewBar, ts: number): Acc => ({
+const createAccFromRow = (row: ReviewBar, ts: number): Acc => ({
   ts,
   symbol: row.symbol,
   sourceDate: row.source_date,
@@ -124,7 +122,7 @@ const createAccFromRow = (row: SandboxReviewBar, ts: number): Acc => ({
   l2_super_sell: row.l2_super_sell,
 });
 
-const mergeRowToAcc = (acc: Acc, row: SandboxReviewBar, ts: number): void => {
+const mergeRowToAcc = (acc: Acc, row: ReviewBar, ts: number): void => {
   acc.high = Math.max(acc.high, row.high);
   acc.low = Math.min(acc.low, row.low);
   if (ts < acc.firstTs) {
@@ -147,7 +145,7 @@ const mergeRowToAcc = (acc: Acc, row: SandboxReviewBar, ts: number): void => {
   acc.l2_super_sell += row.l2_super_sell;
 };
 
-const toBar = (acc: Acc, datetime: string, granularity: Granularity): SandboxReviewBar => ({
+const toBar = (acc: Acc, datetime: string, granularity: Granularity): ReviewBar => ({
   symbol: acc.symbol,
   datetime,
   open: acc.open,
@@ -171,7 +169,7 @@ const toBar = (acc: Acc, datetime: string, granularity: Granularity): SandboxRev
   bucket_granularity: granularity,
 });
 
-const aggregateRows = (rows: SandboxReviewBar[], granularity: Granularity): SandboxReviewBar[] => {
+const aggregateRows = (rows: ReviewBar[], granularity: Granularity): ReviewBar[] => {
   if (granularity === '5m') {
     return rows.map((row) => ({
       ...row,
@@ -218,7 +216,7 @@ const aggregateRows = (rows: SandboxReviewBar[], granularity: Granularity): Sand
     .map((acc) => toBar(acc, formatLocalDateTime(new Date(acc.ts)), granularity));
 };
 
-const calcRangeByDays = (rows: SandboxReviewBar[], days: number | null): [number, number] => {
+const calcRangeByDays = (rows: ReviewBar[], days: number | null): [number, number] => {
   if (!rows.length || days === null) return [0, 100];
 
   const timestamps = rows.map((row) => parseLocalDateTime(row.datetime).getTime());
@@ -229,7 +227,7 @@ const calcRangeByDays = (rows: SandboxReviewBar[], days: number | null): [number
   return [(startIdx / denominator) * 100, 100];
 };
 
-const calcVisibleDays = (rows: SandboxReviewBar[], zoomRange: [number, number]): number => {
+const calcVisibleDays = (rows: ReviewBar[], zoomRange: [number, number]): number => {
   if (rows.length <= 1) return 0;
 
   const denominator = Math.max(1, rows.length - 1);
@@ -247,7 +245,7 @@ const chooseGranularityByDays = (visibleDays: number): Granularity => {
   return '1d';
 };
 
-const estimateVisibleCount = (rows: SandboxReviewBar[], zoomRange: [number, number]): number => {
+const estimateVisibleCount = (rows: ReviewBar[], zoomRange: [number, number]): number => {
   if (!rows.length) return 0;
   const ratio = Math.max(0.01, (zoomRange[1] - zoomRange[0]) / 100);
   return Math.max(1, Math.round(rows.length * ratio));
@@ -279,8 +277,17 @@ const formatPercentAxis = (value: number): string => {
   return `${Math.round(value)}%`;
 };
 
-const isDateInSandboxWindow = (startDate: string, endDate: string): boolean =>
-  startDate >= SANDBOX_MIN_DATE && endDate <= SANDBOX_MAX_DATE && endDate >= startDate;
+const isDateInReviewWindow = (
+  startDate: string,
+  endDate: string,
+  minDate?: string,
+  maxDate?: string
+): boolean => {
+  if (!startDate || !endDate || endDate < startDate) return false;
+  if (minDate && startDate < minDate) return false;
+  if (maxDate && endDate > maxDate) return false;
+  return true;
+};
 
 const formatMarketCapYi = (marketCap: number): string => {
   if (!Number.isFinite(marketCap) || marketCap <= 0) return '--';
@@ -306,16 +313,17 @@ const splitSignedSeriesNullable = (
 });
 
 const SandboxReviewPage: React.FC = () => {
-  const [poolItems, setPoolItems] = useState<SandboxPoolItem[]>([]);
+  const [poolItems, setPoolItems] = useState<ReviewPoolItem[]>([]);
   const [poolTotal, setPoolTotal] = useState(0);
   const [poolAsOfDate, setPoolAsOfDate] = useState('');
+  const [poolLatestDate, setPoolLatestDate] = useState('');
   const [symbolInput, setSymbolInput] = useState(DEFAULT_SYMBOL);
   const [startDateInput, setStartDateInput] = useState(DEFAULT_START);
   const [endDateInput, setEndDateInput] = useState(DEFAULT_END);
   const [querySymbol, setQuerySymbol] = useState(DEFAULT_SYMBOL);
   const [queryStartDate, setQueryStartDate] = useState(DEFAULT_START);
   const [queryEndDate, setQueryEndDate] = useState(DEFAULT_END);
-  const [rawData, setRawData] = useState<SandboxReviewBar[]>([]);
+  const [rawData, setRawData] = useState<ReviewBar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [emptyMessage, setEmptyMessage] = useState('');
@@ -330,7 +338,7 @@ const SandboxReviewPage: React.FC = () => {
     setError('');
     setEmptyMessage('');
     try {
-      const rows = await StockService.fetchSandboxReviewData(symbol, startDate, endDate, '5m');
+      const rows = await StockService.fetchReviewData(symbol, startDate, endDate, '5m');
       if (!rows.length) {
         setRawData([]);
         setActivePreset('20d');
@@ -348,7 +356,7 @@ const SandboxReviewPage: React.FC = () => {
       setQueryEndDate(endDate);
     } catch (err: any) {
       setRawData([]);
-      setError(err?.message || '查询失败，请检查 sandbox API 与 sandbox_review.db。');
+      setError(err?.message || '查询失败，请检查正式复盘接口与生产历史库。');
     } finally {
       setLoading(false);
     }
@@ -357,24 +365,41 @@ const SandboxReviewPage: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        const pool = await StockService.fetchSandboxReviewPool('', 3000);
+        const pool = await StockService.fetchReviewPool('', 5000);
         setPoolItems(pool.items);
         setPoolTotal(pool.total);
         setPoolAsOfDate(pool.as_of_date || '');
+        setPoolLatestDate(pool.latest_date || '');
         if (pool.items.length > 0) {
           const picked = pool.items.find((item) => item.symbol === DEFAULT_SYMBOL) || pool.items[0];
           setSymbolInput(picked.symbol);
-          await fetchData(picked.symbol, startDateInput, endDateInput);
+          setStartDateInput(picked.min_date);
+          setEndDateInput(picked.max_date);
+          await fetchData(picked.symbol, picked.min_date, picked.max_date);
           return;
         }
-        setError('股票池为空，请先执行 pool build + backfill。');
+        setError('正式复盘股票池为空，请先迁移历史数据并刷新股票元数据。');
       } catch (e: any) {
-        setError(e?.message || '股票池加载失败，请检查 /api/sandbox/pool');
+        setError(e?.message || '股票池加载失败，请检查 /api/review/pool');
       }
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const matched = poolItems.find((item) => item.symbol === symbolInput.trim().toLowerCase());
+    if (!matched) return;
+
+    setStartDateInput((prev) => {
+      if (!prev || prev < matched.min_date || prev > matched.max_date) return matched.min_date;
+      return prev;
+    });
+    setEndDateInput((prev) => {
+      if (!prev || prev > matched.max_date || prev < matched.min_date) return matched.max_date;
+      return prev;
+    });
+  }, [poolItems, symbolInput]);
 
   const aggregatedByGranularity = useMemo(() => {
     const sortedRaw = normalizeRows(rawData);
@@ -384,7 +409,7 @@ const SandboxReviewPage: React.FC = () => {
       '30m': aggregateRows(sortedRaw, '30m'),
       '60m': aggregateRows(sortedRaw, '60m'),
       '1d': aggregateRows(sortedRaw, '1d'),
-    } as Record<Granularity, SandboxReviewBar[]>;
+    } as Record<Granularity, ReviewBar[]>;
   }, [rawData]);
 
   const viewState = useMemo(() => {
@@ -616,19 +641,28 @@ const SandboxReviewPage: React.FC = () => {
     [poolItems, querySymbol]
   );
 
+  const selectedInputPoolItem = useMemo(
+    () => poolItems.find((item) => item.symbol === symbolInput.trim().toLowerCase()) || null,
+    [poolItems, symbolInput]
+  );
+
   const handleExecuteQuery = useCallback(async () => {
     const symbol = symbolInput.trim().toLowerCase();
     if (!symbol) {
       setError('请先输入股票代码');
       return;
     }
-    if (!isDateInSandboxWindow(startDateInput, endDateInput)) {
-      setError(`日期范围仅支持 ${SANDBOX_MIN_DATE} ~ ${SANDBOX_MAX_DATE}`);
+    if (!isDateInReviewWindow(startDateInput, endDateInput, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date)) {
+      if (selectedInputPoolItem) {
+        setError(`日期范围仅支持 ${selectedInputPoolItem.min_date} ~ ${selectedInputPoolItem.max_date}`);
+      } else {
+        setError('日期范围无效，请确认开始/结束日期');
+      }
       return;
     }
     setAnchorTs(null);
     await fetchData(symbol, startDateInput, endDateInput);
-  }, [symbolInput, startDateInput, endDateInput]);
+  }, [symbolInput, startDateInput, endDateInput, selectedInputPoolItem, fetchData]);
 
   const handleSelectPreset = (preset: WindowPreset, days: number | null) => {
     setActivePreset(preset);
@@ -1185,7 +1219,7 @@ const SandboxReviewPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4" />
             返回首页
           </a>
-          <div className="text-xs text-slate-400">沙盒 / L2 复盘</div>
+          <div className="text-xs text-slate-400">正式复盘 / L1-L2 历史</div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-4 flex flex-wrap items-end gap-3">
@@ -1204,8 +1238,8 @@ const SandboxReviewPage: React.FC = () => {
               <span className="text-slate-400 text-xs">开始日期</span>
               <input
                 type="date"
-                min={SANDBOX_MIN_DATE}
-                max={SANDBOX_MAX_DATE}
+                min={selectedInputPoolItem?.min_date || ''}
+                max={selectedInputPoolItem?.max_date || ''}
                 value={startDateInput}
                 onChange={(e) => setStartDateInput(e.target.value)}
                 className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
@@ -1215,8 +1249,8 @@ const SandboxReviewPage: React.FC = () => {
               <span className="text-slate-400 text-xs">结束日期</span>
               <input
                 type="date"
-                min={SANDBOX_MIN_DATE}
-                max={SANDBOX_MAX_DATE}
+                min={selectedInputPoolItem?.min_date || ''}
+                max={selectedInputPoolItem?.max_date || ''}
                 value={endDateInput}
                 onChange={(e) => setEndDateInput(e.target.value)}
                 className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100"
@@ -1251,20 +1285,25 @@ const SandboxReviewPage: React.FC = () => {
             ))}
           </datalist>
           <div className="w-full flex flex-wrap items-center gap-3 text-sm">
-            <span className="text-slate-300">Sandbox 复盘：</span>
+            <span className="text-slate-300">正式复盘：</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
               股票 {querySymbol} {activePoolItem ? `(${activePoolItem.name})` : ''}
             </span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-200">
               区间 {queryStartDate} ~ {queryEndDate}
             </span>
-            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-cyan-300">数据源 sandbox API</span>
+            <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-cyan-300">数据源 /api/review/*</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-emerald-300">当前粒度 {viewState.granularity}</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-violet-300">当前窗口约 {viewState.visibleDays.toFixed(1)} 天 / {viewState.visibleCount} 点</span>
             <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300">接口返回 {rawData.length} 条</span>
             {poolAsOfDate && (
               <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
-                池子快照 {poolAsOfDate}
+                元数据快照 {poolAsOfDate}
+              </span>
+            )}
+            {poolLatestDate && (
+              <span className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-300">
+                正式库最新 {poolLatestDate}
               </span>
             )}
             {activePoolItem && (
@@ -1280,7 +1319,8 @@ const SandboxReviewPage: React.FC = () => {
             )}
           </div>
           <div className="w-full text-xs text-slate-500">
-            数据范围：{rawRangeText}（查询窗口仅支持 {SANDBOX_MIN_DATE} ~ {SANDBOX_MAX_DATE}）
+            数据范围：{rawRangeText}
+            {selectedInputPoolItem ? `（当前股票可查 ${selectedInputPoolItem.min_date} ~ ${selectedInputPoolItem.max_date}）` : ''}
           </div>
           <div className="w-full flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-400">窗口快捷：</span>

@@ -245,6 +245,22 @@
 > `net` 字段在查询时按 `buy-sell` 计算，避免重复存储。V2 已收敛为“5m底层 + 上层聚合”，不再维护 1m 持久层。
 > 新决策（2026-03-14）：sandbox V2 继续保留实验用途，但未来生产正式页面不应长期依赖该数据域。
 
+### 12. `stock_universe_meta`（正式复盘股票元数据表）
+> **生产正式层**：服务 `/api/review/pool`，为正式复盘页补齐股票名称、市值与元数据快照日期。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `PRIMARY KEY`，标准代码（如 `sh603629`） |
+| `name` | `TEXT` | `NOT NULL`，股票简称 |
+| `market_cap` | `REAL` | `NOT NULL`，总市值 |
+| `as_of_date` | `TEXT` | `NOT NULL`，快照日期 `%Y-%m-%d` |
+| `source` | `TEXT` | `NOT NULL`，当前固定为 `akshare.stock_zh_a_spot_em` |
+| `updated_at` | `TEXT` | `NOT NULL`，写入时间 |
+
+> 说明：
+> - 正式复盘股票池基础集合来自 `history_daily_l2` 的真实覆盖 symbol，再 left join 本表补 `name + market_cap`；
+> - 首期若本表尚未刷新，接口允许回退展示 `symbol` 本身，但正式过滤与排序优先依赖本表。
+
 ---
 
 ## 二、 业务外部 API 的真实 Payload 契约
@@ -426,7 +442,37 @@ D:\MarketData\
 > - （v4.2.14+）累计语义固定为“单曲线累计净流入”：每图仅一条累计曲线，正负通过面积分色表达；累计公式为从锚点开始对对应 `*_net` 的滚动求和（锚点前置空）。
 > - （v4.2.14+）累计终点跟随当前可视窗口右边界；百分比轴展示整数 `%`（无小数）。
 
-### 4. 实时盯盘二态契约（v4.2.15+）
+### 4. 正式复盘接口（v4.2.27+，生产主链路）
+* **`GET /api/review/pool?keyword=&limit=`**
+  - 描述：返回正式复盘可选股票池。
+  - 数据源：`history_daily_l2` + `stock_universe_meta`。
+  - 返回：`APIResponse`，`data={total,as_of_date,latest_date,items[]}`。
+  - `items[]` 字段固定：
+    - `symbol`, `name`, `market_cap`, `as_of_date`
+    - `min_date`, `max_date`, `latest_date`
+  - 过滤规则：
+    - 只保留正式 `history_daily_l2` 中有历史覆盖的股票；
+    - 默认过滤名称含 `ST`；
+    - 默认只保留正常 `A/BJ` 证券代码；
+    - sandbox 的 `50~300亿` 固定池过滤不再作为正式池规则。
+* **`GET /api/review/data?symbol=sh603629&start_date=2025-01-02&end_date=2026-03-20&granularity=5m`**
+  - 描述：返回正式复盘页兼容结构。
+  - 参数：`granularity=5m|15m|30m|60m|1d`。
+  - 数据源：
+    - `5m/15m/30m/60m` → `history_5m_l2`（其中 `15m/30m/60m` 由 `5m` 聚合）
+    - `1d` → `history_daily_l2`
+  - 返回：`APIResponse`，`data` 为时间升序数组。
+  - 单条字段固定：
+    - `datetime`, `bucket_granularity`, `source_date`
+    - `open/high/low/close`, `total_amount`
+    - `l1_main_buy/sell/net`, `l1_super_buy/sell/net`
+    - `l2_main_buy/sell/net`, `l2_super_buy/sell/net`
+    - `quality_info`（可选）
+  - 约束：
+    - 不注入 preview、placeholder、fallback 假值；
+    - 复盘页日期边界应按 `/api/review/pool` 返回的 `min_date/max_date` 动态控制。
+
+### 5. 实时盯盘二态契约（v4.2.15+）
 - 实时页盯盘仅保留二态：
   - `focus`：5 秒轮询报价与实时图；
   - `warm`：30 秒轮询报价与实时图。

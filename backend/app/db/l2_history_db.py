@@ -177,6 +177,19 @@ def ensure_l2_history_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_l2_daily_ingest_failures_run
             ON l2_daily_ingest_failures(run_id);
+
+            CREATE TABLE IF NOT EXISTS stock_universe_meta (
+                symbol TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                market_cap REAL NOT NULL,
+                as_of_date TEXT NOT NULL,
+                source TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_stock_universe_meta_market_cap
+            ON stock_universe_meta(market_cap DESC, symbol ASC);
+            CREATE INDEX IF NOT EXISTS idx_stock_universe_meta_as_of_date
+            ON stock_universe_meta(as_of_date DESC);
             """
         )
         _ensure_column(conn, "history_5m_l2", "total_volume", "REAL NULL")
@@ -855,3 +868,134 @@ def query_l2_history_analysis(symbol: str, limit_days: Optional[int] = None) -> 
             }
         )
     return result
+
+
+def replace_stock_universe_meta(
+    rows: Sequence[Tuple[str, str, float]],
+    as_of_date: str,
+    source: str,
+) -> int:
+    ensure_l2_history_schema()
+    normalized_rows = [
+        (
+            normalize_l2_symbol(symbol),
+            str(name or "").strip() or normalize_l2_symbol(symbol),
+            float(market_cap or 0.0),
+            str(as_of_date),
+            str(source),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        for symbol, name, market_cap in rows
+        if normalize_l2_symbol(symbol)
+    ]
+    conn = get_l2_history_connection()
+    try:
+        with conn:
+            conn.execute("DELETE FROM stock_universe_meta")
+            if normalized_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO stock_universe_meta (
+                        symbol, name, market_cap, as_of_date, source, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    normalized_rows,
+                )
+        return len(normalized_rows)
+    finally:
+        conn.close()
+
+
+def _is_valid_review_symbol(symbol: str) -> bool:
+    text = normalize_l2_symbol(symbol)
+    if len(text) != 8:
+        return False
+    return text.startswith(("sh60", "sh68", "sz00", "sz30", "bj"))
+
+
+def query_review_pool(
+    keyword: str = "",
+    limit: Optional[int] = None,
+) -> Dict[str, object]:
+    ensure_l2_history_schema()
+    conn = get_l2_history_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        clauses = [
+            "("
+            "bounds.symbol GLOB 'sh60[0-9][0-9][0-9][0-9]' OR "
+            "bounds.symbol GLOB 'sh68[0-9][0-9][0-9][0-9]' OR "
+            "bounds.symbol GLOB 'sz00[0-9][0-9][0-9][0-9]' OR "
+            "bounds.symbol GLOB 'sz30[0-9][0-9][0-9][0-9]' OR "
+            "bounds.symbol GLOB 'bj[0-9][0-9][0-9][0-9][0-9][0-9]'"
+            ")",
+            "(meta.name IS NULL OR UPPER(meta.name) NOT LIKE '%ST%')",
+        ]
+        params: List[object] = []
+        keyword_text = str(keyword or "").strip()
+        if keyword_text:
+            clauses.append("(bounds.symbol LIKE ? OR COALESCE(meta.name, '') LIKE ?)")
+            like_value = f"%{keyword_text}%"
+            params.extend([like_value, like_value])
+
+        where_sql = f"WHERE {' AND '.join(clauses)}"
+        count_row = conn.execute(
+            f"""
+            WITH bounds AS (
+                SELECT symbol, MIN(date) AS min_date, MAX(date) AS max_date
+                FROM history_daily_l2
+                GROUP BY symbol
+            )
+            SELECT COUNT(*)
+            FROM bounds
+            LEFT JOIN stock_universe_meta AS meta
+              ON meta.symbol = bounds.symbol
+            {where_sql}
+            """,
+            params,
+        ).fetchone()
+        total = int(count_row[0] or 0) if count_row else 0
+
+        limit_sql = ""
+        data_params = list(params)
+        if limit is not None and int(limit) > 0:
+            limit_sql = " LIMIT ?"
+            data_params.append(int(limit))
+
+        rows = conn.execute(
+            f"""
+            WITH bounds AS (
+                SELECT symbol, MIN(date) AS min_date, MAX(date) AS max_date
+                FROM history_daily_l2
+                GROUP BY symbol
+            )
+            SELECT
+                bounds.symbol,
+                COALESCE(meta.name, bounds.symbol) AS name,
+                COALESCE(meta.market_cap, 0) AS market_cap,
+                COALESCE(meta.as_of_date, '') AS as_of_date,
+                COALESCE(meta.source, 'history_daily_l2') AS source,
+                COALESCE(meta.updated_at, '') AS updated_at,
+                bounds.min_date,
+                bounds.max_date,
+                bounds.max_date AS latest_date
+            FROM bounds
+            LEFT JOIN stock_universe_meta AS meta
+              ON meta.symbol = bounds.symbol
+            {where_sql}
+            ORDER BY COALESCE(meta.market_cap, 0) DESC, bounds.symbol ASC
+            {limit_sql}
+            """,
+            data_params,
+        ).fetchall()
+        items = [dict(row) for row in rows if _is_valid_review_symbol(str(row["symbol"]))]
+        as_of_row = conn.execute("SELECT MAX(as_of_date) FROM stock_universe_meta").fetchone()
+        latest_row = conn.execute("SELECT MAX(date) FROM history_daily_l2").fetchone()
+        return {
+            "total": total,
+            "as_of_date": str(as_of_row[0] or ""),
+            "latest_date": str(latest_row[0] or ""),
+            "items": items,
+        }
+    finally:
+        conn.close()

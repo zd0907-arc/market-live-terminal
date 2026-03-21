@@ -260,6 +260,16 @@ export interface SandboxPoolItem {
   updated_at: string;
 }
 
+export interface ReviewBar extends SandboxReviewBar {
+  quality_info?: string | null;
+}
+
+export interface ReviewPoolItem extends SandboxPoolItem {
+  min_date: string;
+  max_date: string;
+  latest_date: string;
+}
+
 export interface SentimentData {
   symbol: string;
   name: string;

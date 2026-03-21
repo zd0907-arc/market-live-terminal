@@ -11,6 +11,8 @@ import {
   RealtimeDashboardData,
   SandboxPoolItem,
   SandboxReviewBar,
+  ReviewPoolItem,
+  ReviewBar,
 } from '../types';
 import { API_BASE_URL, getWriteHeaders } from '../config';
 
@@ -474,6 +476,70 @@ export const fetchSandboxReviewPool = async (keyword = '', limit = 0): Promise<{
   }
 
   throw new Error(lastError?.message || '股票池查询失败');
+};
+
+export const fetchReviewData = async (
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  granularity: '5m' | '15m' | '30m' | '60m' | '1d' = '5m'
+): Promise<ReviewBar[]> => {
+  const params = new URLSearchParams({
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    granularity,
+  });
+
+  const url = `${API_BASE_URL}/review/data?${params.toString()}`;
+  try {
+    const res = await fetch(url);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(json?.message || `正式复盘接口请求失败（HTTP ${res.status}）`);
+    }
+    if (json?.code === 200 && Array.isArray(json.data)) {
+      return json.data as ReviewBar[];
+    }
+    throw new Error(json?.message || '正式复盘接口返回异常');
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '正式复盘数据查询失败';
+    console.error('Fetch review data error:', errorMessage);
+    throw new Error(errorMessage);
+  }
+};
+
+export const fetchReviewPool = async (keyword = '', limit = 0): Promise<{
+  total: number;
+  as_of_date: string;
+  latest_date: string;
+  items: ReviewPoolItem[];
+}> => {
+  const params = new URLSearchParams();
+  if (keyword) params.set('keyword', keyword);
+  if (limit > 0) params.set('limit', String(limit));
+
+  const url = `${API_BASE_URL}/review/pool?${params.toString()}`;
+  try {
+    const res = await fetch(url);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(json?.message || `正式复盘股票池请求失败（HTTP ${res.status}）`);
+    }
+    if (json?.code === 200 && json?.data) {
+      return {
+        total: Number(json.data.total || 0),
+        as_of_date: json.data.as_of_date || '',
+        latest_date: json.data.latest_date || '',
+        items: Array.isArray(json.data.items) ? (json.data.items as ReviewPoolItem[]) : [],
+      };
+    }
+    throw new Error(json?.message || '正式复盘股票池返回异常');
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : '正式复盘股票池查询失败';
+    console.error('Fetch review pool error:', errorMessage);
+    throw new Error(errorMessage);
+  }
 };
 
 export interface SandboxEtlStatus {
