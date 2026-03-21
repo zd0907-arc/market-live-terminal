@@ -29,3 +29,5 @@
 | `docs/archive/incidents/09_30M_DIAGNOSIS_PLAN_2026-03-07.md` | 09_30M_DIAGNOSIS_PLAN_2026-03-07（30分钟线问题诊断与修复方案） | `INC` | `ARC-INC-20260307-09-30m-diagnosis-plan-2026-03-07` | `ARC-INC-20260307-09-30m-diagnosis-plan-2026-03-07.md` |
 | `docs/archive/retail_sentiment_design.md` | 散户情绪模块 (Retail Sentiment) 需求设计文档 | `LEG` | `ARC-LEG-00000000-retail-sentiment-design` | `ARC-LEG-00000000-retail-sentiment-design.md` |
 | `docs/archive/retail_sentiment_implementation.md` | 散户情绪模块 (Retail Sentiment) 详细实现说明文档 (v2.7.0) | `LEG` | `ARC-LEG-00000000-retail-sentiment-implementation` | `ARC-LEG-00000000-retail-sentiment-implementation.md` |
+
+| `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` | 最后一个支持“旧版 / 新版切换”的生产基线（`v4.2.28`） | `CHG` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` |
