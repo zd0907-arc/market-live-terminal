@@ -90,5 +90,9 @@
   - 当前完整基线说明见：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`。
 
 ## 8. 结果回填
-- 当前状态：仅完成文档冻结与基线归档，尚未开始代码收敛。
-- 下一步：在 `codex/fusion-only-remove-legacy` 分支实施。
+- 当前状态：已在分支 `codex/fusion-only-remove-legacy` 完成首页入口收敛第一步，正式移除首页 `旧版 / 新版` 按钮与旧版三分支入口；首页现只保留 `当日分时 + 历史多维 + 散户情绪监测`。
+- 保留策略：当前仅做“下入口”，未物理删除 `HistoryView` 文件与旧接口，继续保留一版暗桩回滚缓冲。
+- 验证结果：
+  - `npm run build` 通过；
+  - `npm run check:baseline` 通过（`84 passed`）。
+- 下一步：如需发布，再继续走合并 / 发版流程；若后续确认稳定，可另开清理卡物理删除死代码。

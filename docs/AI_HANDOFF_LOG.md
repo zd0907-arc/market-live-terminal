@@ -7,6 +7,14 @@
 - 链接: `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`, `docs/changes/REQ-20260321-02-fusion-only-remove-legacy-entry.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
 
 # AI_HANDOFF_LOG（短日志）
+
+## 2026-03-21 19:40 | Codex
+- Task ID: `CHG-20260321-02`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-HISTORY-30M`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已在分支 `codex/fusion-only-remove-legacy` 完成首页“只保留新版”第一步实现：去掉 `旧版 / 新版` 顶部切换与旧版 `30分钟线 / 日线` 首页入口，首页现只保留 `当日分时 + 历史多维 + 散户情绪监测`。
+- 风险: 当前仅移除入口，尚未物理删除 `HistoryView` 与旧接口；这符合“先下入口、后删代码”的回滚缓冲策略，但正式线上尚未发版。
+- 链接: `src/App.tsx`, `docs/changes/REQ-20260321-02-fusion-only-remove-legacy-entry.md`, `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
+
 > 规则：每条日志必须包含 Task ID、CAP ID、结论、阻塞/风险、链接；每条不超过 8 行要点。
 >
 > 历史长日志归档：`docs/archive/AI_HANDOFF_LOG_LEGACY_2026-03-09.md`
