@@ -235,7 +235,7 @@
 6. **变更记录（任务ID）**
 - `CHG-20260322-01`：冻结“散户情绪模块重构”总方案，明确模块定位改为“散户一致性观察”，并按 `freshness -> metric -> price-linked -> coverage` 四期推进。
 - `CHG-20260323-01`：升级为 V2 热度主导方案：正式数据模型切到 `sentiment_events`，首页主链路改为 `overview / heat_trend / feed`，布局改为 `左图 / 中 AI 预留 / 右原文流`。
-- `CHG-20260324-01`：按实际落地状态完成收口：正式源收敛为股吧单源，窗口扩为 `5D/20D/60D`，星标股日级 AI 评分与补数调度进入正式链路，并新增总收口卡 `MOD-20260324-01-retail-sentiment-v2-current-state.md`。
+- `CHG-20260324-01`：按实际落地状态完成收口：正式源收敛为股吧单源，窗口扩为 `5D/20D/60D`，星标股日级 AI 评分与补数调度进入正式链路；当前冻结基线已归档为 `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md`。
 
 ---
 

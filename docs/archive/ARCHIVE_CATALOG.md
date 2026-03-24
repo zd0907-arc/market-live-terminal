@@ -33,3 +33,5 @@
 | `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` | 最后一个支持“旧版 / 新版切换”的生产基线（`v4.2.28`） | `CHG` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline` | `ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md` |
 
 | `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` | 首页去掉旧版入口，只保留新版信息架构 | `CHG` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` |
+
+| `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md` | 散户一致性观察 V2 当前落地状态、发布与补跑归档 | `CHG` | `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill` | `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md` |

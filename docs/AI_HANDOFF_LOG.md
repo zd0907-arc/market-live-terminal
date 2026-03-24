@@ -772,3 +772,10 @@
 - 结论: 已完成散户一致性观察本轮文档治理收口：新增总收口卡 `MOD-20260324-01-retail-sentiment-v2-current-state.md`，把 `2026-03-22 ~ 2026-03-24` 多轮 STG/REQ 的过程文档收敛为“当前真实状态”母卡；同步把 `02/03/07` 回填为实际已落地口径（股吧单源、`5D/20D/60D`、星标股日级 AI 评分、前端可改 `llm_model`、未完成项改写为后置项）。
 - 风险: 旧的 `20260322/20260323` 规划卡仍保留作为过程记录，其中关于“多源 / AI仅占位 / 来源Tab”的说法已不再代表当前真实状态；后续查现状时应优先看 `MOD-20260324-01`。
 - 链接: `docs/changes/MOD-20260324-01-retail-sentiment-v2-current-state.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-24 20:20 | 生产补跑 / 归档 AI
+- Task ID: `CHG-20260324-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已在生产对 7 只星标股完成散户一致性观察补跑：执行星标抓取补跑 `new_count=444`、当日日评分补跑 `generated=7`，并继续补齐近 20 个交易日 AI 日评分；补跑后 `20D` 可见评分点分别为 `7/11/11/10/9/7/11` 天（贵州茅台/天下秀/有研新材/利通电子/中百集团/贝因美/粤桂股份）。同时已将本轮母卡归档为 `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill`，作为 `v4.2.32 / 9bbdd3d` 的冻结基线。
+- 风险: 历史 AI 评分仍按“样本数足够才生成”的规则执行，个别交易日会因 `insufficient_samples` 留空；这属于真实数据稀疏，不是图表缺失。
+- 链接: `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md`, `docs/archive/ARCHIVE_CATALOG.md`, `docs/02_BUSINESS_DOMAIN.md`
