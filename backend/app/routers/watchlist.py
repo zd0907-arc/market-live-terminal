@@ -31,9 +31,11 @@ def add_watchlist(symbol: str, name: str):
         try:
             from backend.app.services.sentiment_crawler import sentiment_crawler
             from backend.app.services.backfill import perform_historical_fetch
+            from backend.app.services.retail_sentiment import backfill_starred_symbol_history
             
             # 手动模式调度，优先取最近几天快速出图
-            submit_background("sentiment_crawl_scheduler", sentiment_crawler.run_crawl, symbol, "scheduler")
+            submit_background("sentiment_crawl_scheduler", sentiment_crawler.run_crawl, symbol, "pre_open")
+            submit_background("sentiment_backfill_starred", backfill_starred_symbol_history, symbol)
             submit_background("watchlist_backfill", perform_historical_fetch, symbol)
         except Exception as bg_err:
             logger.error(f"Failed to trigger background workers for {symbol}: {bg_err}")

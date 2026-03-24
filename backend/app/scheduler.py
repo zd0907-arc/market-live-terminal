@@ -1,16 +1,15 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from backend.app.services.analysis import perform_aggregation, aggregate_intraday_30m
-from backend.app.services.sentiment_crawler import sentiment_crawler
 from backend.app.db.crud import (
     get_all_symbols,
-    get_watchlist_items,
     get_latest_tick_time,
     save_ticks_daily_overwrite,
 )
 from backend.app.services.analysis import aggregate_intraday_1m, refresh_realtime_preview
 from backend.app.services.market import fetch_live_ticks
 from backend.app.core.http_client import MarketClock
+from backend.app.services.retail_sentiment import run_starred_daily_scores, run_starred_sentiment_crawl
 import logging
 from datetime import datetime
 import asyncio
@@ -77,35 +76,16 @@ async def _rehydrate_symbol_postclose_if_stale(symbol: str, trade_date: str) -> 
     )
     return healed
 
-def run_sentiment_crawl(mode="scheduler"):
-    """
-    定时抓取自选股的情绪数据 (深度抓取/增量抓取)
-    """
-    from backend.app.core.http_client import MarketClock
-    
-    # 如果是盘中轮询模式，但在非交易时间，则直接跳过
-    if mode == "intraday" and not MarketClock.is_trading_time():
-        return
+def run_sentiment_crawl(mode="nightly"):
+    logger.info(">>> STARTING STARRED SENTIMENT CRAWL JOB (Mode: %s) <<<", mode)
+    result = run_starred_sentiment_crawl(mode=mode)
+    logger.info(">>> STARRED SENTIMENT CRAWL COMPLETED <<< %s", result)
 
-    logger.info(f">>> STARTING SENTIMENT CRAWL JOB (Mode: {mode}) <<<")
-    watchlist = get_watchlist_items()
-    
-    if not watchlist:
-        logger.info("Watchlist is empty. Skipping sentiment crawl.")
-        return
 
-    for item in watchlist:
-        symbol = item['symbol']
-        name = item.get('name', '')
-        logger.info(f"Auto-crawling sentiment for {symbol} ({name})...")
-        try:
-            # 同步调用，但在后台任务中无所谓阻塞
-            new_count = sentiment_crawler.run_crawl(symbol, mode="scheduler")
-            logger.info(f"[{symbol}] Crawl finished. New comments: {new_count}")
-        except Exception as e:
-            logger.error(f"[{symbol}] Crawl failed: {e}")
-            
-    logger.info(">>> DAILY SENTIMENT CRAWL COMPLETED <<<")
+def run_sentiment_daily_score_refresh(mode="nightly"):
+    logger.info(">>> STARTING STARRED SENTIMENT DAILY SCORE JOB (Mode: %s) <<<", mode)
+    result = run_starred_daily_scores(mode=mode)
+    logger.info(">>> STARRED SENTIMENT DAILY SCORE COMPLETED <<< %s", result)
 
 def run_daily_finalization():
     logger.info(">>> STARTING DAILY FINALIZATION JOB <<<")
@@ -188,13 +168,19 @@ def init_scheduler():
     trigger_postclose_self_heal = CronTrigger(day_of_week='mon-fri', hour=15, minute='2,7,12,17')
     scheduler.add_job(run_postclose_tick_self_heal, trigger_postclose_self_heal)
     
-    # 2. 每日情绪抓取 (08:30) - 盘前预热全量
-    trigger_sentiment = CronTrigger(hour=8, minute=30)
-    scheduler.add_job(run_sentiment_crawl, trigger_sentiment, kwargs={"mode": "scheduler"})
-    
-    # 2.1 盘中情绪轮询 (每半小时) - 增量
-    trigger_sentiment_intraday = CronTrigger(day_of_week='mon-fri', hour='9-14', minute='0,30')
-    scheduler.add_job(run_sentiment_crawl, trigger_sentiment_intraday, kwargs={"mode": "intraday"})
+    # 2. 星标股散户一致性观察：
+    # 盘前预热、盘后补齐、夜间终补 + 每日 LLM 解读
+    trigger_sentiment_pre = CronTrigger(day_of_week='mon-fri', hour=8, minute=40)
+    scheduler.add_job(run_sentiment_crawl, trigger_sentiment_pre, kwargs={"mode": "pre_open"})
+    trigger_sentiment_post = CronTrigger(day_of_week='mon-fri', hour=15, minute=30)
+    scheduler.add_job(run_sentiment_crawl, trigger_sentiment_post, kwargs={"mode": "post_close"})
+    trigger_sentiment_night = CronTrigger(day_of_week='mon-fri', hour=21, minute=0)
+    scheduler.add_job(run_sentiment_crawl, trigger_sentiment_night, kwargs={"mode": "nightly"})
+
+    trigger_sentiment_score_post = CronTrigger(day_of_week='mon-fri', hour=15, minute=40)
+    scheduler.add_job(run_sentiment_daily_score_refresh, trigger_sentiment_score_post, kwargs={"mode": "post_close"})
+    trigger_sentiment_score_night = CronTrigger(day_of_week='mon-fri', hour=21, minute=10)
+    scheduler.add_job(run_sentiment_daily_score_refresh, trigger_sentiment_score_night, kwargs={"mode": "nightly"})
     
     # 3. 每日交易日历自我刷新 (00:05) - 云端长效挂机维稳
     trigger_calendar = CronTrigger(hour=0, minute=5)
@@ -203,7 +189,8 @@ def init_scheduler():
     scheduler.start()
     logger.info(
         "Scheduler initialized. Jobs: [Calendar Sync @ 00:05], "
-        "[Sentiment Crawl @ 08:30 & Intraday 30m], "
+        "[Sentiment Crawl @ 08:40 / 15:30 / 21:00], "
+        "[Sentiment Daily Score @ 15:40 / 21:10], "
         "[PostClose SelfHeal @ 15:02/07/12/17], "
         "[Finalization @ 15:20]"
     )

@@ -723,3 +723,52 @@
 - 结论: 搜索历史覆盖修复已随 `v4.2.31` 发版；发布提交 `c18cd2c`，tag `v4.2.31`，生产部署完成。
 - 风险: 本次为前端状态修复，不涉及后端契约；如用户仍反馈历史记录异常，应优先检查浏览器是否处于隐私模式或是否有扩展拦截 `localStorage`。
 - 链接: `src/App.tsx`, `package.json`, `src/version.ts`, `backend/app/main.py`, `docs/changes/MOD-20260321-03-review-toolbar-refactor.md`
+
+## 2026-03-22 01:10 | 文档 AI
+- Task ID: `CHG-20260322-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已按“文档先行”冻结散户情绪模块重构总方案与四张分期 REQ，并同步 core docs：模块定位正式改为“散户一致性观察”；明确 dashboard 读接口禁止同步 LLM、trend 必须区分 gap/0、首页后续按 freshness -> metric -> price-linked -> coverage 四期推进。
+- 风险: 当前仅完成文档冻结，尚未落代码；`latest_crawl_time` 来源、`keywords.topics` 是否首期落地、`focus/hot pool` 规则仍保留为后续实施决策点。
+- 链接: `docs/changes/STG-20260322-01-retail-sentiment-rebuild.md`, `docs/changes/REQ-20260322-02-sentiment-positioning-and-freshness-v1.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-03-22 02:05 | 前后端 AI
+- Task ID: `CHG-20260322-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已完成 Phase 1 首轮实现：dashboard 读接口改为只读缓存摘要、不再同步调 LLM；trend 增加 `has_data/is_gap`；首页模块改名为“散户一致性观察”，顶部切到 `热度 / 一致性 / 风险 / 最新样本`，并移除“页面刷新时间伪装成数据更新时间”的旧表达；scheduler 同步补了盘前/盘后摘要缓存刷新任务。
+- 风险: Phase 1 的 `heat_score / risk_tag` 仍属过渡口径，Phase 2 需要继续冻结正式指标定义与关键词区；评论覆盖仍然主要受单源股吧样本质量约束。
+- 链接: `backend/app/services/retail_sentiment.py`, `backend/app/routers/sentiment.py`, `backend/app/scheduler.py`, `src/components/sentiment/SentimentDashboard.tsx`, `docs/changes/REQ-20260322-02-sentiment-positioning-and-freshness-v1.md`
+
+## 2026-03-22 03:20 | 前后端 AI
+- Task ID: `CHG-20260322-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已完成 Phase 2：新增 `GET /api/sentiment/keywords`，首页模块重排为 `热度/一致性/偏向/风险 + 缓存摘要/关键词主题词/代表帖子 + 趋势图` 三段式结构；代表帖子支持 `最新/最热/分歧` 排序，并新增 `高热中性/噪音` 展示层分类。
+- 风险: 关键词/主题聚合仍属规则统计法，存在少量泛词混入；真正的“情绪-价格背离”标签与价格联动图仍待 Phase 3 落地。
+- 链接: `backend/app/services/retail_sentiment.py`, `backend/app/routers/sentiment.py`, `src/services/sentimentService.ts`, `src/components/sentiment/SentimentDashboard.tsx`, `src/components/sentiment/CommentList.tsx`, `docs/changes/REQ-20260322-03-sentiment-metric-engine-and-dashboard-v2.md`
+
+## 2026-03-22 04:05 | 前后端 AI
+- Task ID: `CHG-20260322-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已完成 Phase 3：`/api/sentiment/trend` 新增 `neutral_vol + price_close + price_change_pct + volume_proxy + has_price_data`；首页趋势图升级为“偏多/偏空/中性柱 + 热度线 + 价格线”，并新增前端联动观察标签。非交易时段默认优先展示 `14D`。
+- 风险: `volume_proxy` 仍是成交活跃度代理，不是严格统一量；72H 价格桶当前按自然小时对齐舆情小时桶，后续若要改为交易所标准小时桶需重新冻结口径。
+- 链接: `backend/app/services/retail_sentiment.py`, `backend/app/routers/sentiment.py`, `src/components/sentiment/SentimentTrendChart.tsx`, `src/components/sentiment/SentimentDashboard.tsx`, `docs/changes/REQ-20260322-04-sentiment-price-linked-visualization-v3.md`
+
+## 2026-03-23 11:40 | 前后端 AI
+- Task ID: `CHG-20260323-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已完成散户一致性观察 V2 首轮落地：新增 `sentiment_events` 正式事件流模型与旧 `sentiment_comments` 懒回填；首页正式主链路切到 `GET /api/sentiment/overview|heat_trend|feed`；首页模块重构为 `单信息卡 + 热度主图（价格 / 事件数 / 相对热度） + AI 预留窄区 + 右侧来源 Tab 原文流`，窗口统一为 `5D / 20D`。
+- 风险: 当前正式可见数据仍以 `股吧主帖 + 旧评论兼容回填` 为主；股吧回复正文与雪球适配器尚未实装，因此 `reply`/`xueqiu` 仍主要停留在 schema/API 预留层。
+- 链接: `backend/app/db/database.py`, `backend/app/services/retail_sentiment.py`, `backend/app/services/sentiment_crawler.py`, `backend/app/routers/sentiment.py`, `src/services/sentimentService.ts`, `src/components/sentiment/SentimentDashboard.tsx`, `docs/changes/STG-20260323-01-retail-sentiment-v2-heat-event-stream.md`
+
+## 2026-03-23 19:20 | 数据接入 AI
+- Task ID: `CHG-20260323-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已继续推进事件流接入层：股吧 crawler 新增线程详情解析，主帖可从详情页提取正文与互动字段；回复链路改为调用东方财富 `gbapi` reply 接口做 best-effort 抓取；雪球新增 cookie-gated 适配器骨架（`statuses/search.json + statuses/comments.json`）。同时已在本地对 `000833 / 603629` 执行 live crawl，V2 模块本地样本已刷新到 `2026-03-23`。
+- 风险: 东方财富 reply API 当前大量返回 `系统繁忙[00003]`，因此 reply 正文仍不稳定；雪球在未配置 `XUEQIU_COOKIE` 或被 WAF 挑战时会软失败，当前环境下默认仍可能无数据。
+- 链接: `backend/app/services/sentiment_crawler.py`, `backend/app/services/retail_sentiment.py`, `docs/changes/REQ-20260323-02-sentiment-events-and-two-source-contract.md`
+
+## 2026-03-24 18:40 | 文档治理 AI
+- Task ID: `CHG-20260324-01`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已完成散户一致性观察本轮文档治理收口：新增总收口卡 `MOD-20260324-01-retail-sentiment-v2-current-state.md`，把 `2026-03-22 ~ 2026-03-24` 多轮 STG/REQ 的过程文档收敛为“当前真实状态”母卡；同步把 `02/03/07` 回填为实际已落地口径（股吧单源、`5D/20D/60D`、星标股日级 AI 评分、前端可改 `llm_model`、未完成项改写为后置项）。
+- 风险: 旧的 `20260322/20260323` 规划卡仍保留作为过程记录，其中关于“多源 / AI仅占位 / 来源Tab”的说法已不再代表当前真实状态；后续查现状时应优先看 `MOD-20260324-01`。
+- 链接: `docs/changes/MOD-20260324-01-retail-sentiment-v2-current-state.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`

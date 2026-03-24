@@ -16,6 +16,7 @@
 |---|---|---|---|
 | `CAP-MKT-TIME` | 交易日与交易时段展示状态机 | 前后端共享 | ACTIVE |
 | `CAP-REALTIME-FLOW` | 主力动态实时数据链路 | 后端主责，前端联调 | ACTIVE |
+| `CAP-RETAIL-SENTIMENT` | 散户一致性观察（股吧舆情） | 后端/前端 | ACTIVE |
 | `CAP-HISTORY-30M` | 30分钟历史趋势与口径 | 后端主责 | ACTIVE |
 | `CAP-WIN-PIPELINE` | Windows离线节点与云端注入 | 后端/运维 | ACTIVE（有阻塞） |
 | `CAP-L2-HISTORY-FOUNDATION` | 盘后L2历史底座与回补机制 | 后端/前端/运维 | ACTIVE |
@@ -164,6 +165,77 @@
 - `CHG-20260312-02`：盯盘三态收敛为二态（5s/30s），实时页改为静默刷新，并将 heartbeat / crawler 升级为 `focus/warm` 分层抓取。
 - `CHG-20260318-02`：新增“交易日当天但盘后查看新股票”按需补抓与聚合逻辑，并把实时页状态展示改为以后端权威状态为准。
 - `CHG-20260320-01`：新增盘后主动自愈扫盘，不再只依赖用户打开页面时才触发 today stale rehydrate。
+
+---
+
+### CAP-RETAIL-SENTIMENT（散户一致性观察 / 股吧舆情）
+
+1. **业务目标**
+- 提供一个基于统一舆情事件流的**散户一致性观察模块**，用于辅助判断“有没有人在讨论、最近是更热还是更冷、价格是否与讨论同步/背离”；
+- 该能力是首页辅助观察模块，不承担盘中高频交易信号职责。
+
+2. **业务规则（强约束）**
+- **模块定位冻结（`CHG-20260322-01` / `CHG-20260323-01`）**：
+  - 对外定位为 `散户一致性观察`，而不是“实时情绪交易信号”；
+  - 首页主视图优先表达 `热度 -> 相对热度 -> 价格联动 -> AI日评`；
+  - 关键词/方向分类不再作为首页主图主结论。
+- **正式数据模型冻结**：
+  - 正式舆情底座为 `sentiment_events`；
+  - 事件流字段至少包含 `source / event_type / thread_id / parent_id / content / pub_time / interaction metrics`；
+  - 旧 `sentiment_comments` 仅保留为兼容层与历史回填来源，不再是首页正式主消费表。
+- **读接口红线**：
+  - `GET /api/sentiment/dashboard/{symbol}` 禁止同步调用 LLM；
+  - 首页正式主链路改为 `GET /api/sentiment/overview|heat_trend|feed|daily_scores`；
+  - 页面不得把“页面刷新时间”当作“数据更新时间”。
+- **首页窗口与主图冻结（`CHG-20260324-01` 实际收口）**：
+  - 首页正式窗口为 `5D / 20D / 60D`，默认 `20D`；
+  - 左侧主图固定为上下两层：
+    - 上层：`价格 + AI情绪分`
+    - 下层：`raw_heat` 柱 + `relative_heat_index` 线 + `AI一致性/温度` 线；
+  - 图内只展示数值因子，不直接贴叙事类文字标签；
+  - `raw_heat` 与 `relative_heat_index` 的口径以 `retail_sentiment.py` 中 V3 实现为准。
+- **来源与原文流冻结（`CHG-20260324-01` 实际收口）**：
+  - 当前正式源只保留 `股吧`；
+  - 右侧原文流必须保留全文，不截断为摘要；
+  - 当前正式页面不再展示多来源切换 Tab。
+- **AI 日评策略**：
+  - AI 解读已从“占位”升级为**星标股日级缓存结果**；
+  - 输出 `情绪得分 / 一致性 / 温度 / 风险标签 / 摘要`；
+  - 首页读请求只读缓存，不得临时同步调模。
+- **覆盖边界**：
+  - 当前正式可见数据仍以 `股吧主帖 + 旧评论兼容回填` 为主；
+  - `reply` 事件与更完整事件关系链仍属后续补齐项；
+  - 当前抓取/补数重点围绕 `watchlist(星标股)`，未扩到独立 `focus_pool / hot_pool`。
+
+3. **实现摘要（当前方案）**
+- 截至 `2026-03-24`，该能力的当前真实状态为：
+  - 后端已落地 `sentiment_events`，并支持旧 `sentiment_comments` 懒回填；
+  - 首页正式主链路已切到 `overview / heat_trend / feed / daily_scores`；
+  - 首页已重构为 `左图 + 中AI + 右原文流`；
+  - 星标股支持：新加即回补 `20D -> 60D`、日常定时抓取、日级 AI 评分缓存；
+  - 当前正式源只保留 `股吧`；
+  - 旧 `dashboard / trend / comments / keywords` 继续保留，供兼容与历史验证使用。
+
+4. **验收案例（Given / When / Then）**
+- **正常**：Given `2026-03-24 20:30`，When 首页打开 `sz000833` 并切到 `5D`，Then 左侧主图显示价格 + 事件数柱 + 相对热度线，右侧原文流可查看完整事件正文。
+- **边界**：Given `2026-03-24 20:35` 某交易日价格有数据但该桶没有任何事件，When 查看 `heat_trend`，Then 该桶必须表现为 gap，而不是“热度归零平台”。
+- **异常防线**：Given `2026-03-24 20:40` 请求 `GET /api/sentiment/overview/{symbol}`，When 后端返回 overview，Then 不得触发任何同步 LLM 调用。
+
+5. **可观测性与告警**
+- 观测点：
+  - `latest_event_time`
+  - `window total_events / post_count / reply_count`
+  - `relative_heat_index`
+  - 各来源事件数与未覆盖股票占比
+- 告警条件：
+  - 读接口仍触发 LLM；
+  - `heat_trend` 无法区分 gap / 0；
+  - 页面把无覆盖态错误展示为“暂无情绪”。
+
+6. **变更记录（任务ID）**
+- `CHG-20260322-01`：冻结“散户情绪模块重构”总方案，明确模块定位改为“散户一致性观察”，并按 `freshness -> metric -> price-linked -> coverage` 四期推进。
+- `CHG-20260323-01`：升级为 V2 热度主导方案：正式数据模型切到 `sentiment_events`，首页主链路改为 `overview / heat_trend / feed`，布局改为 `左图 / 中 AI 预留 / 右原文流`。
+- `CHG-20260324-01`：按实际落地状态完成收口：正式源收敛为股吧单源，窗口扩为 `5D/20D/60D`，星标股日级 AI 评分与补数调度进入正式链路，并新增总收口卡 `MOD-20260324-01-retail-sentiment-v2-current-state.md`。
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield } from 'lucide-react';
+import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield, Save } from 'lucide-react';
 import * as StockService from '../../services/stockService';
 
 interface ConfigModalProps {
@@ -15,11 +15,13 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     const [bullWords, setBullWords] = useState('');
     const [bearWords, setBearWords] = useState('');
 
-    // AI Config (只读)
+    // AI Config
     const [llmModel, setLlmModel] = useState('');
     const [llmBaseUrl, setLlmBaseUrl] = useState('');
     const [llmKeyConfigured, setLlmKeyConfigured] = useState(false);
+    const [llmModelSource, setLlmModelSource] = useState<'app_config' | 'env' | string>('env');
     const [isTesting, setIsTesting] = useState(false);
+    const [isSavingAi, setIsSavingAi] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean, message: string } | null>(null);
 
     useEffect(() => {
@@ -35,6 +37,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                 setLlmModel(info.model || '未配置');
                 setLlmBaseUrl(info.base_url || '未配置');
                 setLlmKeyConfigured(info.key_configured || false);
+                setLlmModelSource(info.model_source || 'env');
             });
         }
     }, [isOpen]);
@@ -57,11 +60,25 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     };
 
     const handleSave = async () => {
-        // 只保存情绪关键词配置，LLM 配置不再通过前端修改
         await StockService.updateAppConfig('sentiment_bull_words', bullWords);
         await StockService.updateAppConfig('sentiment_bear_words', bearWords);
         onSave();
         onClose();
+    };
+
+    const handleSaveAiModel = async () => {
+        setIsSavingAi(true);
+        setTestResult(null);
+        try {
+            await StockService.updateAppConfig('llm_model', llmModel.trim());
+            setLlmModelSource('app_config');
+            setTestResult({ success: true, message: '模型名称已保存' });
+            onSave();
+        } catch (e) {
+            setTestResult({ success: false, message: '模型名称保存失败' });
+        } finally {
+            setIsSavingAi(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -126,16 +143,36 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                             <div className="flex items-start gap-2 p-3 bg-slate-800/60 border border-slate-700 rounded-lg">
                                 <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                                 <p className="text-xs text-slate-400 leading-relaxed">
-                                    AI 配置已由服务端环境变量安全管理，无法通过前端修改。如需更换模型或 Key，请联系管理员在服务器端配置。
+                                    API Key 与 Base URL 仍由服务端环境变量安全管理；前端只允许修改模型名称，保存后立即作为默认模型生效。
                                 </p>
                             </div>
 
-                            {/* 只读信息卡片 */}
+                            {/* 可编辑/只读信息卡片 */}
                             <div className="space-y-3">
                                 <div>
                                     <label className="block text-xs text-slate-500 mb-1">模型</label>
-                                    <div className="w-full bg-slate-800/40 border border-slate-700 rounded px-3 py-2 text-slate-300 text-sm">
-                                        {llmModel}
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            value={llmModel}
+                                            onChange={e => setLlmModel(e.target.value)}
+                                            placeholder="例如 gpt-4.1-mini / gemini-2.5-pro"
+                                            className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-green-500 focus:outline-none"
+                                        />
+                                        <button
+                                            onClick={handleSaveAiModel}
+                                            disabled={isSavingAi || !llmModel.trim()}
+                                            className={`inline-flex items-center gap-1 rounded px-3 py-2 text-xs transition-colors ${
+                                                isSavingAi || !llmModel.trim()
+                                                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                                    : 'bg-green-600 hover:bg-green-500 text-white'
+                                            }`}
+                                        >
+                                            <Save className="w-3.5 h-3.5" />
+                                            {isSavingAi ? '保存中...' : '保存'}
+                                        </button>
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-slate-500">
+                                        当前来源：{llmModelSource === 'app_config' ? '前端保存配置' : '服务端环境变量'}
                                     </div>
                                 </div>
                                 <div>
