@@ -139,6 +139,31 @@ def init_db():
                  )''')
     c.execute("CREATE INDEX IF NOT EXISTS idx_comments_code_time ON sentiment_comments (stock_code, pub_time)")
 
+    # 散户舆情统一事件流 (Retail Sentiment Events)
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_events (
+                 event_id TEXT PRIMARY KEY,
+                 source TEXT NOT NULL,
+                 symbol TEXT NOT NULL,
+                 event_type TEXT NOT NULL,
+                 thread_id TEXT,
+                 parent_id TEXT,
+                 content TEXT NOT NULL,
+                 author_name TEXT,
+                 pub_time DATETIME,
+                 crawl_time DATETIME,
+                 view_count INTEGER,
+                 reply_count INTEGER,
+                 like_count INTEGER,
+                 repost_count INTEGER,
+                 raw_url TEXT,
+                 source_event_id TEXT,
+                 extra_json TEXT
+                 )''')
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_sentiment_events_source_event ON sentiment_events (source, source_event_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_events_symbol_time ON sentiment_events (symbol, pub_time)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_events_symbol_source_time ON sentiment_events (symbol, source, pub_time)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_events_thread_time ON sentiment_events (thread_id, pub_time)")
+
     # AI 情绪摘要表 (Sentiment Summaries)
     c.execute('''CREATE TABLE IF NOT EXISTS sentiment_summaries (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,6 +172,24 @@ def init_db():
                  model_used TEXT,
                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                  )''')
+
+    # 散户一致性观察 - 日级 LLM 解读缓存
+    c.execute('''CREATE TABLE IF NOT EXISTS sentiment_daily_scores (
+                 symbol TEXT,
+                 trade_date TEXT,
+                 sample_count INTEGER DEFAULT 0,
+                 sentiment_score REAL,
+                 direction_label TEXT,
+                 consensus_strength INTEGER,
+                 emotion_temperature INTEGER,
+                 risk_tag TEXT,
+                 summary_text TEXT,
+                 model_used TEXT,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 raw_payload TEXT,
+                 PRIMARY KEY(symbol, trade_date)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_daily_scores_symbol_date ON sentiment_daily_scores (symbol, trade_date)")
 
                  
     # 配置部分
@@ -160,7 +203,8 @@ def init_db():
     # 阈值 (V4.0 已写死，仅保持兼容)
     c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
     c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
-    # LLM 配置已迁移至服务端环境变量，不再存储在数据库中
+    # LLM 仅保留非敏感模型名可前端修改；Key/Base URL 仍由环境变量管理
+    c_user.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', '')")
     
     user_conn.commit()
     user_conn.close()

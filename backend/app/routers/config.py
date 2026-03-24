@@ -28,15 +28,18 @@ def get_public_config():
 @router.get("/config/llm-info", response_model=APIResponse)
 def get_llm_info():
     """
-    返回 LLM 的脱敏信息（仅模型名称和 Base URL），不返回 API Key
-    供前端 AI 设置面板只读展示
+    返回 LLM 的脱敏信息；模型名允许来自前端保存配置，Key/Base URL 仍只读
     """
+    config = get_app_config()
+    saved_model = str(config.get("llm_model") or "").strip()
+    env_model = os.getenv("LLM_MODEL", "未配置")
     return APIResponse(
         code=200,
         data={
-            "model": os.getenv("LLM_MODEL", "未配置"),
+            "model": saved_model or env_model,
             "base_url": os.getenv("LLM_BASE_URL", "未配置"),
-            "key_configured": bool(os.getenv("LLM_API_KEY", ""))
+            "key_configured": bool(os.getenv("LLM_API_KEY", "")),
+            "model_source": "app_config" if saved_model else "env"
         }
     )
 

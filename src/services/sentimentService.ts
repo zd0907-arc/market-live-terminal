@@ -1,109 +1,128 @@
 import axios from 'axios';
-import { API_BASE_URL, getWriteHeaders } from '../config';
+import { API_BASE_URL } from '../config';
 
-// 移除 API_BASE_URL 常量定义，直接使用 config 中导入的
-// const API_BASE_URL = 'http://127.0.0.1:8000/api';
+export type SentimentWindow = '5d' | '20d' | '60d';
+export type SentimentFeedSort = 'latest' | 'hot';
 
-export interface SentimentDashboardData {
-    score: number;
-    status: string;
-    bull_bear_ratio: number;
-    summary: string;
-    risk_warning: string;
-    details: {
-        bull_count: number;
-        bear_count: number;
-        total_count: number;
-    };
+export interface SentimentDailyScore {
+    symbol: string;
+    trade_date: string;
+    sample_count: number;
+    sentiment_score: number | null;
+    direction_label: '偏多' | '偏空' | '分歧' | '中性' | string | null;
+    consensus_strength: number | null;
+    emotion_temperature: number | null;
+    risk_tag: string | null;
+    summary_text: string | null;
+    model_used?: string | null;
+    created_at?: string | null;
+    has_score?: boolean;
 }
 
-export interface SentimentTrendPoint {
-    time_bucket: string;
-    total_heat: number;
+export interface SentimentOverviewV2 {
+    symbol: string;
+    window: SentimentWindow;
+    window_label: string;
+    window_start: string | null;
+    window_end: string | null;
+    trade_dates: string[];
+    current_stock_heat: number;
     post_count: number;
-    bull_vol: number;
-    bear_vol: number;
-    bull_bear_ratio: number;
+    reply_count_sum: number;
+    read_count_sum: number;
+    relative_heat_index: number | null;
+    relative_heat_label: string;
+    coverage_status: 'covered' | 'no_recent_events' | 'uncovered' | string;
+    metric_explanations: Record<string, string>;
+    daily_score?: SentimentDailyScore | null;
 }
 
-export interface SentimentComment {
-    id: string;
+export interface SentimentHeatTrendPointV2 {
+    time_bucket: string;
+    bucket_label: string;
+    bucket_date: string;
+    bucket_clock?: string;
+    raw_heat: number;
+    post_count: number;
+    reply_count_sum: number;
+    read_count_sum: number;
+    relative_heat_index: number | null;
+    relative_heat_label: string;
+    is_gap: boolean;
+    is_live_bucket?: boolean;
+    price_close?: number | null;
+    price_change_pct?: number | null;
+    volume_proxy?: number | null;
+    has_price_data?: boolean;
+    ai_sentiment_score?: number | null;
+    ai_consensus_strength?: number | null;
+    ai_emotion_temperature?: number | null;
+    ai_risk_tag?: string | null;
+    ai_has_score?: boolean;
+    ai_tag_visible?: boolean;
+}
+
+export interface SentimentFeedItemV2 {
+    event_id: string;
+    title?: string;
     content: string;
+    day_key: string;
+    author_name?: string | null;
     pub_time: string;
-    read_count: number;
+    crawl_time?: string | null;
+    view_count: number;
     reply_count: number;
-    sentiment_score: number;
-    heat_score: number;
+    like_count: number;
+    repost_count: number;
+    raw_url?: string | null;
+    source_event_id?: string | null;
+    hot_score?: number;
 }
 
-export interface SentimentSummary {
-    id: number;
-    content: string;
-    created_at: string;
-    model: string;
+export interface SentimentFeedPayloadV2 {
+    items: SentimentFeedItemV2[];
+    coverage_status: 'covered' | 'no_recent_events' | 'uncovered' | string;
+    window_start?: string | null;
+    window_end?: string | null;
 }
-
-interface APIResponse<T> {
-    code?: number;
-    message?: string;
-    data?: T;
-}
-
-const unwrapArrayData = <T>(payload: APIResponse<T[]> | T[]): T[] => {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.data)) return payload.data;
-    return [];
-};
 
 export const sentimentService = {
-    // 触发抓取
     crawl: async (symbol: string) => {
-        // 由于 config.ts 中 API_BASE_URL = '/api'，所以这里直接拼
+        const response = await axios.post(`${API_BASE_URL}/sentiment/crawl/${symbol}`);
+        return response.data;
+    },
+
+    getOverviewV2: async (symbol: string, window: SentimentWindow = '5d'): Promise<SentimentOverviewV2> => {
+        const response = await axios.get(`${API_BASE_URL}/sentiment/overview/${symbol}?window=${window}`);
+        return response.data;
+    },
+
+    getHeatTrendV2: async (symbol: string, window: SentimentWindow = '5d'): Promise<SentimentHeatTrendPointV2[]> => {
+        const response = await axios.get(`${API_BASE_URL}/sentiment/heat_trend/${symbol}?window=${window}`);
+        return Array.isArray(response.data) ? response.data : [];
+    },
+
+    getDailyScoresV2: async (symbol: string, window: SentimentWindow = '20d'): Promise<SentimentDailyScore[]> => {
+        const response = await axios.get(`${API_BASE_URL}/sentiment/daily_scores/${symbol}?window=${window}`);
+        return Array.isArray(response.data) ? response.data : [];
+    },
+
+    getFeedV2: async (
+        symbol: string,
+        window: SentimentWindow = '5d',
+        sort: SentimentFeedSort = 'latest',
+        limit = 50
+    ): Promise<SentimentFeedPayloadV2> => {
+        const response = await axios.get(
+            `${API_BASE_URL}/sentiment/feed/${symbol}?window=${window}&sort=${sort}&limit=${limit}`
+        );
+        return response.data;
+    },
+
+    generateDailyScore: async (symbol: string, tradeDate: string) => {
         const response = await axios.post(
-            `${API_BASE_URL}/sentiment/crawl/${symbol}`,
-            {},
-            { headers: getWriteHeaders() }
+            `${API_BASE_URL}/sentiment/internal/sentiment/score_daily/${symbol}?trade_date=${tradeDate}`
         );
         return response.data;
     },
-
-    // 获取仪表盘数据
-    getDashboard: async (symbol: string): Promise<SentimentDashboardData> => {
-        const response = await axios.get(`${API_BASE_URL}/sentiment/dashboard/${symbol}`);
-        return response.data;
-    },
-
-    // 获取趋势数据 (支持 interval 参数)
-    getTrend: async (symbol: string, interval: '72h' | '14d' = '72h'): Promise<SentimentTrendPoint[]> => {
-        const response = await axios.get<APIResponse<SentimentTrendPoint[]> | SentimentTrendPoint[]>(
-            `${API_BASE_URL}/sentiment/trend/${symbol}?interval=${interval}`
-        );
-        return unwrapArrayData(response.data);
-    },
-
-    // 获取真实评论列表
-    getComments: async (symbol: string): Promise<SentimentComment[]> => {
-        const response = await axios.get<APIResponse<SentimentComment[]> | SentimentComment[]>(
-            `${API_BASE_URL}/sentiment/comments/${symbol}`
-        );
-        return unwrapArrayData(response.data);
-    },
-
-    // 生成 AI 摘要
-    generateSummary: async (symbol: string) => {
-        const response = await axios.post(
-            `${API_BASE_URL}/sentiment/summary/${symbol}`,
-            {},
-            { timeout: 120000, headers: getWriteHeaders() }
-        );
-        return response.data;
-    },
-
-    // 获取 AI 摘要历史
-    getSummaryHistory: async (symbol: string): Promise<SentimentSummary[]> => {
-        const response = await axios.get<APIResponse<SentimentSummary[]> | SentimentSummary[]>(
-            `${API_BASE_URL}/sentiment/summary/history/${symbol}`
-        );
-        return unwrapArrayData(response.data);
-    }
 };

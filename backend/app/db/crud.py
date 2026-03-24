@@ -97,19 +97,21 @@ def get_ticks_for_aggregation(symbol: str, date: str):
     return ticks
 
 def get_app_config():
-    """读取业务配置（阈值、情绪关键词等），不包含 LLM 敏感信息"""
+    """读取业务配置；LLM 仅放行非敏感的 llm_model，Key/Base URL 仍不返回"""
     conn = get_user_db_connection()
     c = conn.cursor()
     c.execute("SELECT key, value FROM app_config")
     db_rows = c.fetchall()
     conn.close()
-    # 过滤掉 LLM 相关的敏感 Key，只返回业务配置
-    config = {k: v for k, v in db_rows if not k.startswith('llm_')}
+    config = {
+        k: v for k, v in db_rows
+        if (not k.startswith('llm_')) or k == 'llm_model'
+    }
     return config
 
 def update_app_config(key: str, value: str):
-    """更新业务配置，禁止通过此接口写入 LLM Key"""
-    if key.startswith('llm_'):
+    """更新业务配置；仅允许 llm_model 通过前端修改"""
+    if key.startswith('llm_') and key != 'llm_model':
         raise ValueError(f"LLM 配置 '{key}' 不可通过 API 修改，请使用服务端环境变量")
     conn = get_user_db_connection()
     c = conn.cursor()

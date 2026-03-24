@@ -146,7 +146,7 @@ python -m backend.app.main
 | 1 | `.env.local` 未被追踪 | `git check-ignore .env.local` | 输出 `.env.local` |
 | 2 | `.env` 未被追踪 | `git check-ignore .env` | 输出 `.env` |
 | 3 | 代码中无硬编码 Key | `grep -r "sk-" --include="*.py" --include="*.ts" --include="*.tsx" backend/ src/` | 无输出 |
-| 4 | 数据库中无 Key | `sqlite3 data/user_data.db "SELECT * FROM app_config WHERE key LIKE 'llm_%'"` | 无结果或仅有历史残留 |
+| 4 | 数据库中无敏感 LLM 配置 | `sqlite3 data/user_data.db "SELECT key,value FROM app_config WHERE key LIKE 'llm_%'"` | 允许存在 `llm_model`；不得出现 `llm_api_key / llm_base_url / llm_proxy` |
 | 5 | Config API 不泄露 Key | `curl localhost:8000/api/config \| python -m json.tool` | 输出中无 `llm_api_key` |
 
 ---
@@ -167,6 +167,11 @@ sudo docker compose up -d
 nano .env.local        # 修改 Key 或模型名
 # 重启后端即可生效
 ```
+
+> 补充说明（`CHG-20260324-01`）：
+> - **Key / Base URL / Proxy** 仍只能通过环境变量修改；
+> - **模型名称** 现在允许在前端 AI 设置里保存到 `app_config.llm_model`，并优先覆盖环境变量 `LLM_MODEL`；
+> - 该前端可写项属于**非敏感配置**，不改变本文件的 Key 安全边界。
 
 ---
 

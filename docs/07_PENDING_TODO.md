@@ -279,3 +279,18 @@
   1. 产品回滚锚点固定为 `v4.2.28 / c1eec34 / baseline-v4.2.28-legacy-toggle`；
   2. 详细基线说明见 `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`。
 - 关联任务：`CHG-20260321-02`
+
+## T-021 散户一致性观察模块重构后置项
+- 状态：`ACTIVE`
+- 当前事实：
+  - `2026-03-22` 已冻结散户情绪模块重构总方案：模块定位改为“散户一致性观察”，并按 `Phase 1 freshness/summary -> Phase 2 metric/dashboard -> Phase 3 price-linked -> Phase 4 coverage/source` 四期推进；
+  - 截至 `2026-03-24`，实际线上准备口径已收敛为：`股吧单源 + sentiment_events + overview/heat_trend/feed/daily_scores + 星标股日级 AI 评分`；
+  - 首页页面结构已稳定为 `左热度主图 / 中 AI 日评与日志 / 右原文流`，默认窗口为 `20D`；
+  - 当前正式可见数据仍主要来自 `股吧主帖 + 旧 sentiment_comments 兼容回填`。
+- 后置项：
+  1. `reply` 事件仍未形成稳定、完整的首页展示链路，当前主消费仍以 `post` 为主；
+  2. `relative_heat_index` 当前以“前 5 个交易日同类基线”计算，若未来继续细化到更高频/更复杂桶，需要重新冻结基线口径；
+  3. AI 风险标签当前只留在结论层（卡片 / Tooltip / 日志），后续若要做更强结构化量化表达，需单开卡定义；
+  4. 当前正式源已收敛为股吧单源；如未来重新引入雪球/同花顺，必须以新卡重新冻结，不沿用旧的两源预留文档直接开工；
+  5. 星标股补历史当前目标是 `20D -> 60D`，若后续需要更长历史覆盖，需要评估抓取成本与调度窗口。
+- 关联任务：`CHG-20260322-01`, `CHG-20260323-01`, `CHG-20260324-01`

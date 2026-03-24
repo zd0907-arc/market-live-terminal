@@ -12,7 +12,7 @@
 
 | 层级 | 表 | 写入规则 | 说明 |
 |------|-----|---------|------|
-| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/评论源数据 |
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments`, `sentiment_events` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/舆情事件源数据 |
 | **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
 | **Derived（生产L2历史层）** | `history_5m_l2`, `history_daily_l2`, `l2_daily_ingest_runs`, `l2_daily_ingest_failures` | 仅允许按 `symbol+trade_date` 整日覆盖重写 | 盘后L2正式结算结果（含同源 L1/L2 双派生） |
 | **Derived（盘中预览层）** | `realtime_5m_preview`, `realtime_daily_preview` | 仅允许按 `symbol+trade_date` 整日覆盖重写；只存 preview，不得伪装 finalized | 盘中临时 L1 预览层，服务新版多维历史/当日衔接 |
@@ -74,6 +74,31 @@
 | `outer_vol` / `inner_vol` | `INTEGER` | 绝对买盘 / 绝对卖盘 | |
 | `signals` | `TEXT` | **重点：只允许存 JSON Array** | 比如 `'["Iceberg Allowed"]'`。哪怕没信号也要存 `'[]'` 字符串，绝不可以存 `NULL`。读取时必须 `json.loads`！ |
 | `bid1_vol` / `ask1_vol` | `INTEGER` | 买一卖一挂单量 | 用于冰山探测 |
+
+### 4A. `sentiment_events`（统一舆情事件流）
+> **V2 正式舆情底座**：服务首页 `overview / heat_trend / feed` 主链路。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `event_id` | `TEXT` | 主键，单条事件唯一标识 |
+| `source` | `TEXT` | `NOT NULL`，`guba | xueqiu | ths` |
+| `symbol` | `TEXT` | `NOT NULL`，标准代码（推荐 `sz000833` 这类前缀格式） |
+| `event_type` | `TEXT` | `NOT NULL`，`post | reply` |
+| `thread_id` | `TEXT` | Allow `NULL`，同线程聚合标识 |
+| `parent_id` | `TEXT` | Allow `NULL`，回复场景指向父事件 |
+| `content` | `TEXT` | `NOT NULL`，正文全文 |
+| `author_name` | `TEXT` | Allow `NULL` |
+| `pub_time` / `crawl_time` | `DATETIME` | Allow `NULL`，优先使用源发布时间 |
+| `view_count` / `reply_count` / `like_count` / `repost_count` | `INTEGER` | Allow `NULL`，缺失时保持空，不得伪造 0 语义 |
+| `raw_url` | `TEXT` | Allow `NULL` |
+| `source_event_id` | `TEXT` | 同源内唯一键组成部分；与 `source` 组合唯一 |
+| `extra_json` | `TEXT` | Allow `NULL`，仅允许 JSON Object / JSON Array 字符串 |
+
+> 说明：
+> - 同源内唯一约束冻结为 `source + source_event_id`；
+> - 不做跨源去重；
+> - 旧 `sentiment_comments` 允许按 symbol 懒回填为 `source=guba,event_type=post` 的兼容事件。
+> - 截至 `2026-03-24` 的正式可见链路仍以 `guba + post` 为主，`reply` 事件虽在 schema 中保留，但首页主消费尚未完整切到 reply 级展示。
 
 ### 5. `history_5m_l2`（生产正式 L2 历史 5 分钟底座）
 > **生产正式层**：该表属于 `data/market_data.db`，用于盯盘历史模式、日后复盘页正式查询、多周期聚合源。
@@ -352,13 +377,103 @@
 > - 内部高速 ingest 接口继续使用 `INGEST_TOKEN`，且服务端不再提供默认 token。
 
 ### 2. 散户情绪类 (Retail Sentiment)
-> 说明：`/api/sentiment*` 保留给散户情绪/旧情绪链路使用；自 `CHG-20260319-01` 起，它们**不再是当日分时页资金博弈分析的正式主路径**。
-*   **`POST /api/sentiment/crawl/{symbol}`**: 触发云端无头请求，抓取股吧增量数据。返回 `{"code": 200, "data": {"new_count": 50}}`。
-*   **`GET /api/sentiment/dashboard/{symbol}`**: 返回情绪全息版。结构: `{"score": 8, "bull_bear_ratio": 2.5, "risk_warning": "高"}`
-*   **`POST /api/sentiment/summary/{symbol}`**: 召唤 LLM 生成摘要。
+> 说明：`/api/sentiment*` 现分为两套链路：
+> - **V2/V3 正式首页主链路**：`overview / heat_trend / feed / daily_scores`
+> - **兼容链路**：`dashboard / trend / comments / keywords / summary`
+> 自 `CHG-20260324-01` 起，首页正式模块以“股吧单源 + 热度主导 + 星标股日级 AI 评分”口径运行。
+
+*   **`POST /api/sentiment/crawl/{symbol}`**: 触发云端无头请求，当前仍以股吧主帖增量抓取为主，并会同步写入 `sentiment_comments + sentiment_events`。
+*   **`GET /api/sentiment/overview/{symbol}?window=5d|20d|60d`**（正式主链路）:
+    - 返回 overview object。
+    - 正式字段：
+      - `symbol`
+      - `window` / `window_label`
+      - `trade_dates`
+      - `current_stock_heat`
+      - `post_count`
+      - `reply_count_sum`
+      - `read_count_sum`
+      - `relative_heat_index`
+      - `relative_heat_label`
+      - `coverage_status`
+      - `metric_explanations`
+      - `daily_score`
+      - `window_start` / `window_end`
+*   **`GET /api/sentiment/heat_trend/{symbol}?window=5d|20d|60d`**（正式主链路）:
+    - 返回 trend array。
+    - 每个时间桶至少包含：
+      - `time_bucket`
+      - `bucket_label`
+      - `bucket_date`
+      - `bucket_clock`（5D 压缩场景）
+      - `raw_heat`
+      - `post_count`
+      - `reply_count_sum`
+      - `read_count_sum`
+      - `relative_heat_index`
+      - `relative_heat_label`
+      - `is_gap`
+      - `is_live_bucket`
+      - `price_close`
+      - `price_change_pct`
+      - `volume_proxy`
+      - `has_price_data`
+      - `ai_sentiment_score`
+      - `ai_consensus_strength`
+      - `ai_emotion_temperature`
+      - `ai_risk_tag`
+      - `ai_has_score`
+      - `ai_tag_visible`
+    - 红线：必须区分“无新增事件 gap”与真实 0 值，前端不得自行猜测。
+*   **`GET /api/sentiment/feed/{symbol}?window=5d|20d|60d&sort=latest|hot&limit=50`**（正式主链路）:
+    - 返回 object：
+      - `items: [event]`
+      - `coverage_status`
+      - `window_start`
+      - `window_end`
+    - 单条 event 至少包含：
+      - `event_id`
+      - `content`
+      - `title`
+      - `author_name`
+      - `pub_time`
+      - `crawl_time`
+      - `view_count / reply_count / like_count / repost_count`
+      - `raw_url`
+      - `source_event_id`
+      - `day_key`
+      - `hot_score`
+    - 当前正式页面按股吧单源消费；即使服务端仍兼容旧 `source` 参数，也不再作为正式首页必需语义。
+*   **`GET /api/sentiment/daily_scores/{symbol}?window=20d|60d`**（正式主链路）:
+    - 返回日级 AI 评分数组；
+    - 单条至少包含：
+      - `symbol`
+      - `trade_date`
+      - `sample_count`
+      - `sentiment_score`
+      - `direction_label`
+      - `consensus_strength`
+      - `emotion_temperature`
+      - `risk_tag`
+      - `summary_text`
+      - `model_used`
+      - `created_at`
+      - `has_score`
+*   **`GET /api/sentiment/dashboard/{symbol}`**（兼容链路）:
+    - 读接口**不得同步调用 LLM**；
+    - `summary` 只能返回缓存结果；无缓存时返回 `null`；
+    - 允许保留旧字段兼容，但不再作为首页正式主链路。
+*   **`POST /api/sentiment/summary/{symbol}`**: 手动触发摘要生成并写入缓存，不参与读接口实时计算。
 *   **`GET /api/sentiment/summary/history/{symbol}`**: 返回 `APIResponse`，`data` 为摘要数组。
-*   **`GET /api/sentiment/trend/{symbol}?interval=72h|14d`**: 返回 `APIResponse`，`data` 为趋势数组。
-*   **`GET /api/sentiment/comments/{symbol}`**: 返回 `APIResponse`，`data` 为评论数组。
+*   **`GET /api/sentiment/trend/{symbol}?interval=72h|14d`**（兼容链路）:
+    - 返回 `APIResponse`，`data` 为旧版趋势数组；
+    - 保留 `has_data / is_gap / price_close / price_change_pct / volume_proxy / has_price_data` 字段。
+*   **`GET /api/sentiment/comments/{symbol}`**（兼容链路）:
+    - 返回 `APIResponse`，`data` 为旧版代表帖子数组；
+    - 支持 `sort=latest|hot|controversial`、`window=72h|14d`、`limit`。
+*   **`GET /api/sentiment/keywords/{symbol}?window=72h|14d`**（兼容链路）:
+    - 返回 `keywords / topics / sample_count / latest_comment_time / coverage_status`；
+    - 当前仅服务旧模块与规则验证，不再占用首页主区。
 
 ### 3. 空状态法则 (No Silent Empty States)
 **绝对执行命令**：如果后端查询数据库得到空数组 `[]`，严禁直接 `return []` 让前端去猜！必须标准化返回：
@@ -400,10 +515,14 @@ D:\MarketData\
 *   **`DELETE /api/watchlist?symbol=sh600519`**: 移除自选股。
 
 ### 2. LLM 配置（Security-First）
-*   **`GET /api/config/llm-info`**: 返回 LLM 脱敏信息（模型名、Base URL、Key 是否已配置），**不返回 API Key 明文**。
+*   **`GET /api/config/llm-info`**: 返回 LLM 脱敏信息（模型名、Base URL、Key 是否已配置、模型来源），**不返回 API Key 明文**。
 *   **`POST /api/config/test-llm`**: 使用服务端环境变量中的 Key 测试 LLM 连通性，前端无需传参。
+*   **`POST /api/config`**:
+  - 继续禁止写入 `llm_api_key / llm_base_url` 等敏感项；
+  - 自 `CHG-20260324-01` 起，允许前端写入**非敏感** `llm_model`，用于覆盖默认模型名称；
+  - `LLMService.reload_config()` 读取顺序为：`app_config.llm_model` 优先，否则回退环境变量 `LLM_MODEL`。
 
-> ⚠️ **v4.0 破坏性变更**：`POST /api/config` 不再接受 `llm_` 前缀的 Key 写入，会返回 403。LLM 配置改由服务端环境变量管理。详见 `docs/05_LLM_KEY_SECURITY.md`。
+> ⚠️ **当前安全边界**：前端仍**不能**修改 `API Key / Base URL / Proxy`；只允许修改 `llm_model` 这个非敏感显示/调用模型名。详见 `docs/05_LLM_KEY_SECURITY.md`。
 
 ### 3. 沙盒复盘接口（v4.2.11+，非生产主链路）
 * **`GET /api/sandbox/review_data?symbol=sh603629&start_date=2026-01-01&end_date=2026-02-28`**
