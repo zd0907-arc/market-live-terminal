@@ -12,11 +12,12 @@ interface HistoryViewProps {
     backendStatus: boolean;
     configVersion?: number;
     forceViewMode?: 'daily' | 'intraday';
+    initialHistorySource?: 'sina' | 'local';
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, configVersion, forceViewMode }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, configVersion, forceViewMode, initialHistorySource = 'sina' }) => {
     // History State
-    const [historySource, setHistorySource] = useState('sina');
+    const [historySource, setHistorySource] = useState<'sina' | 'local'>(initialHistorySource);
     const [historyCompareMode, setHistoryCompareMode] = useState(false);
     const [historyCompareSource, setHistoryCompareSource] = useState('local');
     const [historyCompareData, setHistoryCompareData] = useState<HistoryAnalysisData[]>([]);

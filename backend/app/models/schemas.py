@@ -61,3 +61,14 @@ class AggregateResult(BaseModel):
 class ConfigUpdate(BaseModel):
     key: str
     value: str
+
+
+# --- Selection Research ---
+class SelectionBacktestRunRequest(BaseModel):
+    strategy_name: str = "breakout"
+    start_date: str
+    end_date: str
+    holding_days_set: List[int] = [5, 10, 20, 40]
+    max_positions_per_day: int = 10
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None

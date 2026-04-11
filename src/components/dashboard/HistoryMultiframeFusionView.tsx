@@ -25,6 +25,18 @@ interface HistoryMultiframeFusionViewProps {
   backendStatus: boolean;
   granularity: HistoryMultiframeGranularity;
   onGranularityChange: (value: HistoryMultiframeGranularity) => void;
+  startDate?: string;
+  endDate?: string;
+  includeTodayPreview?: boolean;
+  fetchRows?: (params: {
+    symbol: string;
+    granularity: HistoryMultiframeGranularity;
+    days: number;
+    startDate?: string;
+    endDate?: string;
+    includeTodayPreview?: boolean;
+  }) => Promise<HistoryMultiframeItem[]>;
+  onDataStatusChange?: (status: { hasData: boolean; hasFormalL2History: boolean; hasPreviewRows: boolean; rowCount: number; dataOrigin: 'local' | 'cloud' | 'none' }) => void;
 }
 
 type FusionRow = {
@@ -532,6 +544,11 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   backendStatus,
   granularity,
   onGranularityChange,
+  startDate,
+  endDate,
+  includeTodayPreview = true,
+  fetchRows,
+  onDataStatusChange,
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -553,10 +570,21 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       setLoading(true);
       setError('');
       try {
-        const data = await StockService.fetchHistoryMultiframe(activeStock.symbol, {
+        const loader = fetchRows || (async (params: {
+          symbol: string;
+          granularity: HistoryMultiframeGranularity;
+          days: number;
+          startDate?: string;
+          endDate?: string;
+          includeTodayPreview?: boolean;
+        }) => StockService.fetchHistoryMultiframe(params.symbol, params));
+        const data = await loader({
+          symbol: activeStock.symbol,
           granularity,
           days: LOOKBACK_DAYS[granularity],
-          includeTodayPreview: true,
+          startDate,
+          endDate,
+          includeTodayPreview,
         });
         setRows(data);
       } catch (e: any) {
@@ -567,7 +595,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     };
 
     load();
-  }, [activeStock, granularity, refreshKey]);
+  }, [activeStock, granularity, refreshKey, startDate, endDate, includeTodayPreview, fetchRows]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -607,6 +635,20 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   );
   const hasPreviewRows = fusionRows.some((row) => row.isPreviewOnly);
   const issueCount = issueRows.length;
+  const dataOrigin: 'local' | 'cloud' | 'none' = useMemo(() => {
+    if (!fusionRows.length) return 'none';
+    return fusionRows.some((row) => String(row.source || '').startsWith('cloud::')) ? 'cloud' : 'local';
+  }, [fusionRows]);
+
+  useEffect(() => {
+    onDataStatusChange?.({
+      hasData: fusionRows.length > 0,
+      hasFormalL2History,
+      hasPreviewRows,
+      rowCount: fusionRows.length,
+      dataOrigin,
+    });
+  }, [fusionRows.length, hasFormalL2History, hasPreviewRows, onDataStatusChange, dataOrigin]);
 
   useEffect(() => {
     if (!fusionRows.length) {
@@ -620,12 +662,17 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   }, [fusionRows.length, granularity]);
 
   const sourceLabel = useMemo(() => {
+    if (dataOrigin === 'cloud') {
+      if (hasFormalL2History && hasPreviewRows) return '云端正式L2 + 今日预览';
+      if (hasFormalL2History) return '云端正式L2';
+      if (hasPreviewRows) return '云端预览';
+    }
     if (hasFormalL2History && hasPreviewRows) return '正式L2 + 今日L1';
     if (hasFormalL2History) return '正式L2';
     if (hasPreviewRows) return '今日L1预览';
     if (fusionRows.length) return '占位 / 待补';
     return '暂无正式L2';
-  }, [fusionRows.length, hasFormalL2History, hasPreviewRows]);
+  }, [dataOrigin, fusionRows.length, hasFormalL2History, hasPreviewRows]);
 
   const issueTagLabel = issueCount > 0 ? `${issueCount}条缺失 / 异常` : '数据完整';
 

@@ -226,6 +226,45 @@ def test_l2_daily_backfill_allows_single_side_zero_overlap(monkeypatch, tmp_path
     assert daily_row[0] is not None
 
 
+def test_l2_daily_backfill_supports_vendor_ad_order_codes(monkeypatch, tmp_path):
+    db_path = tmp_path / "market_data.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    package_path = _build_sample_day(tmp_path)
+    order_path = package_path / "000833.SZ" / "逐笔委托.csv"
+    _write_csv(
+        order_path,
+        "\n".join(
+            [
+                "万得代码,交易所代码,自然日,时间,委托编号,交易所委托号,委托类型,委托代码,委托价格,委托数量",
+                "000833.SZ,000833,20260311,93000000,1,1001,A,B,250000,10000",
+                "000833.SZ,000833,20260311,93000000,2,2001,A,S,250000,10000",
+                "000833.SZ,000833,20260311,93020000,5,1001,D,B,0,2000",
+                "000833.SZ,000833,20260311,93020000,6,2001,D,S,0,1000",
+            ]
+        ),
+    )
+
+    report = backfill_day_package(package_path, mode="unit-test")
+
+    assert report["success_symbols"] == 1
+    assert report["failed_symbols"] == 0
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        """
+        SELECT
+            l2_add_buy_amount, l2_add_sell_amount,
+            l2_cancel_buy_amount, l2_cancel_sell_amount,
+            l2_oib_delta
+        FROM history_5m_l2
+        WHERE symbol='sz000833' AND datetime='2026-03-11 09:30:00'
+        """
+    ).fetchone()
+    conn.close()
+
+    assert row == (250000.0, 250000.0, 50000.0, 25000.0, -25000.0)
+
+
 def test_l2_daily_backfill_still_fails_when_both_sides_zero_overlap(monkeypatch, tmp_path):
     db_path = tmp_path / "market_data.db"
     monkeypatch.setenv("DB_PATH", str(db_path))

@@ -1,3 +1,23 @@
+## 2026-04-04 23:25 | Codex
+- Task ID: `CHG-20260404-02`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已把选股工作台再收口一轮：候选默认范围限制为沪深A（先排除科创板/北交所），右侧复盘默认改为日线，并在日线下优先复用旧 `HistoryView(local_history)`，保证正式 L2 未补齐前也能先看到日级复盘；同时新增数据对齐卡，明确“选股信号能跑”和“正式复盘历史已补齐”是两层问题。
+- 风险: 本地 `history_daily_l2/history_5m_l2` 仍只覆盖极少数 symbol，`stock_universe_meta` 仍为空；本轮尝试连接 Windows 原始数据机失败，且本机 `tailscale` 处于 stopped，后续补 `2026-03` 全量 L2 仍需先恢复远程链路。
+- 链接: `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/HistoryView.tsx`, `backend/app/services/selection_research.py`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-04 23:55 | Codex
+- Task ID: `CHG-20260404-02`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已继续按工作流收口选股页右侧：把顶部判断区压缩为横向摘要，放大主图区域；新增“信号后40天/90天/到现在 + 起止日期”窗口控制；主图改为优先直连 `HistoryMultiframeFusionView` 展示 L1/L2 资金图，没正式 L2 时再回退日级资金 fallback。同时已远程核验 Windows：`D:\MarketData\202603` 现有 `20260302~20260331` 共 22 个日包，`data/market_data.db` 已含 `2026-03-02~2026-03-13` 的 `8111` symbols 正式 L2。
+- 风险: Windows 这批正式 L2 还没同步到本地，所以当前页面虽能按新窗口看，但不少股票仍会先走 fallback；下一步应优先做“只同步正式 L2 表，不覆盖本地其它表”的本地对齐。
+- 链接: `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`
+
+## 2026-04-05 00:18 | Codex
+- Task ID: `CHG-20260404-03`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已按“不要全量同步大库，先让右侧能看”落地选股专用云端只读 fallback：新增 `/api/selection/history/multiframe`，本地无有效多维数据时自动回退生产 `/api/history/multiframe`；前端选股右侧图表已改为只走这条专用通道，并在命中云端时显示来源提示。旧首页/旧复盘主链路未改。
+- 风险: 当前只接了选股右侧的历史多维图；名称映射和本地正式库补齐仍要继续做。若云端临时不可达，右侧仍会退回本地现状，不会改坏旧模块。
+- 链接: `backend/app/services/selection_history_proxy.py`, `backend/app/routers/selection.py`, `src/services/selectionService.ts`, `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`
 
 ## 2026-03-21 19:10 | Codex
 - Task ID: `CHG-20260321-01`, `CHG-20260321-02`
@@ -779,3 +799,74 @@
 - 结论: 已在生产对 7 只星标股完成散户一致性观察补跑：执行星标抓取补跑 `new_count=444`、当日日评分补跑 `generated=7`，并继续补齐近 20 个交易日 AI 日评分；补跑后 `20D` 可见评分点分别为 `7/11/11/10/9/7/11` 天（贵州茅台/天下秀/有研新材/利通电子/中百集团/贝因美/粤桂股份）。同时已将本轮母卡归档为 `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill`，作为 `v4.2.32 / 9bbdd3d` 的冻结基线。
 - 风险: 历史 AI 评分仍按“样本数足够才生成”的规则执行，个别交易日会因 `insufficient_samples` 留空；这属于真实数据稀疏，不是图表缺失。
 - 链接: `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md`, `docs/archive/ARCHIVE_CATALOG.md`, `docs/02_BUSINESS_DOMAIN.md`
+
+
+## 2026-04-04 21:20 | 选股研究 AI
+- Task ID: `CHG-20260404-01`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已完成选股研究一期强解耦实现：新增独立库 `data/selection/selection_research.db`、独立服务层 `selection_research.py`、独立接口 `/api/selection/*`、独立研究页 `/selection-research`，并补齐总册 + 四张需求卡。当前策略固定为 `stealth / breakout / distribution`，回测固定支持 `5/10/20/40` 交易日。
+- 风险: 主正式库里的 L2 订单事件新因子是否完整 merge，仍会影响 `2026-03+` 的增强确认质量；当前模块已做弱化兜底，但这属于后续增强项。
+- 链接: `docs/selection/selection_research_master.md`, `docs/changes/REQ-20260404-01-selection-data-foundation.md`, `backend/app/services/selection_research.py`, `backend/app/routers/selection.py`, `src/components/selection/SelectionResearchPage.tsx`
+
+## 2026-04-04 21:45 | 选股研究 AI
+- Task ID: `CHG-20260404-01`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已补齐首轮真实数据样例：独立选股库当前已有 `603,675` 条 feature、`413,204` 条 signal，最新信号日为 `2026-02-27`；已跑出 breakout 回测 `run_id=1`（区间 `2026-02-03 ~ 2026-02-27`），`5D` 胜率 `58.43%`、平均收益 `2.02%`，`10D` 胜率 `52.50%`、平均收益 `2.46%`。同时已修正 refresh 过程中的 `FutureWarning` 噪音，方便后续继续补跑。
+- 风险: 当前 `stock_universe_meta` 为空，页面暂时只能稳定显示 `symbol`；另外本地主库 `2026-03+` 全市场连续覆盖不完整，因此现阶段最适合先用 `2026-02-27` 前的数据做研究验证。
+- 链接: `docs/changes/MOD-20260404-01-selection-research-current-state.md`, `docs/selection/selection_research_master.md`, `docs/changes/REQ-20260404-02-selection-features-and-signals.md`, `docs/changes/REQ-20260404-03-selection-backtest-engine.md`, `docs/changes/REQ-20260404-04-selection-api-and-research-page.md`
+
+## 2026-04-04 22:35 | 选股研究 AI
+- Task ID: `CHG-20260404-01`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 V2 重构：工作台从“研究数表页”收敛为“左侧 Top10 breakout 候选池 + 右侧复盘决策视图”。`distribution` 不再做全市场榜单，而是变成当前票风险判断；右侧详情新增“当前综合判断 / 为什么选中它 / 出货风险 / 事件时间线”；回测新增窗口最高机会口径，开始同时输出固定持有与窗口机会结果。
+- 风险: 股票正式名称映射仍优先依赖 `stock_universe_meta`，当前库为空时页面通过前端 fallback 尽量补名称；动态出货退出回测仍未实现，现阶段只完成双口径静态统计。
+- 链接: `src/components/selection/SelectionResearchPage.tsx`, `src/components/selection/SelectionDecisionPanel.tsx`, `backend/app/services/selection_research.py`, `backend/app/db/selection_db.py`, `docs/selection/selection_research_master.md`
+
+## 2026-04-10 23:35 | 数据审计 / 选股研究 AI
+- Task ID: `CHG-20260410-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成利通电子 `sh603629` 原始包审计，确认 `2025-01 ~ 2026-02` 属于成交级源、`2026-03+` 原始包真实包含挂单事件；当前事件层大量缺失的关键原因不是 raw 无数据，而是旧 `l2_daily_backfill.py` 未兼容 Wind `A/D` 挂单事件码，且 Windows 正式跑数机 schema 仍偏旧。已在本地修复解析脚本并补单测，同时把利通关键日 `2026-03-09 / 03-11 / 03-16 ~ 03-18` 回补到本地，事件层字段现已可读。
+- 风险: 当前只完成利通关键日单票修复，Windows 正式跑数机与全市场历史库仍未整体升级；若不继续同步 Windows 最新脚本与 schema，后续新增日仍会继续丢事件层。
+- 链接: `backend/scripts/l2_daily_backfill.py`, `backend/tests/test_l2_daily_backfill.py`, `docs/changes/INV-20260410-01-litong-data-audit-and-parser-gap.md`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-10 23:55 | 数据审计 / Windows 链路 AI
+- Task ID: `CHG-20260410-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 Windows 正式 L2 链路范围审计，确认当前跑数机代码并非只差一个补丁，而是整体停留在“基础 5m+daily + quality_info”阶段，尚未进入事件因子阶段；Windows 正式库现有 `2026-03-02 ~ 2026-03-13` 的 `76,749` 条 daily / `3,461,334` 条 5m 结果因此整体缺 `total_volume + add/cancel + l2_cvd_delta + l2_oib_delta`。同时已确认原始挂单事件码存在多套体系：`sz000833=0/1/U`，`sh603629=A/D/S`，后续修复必须做多映射兼容，不能只修单一编码。
+- 风险: 若直接全量重跑而不先做编码分布审计与单日演练，容易再次踩大规模跑数坑；但若不升级 Windows 正式链路，后续选股研究与复盘都会继续受限于事件层缺失。
+- 链接: `docs/changes/INV-20260410-02-windows-l2-version-drift-scope.md`, `docs/changes/INV-20260410-01-litong-data-audit-and-parser-gap.md`, `docs/07_PENDING_TODO.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-04-11 00:20 | 数据治理 / 文档与脚本 AI
+- Task ID: `CHG-20260410-03`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已新增本轮数据治理的完整母文档，系统梳理 `2025-01~2026-02` 成交级历史、`2026-03+` 成交+挂单历史、当前问题、修复路线、正式库目标结构、Windows staging/8-worker 清理策略，以及 `2025` 原始数据“榨干后再删”的判断边界；同时新增事件码审计脚本 `backend/scripts/audit_l2_order_event_codes.py`，已用本地样本验证 `sh603629=alpha_ads`、`sz000833=numeric_01u`。
+- 风险: 审计脚本目前已适合做小样本/单日抽查，但全市场大样本统计仍需配合 Windows staging 或 prepare 流程使用；`2025` raw 删除仍不建议立即执行，需先完成正式 `5m+daily` 与必要研究派生沉淀。
+- 链接: `docs/changes/STG-20260410-03-l2-data-remediation-full-guide.md`, `backend/scripts/audit_l2_order_event_codes.py`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 00:45 | 数据审计 / 利通补数 AI
+- Task ID: `CHG-20260410-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续补利通 `sh603629` 的后续关键日到本地：新增回补 `2026-03-19` 与 `2026-04-01`，5m 事件层均已成功落库；其中 `2026-03-19` 的 `Σl2_add_buy≈48.78亿 / Σcancel_buy≈33.82亿 / Σcvd≈-5.37亿 / Σoib≈+7.08亿`，`2026-04-01` 的 `Σl2_add_buy≈24.87亿 / Σcancel_buy≈10.65亿 / Σcvd≈+1.44亿 / Σoib≈-1.47亿`。同时补充样本确认 `sh600519` 也使用 `A/D/S`，进一步支持“事件码至少分两套体系”的判断。
+- 风险: 当前只是单票/少量样本验证，尚未把 `2026-03+` 全市场正式库整体升级；若不尽快推进 Windows 单日演练，最近窗口的正式全市场研究仍会受限。
+- 链接: `docs/changes/INV-20260410-01-litong-data-audit-and-parser-gap.md`, `docs/changes/INV-20260410-02-windows-l2-version-drift-scope.md`, `backend/scripts/audit_l2_order_event_codes.py`
+
+## 2026-04-11 01:35 | 数据治理 / 利通全窗口补齐 AI
+- Task ID: `CHG-20260410-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已继续通过 Tailscale + SSH + 单票 raw 抽取，把利通 `sh603629` 此前仍是旧版存量的 `2026-03-02 / 03 / 04 / 05 / 06 / 10 / 12 / 13` 共 `8` 个交易日补回本地；至此，本地 `2026-03-02 ~ 2026-04-10` 共 `29` 个交易日的 `l2_add_* / l2_cancel_* / l2_cvd_delta / l2_oib_delta` 已全部可读，不再存在整天全空的旧版存量。新补样本中，`2026-03-02` 的 `Σl2_add_buy≈34.52亿 / Σcancel_buy≈20.18亿 / Σcvd≈-0.09亿 / Σoib≈+0.80亿`，`2026-03-03` 的 `Σl2_add_buy≈21.43亿 / Σcancel_buy≈8.01亿 / Σcvd≈-2.01亿 / Σoib≈+2.27亿`。
+- 风险: 当前改善仍限于利通本地单票窗口；Windows 正式库与全市场 `2026-03+` 事件层缺口仍在，下一步要做的是 Windows 单日演练 + 利通分阶段深复盘，而不是误以为全局已修完。
+- 链接: `docs/changes/INV-20260410-01-litong-data-audit-and-parser-gap.md`, `docs/changes/STG-20260410-03-l2-data-remediation-full-guide.md`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 15:10 | 选股工作台 / 利通复盘 AI
+- Task ID: `CHG-20260411-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已定位右侧“画像卡死/空白”的一个关键根因：当请求画像日期超过当前 `selection_feature_daily` 最新日时，旧逻辑会强行重算到越界日期，导致本地接口长时间卡住。现已改为自动回落到最近可用画像日，并在前端加明确提示；同时已新增《利通四阶段深复盘骨架》，把行情拆成“启动前吸筹 / 主升浪前半 / 主升浪后半 / 高位稳住”四段。第一版结论是：利通后半段更像“高位强换手 + 深承接”，关键不只是主动买入，而是 `超大单净额 + 正向 oib + 没有失衡的撤单结构` 一起支撑它高位没立刻崩。
+- 风险: 这次修的是“画像日期越界卡顿”，不是把全市场历史都补齐；此外利通高位阶段的结论虽已具备数据骨架，但仍需补图形证据卡和失败样本对照，才能沉淀成可复用选股规则。
+- 链接: `backend/app/services/selection_research.py`, `backend/app/db/selection_db.py`, `src/components/selection/SelectionDecisionPanel.tsx`, `docs/changes/INV-20260411-01-litong-phase-review-skeleton.md`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`
+
+## 2026-04-11 15:25 | 文档治理 / 数据与利通双线 AI
+- Task ID: `CHG-20260411-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已按后续分会话推进的需要，新增两份独立母文档：一份是《市场数据处理总方案》，专门冻结老数据榨干、新数据事件层、正式库结构、Windows 处理方式与 2025 raw 删除前条件；另一份是《利通电子复盘专项当前状态》，专门收口“已经做了什么、发现了哪些问题、下一步准备做什么”。后续可以分别围绕“数据治理”与“利通复盘”两条线继续推进。
+- 风险: 这两份文档解决的是“真实状态与执行边界”，不是已经完成对应工程；尤其 2025 raw 仍未达到可删线，利通复盘也还没完成图形证据卡和失败样本对照。
+- 链接: `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/changes/MOD-20260411-03-litong-review-current-state.md`

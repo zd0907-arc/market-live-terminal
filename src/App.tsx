@@ -12,6 +12,7 @@ const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
+const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
@@ -64,6 +65,15 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">复盘页面加载中...</div>}>
         <SandboxReviewPage />
+      </Suspense>
+    );
+  }
+
+  const isSelectionRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-research');
+  if (isSelectionRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
+        <SelectionResearchPage />
       </Suspense>
     );
   }

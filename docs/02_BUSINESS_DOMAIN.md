@@ -21,6 +21,7 @@
 | `CAP-WIN-PIPELINE` | Windows离线节点与云端注入 | 后端/运维 | ACTIVE（有阻塞） |
 | `CAP-L2-HISTORY-FOUNDATION` | 盘后L2历史底座与回补机制 | 后端/前端/运维 | ACTIVE |
 | `CAP-SANDBOX-REVIEW` | L1/L2 复盘沙盒验证闭环 | 后端/前端（沙盒） | ACTIVE |
+| `CAP-SELECTION-RESEARCH` | 选股研究与回测闭环 | 后端/前端（独立模块） | ACTIVE |
 
 ## 2. CAP 卡片模板（新增需求时复制）
 
@@ -543,3 +544,63 @@
 - **display_date**：前端展示日期，不等于自然日，必须服从 `CAP-MKT-TIME` 状态机。
 - **回溯模式**：`display_date != 当日(北京时间)` 时的历史展示态。
 - **污染窗口**：历史数据中存在明显占位或口径混杂、导致分析不可用的日期区间。
+
+
+---
+
+### CAP-SELECTION-RESEARCH（选股研究与回测闭环）
+
+1. **业务目标**
+- 在不干扰原有盯盘/复盘/舆情正式链路的前提下，建立一个独立的选股研究工作台，核心服务“每日 Top10 启动确认候选 -> 右侧复盘决策 -> 人工波段决策”主流程。
+
+2. **业务规则（强约束）**
+- **解耦红线**：
+  - 只允许读取生产主库，不允许改写旧表；
+  - 新模块 API 固定在 `/api/selection/*`；
+  - 新模块前端固定在 `/selection-research`；
+  - 禁止把选股计算塞进旧 `/api/realtime/*`、`/api/review/*`、`/api/sentiment/*` 请求链路。
+- **存储红线**：
+  - 选股特征、信号、回测结果必须写入独立库 `data/selection/selection_research.db`；
+  - 任何策略升级只重跑独立库，不回写旧主库。
+- **一期信号职责冻结**：
+  - `stealth`：内部前置 / 解释信号；
+  - `breakout`：唯一主筛选信号，负责左侧候选池；
+  - `distribution`：当前票风险识别能力，不做全市场榜单。
+- **一期研究口径冻结**：
+  - 盘后研究、次日及后续波段参考；
+  - 默认候选池为 `Top10 breakout`；
+  - 默认固定持有期回测为 `5/10/20/40`；
+  - 入场口径固定为“信号日下一可用交易日收盘”；
+  - 同时输出“固定持有结果 + 持有窗口内最高机会结果”。
+- **L2 使用冻结**：
+  - `2025-01 ~ 2026-02` 以日级资金为主；
+  - `2026-03+` 若正式库已有可用 L2，则作为确认增强；
+  - 若正式库未完整 merge 订单事件因子，新模块只能走弱化 L2 确认，不得因此修改旧模块读口径。
+
+3. **实现摘要（当前方案）**
+- 已新增独立选股库与 schema：
+  - `selection_feature_daily`
+  - `selection_signal_daily`
+  - `selection_backtest_runs`
+  - `selection_backtest_trades`
+  - `selection_backtest_summary`
+- 已新增独立服务层：从主库读取日级/L2/热度数据，生成特征、信号与回测结果。
+- 已新增独立接口 `/api/selection/*` 与独立页面 `/selection-research`。
+- 当前页面形态已调整为：
+  - 左侧 `Top10 breakout` 候选卡片；
+  - 右侧复盘决策视图；
+  - `distribution` 风险判断与事件时间线内嵌到右侧详情。
+- 已提供 runner：`backend/scripts/run_selection_research.py`。
+
+4. **验收案例（Given / When / Then）**
+- **正常**：Given 主库已存在 `local_history` 历史，When 刷新选股研究数据，Then 特征与信号应仅写入独立库，不影响旧表。
+- **正常**：Given 请求 `GET /api/selection/candidates?strategy=breakout`，When 独立库已有最新结果，Then 返回候选列表与对应得分。
+- **边界**：Given 主库缺少完整 L2 订单事件因子，When 生成特征，Then 允许输出弱化 L2 确认结果，但不得报错中断。
+- **异常防线**：Given 旧盯盘/复盘接口被请求，When 新模块已接入，Then 旧接口返回结构与路径不得发生变化。
+
+5. **可观测性与告警**
+- 观测点：独立库 feature/signal/backtest row 数、最新 signal date、回测 run 状态。
+- 告警条件：独立库写失败、候选为空且主库明明有历史、回测 run 频繁失败。
+
+6. **变更记录（任务ID）**
+- `CHG-20260404-01`：完成选股研究一期基础设施、独立接口、独立研究页与文档总册/需求卡。

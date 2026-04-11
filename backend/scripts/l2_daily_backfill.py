@@ -39,6 +39,17 @@ from backend.app.db.l2_history_db import (
 
 
 REQUIRED_FILES = ("行情.csv", "逐笔成交.csv", "逐笔委托.csv")
+ORDER_EVENT_TYPE_MAP = {
+    "0": "add",
+    "1": "cancel",
+    "U": "cancel",
+    "A": "add",
+    "D": "cancel",
+}
+ORDER_SIDE_MAP = {
+    "B": "buy",
+    "S": "sell",
+}
 
 
 def normalize_symbol_dir_name(name: str) -> str:
@@ -106,10 +117,10 @@ def _build_standardized_order_events(order: pd.DataFrame, trade_date: str) -> Tu
     events["datetime"] = pd.to_datetime(f"{trade_date} " + events["time"], errors="coerce")
     events["order_id"] = pd.to_numeric(order["交易所委托号"], errors="coerce").fillna(0).astype("int64")
     events["event_code"] = order["委托类型"].astype(str).str.strip().str.upper()
-    events["side"] = order["委托代码"].astype(str).str.strip().str.upper().map({"B": "buy", "S": "sell"})
+    events["side"] = order["委托代码"].astype(str).str.strip().str.upper().map(ORDER_SIDE_MAP)
     events["price"] = pd.to_numeric(order["委托价格"], errors="coerce") / 10000
     events["volume"] = pd.to_numeric(order["委托数量"], errors="coerce")
-    events["event_type"] = events["event_code"].map({"0": "add", "1": "cancel", "U": "cancel"})
+    events["event_type"] = events["event_code"].map(ORDER_EVENT_TYPE_MAP)
 
     events = events.dropna(subset=["datetime", "side", "event_type", "volume"])
     events = events[(events["volume"] > 0) & (events["order_id"] > 0)]

@@ -283,3 +283,202 @@ export interface SentimentData {
   turnover_rate: number;
   timestamp: string;
 }
+
+
+export type SelectionStrategy = 'stealth' | 'breakout' | 'distribution';
+
+export interface SelectionHealthData {
+  status: string;
+  feature_version: string;
+  strategy_version: string;
+  backtest_version: string;
+  latest_signal_date?: string | null;
+  feature_rows: number;
+  signal_rows: number;
+  backtest_runs: number;
+  source_snapshot?: Record<string, any>;
+}
+
+export interface SelectionCandidateItem {
+  rank?: number;
+  symbol: string;
+  name: string;
+  trade_date: string;
+  score: number;
+  signal: number;
+  signal_label?: string;
+  current_judgement?: string;
+  reason_summary?: string;
+  risk_level?: string;
+  stealth_score: number;
+  breakout_score: number;
+  distribution_score: number;
+  close?: number | null;
+  return_5d_pct?: number | null;
+  return_10d_pct?: number | null;
+  return_20d_pct?: number | null;
+  net_inflow_5d?: number | null;
+  net_inflow_20d?: number | null;
+  positive_inflow_ratio_10d?: number | null;
+  dist_ma20_pct?: number | null;
+  price_position_60d?: number | null;
+  l2_vs_l1_strength?: number | null;
+  l2_order_event_available?: number;
+  sentiment_heat_ratio?: number | null;
+  market_cap?: number | null;
+  feature_version?: string;
+  strategy_version?: string;
+}
+
+export interface SelectionCandidatesResponse {
+  trade_date: string;
+  strategy: SelectionStrategy;
+  items: SelectionCandidateItem[];
+}
+
+export interface SelectionProfileSeriesItem {
+  trade_date: string;
+  close?: number | null;
+  net_inflow?: number | null;
+  activity_ratio?: number | null;
+  l1_main_net?: number | null;
+  l2_main_net?: number | null;
+  event_count?: number | null;
+}
+
+export interface SelectionEventTimelineItem {
+  kind: 'event' | 'daily_score';
+  time: string;
+  event_type?: string;
+  source?: string;
+  content?: string;
+  author_name?: string;
+  sentiment_score?: number | null;
+  direction_label?: string;
+  risk_tag?: string;
+  summary_text?: string;
+}
+
+export interface SelectionProfileData {
+  symbol: string;
+  trade_date: string;
+  requested_trade_date?: string;
+  profile_date_fallback_used?: boolean;
+  name?: string | null;
+  market_cap?: number | null;
+  feature_version: string;
+  strategy_version?: string | null;
+  stealth_score?: number;
+  stealth_signal?: number;
+  breakout_score?: number;
+  confirm_signal?: number;
+  distribution_score?: number;
+  exit_signal?: number;
+  close: number;
+  prev_close?: number | null;
+  daily_return_pct?: number | null;
+  return_3d_pct?: number | null;
+  return_5d_pct?: number | null;
+  return_10d_pct?: number | null;
+  return_20d_pct?: number | null;
+  volatility_10d?: number | null;
+  volatility_20d?: number | null;
+  ma20?: number | null;
+  ma60?: number | null;
+  dist_ma20_pct?: number | null;
+  dist_ma60_pct?: number | null;
+  price_position_20d?: number | null;
+  price_position_60d?: number | null;
+  breakout_vs_prev20_high_pct?: number | null;
+  net_inflow_5d?: number | null;
+  net_inflow_10d?: number | null;
+  net_inflow_20d?: number | null;
+  positive_inflow_ratio_5d?: number | null;
+  positive_inflow_ratio_10d?: number | null;
+  positive_inflow_ratio_20d?: number | null;
+  activity_ratio_5d?: number | null;
+  activity_ratio_20d?: number | null;
+  l1_main_net_3d?: number | null;
+  l2_main_net_3d?: number | null;
+  l2_vs_l1_strength?: number | null;
+  l2_order_event_available?: number;
+  l2_add_buy_3d?: number | null;
+  l2_add_sell_3d?: number | null;
+  l2_cancel_buy_3d?: number | null;
+  l2_cancel_sell_3d?: number | null;
+  l2_cvd_3d?: number | null;
+  l2_oib_3d?: number | null;
+  sentiment_event_count_5d?: number | null;
+  sentiment_event_count_20d?: number | null;
+  sentiment_heat_ratio?: number | null;
+  sentiment_score?: number | null;
+  current_judgement?: string;
+  breakout_reason_summary?: string;
+  distribution_reason_summary?: string;
+  distribution_risk_level?: string;
+  explain_cards?: Array<{ title: string; summary: string }>;
+  series: SelectionProfileSeriesItem[];
+  event_timeline?: SelectionEventTimelineItem[];
+}
+
+export interface SelectionBacktestRunItem {
+  id: number;
+  strategy_name: string;
+  start_date: string;
+  end_date: string;
+  holding_days_set: string;
+  max_positions_per_day: number;
+  stop_loss_pct?: number | null;
+  take_profit_pct?: number | null;
+  feature_version: string;
+  strategy_version: string;
+  backtest_version: string;
+  source_snapshot: string;
+  status: string;
+  summary_json?: string | null;
+  created_at: string;
+  finished_at?: string | null;
+}
+
+export interface SelectionBacktestSummaryItem {
+  id: number;
+  run_id: number;
+  strategy_name: string;
+  holding_days: number;
+  trade_count: number;
+  win_rate: number;
+  avg_return_pct: number;
+  median_return_pct: number;
+  max_drawdown_pct: number;
+  avg_max_drawdown_pct: number;
+  opportunity_win_rate?: number;
+  avg_max_runup_pct?: number;
+  median_max_runup_pct?: number;
+  total_return_pct: number;
+}
+
+export interface SelectionBacktestTradeItem {
+  id: number;
+  run_id: number;
+  strategy_name: string;
+  holding_days: number;
+  symbol: string;
+  signal_date: string;
+  entry_date: string;
+  exit_date: string;
+  entry_price: number;
+  exit_price: number;
+  return_pct: number;
+  max_drawdown_pct: number;
+  fixed_exit_return_pct?: number;
+  max_runup_within_holding_pct?: number;
+  max_drawdown_within_holding_pct?: number;
+  exit_reason: string;
+  score_value?: number | null;
+}
+
+export interface SelectionBacktestDetail {
+  run: SelectionBacktestRunItem;
+  summaries: SelectionBacktestSummaryItem[];
+  trades: SelectionBacktestTradeItem[];
+}

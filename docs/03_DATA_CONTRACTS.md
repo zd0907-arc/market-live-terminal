@@ -604,3 +604,60 @@ D:\MarketData\
   - `warm_symbols` 使用 30 秒 tick 节奏；
   - watchlist 仍按 15 分钟全量兜底轮扫；
   - 本轮不支持“最近查看股票”额外中频队列。
+
+
+### 12. `data/selection/selection_research.db`（选股研究独立库，非主链路）
+> **隔离红线**：该库只允许由选股研究模块读写，禁止旧盯盘/复盘/舆情接口直接依赖。
+
+#### 12.1 `selection_feature_daily`
+- 用途：存放按 `symbol + trade_date + feature_version` 生成的日级特征快照。
+- 关键字段：
+  - 日级资金：`net_inflow_5d/10d/20d`、`positive_inflow_ratio_*`、`activity_ratio_*`
+  - 价格结构：`ma20/ma60`、`dist_ma20_pct`、`price_position_20d/60d`、`return_3d/5d/10d/20d`、`volatility_10d/20d`
+  - L2 增强：`l1_main_net_3d`、`l2_main_net_3d`、`l2_vs_l1_strength`、`l2_add/cancel/cvd/oib_3d`、`l2_order_event_available`
+  - 热度：`sentiment_event_count_5d/20d`、`sentiment_heat_ratio`、`sentiment_score`
+  - 版本：`source_snapshot`、`feature_version`
+
+#### 12.2 `selection_signal_daily`
+- 用途：存放三类策略的日级信号与打分结果。
+- 固定字段：
+  - `stealth_score / stealth_signal`
+  - `breakout_score / confirm_signal`
+  - `distribution_score / exit_signal`
+  - `strategy_version`、`feature_version`、`source_snapshot`
+
+#### 12.3 `selection_backtest_runs / selection_backtest_trades / selection_backtest_summary`
+- 用途：记录回测任务、交易明细与汇总统计。
+- 默认口径：
+  - 入场 = 信号日下一可用交易日收盘价
+  - 默认持有期 = `5/10/20/40`
+  - 汇总输出同时包含：
+    - 固定持有结果：`win_rate / avg_return_pct / median_return_pct`
+    - 窗口机会结果：`opportunity_win_rate / avg_max_runup_pct / median_max_runup_pct`
+    - 风险结果：`max_drawdown_pct / avg_max_drawdown_pct`
+
+---
+
+## 三、 选股研究接口契约（v4.2.33+）
+
+### 6. `GET /api/selection/health`
+- 描述：返回独立选股研究模块健康状态、版本、最新信号日与行数。
+
+### 7. `GET /api/selection/candidates?date=YYYY-MM-DD&strategy=breakout&limit=10`
+- 描述：返回某一交易日的候选列表，当前页面默认消费 `breakout Top10`。
+- `strategy`：`stealth | breakout | distribution`。
+- 返回：`APIResponse`，`data={trade_date,strategy,items[]}`。
+
+### 8. `GET /api/selection/profile/{symbol}?date=YYYY-MM-DD`
+- 描述：返回单股票当日特征、信号、最近序列画像、解释卡、风险卡与事件时间线。
+
+### 9. `GET /api/selection/backtests`
+- 描述：返回最近回测 run 列表。
+
+### 10. `POST /api/selection/backtests/run`
+- 描述：执行固定持有期回测。
+- Body：`{strategy_name,start_date,end_date,holding_days_set,max_positions_per_day,stop_loss_pct?,take_profit_pct?}`。
+- 约束：只写独立选股库，不得回写主库。
+
+### 11. `GET /api/selection/backtests/{run_id}`
+- 描述：返回单次回测的 run / summaries / trades。
