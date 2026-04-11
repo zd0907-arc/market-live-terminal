@@ -933,3 +933,10 @@
 - 结论: 已把新脚本同步到 Windows，并对真实 raw 样本完成第一轮集合竞价审计：`sh603629@20260302/20260311/20260408/20260410` 与 `sz000833@20260311`。结论已足够明确：raw 里确实存在竞价数据；`order/quote` 对 `09:15~09:24:59` 的覆盖比 `trade` 更稳定；`09:25` 是明显边界点；集合竞价至少包含“过程窗口 + 最终边界点”两层结构，不能简单并入 `09:30` 连续竞价 bar。
 - 风险: 目前仍是第一轮样本，不代表已覆盖所有股票/月份；同时 `trade` 层在不同股票上的竞价表现并不完全一致（如 `sh603629` 多数只见 `09:25`，`sz000833` 则在 `09:15~09:19` 也有记录），因此仍不宜马上拍板最终 schema。
 - 链接: `docs/changes/STG-20260411-10-auction-window-audit-plan.md`, `docs/changes/INV-20260411-11-auction-window-sample-findings.md`, `backend/scripts/audit_l2_auction_window.py`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 18:20 | 数据治理 / 集合竞价落库草案 AI
+- Task ID: `CHG-20260411-12`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 基于第一轮 Windows 真实样本，已新增《集合竞价落库方案草案 V1》。当前推荐方向已经明确：不要把集合竞价硬塞进 `atomic_trade_5m / atomic_order_5m`，而是先独立成 `atomic_open_auction_trade_daily / atomic_open_auction_order_daily` 两张日级竞价摘要表，与连续竞价 5m 原子层并行。这样既保留竞价独立语义，也不污染主 5m 表。
+- 风险: 当前仍然是 V1 草案，不是已冻结正式 schema；尤其 `09:25` 是否要再单独建 event 子对象、`09:20~09:25` 是否要单独强调不可撤单语义、收盘竞价是否复用同一设计，这些还没最后拍板。
+- 链接: `docs/changes/STG-20260411-12-open-auction-storage-v1.md`, `docs/changes/INV-20260411-11-auction-window-sample-findings.md`, `docs/07_PENDING_TODO.md`
