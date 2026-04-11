@@ -275,6 +275,8 @@
    - 是否单独落 `09:25` bar
    - 是否加入 `session_phase`
 3. 这一步在下一轮讨论前，不直接进正式 P0 DDL
+4. 当前已新增审计脚本：
+   - `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/audit_l2_auction_window.py`
 
 ### Phase 2：先回填成交原子层
 #### 2.1 `2025-01 ~ 2026-02`

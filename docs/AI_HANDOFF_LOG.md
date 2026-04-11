@@ -919,3 +919,10 @@
 - 结论: 已把新一轮评审意见回填到数据治理文档：明确 raw price/复权因子分层、5m 前闭后开约定、集合竞价必须与连续竞价隔离、涨跌停状态作为 P1 增强、以及截面读取索引优化；同时已把时间维度的二级索引直接补进 `atomic_fact_p0_schema.sql`。其中“集合竞价如何具体落库”已被明确记录为**待下一轮专题讨论**，当前只冻结“必须隔离”，不冻结最终字段形态。
 - 风险: 集合竞价设计仍未完全拍板，因此当前任何新脚本都不应自行把 `09:25` 并入 `09:30` 连续竞价 bar；此外复权因子与涨跌停状态目前仍停留在文档层，尚未进入实际表结构与脚本实现。
 - 链接: `docs/03_DATA_CONTRACTS.md`, `docs/changes/STG-20260411-07-atomic-fact-layer-schema-map.md`, `docs/changes/STG-20260411-08-atomic-fact-gap-execution-table.md`, `docs/changes/STG-20260411-09-atomic-fact-p0-ddl-and-runbook.md`, `backend/scripts/sql/atomic_fact_p0_schema.sql`
+
+## 2026-04-11 17:45 | 数据治理 / 集合竞价审计 AI
+- Task ID: `CHG-20260411-10`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已新增《集合竞价原始数据审计方案》与脚本 `audit_l2_auction_window.py`，用于在 raw 日包层面确认 `trade/order/quote` 三类文件在 `09:15~09:25` 的真实覆盖、是否存在 `09:25:00`、以及样本属于 `trade+order+quote / quote_only / no_pre_0930_data` 哪种形态。脚本已用本地伪造日包做过一次冒烟，输出结构正常。
+- 风险: 当前拿到的是“审计工具”和“审计方案”，不是最终集合竞价 schema；在 Windows 样本实际跑出来之前，仍不能拍板 `09:25` 是否单独成 bar、`session_phase` 如何设计，也不能让新脚本默认把竞价并入连续竞价桶。
+- 链接: `docs/changes/STG-20260411-10-auction-window-audit-plan.md`, `backend/scripts/audit_l2_auction_window.py`, `docs/07_PENDING_TODO.md`
