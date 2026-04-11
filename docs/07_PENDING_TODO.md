@@ -378,6 +378,7 @@
 - 关联任务：`CHG-20260411-09`
 
 ## T-024 集合竞价原始数据审计与落库方案冻结
+- 当前新增：已形成《集合竞价 L1/L2 摘要表与 DDL 草案》，明确当前先做数据层，不碰决策层；并建议采用 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三表结构。
 - 状态：`ACTIVE`
 - 当前事实：
   - `2026-04-11` 已确认集合竞价对 A 股研究和后续选股/复盘都很重要；

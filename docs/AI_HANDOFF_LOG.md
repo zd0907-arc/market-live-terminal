@@ -940,3 +940,10 @@
 - 结论: 基于第一轮 Windows 真实样本，已新增《集合竞价落库方案草案 V1》。当前推荐方向已经明确：不要把集合竞价硬塞进 `atomic_trade_5m / atomic_order_5m`，而是先独立成 `atomic_open_auction_trade_daily / atomic_open_auction_order_daily` 两张日级竞价摘要表，与连续竞价 5m 原子层并行。这样既保留竞价独立语义，也不污染主 5m 表。
 - 风险: 当前仍然是 V1 草案，不是已冻结正式 schema；尤其 `09:25` 是否要再单独建 event 子对象、`09:20~09:25` 是否要单独强调不可撤单语义、收盘竞价是否复用同一设计，这些还没最后拍板。
 - 链接: `docs/changes/STG-20260411-12-open-auction-storage-v1.md`, `docs/changes/INV-20260411-11-auction-window-sample-findings.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 18:35 | 数据治理 / 集合竞价 L1L2 草案 AI
+- Task ID: `CHG-20260411-13`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已按“先只做数据层、不碰决策层”的要求，新增《集合竞价 L1/L2 摘要表与 DDL 草案》。当前建议集合竞价先独立成三表：`atomic_open_auction_l1_daily`、`atomic_open_auction_l2_daily`、`atomic_open_auction_manifest`；其中 L1 表记录白天真实可见竞价结果，L2 表记录盘后增强结果，manifest 负责覆盖与质量对齐。同时已新增对应 SQL 草案 `open_auction_summary_schema_draft.sql`。
+- 风险: 当前仍是草案，不代表正式 schema 已冻结；字段还没有接入正式跑批，也还没经过更大样本的跨股票/跨月份校正。
+- 链接: `docs/changes/STG-20260411-13-open-auction-l1-l2-ddl-draft.md`, `backend/scripts/sql/open_auction_summary_schema_draft.sql`, `docs/07_PENDING_TODO.md`
