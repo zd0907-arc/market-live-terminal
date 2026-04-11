@@ -393,6 +393,9 @@
     2. `order / quote` 对 `09:15~09:24:59` 的覆盖比 `trade` 更稳定；
     3. `09:25` 是一个强边界点；
     4. 集合竞价至少包含“过程窗口 + 最终边界点”两层结构。
+  - 已继续补到“真正治理”阶段：
+    - 新增 `build_open_auction_summaries.py`
+    - 并已在 Windows 样本 `sh603629 @ 20260311` 上成功写入草案库 `auction_test.db`
 - 目标：
   1. 去 Windows 原始包上抽样跑集合竞价审计；
   2. 明确 `trade/order/quote` 在竞价窗口的覆盖形态；

@@ -947,3 +947,10 @@
 - 结论: 已按“先只做数据层、不碰决策层”的要求，新增《集合竞价 L1/L2 摘要表与 DDL 草案》。当前建议集合竞价先独立成三表：`atomic_open_auction_l1_daily`、`atomic_open_auction_l2_daily`、`atomic_open_auction_manifest`；其中 L1 表记录白天真实可见竞价结果，L2 表记录盘后增强结果，manifest 负责覆盖与质量对齐。同时已新增对应 SQL 草案 `open_auction_summary_schema_draft.sql`。
 - 风险: 当前仍是草案，不代表正式 schema 已冻结；字段还没有接入正式跑批，也还没经过更大样本的跨股票/跨月份校正。
 - 链接: `docs/changes/STG-20260411-13-open-auction-l1-l2-ddl-draft.md`, `backend/scripts/sql/open_auction_summary_schema_draft.sql`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 18:55 | 数据治理 / 集合竞价构建脚本 AI
+- Task ID: `CHG-20260411-13`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 在竞价 L1/L2 表草案之外，已继续进入真正治理阶段：新增 `build_open_auction_summaries.py`，用于从 raw 日包直接构建 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三张竞价摘要表。脚本已本地伪样本冒烟通过，并已同步到 Windows，在真实样本 `sh603629 @ 20260311` 上成功写入 `D:\market-live-terminal\data\atomic_facts\auction_test.db`。
+- 风险: 当前写入的仍是 draft schema，对字段定义和窗口切法还需更大样本继续校正；同时它还没正式并入统一 `market_atomic.db` 主跑批，只能算竞价子模块的首轮试跑。
+- 链接: `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-13-open-auction-l1-l2-ddl-draft.md`, `backend/scripts/build_open_auction_summaries.py`, `backend/scripts/sql/open_auction_summary_schema_draft.sql`
