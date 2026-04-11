@@ -926,3 +926,10 @@
 - 结论: 已新增《集合竞价原始数据审计方案》与脚本 `audit_l2_auction_window.py`，用于在 raw 日包层面确认 `trade/order/quote` 三类文件在 `09:15~09:25` 的真实覆盖、是否存在 `09:25:00`、以及样本属于 `trade+order+quote / quote_only / no_pre_0930_data` 哪种形态。脚本已用本地伪造日包做过一次冒烟，输出结构正常。
 - 风险: 当前拿到的是“审计工具”和“审计方案”，不是最终集合竞价 schema；在 Windows 样本实际跑出来之前，仍不能拍板 `09:25` 是否单独成 bar、`session_phase` 如何设计，也不能让新脚本默认把竞价并入连续竞价桶。
 - 链接: `docs/changes/STG-20260411-10-auction-window-audit-plan.md`, `backend/scripts/audit_l2_auction_window.py`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 18:05 | 数据治理 / 集合竞价样本证据 AI
+- Task ID: `CHG-20260411-10`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已把新脚本同步到 Windows，并对真实 raw 样本完成第一轮集合竞价审计：`sh603629@20260302/20260311/20260408/20260410` 与 `sz000833@20260311`。结论已足够明确：raw 里确实存在竞价数据；`order/quote` 对 `09:15~09:24:59` 的覆盖比 `trade` 更稳定；`09:25` 是明显边界点；集合竞价至少包含“过程窗口 + 最终边界点”两层结构，不能简单并入 `09:30` 连续竞价 bar。
+- 风险: 目前仍是第一轮样本，不代表已覆盖所有股票/月份；同时 `trade` 层在不同股票上的竞价表现并不完全一致（如 `sh603629` 多数只见 `09:25`，`sz000833` 则在 `09:15~09:19` 也有记录），因此仍不宜马上拍板最终 schema。
+- 链接: `docs/changes/STG-20260411-10-auction-window-audit-plan.md`, `docs/changes/INV-20260411-11-auction-window-sample-findings.md`, `backend/scripts/audit_l2_auction_window.py`, `docs/07_PENDING_TODO.md`
