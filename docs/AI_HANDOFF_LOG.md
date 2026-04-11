@@ -877,3 +877,10 @@
 - 结论: 数据治理线已把利通 `sh603629` 正式沉淀成样板票：新增《利通电子数据治理验收卡》，确认本地 `2026-03-02 ~ 2026-04-10` 共 `29` 个交易日事件层窗口已打通；同时新增《单票补数 SOP》，冻结“Windows raw -> 单票抽取 -> 本地回填 -> SQL 验证”的标准路径，后续别的票可以复用这条样板流程。
 - 风险: 这次收口的是“单票样板”和“局部治理路径”，不代表 Windows 正式全市场链路已经修完；下一步仍要做页面验收和 Windows 单日正式演练。
 - 链接: `docs/changes/INV-20260411-04-litong-data-governance-acceptance.md`, `docs/changes/STG-20260411-05-single-symbol-backfill-sop.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 16:05 | 数据治理 / 原子特征设计 AI
+- Task ID: `CHG-20260411-06`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已新增《资金流向研究的一次性数据沉淀清单》，把这轮数据治理的目标从“先想死一套策略”收敛为“先把原子事实层做厚”。文档明确区分了老数据（成交级原子特征）与新数据（挂单事件原子特征）应一次性沉淀哪些字段，并冻结原则：未来多数新研究应只重算 snapshot / signal / backtest，而不反复重跑 raw。
+- 风险: 这份文档现在定义的是“目标字段层”，还不是字段差异表；下一步必须继续做当前表结构 vs 目标字段的差异梳理，否则仍容易停留在原则层。
+- 链接: `docs/changes/STG-20260411-06-fund-flow-atomic-data-catalog.md`, `docs/07_PENDING_TODO.md`
