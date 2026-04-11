@@ -898,3 +898,17 @@
 - 结论: 已新增《原子事实层字段差异执行表》，把目标原子层字段正式拆成“已有 / 可算 / 必补”三类，并按 `atomic_trade_5m / atomic_trade_daily / atomic_order_5m / atomic_order_daily / atomic_data_manifest` 五个对象逐字段标明来源、说明、支持范围与优先级。当前已经可以明确首批 P0 顺序应为：先做成交原子层，再做 `2026-03+` 的挂单原子层，最后补 manifest 验收清单。
 - 风险: 当前完成的是“施工清单”而不是落库实现；如果下一步不尽快把 P0 字段转成真实表与脚本，文档仍会停留在设计层。另：老数据区间仍不支持真实挂单事件层，这个边界不能被后续实现误突破。
 - 链接: `docs/changes/STG-20260411-08-atomic-fact-gap-execution-table.md`, `docs/changes/STG-20260411-07-atomic-fact-layer-schema-map.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 16:55 | 数据治理 / 原子事实 P0 落库 AI
+- Task ID: `CHG-20260411-09`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已新增《原子事实层 P0 落库方案与跑批顺序》，把下一步真正要落的最小可用范围冻结为 `atomic_trade_5m / atomic_trade_daily / atomic_order_5m / atomic_order_daily / atomic_data_manifest` 五张表，并同步新增可执行 DDL 文件 `backend/scripts/sql/atomic_fact_p0_schema.sql`。该 SQL 已做一次 SQLite 建表冒烟，表结构可成功创建。
+- 风险: 当前仍是“DDL + 跑批拆分方案”阶段，真正的 `init/build/backfill` Python 脚本骨架还没补；另外 `2025-01 ~ 2026-02` 的 `trade_count/total_volume` 缺口仍需要 raw 回填，`2026-03+` 的 `add/cancel count/volume` 也仍需要正式清洗脚本支撑。
+- 链接: `docs/changes/STG-20260411-09-atomic-fact-p0-ddl-and-runbook.md`, `backend/scripts/sql/atomic_fact_p0_schema.sql`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 17:10 | 数据治理 / 原子事实脚本骨架 AI
+- Task ID: `CHG-20260411-09`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 在 P0 DDL 之外，已继续补上两个可执行脚本：`init_atomic_fact_db.py` 用于初始化 `market_atomic.db`，`build_atomic_trade_from_history.py` 用于把现有 `history_5m_l2 / history_daily_l2` 映射进 `atomic_trade_5m / atomic_trade_daily`。已做一次小范围冒烟：以 `sh603629`、`2026-03-02 ~ 2026-03-05` 为样本，成功写入 `195` 条 `atomic_trade_5m` 与 `4` 条 `atomic_trade_daily`。
+- 风险: 当前脚本只覆盖“现表可直映/可算”的 trade 层，尚未补 raw 回填脚本；因此 `trade_count` 仍为空，`2026-03+` 的 `add/cancel count/volume` 也还未进入原子库。
+- 链接: `backend/scripts/init_atomic_fact_db.py`, `backend/scripts/build_atomic_trade_from_history.py`, `backend/scripts/sql/atomic_fact_p0_schema.sql`, `docs/changes/STG-20260411-09-atomic-fact-p0-ddl-and-runbook.md`

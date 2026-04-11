@@ -370,7 +370,8 @@
     4. `atomic_order_daily`
     5. `atomic_data_manifest`
 - 目标：
-  1. 基于执行表，补一版真正可跑的 `P0` 字段落库脚本方案；
-  2. 决定 `2025-01 ~ 2026-02` 先补哪些成交原子字段；
-  3. 决定 `2026-03+` 正式链路先补哪些挂单原子字段。
-- 关联任务：`CHG-20260411-08`
+  1. 基于执行表，先落 `market_atomic.db` 与 `P0 DDL`；
+  2. 已落 `init/build` 两个脚本，下一步继续补 `backfill_atomic_trade_from_raw.py` 与 `backfill_atomic_order_from_raw.py`；
+  3. 决定 `2025-01 ~ 2026-02` 先补哪些成交原子字段；
+  4. 决定 `2026-03+` 正式链路先补哪些挂单原子字段。
+- 关联任务：`CHG-20260411-09`
