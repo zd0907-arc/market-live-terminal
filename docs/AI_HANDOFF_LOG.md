@@ -870,3 +870,10 @@
 - 结论: 已按后续分会话推进的需要，新增两份独立母文档：一份是《市场数据处理总方案》，专门冻结老数据榨干、新数据事件层、正式库结构、Windows 处理方式与 2025 raw 删除前条件；另一份是《利通电子复盘专项当前状态》，专门收口“已经做了什么、发现了哪些问题、下一步准备做什么”。后续可以分别围绕“数据治理”与“利通复盘”两条线继续推进。
 - 风险: 这两份文档解决的是“真实状态与执行边界”，不是已经完成对应工程；尤其 2025 raw 仍未达到可删线，利通复盘也还没完成图形证据卡和失败样本对照。
 - 链接: `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/changes/MOD-20260411-03-litong-review-current-state.md`
+
+## 2026-04-11 15:45 | 数据治理 / 利通样板票 AI
+- Task ID: `CHG-20260411-04`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 数据治理线已把利通 `sh603629` 正式沉淀成样板票：新增《利通电子数据治理验收卡》，确认本地 `2026-03-02 ~ 2026-04-10` 共 `29` 个交易日事件层窗口已打通；同时新增《单票补数 SOP》，冻结“Windows raw -> 单票抽取 -> 本地回填 -> SQL 验证”的标准路径，后续别的票可以复用这条样板流程。
+- 风险: 这次收口的是“单票样板”和“局部治理路径”，不代表 Windows 正式全市场链路已经修完；下一步仍要做页面验收和 Windows 单日正式演练。
+- 链接: `docs/changes/INV-20260411-04-litong-data-governance-acceptance.md`, `docs/changes/STG-20260411-05-single-symbol-backfill-sop.md`, `docs/07_PENDING_TODO.md`
