@@ -384,6 +384,7 @@ const App: React.FC = () => {
     </div>
   );
   const reviewHref = activeStock?.symbol ? `/sandbox-review?symbol=${activeStock.symbol.toLowerCase()}` : '/sandbox-review';
+  const selectionHref = '/selection-research';
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-20 overflow-x-hidden">
@@ -391,6 +392,9 @@ const App: React.FC = () => {
         routeHref={reviewHref}
         routeLabel="去复盘"
         routeTitle="打开沙盒复盘页面"
+        secondaryRouteHref={selectionHref}
+        secondaryRouteLabel="去选股"
+        secondaryRouteTitle="打开选股研究工作台"
         searchValue={query}
         isSearchFocused={isSearchFocused}
         searchResults={results}
@@ -441,6 +445,15 @@ const App: React.FC = () => {
             <Activity className="w-16 h-16 mx-auto mb-4 opacity-20" />
             <p>请输入股票代码开始监控</p>
             <p className="text-xs mt-2 opacity-60">模式：实时逐笔 (Web) | 历史博弈 (Python Local)</p>
+            <div className="mt-5">
+              <a
+                href={selectionHref}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
+              >
+                <TrendingUp className="h-4 w-4" />
+                去选股研究工作台
+              </a>
+            </div>
           </div>
         )}
 

@@ -8,6 +8,9 @@ interface MarketTopHeaderProps {
   routeHref: string;
   routeLabel: string;
   routeTitle: string;
+  secondaryRouteHref?: string;
+  secondaryRouteLabel?: string;
+  secondaryRouteTitle?: string;
   searchValue: string;
   isSearchFocused: boolean;
   searchResults: SearchResult[];
@@ -27,6 +30,9 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
   routeHref,
   routeLabel,
   routeTitle,
+  secondaryRouteHref,
+  secondaryRouteLabel,
+  secondaryRouteTitle,
   searchValue,
   isSearchFocused,
   searchResults,
@@ -58,6 +64,15 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
             >
               {routeLabel}
             </a>
+            {secondaryRouteHref && secondaryRouteLabel ? (
+              <a
+                href={secondaryRouteHref}
+                className="text-[10px] md:text-xs text-emerald-300 bg-emerald-900/30 border border-emerald-700/50 px-1.5 py-0.5 rounded hover:bg-emerald-800/40 transition-colors"
+                title={secondaryRouteTitle || secondaryRouteLabel}
+              >
+                {secondaryRouteLabel}
+              </a>
+            ) : null}
           </div>
 
           <div className="relative flex-1 max-w-3xl flex items-center gap-2 md:gap-4" ref={searchContainerRef}>
