@@ -36,6 +36,9 @@ ON atomic_trade_5m(trade_date);
 CREATE INDEX IF NOT EXISTS idx_atomic_trade_5m_symbol_trade_date
 ON atomic_trade_5m(symbol, trade_date);
 
+CREATE INDEX IF NOT EXISTS idx_atomic_trade_5m_time_symbol
+ON atomic_trade_5m(bucket_start, symbol);
+
 CREATE TABLE IF NOT EXISTS atomic_trade_daily (
     symbol TEXT NOT NULL,
     trade_date TEXT NOT NULL,
@@ -80,6 +83,9 @@ CREATE TABLE IF NOT EXISTS atomic_trade_daily (
 CREATE INDEX IF NOT EXISTS idx_atomic_trade_daily_trade_date
 ON atomic_trade_daily(trade_date);
 
+CREATE INDEX IF NOT EXISTS idx_atomic_trade_daily_time_symbol
+ON atomic_trade_daily(trade_date, symbol);
+
 CREATE TABLE IF NOT EXISTS atomic_order_5m (
     symbol TEXT NOT NULL,
     trade_date TEXT NOT NULL,
@@ -112,6 +118,9 @@ ON atomic_order_5m(trade_date);
 
 CREATE INDEX IF NOT EXISTS idx_atomic_order_5m_symbol_trade_date
 ON atomic_order_5m(symbol, trade_date);
+
+CREATE INDEX IF NOT EXISTS idx_atomic_order_5m_time_symbol
+ON atomic_order_5m(bucket_start, symbol);
 
 CREATE TABLE IF NOT EXISTS atomic_order_daily (
     symbol TEXT NOT NULL,
@@ -146,6 +155,9 @@ CREATE TABLE IF NOT EXISTS atomic_order_daily (
 
 CREATE INDEX IF NOT EXISTS idx_atomic_order_daily_trade_date
 ON atomic_order_daily(trade_date);
+
+CREATE INDEX IF NOT EXISTS idx_atomic_order_daily_time_symbol
+ON atomic_order_daily(trade_date, symbol);
 
 CREATE TABLE IF NOT EXISTS atomic_data_manifest (
     dataset_key TEXT NOT NULL,

@@ -912,3 +912,10 @@
 - 结论: 在 P0 DDL 之外，已继续补上两个可执行脚本：`init_atomic_fact_db.py` 用于初始化 `market_atomic.db`，`build_atomic_trade_from_history.py` 用于把现有 `history_5m_l2 / history_daily_l2` 映射进 `atomic_trade_5m / atomic_trade_daily`。已做一次小范围冒烟：以 `sh603629`、`2026-03-02 ~ 2026-03-05` 为样本，成功写入 `195` 条 `atomic_trade_5m` 与 `4` 条 `atomic_trade_daily`。
 - 风险: 当前脚本只覆盖“现表可直映/可算”的 trade 层，尚未补 raw 回填脚本；因此 `trade_count` 仍为空，`2026-03+` 的 `add/cancel count/volume` 也还未进入原子库。
 - 链接: `backend/scripts/init_atomic_fact_db.py`, `backend/scripts/build_atomic_trade_from_history.py`, `backend/scripts/sql/atomic_fact_p0_schema.sql`, `docs/changes/STG-20260411-09-atomic-fact-p0-ddl-and-runbook.md`
+
+## 2026-04-11 17:30 | 数据治理 / 评审意见吸收 AI
+- Task ID: `CHG-20260411-09`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把新一轮评审意见回填到数据治理文档：明确 raw price/复权因子分层、5m 前闭后开约定、集合竞价必须与连续竞价隔离、涨跌停状态作为 P1 增强、以及截面读取索引优化；同时已把时间维度的二级索引直接补进 `atomic_fact_p0_schema.sql`。其中“集合竞价如何具体落库”已被明确记录为**待下一轮专题讨论**，当前只冻结“必须隔离”，不冻结最终字段形态。
+- 风险: 集合竞价设计仍未完全拍板，因此当前任何新脚本都不应自行把 `09:25` 并入 `09:30` 连续竞价 bar；此外复权因子与涨跌停状态目前仍停留在文档层，尚未进入实际表结构与脚本实现。
+- 链接: `docs/03_DATA_CONTRACTS.md`, `docs/changes/STG-20260411-07-atomic-fact-layer-schema-map.md`, `docs/changes/STG-20260411-08-atomic-fact-gap-execution-table.md`, `docs/changes/STG-20260411-09-atomic-fact-p0-ddl-and-runbook.md`, `backend/scripts/sql/atomic_fact_p0_schema.sql`

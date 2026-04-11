@@ -37,6 +37,14 @@
 - `2025-01 ~ 2026-02`：只有成交 raw，**不支持真实挂单事件层**
 - `2026-03+`：有成交 + 挂单 raw，支持完整事件层
 
+### 3.4 这轮新增的评审结论
+- **复权因子**：采纳，但不直接塞进 atomic price 主表；建议独立因子表
+- **集合竞价隔离**：采纳，而且属于高优先级；但具体落库形态仍待下轮讨论
+- **涨跌停状态**：采纳，列为 P1 增强
+- **截面索引**：采纳，直接补到 DDL
+- **盘口存量状态**：方向正确，但暂不进入 P0 主线
+- **时间桶开闭约定**：采纳，并已冻结为前闭后开
+
 ---
 
 ## 4. 一眼看明白：总执行结论
@@ -92,6 +100,7 @@
 | `l2_super_net_amount` | L2 超大单净额 | `buy - sell` | 老/新 | P0 | 同上 |
 | `source_type` | 数据类型 | 日期段派生 `trade_only / trade_order` | 老/新 | P0 | 很关键，研究层要知道能不能信挂单字段 |
 | `total_volume` | 5m 总成交量 | `history_5m_l2.total_volume` 直读；为空时标记缺口 | 老部分/新 | P0 | 新数据大多可用；老数据覆盖需单独补齐 |
+| `session_phase` | 交易阶段标记 | 需由时间段/竞价识别规则派生 | 待定 | P0-doc | 原则已定，具体落库待讨论 |
 
 ## 5.3 必补：必须新增清洗产出
 
@@ -110,6 +119,7 @@
 | `avg_trade_amount` | 5m 平均单笔成交额 | 正式表没有 | 老/新 | P1 | |
 | `max_parent_order_amount` | 5m 最大母单金额 | 正式表没有 | 老/新 | P1 | 支撑主力埋伏/强承接研究 |
 | `top5_parent_concentration_ratio` | 前 5 大母单集中度 | 正式表没有 | 老/新 | P1 | 识别是否极少数大资金主导 |
+| `auction isolated bar` | 集合竞价独立 bar / 独立 phase | 当前未冻结 | 待定 | P0-doc | 必须先做 raw 审计与专题讨论 |
 
 ## 5.4 结论
 - `atomic_trade_5m` 是**最该先做的 P0 底座**。
@@ -163,6 +173,8 @@
 | `positive_l2_net_bar_count` | 正净流入 bar 数 | 统计 `l2_main_net_amount > 0` 的 5m 数量 | 老/新 | P1 | |
 | `negative_l2_net_bar_count` | 负净流入 bar 数 | 同上 | 老/新 | P1 | |
 | `source_type` | 数据类型 | 日期段派生 | 老/新 | P0 | 必须显式带给研究层 |
+| `adj_factor` | 复权因子 | 建议来自独立 `price_adjustment_factors` | 老/新 | P0-doc | 不建议塞回 atomic daily 主表 |
+| `limit_up/down states` | 涨跌停状态组 | 需结合板块/规则计算 | 老/新 | P1 | A股强相关增强项 |
 
 ## 6.3 必补：必须新增清洗产出
 
@@ -194,6 +206,8 @@
 | `cvd_delta_amount` | 成交主动差额 | `history_5m_l2.l2_cvd_delta` | 新 | P0 | |
 | `oib_delta_amount` | 挂单失衡变化 | `history_5m_l2.l2_oib_delta` | 新 | P0 | |
 | `quality_info` | 质量提示 | `history_5m_l2.quality_info` | 新 | P0 | |
+| `end_bid_resting_volume` | 5m 结束时买盘留存量 | 现阶段无稳定来源 | 新 | P2 | 盘口存量重建，暂不进 P0 |
+| `end_ask_resting_volume` | 5m 结束时卖盘留存量 | 现阶段无稳定来源 | 新 | P2 | 同上 |
 
 ## 7.2 可算：不必回 raw
 
@@ -322,6 +336,13 @@
    - `buy_add_cancel_net_amount`
    - `sell_add_cancel_net_amount`
 
+### Phase B.5：专题讨论后再决定是否扩竞价阶段落库
+1. 先审计 raw 是否稳定覆盖 `09:15 ~ 09:25`
+2. 再冻结：
+   - 是否单独落 `09:25` bar
+   - 是否统一增加 `session_phase`
+3. 在此之前，不允许默认把竞价撮合并入 `09:30` 连续竞价 bar
+
 ### Phase C：补管理清单，建立删 raw 的判断依据
 1. 落 `atomic_data_manifest`
 2. 每月记录：覆盖、质量、版本、验收状态
@@ -336,4 +357,8 @@
   - `atomic_trade_daily`
   - `atomic_order_5m`
   这三层做扎实。
+- 但这轮也新增冻结了 3 个重要边界：
+  - 价格按 raw 存，复权单独处理；
+  - 5m 时间桶按前闭后开；
+  - 集合竞价必须隔离，但具体形态待专题讨论后再补。
 - 这样后面大多数选股、复盘、风险识别研究，都只是在原子层之上重算，不会动不动回 raw。

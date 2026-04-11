@@ -75,6 +75,57 @@
 
 ---
 
+## 3.4 价格口径冻结：原子层只存 Raw Price
+- `atomic_trade_5m / atomic_trade_daily` 的 `open/high/low/close` 默认都解释为：
+  - **真实价格**
+  - **未复权价格（Raw Price）**
+- 不在原子成交事实表里直接存前复权/后复权价。
+- 若后续进入跨日波段回测、均线研究、区间涨幅研究，建议通过独立复权因子表完成：
+  - 建议对象：`price_adjustment_factors(symbol, trade_date, adj_factor, source, updated_at)`
+- 原则：
+  - 原子层保真
+  - 复权逻辑放在统一视图或 Python Data Loader
+
+---
+
+## 3.5 时间桶冻结：5m 一律前闭后开
+- 5m bar 统一定义为：`[t, t+5m)`
+- 时间戳统一打左端点：
+  - `09:30:00` 表示 `[09:30:00, 09:35:00)`
+- 这条约定要同时服务：
+  - 原子层
+  - 聚合层
+  - 回测层
+  - 多粒度对齐
+
+---
+
+## 3.6 集合竞价原则已冻结，但具体设计未冻结
+- 当前已经确认：
+  - 集合竞价不能和连续竞价直接混为同一类 bar
+  - 尤其不能默认把 `09:25` 并入 `09:30` 第一根连续竞价 bar
+- 但以下问题仍待下一轮专题讨论，不在本轮强行拍死：
+  1. 是否把 `09:25:00` 单独作为独立 bar 落库；
+  2. 是否在 `atomic_trade_5m / atomic_order_5m` 增加 `session_phase`；
+  3. 当前 raw 对竞价阶段到底覆盖到什么粒度；
+  4. 收盘集合竞价是否也纳入统一 phase 体系。
+- 结论：
+  - **“需要隔离”已冻结**
+  - **“怎么隔离”暂未冻结**
+
+---
+
+## 3.7 涨跌停状态属于强相关增强层
+- A 股的涨跌停、触板、封板会极大改变挂单与成交语义。
+- 因此后续建议在 `trade_daily / trade_5m` 增加状态增强字段，例如：
+  - 日级：`limit_up_price`, `limit_down_price`, `hit_limit_up`, `close_at_limit_up`, `first_limit_up_ts`
+  - 5m：`is_limit_up`, `is_limit_down`, `touch_limit_up`, `touch_limit_down`
+- 当前判断：
+  - 这类字段**值得纳入整体设计**
+  - 但先列为 **P1 增强**，不插队当前 P0 主线
+
+---
+
 ## 4. 建议的原子事实层对象
 
 建议冻结为 **4 张核心事实表 + 1 张清单表 + 1 张统一视图**：
@@ -145,6 +196,9 @@
 | `max_parent_order_amount` | 5m 内最大母单金额 | 无正式字段 | 否 | 否 | 新增清洗产出 |
 | `top5_parent_concentration_ratio` | 前5大母单金额占比 | 无正式字段 | 否 | 否 | 新增清洗产出 |
 | `source_type` | `trade_only / trade_order` | 可由日期段判断 | 是 | 是 | 新增派生字段 |
+| `session_phase` | 交易阶段，如 `auction/open_continuous/pm_continuous` | 暂无正式字段 | 待定 | 待定 | 设计已立项，具体落库形态待讨论 |
+| `is_limit_up` | 该 bar 是否处于涨停状态 | 暂无正式字段 | 否 | 否 | P1 增强 |
+| `is_limit_down` | 该 bar 是否处于跌停状态 | 暂无正式字段 | 否 | 否 | P1 增强 |
 | `quality_info` | 质量提示 | `history_5m_l2.quality_info` | 部分 | 是 | 直接复用 |
 
 ## 5.4 判断
@@ -213,6 +267,12 @@
 | `max_parent_order_amount` | 当日最大母单额 | 无正式字段 | 否 | 否 | 从 `atomic_trade_5m`/清洗新增 |
 | `top5_parent_concentration_ratio` | 前5母单集中度 | 无正式字段 | 否 | 否 | 从 `atomic_trade_5m` 汇总 |
 | `source_type` | `trade_only / trade_order` | 可由日期段判断 | 是 | 是 | 新增派生字段 |
+| `adj_factor` | 复权因子 | 暂无正式字段 | 否 | 否 | 建议独立因子表，不建议直接冗余进原子事实表 |
+| `limit_up_price` | 涨停价 | 暂无正式字段 | 否 | 否 | P1 增强 |
+| `limit_down_price` | 跌停价 | 暂无正式字段 | 否 | 否 | P1 增强 |
+| `hit_limit_up` | 是否触及涨停 | 暂无正式字段 | 否 | 否 | P1 增强 |
+| `close_at_limit_up` | 收盘是否封住涨停 | 暂无正式字段 | 否 | 否 | P1 增强 |
+| `first_limit_up_ts` | 首次触板时间 | 暂无正式字段 | 否 | 否 | P1 增强 |
 | `quality_info` | 质量提示 | `history_daily_l2.quality_info` | 部分 | 是 | 直接复用 |
 
 ## 6.4 判断

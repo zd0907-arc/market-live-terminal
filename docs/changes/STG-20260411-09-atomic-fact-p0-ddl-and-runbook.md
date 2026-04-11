@@ -42,6 +42,12 @@
 - 新原子层独立落库：
   - 建议路径：`data/atomic_facts/market_atomic.db`
 
+### 3.4 本轮新增冻结的 4 条边界
+1. 价格按 **Raw Price** 存，复权单独处理
+2. 5m 时间桶统一按 **前闭后开 `[t, t+5m)`**
+3. 集合竞价必须与连续竞价隔离
+4. 但集合竞价的**具体落库形态暂未最终冻结**，需后续专题讨论
+
 ---
 
 ## 4. P0 最小可用表范围
@@ -59,10 +65,20 @@
 - `top5_parent_concentration_ratio`
 - 各类 `*_count` 的 L1/L2 主力/超大单细分笔数
 - 更细的盘口微结构字段
+- 完整盘口存量状态重建（如 `end_bid_resting_volume / end_ask_resting_volume`）
 
 原因：
 - 这些字段虽然有价值，但它们会显著抬高第一次清洗复杂度；
 - 当前更重要的是先把日后 80% 研究都够用的公共底座做出来。
+- 集合竞价虽然重要，但当前更需要先完成 raw 审计，再决定最终落库形态。
+
+### 4.3 本轮新增但不直接进入 P0 DDL 的对象
+1. `price_adjustment_factors`
+   - 用于复权读取
+   - 建议独立表，不污染 atomic trade 主表
+2. `limit_state_daily / limit_state_5m`（或等价状态字段）
+   - 用于涨跌停/触板研究
+   - 当前先记为 P1 增强
 
 ---
 
@@ -96,6 +112,10 @@
 | `l2_super_net_amount` | REAL | L2 超大单净额 | 派生 |
 | `source_type` | TEXT | `trade_only / trade_order` | 日期段派生 |
 | `quality_info` | TEXT | 质量提示 | `history_5m_l2.quality_info` |
+
+> 备注：
+> - 本表当前未把 `session_phase` 写入 P0 DDL，不是因为不重要，而是因为集合竞价具体落库形态尚未冻结；
+> - 在专题方案拍板前，相关逻辑只允许在文档中预留，不允许脚本自行拍脑袋并桶。
 
 ---
 
@@ -138,6 +158,10 @@
 | `negative_l2_net_bar_count` | INTEGER | 负净流入 bar 数 | 5m 汇总 |
 | `source_type` | TEXT | `trade_only / trade_order` | 日期段派生 |
 | `quality_info` | TEXT | 质量提示 | `history_daily_l2.quality_info` |
+
+> 备注：
+> - 日级层后续应支持通过复权因子做 adjusted read，但 P0 原子事实表仍只存 raw OHLC；
+> - 涨跌停状态字段当前记为 P1，不插队这轮 P0 落库。
 
 ---
 
@@ -227,6 +251,13 @@
 
 它就是下一步落库脚本可直接执行的起点。
 
+本轮已顺手补充：
+- 截面研究索引：
+  - `idx_atomic_trade_5m_time_symbol`
+  - `idx_atomic_trade_daily_time_symbol`
+  - `idx_atomic_order_5m_time_symbol`
+  - `idx_atomic_order_daily_time_symbol`
+
 ---
 
 ## 7. 跑批顺序（冻结版）
@@ -235,6 +266,15 @@
 1. 建库：`data/atomic_facts/market_atomic.db`
 2. 执行 `atomic_fact_p0_schema.sql`
 3. 建立基础索引
+
+#### Phase 1.5：竞价阶段 raw 审计（待下一步）
+1. 抽样确认 raw 是否稳定覆盖：
+   - `09:15 ~ 09:25`
+   - 是否有逐笔竞价事件 / 仅撮合结果
+2. 再决定：
+   - 是否单独落 `09:25` bar
+   - 是否加入 `session_phase`
+3. 这一步在下一轮讨论前，不直接进正式 P0 DDL
 
 ### Phase 2：先回填成交原子层
 #### 2.1 `2025-01 ~ 2026-02`
@@ -354,3 +394,5 @@
   - 先落 `trade_5m / trade_daily`
   - 再补 `2026-03+ order_5m / order_daily`
 - 本次新增的 DDL 文件，已经把 P0 表结构冻结成可执行版本。
+- 同时也明确记下了一个重要未决项：
+  - **集合竞价需要隔离，但具体设计暂未完全明确，后续必须单独讨论后再补。**
