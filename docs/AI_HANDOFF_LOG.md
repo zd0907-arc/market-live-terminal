@@ -891,3 +891,10 @@
 - 结论: 已新增《原子事实层表设计与字段对应总表》，把原子事实层进一步收口成可执行的表设计：`atomic_trade_5m / atomic_trade_daily / atomic_order_5m / atomic_order_daily / atomic_data_manifest`，并逐字段标明“字段名、字段含义、当前来源、老数据是否支持、新数据是否支持、处理方式”。这张表现在已经可以直接作为后续字段差异执行表的上游输入。
 - 风险: 当前这张文档解决的是“设计和对应关系”，还没有把字段分成“已有 / 可由现表直接算 / 必须补清洗”的最终执行表；下一步仍需要继续做差异执行表。
 - 链接: `docs/changes/STG-20260411-07-atomic-fact-layer-schema-map.md`, `docs/changes/STG-20260411-06-fund-flow-atomic-data-catalog.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 16:40 | 数据治理 / 原子事实差异执行 AI
+- Task ID: `CHG-20260411-08`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已新增《原子事实层字段差异执行表》，把目标原子层字段正式拆成“已有 / 可算 / 必补”三类，并按 `atomic_trade_5m / atomic_trade_daily / atomic_order_5m / atomic_order_daily / atomic_data_manifest` 五个对象逐字段标明来源、说明、支持范围与优先级。当前已经可以明确首批 P0 顺序应为：先做成交原子层，再做 `2026-03+` 的挂单原子层，最后补 manifest 验收清单。
+- 风险: 当前完成的是“施工清单”而不是落库实现；如果下一步不尽快把 P0 字段转成真实表与脚本，文档仍会停留在设计层。另：老数据区间仍不支持真实挂单事件层，这个边界不能被后续实现误突破。
+- 链接: `docs/changes/STG-20260411-08-atomic-fact-gap-execution-table.md`, `docs/changes/STG-20260411-07-atomic-fact-layer-schema-map.md`, `docs/07_PENDING_TODO.md`
