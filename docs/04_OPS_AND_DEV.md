@@ -205,12 +205,20 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
      4. staging 清理、repair queue 导出、失败汇总要纳入同一收尾动作。
    - 不要退回当前 `backend/scripts/l2_day_sharded_backfill.py` 的 Windows 父进程版。
 
+
+#### 盘位经验冻结（2026-04-12）
+- `Z:`：用于**全市场整日**盘后 L2 staging。
+- `G:`：不再用于 Windows 数据治理执行。
+- 原因：已实测 `Z:` 是当前稳定盘位；为避免重复踩坑，所有验证/bench/正式回补统一收口到 `Z:`。
+- 若后续要改 staging 盘位，必须先做短 bench，再更新 `docs/04_OPS_AND_DEV.md` 与对应 runbook。
+
 #### B. 每日盘后时序
 1. **16:15 ~ 16:20：日包就绪检查**
    - 检查 `D:\MarketData\YYYYMM\YYYYMMDD.7z` 已出现；
    - 连续两次检查文件大小一致后，才允许进入正式流程。
 2. **16:20 ~ 16:25：staging 准备**
    - 解压到 `Z:\l2_stage\YYYYMMDD`；
+   - **全市场整日 L2 默认使用 `tar -xf`，不要把 `G:` + `7z.exe` 当作正式主链路**；
    - 统一按 `YYYYMMDD/{symbol}` 结构整理；
    - 如需，先跑 `backend/scripts/inspect_daily_l2_package.py` 抽样验真。
 3. **16:25 ~ 17:00：正式回补**
@@ -619,3 +627,30 @@ git checkout main && git merge --no-ff <branch>
    - 更新 `02/03/04`（按是否涉及业务/契约/SOP）。  
    - 在 `AI_HANDOFF_LOG.md` 记录短日志；有阻塞则同步 `07_PENDING_TODO.md`。
    - 将完成的变更卡归档到 `docs/archive/changes/`（命名遵循 `ARCHIVE_NAMING_STANDARD`）。
+
+
+### 原子事实层连续月批（2026-04-12 新增）
+- 连续倒序月批 config：`backend/scripts/configs/atomic_backfill_windows.full_reverse_202604_to_202501.json`
+- Mac 启动命令：
+  ```bash
+  bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/start_atomic_backfill_full_reverse.sh
+  ```
+- Mac 人话状态命令：
+  ```bash
+  bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_full_reverse.sh
+  ```
+- 状态口径只保留：
+  - 当前正在处理哪一天
+  - 已完成多少天
+  - 最后完成到哪一天
+- 运行前提：
+  - `G:` 上实验性目录可清；
+  - 正式全市场回补不依赖 `G:`；
+  - L2 全市场整日固定走 `Z:` + `tar -xf` + `12 worker`；
+  - `2026-04-12` 最新真实复测后，当前正式 runner 冻结为：**多进程分片库 + merge 回主库 + `12 worker`**；
+  - `12 worker + overlap/prefetch` 会触发 `database or disk is full`，所以当前正式批次固定：
+    - `prefetch_next_day_extract = false`
+    - `reuse_extracted_day_if_exists = false`
+  - 若当前目标池只做沪深主板，必须同时开启：
+    - `include_gem = false`
+    - `main_board_only = true`
