@@ -1,0 +1,25 @@
+{
+  "atomic_db": "D:/market-live-terminal/data/atomic_facts/bench_20260410_w10.db",
+  "market_root": "D:/MarketData",
+  "extract_root": "Z:/atomic_bench_stage",
+  "workers": 10,
+  "large_threshold": 200000.0,
+  "super_threshold": 1000000.0,
+  "include_bj": false,
+  "include_star": false,
+  "stop_on_failure": true,
+  "cleanup_extracted": true,
+  "symbols": [],
+  "max_items_per_day": 0,
+  "state_file": "D:/market-live-terminal/data/atomic_facts/runs/bench_20260410_w10_state.json",
+  "report_file": "D:/market-live-terminal/data/atomic_facts/runs/bench_20260410_w10_report.json",
+  "batches": [
+    {
+      "name": "bench_20260410",
+      "kind": "l2",
+      "date_from": "2026-04-10",
+      "date_to": "2026-04-10"
+    }
+  ],
+  "reuse_extracted_day_if_exists": true
+}

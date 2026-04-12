@@ -169,13 +169,52 @@
 ## 8. 利通样板结论
 利通 `sh603629` 已按这条 SOP 完成：
 
-- `2026-03-02 ~ 2026-04-10`
-- 共 `29` 个交易日
+- 老数据窗口：`2026-02-02 ~ 2026-02-27`
+- 新数据窗口：`2026-03-02 ~ 2026-04-10`
+- 合计：`44` 个交易日
 
 结果：
-- 事件层已可读；
-- 没有再出现整天全空的旧版存量；
-- 可作为后续其它股票的模板。
+- 连续竞价 trade 原子层已完整落库：
+  - `atomic_trade_daily=44`
+  - `atomic_trade_5m=2148`
+- 新数据段 order 原子层已完整落库：
+  - `atomic_order_daily=29`
+  - `atomic_order_5m=1416`
+- 新数据段集合竞价摘要层已完整落库：
+  - `atomic_open_auction_l1_daily=29`
+  - `atomic_open_auction_l2_daily=29`
+  - `atomic_open_auction_manifest=29`
+- 已证明：
+  1. 老 zip 可按单票定向抽 `603629.csv`
+  2. 新 7z 可按单票定向抽 `YYYYMMDD\\603629.SH\\*`
+  3. 不需要整包长期展开
+  4. 不需要依赖旧正式主库已有底表，也能直接从 raw 生成新库原子层
+
+### 8.1 这次单票实际获取过程（利通样板）
+1. 在 Windows 检查 raw 包是否存在
+   - 老数据：`D:\\MarketData\\202602\\2026-02-xx.zip`
+   - 新数据：`D:\\MarketData\\202603\\202603xx.7z` / `D:\\MarketData\\202604\\202604xx.7z`
+2. 用 `7z` **按单票定向解压**
+   - 老数据只抽：`603629.csv`
+   - 新数据只抽：`YYYYMMDD\\603629.SH\\行情.csv / 逐笔成交.csv / 逐笔委托.csv`
+3. 写入独立验证库，而不是改旧库
+   - `D:\\market-live-terminal\\data\\atomic_facts\\litong_validation.db`
+4. 老数据段直接从成交 raw 构建：
+   - `atomic_trade_5m`
+   - `atomic_trade_daily`
+5. 新数据段直接从成交 + 委托 raw 构建：
+   - `atomic_trade_5m / daily`
+   - `atomic_order_5m / daily`
+   - `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily`
+6. 最后再做 SQL 覆盖校验，确认日期范围与行数正确
+
+### 8.2 这次样板票的意义
+这次单票不是为了“只修利通”，而是为了验证三件事：
+1. **表设计是不是能落**
+2. **Windows raw 结构是不是支持我们按股票精确抽取**
+3. **不用大规模全量回补，能不能先证明新治理方案是通的**
+
+现在这三件事都已经被利通样板票验证通过。
 
 ---
 

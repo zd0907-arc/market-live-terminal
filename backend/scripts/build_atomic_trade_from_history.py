@@ -42,8 +42,15 @@ def ensure_db_exists(path: Path, label: str) -> None:
         raise SystemExit(f'{label} not found: {path}')
 
 
-def load_trade_5m(conn: sqlite3.Connection, symbol: str | None, date_from: str | None, date_to: str | None) -> int:
+def table_columns(conn: sqlite3.Connection, attached_schema: str, table_name: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA {attached_schema}.table_info({table_name})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def load_trade_5m(conn: sqlite3.Connection, symbol: str | None, date_from: str | None, date_to: str | None, source_cols_5m: set[str]) -> int:
     where_sql, params = build_where('h', symbol, 'source_date', date_from, date_to)
+    total_volume_expr = 'h.total_volume' if 'total_volume' in source_cols_5m else 'NULL'
+    quality_info_expr = 'h.quality_info' if 'quality_info' in source_cols_5m else 'NULL'
     sql = f"""
     INSERT OR REPLACE INTO atomic_trade_5m (
         symbol, trade_date, bucket_start, open, high, low, close,
@@ -63,7 +70,7 @@ def load_trade_5m(conn: sqlite3.Connection, symbol: str | None, date_from: str |
         h.low,
         h.close,
         h.total_amount,
-        h.total_volume,
+        {total_volume_expr},
         NULL AS trade_count,
         h.l1_main_buy,
         h.l1_main_sell,
@@ -78,7 +85,7 @@ def load_trade_5m(conn: sqlite3.Connection, symbol: str | None, date_from: str |
         h.l2_super_sell,
         h.l2_super_buy - h.l2_super_sell,
         CASE WHEN h.source_date < '2026-03-01' THEN 'trade_only' ELSE 'trade_order' END,
-        h.quality_info,
+        {quality_info_expr},
         CURRENT_TIMESTAMP
     FROM source.history_5m_l2 h
     {where_sql}
@@ -87,11 +94,13 @@ def load_trade_5m(conn: sqlite3.Connection, symbol: str | None, date_from: str |
     return cur.rowcount if cur.rowcount != -1 else 0
 
 
-def load_trade_daily(conn: sqlite3.Connection, symbol: str | None, date_from: str | None, date_to: str | None) -> int:
+def load_trade_daily(conn: sqlite3.Connection, symbol: str | None, date_from: str | None, date_to: str | None, source_cols_5m: set[str], source_cols_daily: set[str]) -> int:
     where_sql_d, params_d = build_where('d', symbol, 'date', date_from, date_to)
     where_sql_h, params_h = build_where('h', symbol, 'source_date', date_from, date_to)
     if params_d != params_h:
         raise SystemExit('Internal error: daily params and 5m params diverged')
+    total_volume_agg_expr = 'SUM(h.total_volume)' if 'total_volume' in source_cols_5m else 'NULL'
+    quality_info_daily_expr = 'd.quality_info' if 'quality_info' in source_cols_daily else 'NULL'
 
     sql = f"""
     INSERT OR REPLACE INTO atomic_trade_daily (
@@ -111,7 +120,7 @@ def load_trade_daily(conn: sqlite3.Connection, symbol: str | None, date_from: st
         SELECT
             h.symbol,
             h.source_date AS trade_date,
-            SUM(h.total_volume) AS total_volume,
+            {total_volume_agg_expr} AS total_volume,
             NULL AS trade_count,
             SUM(CASE WHEN time(h.datetime) < '13:00:00' THEN (h.l2_main_buy - h.l2_main_sell) ELSE 0 END) AS am_l2_main_net_amount,
             SUM(CASE WHEN time(h.datetime) >= '13:00:00' THEN (h.l2_main_buy - h.l2_main_sell) ELSE 0 END) AS pm_l2_main_net_amount,
@@ -158,7 +167,7 @@ def load_trade_daily(conn: sqlite3.Connection, symbol: str | None, date_from: st
         a.positive_l2_net_bar_count,
         a.negative_l2_net_bar_count,
         CASE WHEN d.date < '2026-03-01' THEN 'trade_only' ELSE 'trade_order' END,
-        d.quality_info,
+        {quality_info_daily_expr},
         CURRENT_TIMESTAMP
     FROM source.history_daily_l2 d
     LEFT JOIN agg a
@@ -176,8 +185,10 @@ def main() -> None:
 
     with sqlite3.connect(args.atomic_db) as conn:
         conn.execute(f"ATTACH DATABASE '{args.source_db}' AS source")
-        rows_5m = load_trade_5m(conn, args.symbol, args.date_from, args.date_to)
-        rows_daily = load_trade_daily(conn, args.symbol, args.date_from, args.date_to)
+        source_cols_5m = table_columns(conn, 'source', 'history_5m_l2')
+        source_cols_daily = table_columns(conn, 'source', 'history_daily_l2')
+        rows_5m = load_trade_5m(conn, args.symbol, args.date_from, args.date_to, source_cols_5m)
+        rows_daily = load_trade_daily(conn, args.symbol, args.date_from, args.date_to, source_cols_5m, source_cols_daily)
         conn.commit()
         conn.execute('DETACH DATABASE source')
 

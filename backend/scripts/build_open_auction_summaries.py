@@ -126,10 +126,7 @@ def _quote_prev_close(quote: pd.DataFrame) -> Optional[float]:
     return None
 
 
-def _build_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
-    trade = _read_csv(symbol_dir / '逐笔成交.csv')
-    quote = _read_csv(symbol_dir / '行情.csv')
-
+def _prepare_trade_auction_df(trade: pd.DataFrame) -> pd.DataFrame:
     trade_df = pd.DataFrame({
         'time': _format_time(trade['时间']),
         'price': _safe_num(trade['成交价格']) / 10000,
@@ -138,19 +135,40 @@ def _build_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
     trade_df['amount'] = trade_df['price'] * trade_df['volume']
     trade_df = trade_df.dropna(subset=['time', 'price', 'volume', 'amount'])
     trade_df = trade_df[(trade_df['price'] > 0) & (trade_df['volume'] > 0) & (trade_df['amount'] > 0)]
+    return trade_df
 
-    quote_df = pd.DataFrame({'time': _format_time(quote['时间'])})
+
+def _prepare_quote_auction_df(quote: pd.DataFrame) -> pd.DataFrame:
+    quote_df = quote.copy()
+    quote_df['time'] = _format_time(quote_df['时间'])
     quote_df = quote_df.dropna(subset=['time'])
+    return quote_df
+
+
+def _prepare_order_auction_df(order: pd.DataFrame) -> pd.DataFrame:
+    order_df = pd.DataFrame({
+        'time': _format_time(order['时间']),
+        'event_code': order['委托类型'].astype(str).str.strip().str.upper(),
+        'side': order['委托代码'].astype(str).str.strip().str.upper().map(ORDER_SIDE_MAP),
+        'price': _safe_num(order['委托价格']) / 10000,
+        'volume': _safe_num(order['委托数量']),
+    })
+    order_df['event_type'] = order_df['event_code'].map(ORDER_EVENT_TYPE_MAP)
+    order_df['amount'] = (order_df['price'] * order_df['volume']).fillna(0.0)
+    order_df = order_df.dropna(subset=['time', 'side', 'event_type', 'volume'])
+    order_df = order_df[(order_df['volume'] > 0)]
+    return order_df
+
+
+def _build_l1_summary_from_frames(symbol: str, trade_date: str, trade_df: pd.DataFrame, quote_df: pd.DataFrame, quote_raw: pd.DataFrame) -> Dict[str, object]:
     quote_pre = quote_df[_between(quote_df['time'], '09:15:00', '09:30:00')]
     trade_windows = _trade_windows(trade_df)
 
     auction_price = None
-    quote_pre_full = quote.copy()
-    quote_pre_full['time'] = _format_time(quote_pre_full['时间'])
-    quote_pre_full = quote_pre_full[_between(quote_pre_full['time'], '09:15:00', '09:30:00')]
+    quote_pre_full = quote_df[_between(quote_df['time'], '09:15:00', '09:30:00')]
     if not quote_pre_full.empty:
         auction_price = _quote_last_price(quote_pre_full)
-    prev_close = _quote_prev_close(quote_pre_full if not quote_pre_full.empty else quote)
+    prev_close = _quote_prev_close(quote_pre_full if not quote_pre_full.empty else quote_raw)
     price_chg_pct = None
     if auction_price is not None and prev_close not in (None, 0):
         price_chg_pct = (auction_price / prev_close - 1.0) * 100.0
@@ -158,7 +176,7 @@ def _build_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
     match_df = trade_windows['0925_match']
     pre_df = trade_windows['pre0930']
     return {
-        'symbol': normalize_symbol_dir_name(symbol_dir.name),
+        'symbol': symbol,
         'trade_date': f'{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}' if len(trade_date) == 8 else trade_date,
         'auction_price': auction_price,
         'auction_match_volume': float(match_df['volume'].sum()) if not match_df.empty else None,
@@ -183,33 +201,8 @@ def _build_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
     }
 
 
-def _build_l2_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
-    trade = _read_csv(symbol_dir / '逐笔成交.csv')
-    order = _read_csv(symbol_dir / '逐笔委托.csv')
-
-    trade_df = pd.DataFrame({
-        'time': _format_time(trade['时间']),
-        'price': _safe_num(trade['成交价格']) / 10000,
-        'volume': _safe_num(trade['成交数量']),
-    })
-    trade_df['amount'] = trade_df['price'] * trade_df['volume']
-    trade_df = trade_df.dropna(subset=['time', 'price', 'volume', 'amount'])
-    trade_df = trade_df[(trade_df['price'] > 0) & (trade_df['volume'] > 0) & (trade_df['amount'] > 0)]
+def _build_l2_summary_from_frames(symbol: str, trade_date: str, trade_df: pd.DataFrame, order_df: pd.DataFrame) -> Dict[str, object]:
     trade_windows = _trade_windows(trade_df)
-
-    order_df = pd.DataFrame({
-        'time': _format_time(order['时间']),
-        'event_code': order['委托类型'].astype(str).str.strip().str.upper(),
-        'side': order['委托代码'].astype(str).str.strip().str.upper().map(ORDER_SIDE_MAP),
-        'price': _safe_num(order['委托价格']) / 10000,
-        'volume': _safe_num(order['委托数量']),
-    })
-    order_df['event_type'] = order_df['event_code'].map(ORDER_EVENT_TYPE_MAP)
-    order_df['amount'] = order_df['price'] * order_df['volume']
-    order_df = order_df.dropna(subset=['time', 'side', 'event_type', 'volume'])
-    order_df = order_df[(order_df['volume'] > 0)]
-    # 撤单价格有时为 0，这里允许金额为空后单独 fallback 为 0，不强行丢事件
-    order_df['amount'] = order_df['amount'].fillna(0.0)
     order_pre = order_df[_between(order_df['time'], '09:15:00', '09:30:00')]
     add_buy = order_pre[(order_pre['event_type'] == 'add') & (order_pre['side'] == 'buy')]
     add_sell = order_pre[(order_pre['event_type'] == 'add') & (order_pre['side'] == 'sell')]
@@ -224,7 +217,7 @@ def _build_l2_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
     match_df = trade_windows['0925_match']
 
     return {
-        'symbol': normalize_symbol_dir_name(symbol_dir.name),
+        'symbol': symbol,
         'trade_date': f'{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}' if len(trade_date) == 8 else trade_date,
         'auction_trade_count_total': int(len(trade_windows['pre0930'])),
         'auction_trade_volume_total': float(trade_windows['pre0930']['volume'].sum()) if not trade_windows['pre0930'].empty else None,
@@ -254,6 +247,151 @@ def _build_l2_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
         'quality_info': None,
         'source_type': 'l2_postclose',
     }
+
+
+def _build_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
+    trade = _read_csv(symbol_dir / '逐笔成交.csv')
+    quote = _read_csv(symbol_dir / '行情.csv')
+    return _build_l1_summary_from_frames(
+        normalize_symbol_dir_name(symbol_dir.name),
+        trade_date,
+        _prepare_trade_auction_df(trade),
+        _prepare_quote_auction_df(quote),
+        quote,
+    )
+
+
+def _build_l2_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
+    trade = _read_csv(symbol_dir / '逐笔成交.csv')
+    order = _read_csv(symbol_dir / '逐笔委托.csv')
+    return _build_l2_summary_from_frames(
+        normalize_symbol_dir_name(symbol_dir.name),
+        trade_date,
+        _prepare_trade_auction_df(trade),
+        _prepare_order_auction_df(order),
+    )
+
+
+def _phase_strength_shift_label(early_amount: float, late_amount: float) -> str:
+    if early_amount <= 0 and late_amount <= 0:
+        return 'unknown'
+    if early_amount > 0 and late_amount > 0:
+        if late_amount > early_amount * 1.2:
+            return 'early_weak_late_strong'
+        if early_amount > late_amount * 1.2:
+            return 'early_strong_late_weak'
+        return 'early_strong_late_strong'
+    if late_amount > 0:
+        return 'early_weak_late_strong'
+    return 'flat'
+
+
+def _phase_shift_label(early_value: float, late_value: float) -> str:
+    if late_value > early_value * 1.1:
+        return 'up'
+    if early_value > late_value * 1.1:
+        return 'down'
+    return 'flat'
+
+
+def _build_phase_l1_summary_from_frames(symbol: str, trade_date: str, trade_df: pd.DataFrame, quote_df: pd.DataFrame) -> Dict[str, object]:
+    trade_windows = _trade_windows(trade_df)
+    quote_0915 = quote_df[_between(quote_df['time'], '09:15:00', '09:20:00')]
+    quote_0920 = quote_df[_between(quote_df['time'], '09:20:00', '09:25:00')]
+    quote_0925 = quote_df[_exact_0925(quote_df['time'])]
+    auction_price = _quote_last_price(quote_df[_between(quote_df['time'], '09:15:00', '09:30:00')]) if not quote_df.empty else None
+    match_df = trade_windows['0925_match']
+    early_amount = float(trade_windows['0915_0920']['amount'].sum()) if not trade_windows['0915_0920'].empty else 0.0
+    late_amount = float(trade_windows['0920_0925']['amount'].sum()) if not trade_windows['0920_0925'].empty else 0.0
+
+    return {
+        'symbol': symbol,
+        'trade_date': f'{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}' if len(trade_date) == 8 else trade_date,
+        'auction_price': auction_price,
+        'auction_match_volume': float(match_df['volume'].sum()) if not match_df.empty else None,
+        'auction_match_amount': float(match_df['amount'].sum()) if not match_df.empty else None,
+        'phase_0915_0920_trade_count': int(len(trade_windows['0915_0920'])),
+        'phase_0915_0920_trade_amount': early_amount if early_amount > 0 else None,
+        'phase_0920_0925_trade_count': int(len(trade_windows['0920_0925'])),
+        'phase_0920_0925_trade_amount': late_amount if late_amount > 0 else None,
+        'phase_0925_match_trade_count': int(len(match_df)),
+        'phase_0925_match_trade_amount': float(match_df['amount'].sum()) if not match_df.empty else None,
+        'phase_0915_0920_quote_row_count': int(len(quote_0915)),
+        'phase_0920_0925_quote_row_count': int(len(quote_0920)),
+        'phase_0925_has_snapshot': int(len(quote_0925) > 0),
+        'phase_strength_shift_label': _phase_strength_shift_label(early_amount, late_amount),
+        'quality_info': None,
+        'source_type': 'l1_visible_phase',
+    }
+
+
+def _build_phase_l1_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
+    trade = _read_csv(symbol_dir / '逐笔成交.csv')
+    quote = _read_csv(symbol_dir / '行情.csv')
+    return _build_phase_l1_summary_from_frames(
+        normalize_symbol_dir_name(symbol_dir.name),
+        trade_date,
+        _prepare_trade_auction_df(trade),
+        _prepare_quote_auction_df(quote),
+    )
+
+
+def _build_phase_l2_summary_from_frames(symbol: str, trade_date: str, trade_df: pd.DataFrame, order_df: pd.DataFrame) -> Dict[str, object]:
+    trade_windows = _trade_windows(trade_df)
+    order_pre = order_df[_between(order_df['time'], '09:15:00', '09:30:00')]
+
+    def phase_amount(df: pd.DataFrame, start: str, end: str, event_type: str, side: str) -> float:
+        sub = df[_between(df['time'], start, end)]
+        sub = sub[(sub['event_type'] == event_type) & (sub['side'] == side)]
+        return float(sub['amount'].sum()) if not sub.empty else 0.0
+
+    early_buy = phase_amount(order_pre, '09:15:00', '09:20:00', 'add', 'buy')
+    early_sell = phase_amount(order_pre, '09:15:00', '09:20:00', 'add', 'sell')
+    late_buy = phase_amount(order_pre, '09:20:00', '09:25:00', 'add', 'buy')
+    late_sell = phase_amount(order_pre, '09:20:00', '09:25:00', 'add', 'sell')
+    early_cancel_buy = phase_amount(order_pre, '09:15:00', '09:20:00', 'cancel', 'buy')
+    early_cancel_sell = phase_amount(order_pre, '09:15:00', '09:20:00', 'cancel', 'sell')
+    late_cancel_buy = phase_amount(order_pre, '09:20:00', '09:25:00', 'cancel', 'buy')
+    late_cancel_sell = phase_amount(order_pre, '09:20:00', '09:25:00', 'cancel', 'sell')
+    match_df = trade_windows['0925_match']
+
+    return {
+        'symbol': symbol,
+        'trade_date': f'{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}' if len(trade_date) == 8 else trade_date,
+        'auction_trade_count_total': int(len(trade_windows['pre0930'])),
+        'auction_trade_amount_total': float(trade_windows['pre0930']['amount'].sum()) if not trade_windows['pre0930'].empty else None,
+        'phase_0915_0920_trade_count': int(len(trade_windows['0915_0920'])),
+        'phase_0915_0920_trade_amount': float(trade_windows['0915_0920']['amount'].sum()) if not trade_windows['0915_0920'].empty else None,
+        'phase_0920_0925_trade_count': int(len(trade_windows['0920_0925'])),
+        'phase_0920_0925_trade_amount': float(trade_windows['0920_0925']['amount'].sum()) if not trade_windows['0920_0925'].empty else None,
+        'phase_0925_match_trade_count': int(len(match_df)),
+        'phase_0925_match_trade_amount': float(match_df['amount'].sum()) if not match_df.empty else None,
+        'phase_0915_0920_add_buy_amount': early_buy if early_buy > 0 else None,
+        'phase_0915_0920_add_sell_amount': early_sell if early_sell > 0 else None,
+        'phase_0915_0920_cancel_buy_amount': early_cancel_buy if early_cancel_buy > 0 else None,
+        'phase_0915_0920_cancel_sell_amount': early_cancel_sell if early_cancel_sell > 0 else None,
+        'phase_0920_0925_add_buy_amount': late_buy if late_buy > 0 else None,
+        'phase_0920_0925_add_sell_amount': late_sell if late_sell > 0 else None,
+        'phase_0920_0925_cancel_buy_amount': late_cancel_buy if late_cancel_buy > 0 else None,
+        'phase_0920_0925_cancel_sell_amount': late_cancel_sell if late_cancel_sell > 0 else None,
+        'phase_buy_strength_shift': _phase_shift_label(early_buy, late_buy),
+        'phase_sell_pressure_shift': _phase_shift_label(early_sell, late_sell),
+        'has_exact_0925_trade': int(len(match_df) > 0),
+        'has_exact_0925_order': int(_exact_0925(order_pre['time']).any()) if not order_pre.empty else 0,
+        'quality_info': None,
+        'source_type': 'l2_postclose_phase',
+    }
+
+
+def _build_phase_l2_summary(symbol_dir: Path, trade_date: str) -> Dict[str, object]:
+    trade = _read_csv(symbol_dir / '逐笔成交.csv')
+    order = _read_csv(symbol_dir / '逐笔委托.csv')
+    return _build_phase_l2_summary_from_frames(
+        normalize_symbol_dir_name(symbol_dir.name),
+        trade_date,
+        _prepare_trade_auction_df(trade),
+        _prepare_order_auction_df(order),
+    )
 
 
 def _build_manifest(l1_row: Dict[str, object], l2_row: Dict[str, object], auction_shape: str = 'trade+order+quote') -> Dict[str, object]:

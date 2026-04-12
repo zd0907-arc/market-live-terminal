@@ -28,6 +28,27 @@
 
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-04-12 13:40 | Codex
+- Task ID: `CHG-20260412-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成原子事实层正式回补的细粒度性能剖析：`commit` 批量化只能减少写库/锁等待，不能解决主耗时；`2026-04-01` 样本显示单 symbol 平均约读 `15` 次 CSV，真正瓶颈在 `trade/order/book/auction` 的重复 raw 解析与聚合。当前 live 吞吐约 `15.46 symbol/min`，按沪深非科创 `7097` symbols 估算，单日约需 `7.6` 小时。
+- 风险: 以当前结构直接连续回补 2026-04→2025-01 会过慢，不适合作为稳定日常工作流；下一步必须优先做 per-symbol raw cache + order/book 聚合向量化优化。
+- 链接: `backend/scripts/benchmark_atomic_detailed_profile.py`, `backend/scripts/benchmark_atomic_stage_profile.py`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+
+## 2026-04-12 14:05 | Codex
+- Task ID: `CHG-20260412-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成第一轮主链路提速并停掉旧全量任务：同一 symbol/day 改成 raw 只读一次，order 聚合改向量化，book 计算改向量化，auction/phase 改复用同一份 raw frame。复测 `2026-04-01` 8 symbol 样本后，单 symbol 平均耗时从 `~5.15s` 降到 `~1.90s`，CSV 读取次数从 `15` 次降到 `3` 次，单线程理论日耗时从 `~10.15h` 降到 `~3.74h`。
+- 风险: 新的主要瓶颈已收敛到 `load_bundle + trade`，全量月批仍不该马上恢复；应继续优化 `ticks/order_events` 标准化与 trade 5m 聚合后再重开正式回补。
+- 链接: `backend/scripts/backfill_atomic_order_from_raw.py`, `backend/scripts/build_book_state_from_raw.py`, `backend/scripts/build_open_auction_summaries.py`, `backend/scripts/run_atomic_backfill_windows.py`, `backend/scripts/benchmark_atomic_detailed_profile.py`
+
+## 2026-04-12 14:20 | Codex
+- Task ID: `CHG-20260412-05`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已完成第二轮 trade 主链路去重：atomic trade 侧不再重复跑 `compute_5m_review_bars / _bucket_stats_from_ticks / _build_trade_feature_maps`，改成单次 bucket 聚合 + 单次 parent 聚合直接产出 rows 和 daily_feature。复测 `2026-04-01` 8 symbol 样本后，单 symbol 平均耗时进一步降到 `~1.47s`，单线程理论日耗时约 `2.89h`；按 `8 worker` 理想并行估算，首次进入 `~21.7min`，已进 30 分钟目标线。
+- 风险: 当前仍是小样本推算，不是完整交易日实跑；下一步要补一轮真实 `8 worker wall time` 验证，并继续压 `load_bundle` 给大票/极端日留余量。
+- 链接: `backend/scripts/run_symbol_atomic_validation.py`, `backend/scripts/benchmark_atomic_detailed_profile.py`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+
 ## 2026-03-21 21:05 | Codex
 - Task ID: `CHG-20260321-03`
 - CAP: `CAP-L2-HISTORY-FOUNDATION`
@@ -954,3 +975,177 @@
 - 结论: 在竞价 L1/L2 表草案之外，已继续进入真正治理阶段：新增 `build_open_auction_summaries.py`，用于从 raw 日包直接构建 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三张竞价摘要表。脚本已本地伪样本冒烟通过，并已同步到 Windows，在真实样本 `sh603629 @ 20260311` 上成功写入 `D:\market-live-terminal\data\atomic_facts\auction_test.db`。
 - 风险: 当前写入的仍是 draft schema，对字段定义和窗口切法还需更大样本继续校正；同时它还没正式并入统一 `market_atomic.db` 主跑批，只能算竞价子模块的首轮试跑。
 - 链接: `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-13-open-auction-l1-l2-ddl-draft.md`, `backend/scripts/build_open_auction_summaries.py`, `backend/scripts/sql/open_auction_summary_schema_draft.sql`
+
+## 2026-04-11 19:10 | 数据治理 / 新库承接原则冻结 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把本轮数据治理迁移原则正式收口到母卡：**旧库只读，不做原地高风险改造；新库独立承接治理结果；待新链路校验通过后，再评估是否把功能平移过去。** 这意味着接下来的 `atomic_trade / atomic_order / auction / manifest` 主线，都应以独立治理库为落点，而不是在旧主库上来回修改。
+- 风险: 会暂时形成“旧库继续供现网、新库承接治理”的双轨状态，因此后续必须补 manifest、覆盖校验和功能切换验收，否则容易长期双轨失管。
+- 链接: `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 19:25 | 数据治理 / atomic order raw 回填脚本 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已新增 `backend/scripts/backfill_atomic_order_from_raw.py`，把连续竞价挂单原子层也推进到真正可执行阶段：脚本可直接读取 raw 日包中的 `逐笔委托.csv + 逐笔成交.csv`，构建 `atomic_order_5m / atomic_order_daily`，并回填 `add/cancel amount + count + volume + cvd/oib`。同时已新增单测 `backend/tests/test_atomic_order_backfill.py`，样本验证通过；随后又已在 Windows 独立测试库 `D:\market-live-terminal\data\atomic_facts\order_test.db` 上对真实样本 `sh603629 @ 2026-03-11` 跑通，结果为 `48` 条 `atomic_order_5m` + `1` 条 `atomic_order_daily`，且不再是空壳数据。
+- 风险: 当前已完成单样本真机验证，但还没扩到多股票 / 多日期批跑；另外 `buy_support_ratio / sell_pressure_ratio` 依赖 `atomic_trade_daily.total_amount`，若 trade 原子层未先建好，会退化为 `NULL`。
+- 链接: `backend/scripts/backfill_atomic_order_from_raw.py`, `backend/tests/test_atomic_order_backfill.py`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+## 2026-04-11 19:45 | 数据治理 / 利通验证窗口并行跑数 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已新增 `backend/scripts/run_symbol_atomic_validation.py`，并在 Windows 上以 `6` 个 worker 对利通验证窗口执行首轮并行跑数：老数据 `2026-02-01 ~ 2026-02-28`、新数据 `2026-03-01 ~ 2026-04-10`，临时解压盘改为 `G:\tmp_litong_validation`。实测证明：老 zip 可只定向抽 `603629.csv`，新 7z 可只定向抽 `YYYYMMDD\\603629.SH\\*`，不必整包全量展开。结果上，新数据窗口的 `atomic_order_daily` 和 `atomic_open_auction_*` 已成功覆盖 `29` 个交易日；但 `atomic_trade_daily` 只覆盖到 `2026-03-02 ~ 2026-03-13` 共 `10` 天，根因已确认是 Windows 主库 `history_daily_l2 / history_5m_l2` 自身只存在这 10 天底表，不是并行回补失败。
+- 风险: 当前已经证明“单票定向解压 + 新数据 order/auction 子层”是可行的，但 trade 主原子层仍缺少 `raw-direct build` 能力；如果不补这一层，老数据 2 月和新数据 3 月后半 / 4 月的 trade 行仍无法完整落到新治理库。
+- 链接: `backend/scripts/run_symbol_atomic_validation.py`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+## 2026-04-11 20:10 | 数据治理 / 利通验证窗口第二轮全量跑通 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已修复 `run_symbol_atomic_validation.py` 对旧版 `l2_daily_backfill.compute_5m_bars` 的依赖，把新数据 trade 5m 聚合逻辑直接内置到脚本中，并重新同步到 Windows。随后按同一命令、`6` 个 worker 对利通验证窗口重跑，结果 `44/44` 全部成功、`0` 失败。验证库 `D:\\market-live-terminal\\data\\atomic_facts\\litong_validation.db` 当前覆盖为：`atomic_trade_daily=44`、`atomic_trade_5m=2148`、`atomic_order_daily=29`、`atomic_order_5m=1416`、`atomic_open_auction_l1_daily=29`、`atomic_open_auction_l2_daily=29`、`atomic_open_auction_manifest=29`。这说明老数据 trade raw-direct build、新数据 trade/order/auction raw-direct build 都已真实跑通。
+- 风险: 利通样板票已跑通，但这还不是全量治理完成；下一阶段风险已收敛为“批量回补策略怎么设计更稳、更省盘、更容易续跑”，而不是“表设计能不能落”。
+- 链接: `backend/scripts/run_symbol_atomic_validation.py`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-11 20:20 | 数据治理 / 单票获取过程收口 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已把“利通单票从 Windows raw 定向解压 -> 新库原子层落库 -> SQL 验收”的完整闭环补回 `STG-20260411-05-single-symbol-backfill-sop.md`，并明确记录了这次样板票的真实覆盖范围与产物行数，作为后续多股票小样本验证和批量回补规划的基线。
+- 风险: 单票 SOP 已经够做样板验证，但不能直接替代后续批量治理方案；后续仍要决定按股票批还是按日期批更合适。
+- 链接: `docs/changes/STG-20260411-05-single-symbol-backfill-sop.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+## 2026-04-11 20:35 | 利通 / 原子层结构化复盘首版 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已基于 `litong_validation.db` 落下的 `atomic_trade_daily / atomic_order_daily / atomic_open_auction_l2_daily` 做出首版结构化复盘，并沉淀到 `INV-20260411-15-litong-atomic-structured-review.md`。当前最重要的发现是：利通更像“整理期承接未断 -> 3/11 与 3/19 成交+挂单共振确认 -> 4/7/4/8 高位二次承接 -> 4/9/4/10 分歧抬头”，而不是简单一波拉高。同时已记录 `2026-02-23` 与 `2026-02-11` 结果重复这一老数据置信度问题。
+- 风险: 这还是验证窗口版，不是最终深复盘完结版；2 月旧数据段仍要谨慎使用，后续更高置信度的规则提炼应优先依赖 `2026-03+`。
+- 链接: `docs/changes/INV-20260411-15-litong-atomic-structured-review.md`, `docs/changes/STG-20260411-05-single-symbol-backfill-sop.md`
+
+## 2026-04-11 20:50 | 数据治理 / 利通 legacy 重复包定位 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已进一步定位利通 `2026-02-11 / 2026-02-23` 重复问题。当前证据显示：`2026-02-11.zip` 与 `2026-02-23.zip` 整包哈希不同，但其中抽样的 `603629.csv` 与 `600000.csv` 哈希完全相同，说明问题更像 legacy raw 源包异常，而不是当前原子层脚本算错。已对利通验证库这两天打上 `legacy_raw_duplicate_suspect` 质量标记，并把该问题回填到总方案与利通复盘文档。
+- 风险: 目前只是样板票级定位，不代表 legacy 全量范围已审计完成；后续 `2025-01 ~ 2026-02` 若要全量治理，必须补 `legacy raw duplicate audit`。
+- 链接: `docs/changes/INV-20260411-15-litong-atomic-structured-review.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`
+
+## 2026-04-11 21:05 | 利通 / 原子层是否足够支撑未来复盘 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续深挖利通关键日期 `2026-03-11 / 03-19 / 03-20 / 04-07 / 04-08 / 04-09 / 04-10` 的 5m 成交层与挂单层细节，并把“原子层是否足够支撑未来任意股票复盘”这一视角回填到利通复盘文档。当前结论是：这套原子层已经足够支撑复盘主骨架（启动确认、盘中成交/挂单共振、高位承接、风险日识别），但要把“为什么走成这样”解释完整，仍必须补事件层（新闻/财报/公告/题材）。
+- 风险: 若没有事件层，复盘只能做到“结构解释”，还做不到“驱动解释”；另外 legacy 老数据段仍受源包质量问题影响。
+- 链接: `docs/changes/INV-20260411-15-litong-atomic-structured-review.md`
+
+## 2026-04-11 21:20 | 数据治理 / 原子层设计够不够 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已基于利通样板票回看当前原子层设计的充分性，并把结论回填到母卡。当前判断是：`atomic_trade_* + atomic_order_* + auction_*` 这套主骨架已经够支撑未来股票复盘主流程，但若要把“偷偷吃货 / 提前埋伏 / 驱动解释”做稳，还必须补一批 P1 增强字段（母单数量、集中度、最大母单、OIB 集中度等）以及独立事件层。
+- 风险: 如果现在就直接全量回补而不留这些 P1 扩展位，后面仍可能为了更细的吸筹识别再回 raw。
+- 链接: `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/INV-20260411-15-litong-atomic-structured-review.md`
+
+## 2026-04-11 22:45 | 数据治理 / 母卡收口与 P1 设计冻结 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已按当前真实主线把数据治理母卡与总方案继续收口，并新增 `STG-20260411-16-atomic-p1-enhancement-design.md` 作为 P1 增强单独设计卡。当前正式冻结为：P1-A 立即进入利通重跑（母单数量、集中度、最大母单、单笔强度、OIB 连续性/集中度），P1-B 先记录设计不阻塞主线（涨跌停状态、复权因子、事件层、竞价 phase 细分）。
+- 风险: 文档已收口，但 P1-B 里关于竞价 phase 细拆和涨跌停口径仍需后续再讨论，不宜现在直接写死到批量回补脚本。
+- 链接: `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/changes/STG-20260411-16-atomic-p1-enhancement-design.md`
+
+## 2026-04-11 23:35 | 数据治理 / 利通 P1-A 字段实跑验证 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把 `run_symbol_atomic_validation.py`、`backfill_atomic_order_from_raw.py` 与 `atomic_fact_p0_schema.sql` 同步到 Windows，并按 `2026-02-01~2026-02-28 + 2026-03-01~2026-04-10` 对利通执行第三轮 P1-A 重跑，结果仍为 `44/44` 成功、`0` 失败。验证库中新增字段已落值，说明这批 P1-A 增强可以进入后续样板解释与批量回补规划。
+- 风险: 当前只验证了利通样板票，尚未说明所有股票、所有事件码风格都完全无坑；正式批量回补前仍需要再做横向小样本验证。
+- 链接: `backend/scripts/run_symbol_atomic_validation.py`, `backend/scripts/backfill_atomic_order_from_raw.py`, `docs/changes/STG-20260411-16-atomic-p1-enhancement-design.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+## 2026-04-12 00:20 | 数据治理 / 涨跌停状态层专项设计 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把涨跌停状态层从 P1-B 待补项提升为专项设计，新增 `STG-20260412-01-limit-state-layer-design.md`，并同步回填到数据治理母卡、总方案与 P1 设计卡。当前建议在独立治理库新增 `atomic_limit_state_daily` 与 `atomic_limit_state_5m`，并通过 `cfg_limit_rule_map` 做板块/风险标识/生效日期配置，不把涨跌停比例硬编码到脚本里。
+- 风险: 涨跌停比例属于交易规则口径，未来可能调整；因此当前冻结的是“配置驱动设计”，不是永久写死比例。
+- 链接: `docs/changes/STG-20260412-01-limit-state-layer-design.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/changes/STG-20260411-16-atomic-p1-enhancement-design.md`
+
+## 2026-04-12 00:35 | 数据治理 / 集合竞价 phase 过程层专项设计 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把‘更细的竞价层’收口为 phase 过程层，而不是逐笔竞价明细库；新增 `STG-20260412-02-open-auction-phase-layer-design.md`，建议在现有 `atomic_open_auction_l1/l2_daily` 摘要层之上，新增 `atomic_open_auction_phase_l1_daily` 与 `atomic_open_auction_phase_l2_daily` 两张日级过程表，用于记录 `09:15~09:20 / 09:20~09:25 / 09:25撮合` 三段演化。
+- 风险: 这层目前还是设计冻结，是否能大规模批量回补，仍要先抽 raw 样本确认 `行情/成交/委托` 对竞价 phase 覆盖是否稳定。
+- 链接: `docs/changes/STG-20260412-02-open-auction-phase-layer-design.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`
+
+## 2026-04-12 00:50 | 数据治理 / 盘口存量快照层专项设计 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把盘口存量快照层写入正式总设计，新增 `STG-20260412-03-order-book-state-layer-design.md`，建议后续若 raw 的 `行情.csv` 能稳定提供盘口快照，再新增 `atomic_book_state_5m` 与 `atomic_book_state_daily`。当前这层先定位为‘待 raw 可行性确认后再实现’，不直接插队主线开发。
+- 风险: 若原始文件没有稳定的盘口快照，只靠逐笔委托/成交反推留存挂单，会有较大失真风险；因此这层不能先拍脑袋落地。
+- 链接: `docs/changes/STG-20260412-03-order-book-state-layer-design.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`
+
+## 2026-04-12 01:20 | 数据治理 / 盘口存量快照层基础版落地 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已新增 `book_state_schema.sql` 与 `build_book_state_from_raw.py`，并接入 `run_symbol_atomic_validation.py`。当前基础版已能从 `行情.csv` 生成 `atomic_book_state_5m / atomic_book_state_daily`，口径为“每个 5m bucket 取最后一个盘口快照”，并处理 `15:00 -> 14:55` 归并。单测已通过。
+- 风险: 当前 `resting_amount` 仍按十档金额和落值，不代表绝对全盘口总额；下一步必须在 Windows 4 只样板库核字段值与单位，再决定是否进入批量回补。
+- 链接: `backend/scripts/build_book_state_from_raw.py`, `backend/scripts/sql/book_state_schema.sql`, `backend/scripts/run_symbol_atomic_validation.py`, `backend/tests/test_book_state_from_raw.py`, `docs/changes/STG-20260412-03-order-book-state-layer-design.md`
+
+## 2026-04-12 01:45 | 数据治理 / 4只样板票补齐 book+limit 状态层 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已把最新脚本同步到 Windows，并完成 4 只样板票重跑。结果：利通 `44/44` 成功，其余 3 只各 `29/29` 成功；4 个标准验证库现均包含 `15` 张表，其中 `atomic_book_state_daily` 已落 `29` 天新数据，`atomic_limit_state_daily` 也已同步重建。
+- 风险: 当前发现 Windows 命令行直接传反斜杠路径会生成一份“错路径 DB”副本；本次已回拷到标准目录，但后续批量跑必须统一改成更稳的路径传参方式，避免脏文件继续堆积。
+- 链接: `backend/scripts/run_symbol_atomic_validation.py`, `backend/scripts/build_book_state_from_raw.py`, `backend/scripts/build_limit_state_from_atomic.py`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/changes/STG-20260412-03-order-book-state-layer-design.md`
+
+## 2026-04-12 02:15 | 数据治理 / Windows 正式批量回补口径落地 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
+- 结论: 已新增 Windows 本地正式回补入口 `run_atomic_backfill_windows.py`，并配套 `win_run_atomic_backfill.bat + sample/pilot config`。核心改动是：不再从 Mac 侧用 SSH 拼超长反斜杠路径，而是改成 Windows 本地读 JSON 配置执行，按天解压、按天清理、批次末统一重建 `limit_state`。同时已用 pilot config 在 Windows 跑通 `2026-02-27 + 2026-03-11` 两天、4 只样板票，结果成功。
+- 风险: 当前 full-market 正式批次还没真正开跑；另外 `limit_state` 还是批次末统一重建，后续若全量规模明显变大，可以再改为按日增量。
+- 链接: `backend/scripts/run_atomic_backfill_windows.py`, `ops/win_run_atomic_backfill.bat`, `backend/scripts/configs/atomic_backfill_windows.sample.json`, `backend/scripts/configs/atomic_backfill_windows.pilot.sample.json`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+
+## 2026-04-12 02:35 | 数据治理 / 4只样板票三项核验收口 AI
+- Task ID: `CHG-20260411-14`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已对 4 只样板票完成三项收口：1) 涨跌停状态层已落表并验证；2) `2026-03-11` 竞价 phase raw 审核显示 4 只票全部为 `trade+order+quote`；3) `2026-03-11` 盘口快照 raw 审核显示 4 只票全部达到 `sufficient_for_book_state_basic`。这意味着：limit/phase/book 三层都已具备进入全量回补的前提。
+- 风险: 当前盘口 `resting_amount` 仍是十档金额和，后续若要做更强盘口解释，还需继续观察是否要引入更完整总额口径。
+- 链接: `backend/scripts/build_limit_state_from_atomic.py`, `backend/scripts/audit_l2_auction_window.py`, `backend/scripts/audit_book_snapshot_raw.py`, `docs/changes/STG-20260412-01-limit-state-layer-design.md`, `docs/changes/STG-20260412-02-open-auction-phase-layer-design.md`, `docs/changes/STG-20260412-03-order-book-state-layer-design.md`
+
+## 2026-04-12 12:05 | 数据治理 / 全市场 L2 解压链路纠偏 AI
+- 卡片: `STG-20260412-04`, `MOD-20260411-14`
+- 结论: 已确认本轮全市场原子层回补变慢的根因不是包本身，而是**误把旧稳定的 `Z:` + `tar -xf` 主链路改成了 `G:` + `7z.exe`**。复核旧方案后，`2026-04-01` 真实包（约 `5.30GB`）已用旧 prepare 路径在约 `255.5` 秒完成解压+切 `7702` 个 symbol / `8` 个 shard；同时复测得到 `8 worker ≈ 14.33 symbol/min`、`10 worker ≈ 14 symbol/min`、`12 worker` 更差。因此当前重新冻结：**全市场整日 L2 必须走 `Z:` staging + `tar -xf` + 8 worker；`G:` 只保留给单票定向验证或实验。**
+- 风险: 若后续再次切换 staging 盘位或解压器，必须先做短 bench 并更新 runbook，否则会重犯同类问题。
+- 链接: `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-04-12 12:20 | 数据治理 / G盘依赖切断与连续月批入口补齐 AI
+- 卡片: `STG-20260412-04`, `04_OPS_AND_DEV`
+- 结论: 已再次确认 4只样板票最终产物全部落在 `D:\market-live-terminal\data\atomic_facts\*_validation.db`，不依赖 `G:` 挂载；`G:` 当前仅剩单票验证、bench、解压实验遗留目录，可在无占用进程时清理。与此同时，已补齐连续按月倒序回补入口：`atomic_backfill_windows.full_reverse_202604_to_202501.json`，以及 Mac 侧启动/人话状态查询脚本，后续正式跑数将按 `2026-04 -> 2026-03 -> 2026-02 -> 2026-01 -> 2025-12..2025-01` 连续推进，不再每月停一次。
+- 风险: 正式连续月批启动前，仍需先清理 G 盘实验遗留目录，避免后续误判为正式依赖。
+- 链接: `backend/scripts/configs/atomic_backfill_windows.full_reverse_202604_to_202501.json`, `ops/start_atomic_backfill_full_reverse.sh`, `ops/check_atomic_backfill_full_reverse.sh`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-04-12 12:35 | 数据治理 / Windows 盘位规则最终收口 AI
+- 卡片: `STG-20260412-04`, `04_OPS_AND_DEV`
+- 结论: 用户已明确要求彻底移除 `G:`。现已把未来所有 Windows 数据治理执行口径统一冻结为：**`Z:` + `tar -xf` + `8 worker`**，不再区分“单票验证可用 G”这类例外规则；同时已把该约束回填到总方案、runbook、当前状态卡，以及 `mac-windows-ops-bridge` 的项目参考中。
+- 风险: 历史 `AI_HANDOFF_LOG` 中仍会保留曾经用过 `G:` 的事实记录，但那只是历史，不再代表当前可执行规则。
+- 链接: `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/changes/STG-20260411-02-market-data-processing-master.md`, `docs/04_OPS_AND_DEV.md`, `/Users/dong/Desktop/AIGC/skills/mac-windows-ops-bridge/references/market-live-terminal.md`
+
+## 2026-04-12 20:45 | 数据治理 / 原子事实层计算链路压到 30 分钟内 AI
+- 卡片: `STG-20260412-04`, `07_PENDING_TODO`
+- 结论: 已完成第三轮提速并切换正式 runner 到“多进程分片库 + merge 回主库”。新增优化包括：`load_bundle` 先按时段过滤再转 datetime、`to_datetime(format=...)`、OrderID 对齐改 `Index.intersection`、trade parent 聚合改 `parent_bucket + parent_daily`。Windows 实测：`8 process / 160 symbols -> 39.20s`，吞吐 `244.91 symbol/min`，推全市场 `7097` symbols ≈ `28.98` 分钟；正式 runner 在已解压 day root 下 `160 symbols` 也已跑到 `40.19s`。同时复测确认 `10/12 process` 都比 `8` 慢，当前仍冻结 `8 worker`。
+- 风险: 目前达标的是**已解压目录下的计算链路**；“整日 tar 解压 + 正式 runner”全链路总 wall time 还未最终压测收口，所以连续倒序月批暂不恢复。
+- 链接: `backend/scripts/backfill_atomic_order_from_raw.py`, `backend/scripts/run_symbol_atomic_validation.py`, `backend/scripts/run_atomic_backfill_windows.py`, `backend/scripts/benchmark_atomic_process_shards.py`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-12 22:30 | 数据治理 / 主板3天连续预演通过 AI
+- 卡片: `STG-20260412-04`, `04_OPS_AND_DEV`
+- 结论: 已完成主板口径 `2026-04-01 ~ 2026-04-03` 连续 3 天真实预演，DB 为 `D:\market-live-terminal\data\atomic_facts\preflight_mainboard_3d_20260401_20260403.db`。3 天全部成功、0 失败，总耗时 `2365.61s`（约 `39.43` 分钟），平均约 `13.14` 分钟/天。并已抽查 `trade_daily/order_daily/book_state_daily/open_auction_l1_daily/limit_state_daily` 多表样本，确认数据真实落库。
+- 风险: 这次 first preflight 已证明主板连续跑数可行，但也暴露出“`prefetch_next_day_extract` 若不同时配 `reuse_extracted_day_if_exists=true` 则不会真正复用”的配置要求；正式批次必须把这两个开关一起写死。
+- 链接: `backend/scripts/run_atomic_backfill_windows.py`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-04-12 21:50 | 数据治理 / 正式主板批量回补已启动 AI
+- 卡片: `STG-20260412-04`
+- 结论: 已正式启动主板口径连续批量回补，config=`atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`，DB=`market_atomic_mainboard_full_reverse.db`。当前固定口径为主板 only + 8 worker + 预解压 + reuse。Mac 侧统一通过 `ops/check_atomic_backfill_status_brief.sh <config>` 查进度。
+- 风险: 当前真正长期运行的进程是通过直跑验证后留在 Windows 上的正式进程；后续若需重启，仍优先用独立 config + 状态脚本验真，不只看 tasklist。
+- 链接: `backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`, `ops/start_atomic_backfill_mainboard_full_reverse.sh`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+- 时间: 2026-04-12 23:20
+- 摘要: 原子事实层正式长跑性能优化完成，并重新冻结正式执行口径
+- 结论: 已修复最近一轮优化引入的 shard 回归（`build_book_rows` 调用口径、shard 错误可见化、shard 内复用单连接写库），并完成真实 wall time 复测：主板 only `2026-04-01` 全日完整链路 `8 worker = 743.23s`、`12 worker = 696.06s`。同时确认 `12 worker + overlap/prefetch` 会触发 `database or disk is full`，因此当前正式配置改为 **主板 only + `Z:` + `tar -xf` + `12 worker` + no-overlap**。
+- 风险: overlap 能力不是逻辑错误，而是当前 `Z:` staging 容量不够；若后续要恢复 overlap，需先调整 staging 容量或落盘策略，再重做 3 天连续复测。
+- 后续: 直接按更新后的正式 config 启动 `atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json` 长跑，并继续通过 `ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json` 查进度。
+- 链接: `backend/scripts/run_atomic_backfill_windows.py`, `backend/scripts/benchmark_atomic_process_shards.py`, `backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+- 时间: 2026-04-12 23:55
+- 摘要: 已收口本轮“选股数据治理 + 全量历史回补”的单文档总说明
+- 结论: 已新增总入口文档，统一说明本轮业务背景、原子事实层方案、单票验证、多票验证、全市场正式回补、关键踩坑、性能提速路径、正式冻结口径，以及“当前数据尚未切到旧功能”的边界。后续如果只看一份文档，优先看这份总说明。
+- 风险: 当前长跑仍在继续推进，文档描述的是“截至 2026-04-12 晚间的冻结状态”；如果后续正式口径再变化，需要继续回填这份总说明而不是再分裂出新的平行真相文档。
+- 后续: 持续观察 `mainboard_full_reverse` 长跑，阶段完成后回填进度，并在后续功能对接时明确哪些页面切新数据源。
+- 链接: `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`

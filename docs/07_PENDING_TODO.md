@@ -143,9 +143,16 @@
     - 《利通电子数据治理验收卡》
     - 《单票补数 SOP》
   - 利通已被正式定义为“数据治理样板票”。
+  - `2026-04-11` 已完成第二轮验证窗口重跑并全量成功：
+    - `atomic_trade_daily=44`
+    - `atomic_trade_5m=2148`
+    - `atomic_order_daily=29`
+    - `atomic_order_5m=1416`
+    - `atomic_open_auction_l1_daily=29`
+    - `atomic_open_auction_l2_daily=29`
 - 下一步：
-  1. 复核选股/复盘页面是否能正确读到这段本地事件层；
-  2. Windows 做单日正式演练；
+  1. 先基于这份验证库确认表设计是否够用；
+  2. 再决定是继续单票深复盘，还是扩到多股票小样本验证；
   3. 补《利通分阶段图形证据卡》与失败样本对照。
 - 关联任务：`CHG-20260410-01`
 
@@ -157,12 +164,32 @@
   - 原始包事件码并非单一体系，至少已确认：
     - `sz000833`: `0/1/U`
     - `sh603629`: `A/D/S`
+  - `2026-04-11` 已补充验证：
+    1. 旧正式主库缺 trade 底表，不代表 raw 不可用；
+    2. 新 `run_symbol_atomic_validation.py` 已证明可以绕开旧正式主库，直接从 raw 生成 `atomic_trade_5m / atomic_trade_daily`；
+    3. 当前问题已从“能不能补”收敛为“怎么批量补更稳、更省磁盘”。
 - 下一步：
   1. 先做“事件码分布审计”；
   2. 升级 Windows 的 `l2_daily_backfill.py + l2_history_db.py`；
   3. 先对单日做正式重跑演练；
   4. 再决定是否批量重跑 `2026-03-02 ~ 2026-04-10`。
 - 关联任务：`CHG-20260410-02`
+
+## T-019 原子事实层全链路 30 分钟目标（解压 + 跑数）
+- 状态：`ACTIVE`
+- 当前事实：
+  - `2026-04-12` 已把**计算链路**压到目标线内：
+    - `8 process`
+    - `244.91 symbol/min`
+    - 对 `7097` symbols 估算 **≈ 28.98 分钟**
+  - 正式 runner（已解压 day root）`160 symbols` 实测 **≈ 40.19s**
+  - `10/12 process` 已复测，均劣于 `8 process`
+  - 当前还没最终收口的是：**整日 `tar -xf` prepare + 正式 runner 的总 wall time**
+- 下一步：
+  1. 对 `2026-04` 整日包再做一次“解压 + 跑数”全链路计时；
+  2. 若总耗时仍 >30 分钟，继续优化 prepare 串并行衔接；
+  3. 达标后再恢复连续倒序月批正式回补。
+- 关联任务：`CHG-20260411-14`
 
 ## T-014 每日盘后 L2 正式回补自动编排固化
 - 状态：`ACTIVE`
@@ -352,6 +379,8 @@
 ## T-023 资金流向研究原子特征清单冻结与字段差异梳理
 - 状态：`ACTIVE`
 - 当前事实：
+  - `2026-04-11` 已补充新的迁移原则：**旧库只读，不原地改造；新库独立承接治理结果**；
+  - 当前 `market_atomic.db` / 竞价摘要表应继续作为治理主承载，不回写旧主库；
   - `2026-04-11` 已新增《资金流向研究的一次性数据沉淀清单》，明确这轮数据治理的目标不是冻结某一个策略，而是一次性做厚与“L1/L2、成交/挂单、主力/超大单、时间结构”相关的原子事实层；
   - 同日已新增《原子事实层表设计与字段对应总表》，正式冻结建议表结构：
     - `atomic_trade_5m`
@@ -369,13 +398,34 @@
     3. `atomic_order_5m`
     4. `atomic_order_daily`
     5. `atomic_data_manifest`
+  - `2026-04-12` 已继续往前推进到 P1 状态层：
+    - `atomic_limit_state_daily / atomic_limit_state_5m` 已实现
+    - `atomic_book_state_daily / atomic_book_state_5m` 基础版已实现并接入样板 runner
 - 目标：
-  1. 基于执行表，先落 `market_atomic.db` 与 `P0 DDL`；
+  1. 基于执行表，先落 **独立治理库** `market_atomic.db` 与 `P0 DDL`；
   2. 已落 `init/build` 两个脚本，下一步继续补 `backfill_atomic_trade_from_raw.py` 与 `backfill_atomic_order_from_raw.py`；
   3. 决定 `2025-01 ~ 2026-02` 先补哪些成交原子字段；
   4. 决定 `2026-03+` 正式链路先补哪些挂单原子字段；
   5. 单开一轮讨论并审计 raw，冻结“集合竞价如何隔离落库”的最终方案。
+  6. 已完成 Windows 4 只样板票 `book_state` 实跑；下一步转为：
+     - 继续评估 `叫买总量 / 叫卖总量` 的长期稳定性；
+     - 评估“十档金额和”是否足够支撑复盘；
+     - Windows 批量任务路径口径已修正；下一步改为直接按正式批次开始回补。
 - 关联任务：`CHG-20260411-09`
+
+## T-025 原子事实层正式回补执行
+- 状态：`ACTIVE`
+- 当前事实：
+  - `2026-04-12` 已新增 Windows 本地正式 runner：`run_atomic_backfill_windows.py`；
+  - 已配套 `ops/win_run_atomic_backfill.bat` 与 `sample/pilot config`；
+  - pilot 已在 Windows 跑通：`2026-02-27` legacy + `2026-03-11` l2 + 4 只样板票；
+  - 当前正式口径已改为：**Windows 本地读 config 执行，不再通过 Mac SSH 传长路径命令**。
+- 目标：
+  1. 阶段 A：跑 `2026-02` 全市场 legacy；
+  2. 阶段 B：跑 `2026-03 ~ 当前` 全市场 L2；
+  3. 阶段 C：按月回补 `2025` legacy；
+  4. 每阶段输出 state/report，并抽样核条数与失败清单。
+- 关联任务：`CHG-20260412-04`
 
 ## T-024 集合竞价原始数据审计与落库方案冻结
 - 当前新增：已形成《集合竞价 L1/L2 摘要表与 DDL 草案》，明确当前先做数据层，不碰决策层；并建议采用 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三表结构。
