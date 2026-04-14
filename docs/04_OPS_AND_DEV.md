@@ -331,6 +331,9 @@ C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe -u backend\
 在云端 `deploy/.env` 中，以下变量必须完成配置：
 
 ```env
+# 正式 atomic 主板库路径（容器内）
+ATOMIC_MAINBOARD_DB_PATH=/app/data/atomic_facts/market_atomic_mainboard_full_reverse.db
+
 # 内部 ingest 鉴权（云端 + Windows 必须一致）
 INGEST_TOKEN=replace-with-strong-token
 
@@ -345,6 +348,13 @@ ENABLE_CLOUD_COLLECTOR=false
 ```bash
 cd ~/market-live-terminal/deploy
 sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|ENABLE_CLOUD_COLLECTOR"
+```
+
+发布 atomic 版本前，额外核验：
+```bash
+cd ~/market-live-terminal/deploy
+sudo docker exec market-backend env | grep ATOMIC_MAINBOARD_DB_PATH
+sudo docker exec market-backend sh -lc 'ls -lh /app/data/atomic_facts/market_atomic_mainboard_full_reverse.db'
 ```
 
 前端容器核验（生产 Nginx 代理应持有该变量，用于服务端侧注入写请求头）：
@@ -383,6 +393,11 @@ echo %CLOUD_API_URL%
      4) 刷新页面后再次进入“当日分时”，确认不回退为空态。
      5) 若页面显示“交易中”但分时持续空白 > 3 分钟，判定为失败。
      6) 若当前是周末/节假日/盘前，进入“当日分时”应显示回溯模式标签，且上一交易日分时图非空。
+     7) 原子事实层版本额外检查：
+        - 首页搜索 `sz000977`，确认历史多维正常；
+        - 进入 `/selection-research`，日期切到 `2026-04-10`，确认 Top10 有结果；
+        - 任选一只候选，右侧历史多维 / 历史视图正常出数；
+        - 进入正式复盘页，确认股票池与日线/5m 正常。
    - **B. 技术冒烟（可选补充）**
    ```bash
    # 1) 云端健康检查

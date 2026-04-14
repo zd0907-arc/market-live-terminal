@@ -728,7 +728,7 @@ def query_l2_history_5m_rows(
         conn.close()
 
     atomic_rows = _query_atomic_history_5m_rows(normalized, start_date=start_date, end_date=end_date)
-    merged_rows = _merge_history_rows(old_rows, atomic_rows, "datetime")
+    merged_rows = _merge_history_rows(atomic_rows, old_rows, "datetime")
     if limit_days is not None:
         dates = sorted({str(row["source_date"]) for row in merged_rows}, reverse=True)[: int(limit_days)]
         if not dates:
@@ -781,7 +781,7 @@ def query_l2_history_daily_rows(
         conn.close()
 
     atomic_rows = _query_atomic_history_daily_rows(normalized, start_date=start_date, end_date=end_date)
-    merged_rows = _merge_history_rows(old_rows, atomic_rows, "date")
+    merged_rows = _merge_history_rows(atomic_rows, old_rows, "date")
     if limit_days is not None:
         merged_rows = merged_rows[-int(limit_days) :]
     return merged_rows

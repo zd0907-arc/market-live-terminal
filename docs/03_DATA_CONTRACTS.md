@@ -350,7 +350,8 @@
     - 描述：新版“历史多维”统一接口；
     - 支持参数：`granularity=5m|15m|30m|1h|1d`（兼容 `day/daily/60m` 别名）、`days`、`start_date`、`end_date`、`include_today_preview`；
     - 数据来源：
-      - 历史 finalized：`history_5m_l2 / history_daily_l2`
+      - 历史 finalized：**`atomic_trade_5m / atomic_trade_daily + atomic_order_5m / atomic_order_daily` 为正式优先来源**；
+      - 旧 `history_5m_l2 / history_daily_l2` 仅作缺口兜底；
       - 今日 preview：`realtime_5m_preview / realtime_daily_preview`
     - 返回结构：`APIResponse.data={"symbol","granularity","days","start_date","end_date","count","items":[...]}`；
     - `items[*]` 统一字段：
@@ -396,7 +397,8 @@
     - 兼容：爬虫端需兼容旧版 flat list 响应，避免云端/Windows 分批发布时断链。
 
 *   **`GET /api/history_analysis?symbol=sh600519`**（正式 L2 历史切换后补充契约）:
-    - 历史日期优先读取 `history_daily_l2`；
+    - 历史日期优先读取 atomic 日线底座（`atomic_trade_daily + atomic_order_daily`）；
+    - 旧 `history_daily_l2` 与 `local_history` 仅保留兜底；
     - 当天继续返回实时口径，且不得覆盖已正式结算的历史日期；
     - 响应补充 `source`、`is_finalized`、`fallback_used`，明确区分“正式历史值/当日实时值/兜底旧口径”；
     - 历史正式值当前默认输出 L2 主指标，同时预留同源 `l1_* / l2_*` 扩展字段供后续页面做对比分析。

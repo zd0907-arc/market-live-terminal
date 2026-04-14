@@ -46,7 +46,7 @@
 - `origin/main` 当前头：`1ef5720`
 - 最新正式 tag：`v4.2.32`
 - 当前工作分支：`codex/atomic-integration-migration`
-- 当前本地开发版：`v4.2.36`
+- 当前本地开发版：`v4.3.0`
 
 ### 4.2 判断结论
 - 当前状态属于：**UNRELEASED_WORK + STAGE_READY_TO_NORMALIZE**
@@ -113,7 +113,7 @@
   - 把本轮阶段归类为“可准备正式 release normalize”。
 - 验证结果：
   - `v4.2.32` 已存在 tag 与归档卡；
-  - 当前开发版四处版本号已统一到 `4.2.36`；
+  - 当前开发版四处版本号已统一到 `4.3.0`；
   - baseline 在修平版本面后应作为后续 release gate 执行。
 - 遗留问题：
   - 尚未正式把当前分支合回 `main`；
