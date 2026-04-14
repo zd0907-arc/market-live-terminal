@@ -355,172 +355,233 @@
 
 ---
 
-## 8. 这次全量长跑当前是怎么落地执行的
+## 8. 这次全量回补的真实结果（2026-04-14 更新）
 
-### 8.1 正式配置
-
+### 8.1 正式配置与正式库
 正式配置文件：
 
 - `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`
 
-当前关键参数：
+正式原子库：
 
+- `D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db`
+
+冻结口径仍是：
+
+- 沪深**主板 only**
+- `2026-04 -> 2026-03 -> ... -> 2025-01`
 - `workers = 12`
-- `main_board_only = true`
-- `include_gem = false`
+- `extractor = tar`
 - `prefetch_next_day_extract = false`
 - `reuse_extracted_day_if_exists = false`
-- `extractor = tar`
 
-### 8.2 Mac 查询命令
+### 8.2 这次长跑真正跑到了什么程度
+截至 `2026-04-14` 复核，正式批次的真实结果是：
 
-后续统一用这条查：
-
-```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json
-```
-
-### 8.3 当前健康判断标准
-
-当前判断一个长跑健康，至少要满足：
-
-1. `state.status = running`
-2. Python 进程存在
-3. 解压或日志在推进
-4. DB 行数在逐步增加
-5. 错误日志不增长
-
----
-
-## 9. 截至当前，这次长跑是否健康
-
-截至本次复核时，状态是健康的。
-
-当时检查到：
-
-- `completed_days = 2`
+- `completed_days = 307`
 - `failed_days = 0`
-- `last_completed_day = full_202604:2026-04-02`
-- 当前正在处理：
-  - `D:\\MarketData\\202604\\20260403.7z`
-- `tar.exe` CPU 在增长
-- `extracted_items` 持续增长
-- 错误日志大小为 `0`
-- `trade_daily/order_daily/book_daily = 6364`
-  - 这和前两天主板样本量累加一致
-
-所以结论是：
-
-> **当前任务在健康推进，没有看到卡死、锁死、爆错、静默退出这类异常。**
-
----
-
-## 10. 现在这些新数据和现有功能的关系
-
-你的理解是对的。
-
-### 当前状态
-
-现在补的这些新数据：
-
-- 已经在 **新原子事实层库** 里持续落地；
-- 但**还没有正式切到你现有页面和现有功能的数据源**。
+- `last_completed_day = full_202501:2025-01-27`
+- 最后一条主日志停在：
+  - `rebuild_limit_state date_from=2025-01-01 date_to=2026-04-30`
+- 错误日志明确报错：
+  - `sqlite3.OperationalError: database or disk is full`
 
 也就是说：
 
-- 旧盯盘 / 旧复盘 / 旧选股页面
-- 暂时**不会自动用上**这次新跑出来的原子层结果
+> **主数据按批次已经全部跑完，但最后统一回填 `limit_state` 时因为磁盘空间不足失败了。**
 
-### 为什么这么做
+### 8.3 当前库里已经真正落下来的东西
+当前正式库大小约：
 
-因为这次有一条红线一直没变：
+- **`19.46 GB`**
 
-> **先把新数据层独立做好，不直接动旧功能，避免把旧模块改坏。**
+当前已核实的主表行数：
 
-### 后续真正接功能时要做什么
+- `atomic_trade_daily = 974571`
+- `atomic_order_daily = 92396`
+- `atomic_book_state_daily = 92396`
+- `atomic_trade_5m = 47545635`
+- `atomic_limit_state_daily = 0`
 
-等这轮数据长跑基本完成后，再做下一步：
+所以当前可以明确判断：
 
-1. 选哪些现有页面 / 接口要改造
-2. 哪些模块继续用旧库
-3. 哪些模块切到新原子层
-4. 是否做新接口映射层，避免前端直接读新表
+1. **trade 主数据已落完**
+2. **order / book / auction 主数据已落完**
+3. **缺口集中在最后一步 `limit_state` 统一回填**
 
-所以目前还处于：
+### 8.4 为什么状态脚本还显示 running
+因为当前卡住的是：
 
-> **“数据底座先建好，功能对接后置”** 阶段。
+- Python 进程已经退出；
+- `tar.exe` 也已经退出；
+- 但 `state.json` 还停留在旧的 `status = running`。
 
----
+所以它不是“还在偷偷跑”，而是：
 
-## 11. 现在能不能合并到主分支
+> **任务已结束，但状态文件没有来得及收尾。**
 
-### 结论
-
-**可以合并，不需要等全量补数完全跑完。**
-
-### 原因
-
-因为当前 Windows 上正在跑的正式任务：
-
-- 用的是已经同步到 Windows 的脚本和配置；
-- 实际执行依赖的是 Windows 本地文件；
-- 不依赖你 Mac 上 worktree 之后是否切分支、是否 merge。
-
-所以：
-
-- **Git 合并不会打断当前 Windows 长跑**
-- 也不会改变已经启动的那条进程的行为
-
-### 但要注意
-
-合并的前提是：
-
-1. 当前代码 / 文档已经收口
-2. 当前正式配置已经冻结
-3. 不在 merge 后立刻又改正式配置并重启任务
-
-只要满足这三点，**现在 merge 是低风险的**。
+这也是下一步 P0 需要单独修的一部分。
 
 ---
 
-## 12. 这次改造最后真正产出了什么
+## 9. 现在可以怎么清空间（你手工删）
 
-最后这次不是只做了一个“想法”，而是已经产出了：
+### 9.1 D 盘原始月包：已验过，可优先删
+我已经复核了 `2025-01 ~ 2025-03` 这三个月：
 
-1. 一套新的原子事实层表结构
-2. 单票验证链路
-3. 多票验证链路
-4. Windows 全市场正式 runner
-5. Mac 侧状态查询命令
-6. 主板 only 正式配置
-7. 性能压测脚本
-8. 真实 wall time 结果
-9. 文档化的当前冻结口径
+- `D:\MarketData\202501`：`20.982 GB`
+  - 已完成交易日：`18`
+- `D:\MarketData\202502`：`26.561 GB`
+  - 已完成交易日：`18`
+- `D:\MarketData\202503`：`27.590 GB`
+  - 已完成交易日：`21`
 
-也就是说，现在已经不再是“还在讨论怎么做”，而是：
+合计可释放约：
 
-> **数据治理方案已经落地，正式长跑已经开始执行。**
+- **`75.133 GB`**
+
+当前判断这三个月**可以删**，原因是：
+
+1. 它们对应的交易日已经全部进入 `completed_days`；
+2. 当前正式原子库里的主数据已经落下来了；
+3. 现在缺的是 `limit_state` 收尾，不依赖重新保留这三个月 raw 才能继续；
+4. 你前面也明确说过：`2025` 这段 legacy raw 的目标就是尽量榨干后再删。
+
+### 9.2 D 盘原始包：建议先别删的部分
+当前建议先保留：
+
+- `2026-03`
+- `2026-04`
+
+因为这两个月是你目前最看重的 **L2 全量成交 + 挂单** 研究样本，后面还要继续支撑：
+
+- `limit_state` 收尾后的抽样校验；
+- 利通及其它样板票继续复盘；
+- 后续新的 L2 派生思路验证。
+
+### 9.3 Z 盘明显可删的临时/测试目录
+以下目录都属于**bench / preflight / staging 临时产物**，不是正式结果库：
+
+- `Z:\atomic_bench_extract\20260401`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_20260401`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_runner_20260401_10`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_runner_20260401_160`：`43.399 GB`
+- `Z:\atomic_preflight_stage_w12\preflight_mainboard_3d_overlap_20260401_20260403_w12`：`30.247 GB`
+- `Z:\atomic_extract_bench_z\20260401`：`4.861 GB`
+- `Z:\l2_stage_smoke\20260401`：`43.399 GB`
+- `Z:\atomic_stage_profile_bench`：仅小型 bench DB，可删
+- `Z:\atomic_writer_bench_small`：仅小型 bench DB，可删
+- `Z:\atomic_bench_full_w8\*`：当前均为空壳
+- `Z:\atomic_bench_full_w12\*`：当前均为空壳
+- `Z:\atomic_preflight_stage\*`：当前均为空壳
+- `Z:\atomic_stage\.worker_shards`：空目录，可删
+- `Z:\atomic_stage\full_202501 ~ full_202604`：当前均为空目录，可删
+
+### 9.4 Z 盘里你特别提到的 `l2_stage`
+我已经盘过：
+
+- `Z:\l2_stage\20260401`：`43.399 GB`
+- `Z:\l2_stage\20260413`：`41.911 GB`
+
+这两份更像是之前的 **L2 日级解压/审计测试目录**，不是正式原子库结果。
+
+当前建议是：
+
+- **如果你后面不打算继续直接拿这两个 stage 目录做 raw 审计，就可以删。**
+- 如果你还想保留一个“L2 原始日目录样本”做人工对照，那就只留其中一天，另一份删掉也行。
+
+### 9.5 当前盘位现实情况
+本次复核时：
+
+- `D:` 剩余约 **`7.18 GB`**
+- `Z:` 剩余约 **`87.77 GB`**
+
+所以现在最优先释放的仍然是：
+
+1. `D:\MarketData\202501~202503`
+2. `Z:` 上的大型 bench / stage 临时目录
 
 ---
 
-## 13. 下一步建议
+## 10. P0 收尾结果（2026-04-14 已完成）
 
-当前最合理的下一步顺序是：
+### 10.1 已完成的收尾动作
+本轮 P0 已经做完：
 
-1. 继续让正式长跑往前跑
-2. 跑完最近的 `2026-04 / 2026-03` 后做一次阶段验收
-3. 再决定哪些现有功能先切新数据源
-4. 最后才进入真正的“基于新原子层做选股规则 / 回测 / 工作台”
+1. **已单独补跑 `limit_state`**
+   - 不重跑主数据；
+   - 只基于现有正式原子库重建：
+     - `atomic_limit_state_5m`
+     - `atomic_limit_state_daily`
 
-也就是说：
+2. **已修正状态文件**
+   - `state.json` 不再是假 `running`；
+   - 当前状态已收口为 `done`。
 
-> **先把数据底座真正跑扎实，再接产品功能。**
+3. **已生成正式 report / validation**
+   - `D:\market-live-terminal\data\atomic_facts\runs\atomic_backfill_mainboard_full_reverse_report.json`
+   - `D:\market-live-terminal\data\atomic_facts\runs\atomic_backfill_mainboard_full_reverse_validation.json`
+
+### 10.2 当前收尾后的核心结果
+当前已确认：
+
+- `atomic_limit_state_daily = 974571`
+- `atomic_limit_state_5m = 47545635`
+- `state.status = done`
+- `report.status = done`
+
+### 10.3 关于“expected_day_count 变小”的解释
+P0 收尾脚本里看到的 `expected_day_count = 250`，不是说历史主数据只跑了 `250` 天，而是因为：
+
+- 这个数反映的是**当前 raw 存量快照**；
+- 你已经手工删除了 `2025-01 ~ 2025-03` 的原始月包；
+- 所以当前 raw 快照比最初完成的 `completed_days=307` 更小。
+
+真正该看的是：
+
+- `completed_days = 307`
+- 月度落库覆盖
+- 各主表 / `limit_state` 的最终行数
+
+这三项现在都已经成立。
 
 ---
 
-## 14. 当前一句话总结
+## 11. 现在这些数据和现有功能是什么关系
 
-这次工作的本质是：
+你的理解还是对的：
 
-> **为了未来选股能力，把原来偏“结果型”的历史数据处理链路，升级成一套可长期复用、可全市场回补、能支撑盯盘/复盘/选股三条线的原子事实层数据底座；并且已经把正式长跑压到主板 only 约 11.6 分钟/天的可执行级别。**
+- 这次跑出来的是**新原子事实层库**；
+- **还没有正式切进旧复盘 / 旧盯盘 / 旧选股页面**。
 
+所以当前真实状态是：
+
+1. **新底座已经基本建出来了；**
+2. **但页面和接口还没有正式迁移到这套新底座。**
+
+这也是故意这么做的，因为本轮一直遵守的红线就是：
+
+> **先把新数据底座独立跑扎实，再决定怎么平移旧功能，不直接在旧链路上硬改。**
+
+---
+
+## 12. 接下来的建议顺序
+
+最合理的顺序现在已经很清楚：
+
+1. P0 已完成，下一步转为：
+   - 复盘页接新原子层
+   - 选股页特征建模 / 回测 / 接口映射
+2. 后续新增日数据，直接沿用当前正式原子层 runner 做增量，不再回到这次历史长跑逻辑里。
+
+也就是说，当前不是继续纠结“怎么设计原子层”，而是：
+
+> **这次正式回补的 P0 已收尾，接下来应该进入功能对接和建模。**
+
+---
+
+## 13. 当前一句话总结
+
+如果只用一句话概括现在的真实进度：
+
+> **主板范围 `2026-04 -> 2025-01` 的原子主数据、`limit_state` 收尾和全量校验都已经完成，下一步就是把新底座真正接到复盘/选股能力上。**

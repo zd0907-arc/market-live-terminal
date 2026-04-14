@@ -24,7 +24,9 @@
 
 > 当前正式批量回补 runbook：`docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
 
-> 2026-04-12 起，关于“Windows 新数据结构怎么设计 / 怎么跑数 / 怎么提速 / 怎么查进度 / 哪些是临时产物”的当前真实说明，也统一先看这张母卡。
+> 2026-04-14 起，如果只想看**这次数据治理 + 全量历史回补的最新单文档收口结果**，优先看：`docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`。
+
+> 这张母卡继续保留为“数据治理主题总入口”；`MOD-20260412-05` 则是本轮正式回补的最新真实收尾说明。
 
 ---
 

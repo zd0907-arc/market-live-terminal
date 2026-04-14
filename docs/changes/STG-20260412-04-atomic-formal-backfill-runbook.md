@@ -443,33 +443,67 @@ bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_ato
 2. `12 worker`：`11.60` 分钟 / 天；
 3. 当前正式默认直接切 `12 worker / no-overlap`。
 
-## 9. 当前结论
-这轮不是只写方案，已经真正落了：
-- Windows 正式 runner
-- bat 包装器
-- config 模板
-- pilot 冒烟验证
+## 9. 2026-04-14 实跑收尾状态（P0 已完成）
+### 9.1 当前真实状态
+正式批次：
+- `atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`
 
-所以下一步不需要再讨论“怎么跑”，而是：
-> **直接按阶段 A / B / C 进入正式回补。**
+当前真实结果：
+- `completed_days = 307`
+- `failed_days = 0`
+- `last_completed_day = full_202501:2025-01-27`
+- `trade_daily = 974571`
+- `order_daily = 92396`
+- `book_daily = 92396`
+- `trade_5m = 47545635`
+- `limit_daily = 974571`
+- `limit_5m = 47545635`
 
-## 8.8 2026-04-12 正式主板批量回补最新冻结口径
-- 正式 config：`backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`
-- 正式 DB：`D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db`
-- 当前口径固定：
-  - `include_bj=false`
-  - `include_star=false`
-  - `include_gem=false`
-  - `main_board_only=true`
-  - `workers=12`
-  - `prefetch_next_day_extract=false`
-  - `reuse_extracted_day_if_exists=false`
-- 备注：
-  - `12 worker` 是当前最快真实可落地配置；
-  - overlap 不是逻辑问题，而是当前 `Z:` staging 容量不足；
-  - 因此正式长跑按 **12 worker / no-overlap** 执行。
-- Mac 查询命令：
+日志最后停在：
+- `rebuild_limit_state date_from=2025-01-01 date_to=2026-04-30`
 
-```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json
-```
+本轮曾经的收尾故障：
+- `sqlite3.OperationalError: database or disk is full`
+- 现已在释放空间后，通过独立脚本单独补完 `limit_state`
+
+### 9.2 当前结论
+当前最终结论：
+
+> **主数据已完成，`limit_state` 已单独补跑完成，`state/report/validation` 已收口。**
+
+### 9.3 本轮曾用到的人工清理
+#### D 盘优先可删
+- `D:\MarketData\202501`：`20.982 GB`
+- `D:\MarketData\202502`：`26.561 GB`
+- `D:\MarketData\202503`：`27.590 GB`
+
+说明：
+- 这三个月对应交易日已全部进入 `completed_days`；
+- 当前缺口只剩 `limit_state` 收尾，不需要为了继续 P0 保留它们。
+
+#### Z 盘优先可删
+- `Z:\atomic_bench_extract\20260401`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_20260401`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_runner_20260401_10`：`43.399 GB`
+- `Z:\atomic_bench_stage\bench_runner_20260401_160`：`43.399 GB`
+- `Z:\atomic_preflight_stage_w12\preflight_mainboard_3d_overlap_20260401_20260403_w12`：`30.247 GB`
+- `Z:\atomic_extract_bench_z\20260401`：`4.861 GB`
+- `Z:\l2_stage_smoke\20260401`：`43.399 GB`
+- `Z:\l2_stage\20260401`：`43.399 GB`（如不再做人肉 raw 审计，可删）
+- `Z:\l2_stage\20260413`：`41.911 GB`（如不再做人肉 raw 审计，可删）
+- `Z:\atomic_stage_profile_bench`：可删
+- `Z:\atomic_writer_bench_small`：可删
+- `Z:\atomic_bench_full_w8\*`：空壳
+- `Z:\atomic_bench_full_w12\*`：空壳
+- `Z:\atomic_preflight_stage\*`：空壳
+- `Z:\atomic_stage\.worker_shards`：空壳
+- `Z:\atomic_stage\full_202501 ~ full_202604`：空壳
+
+### 9.4 P0 已完成后的正式产物
+- `D:\market-live-terminal\data\atomic_facts\runs\atomic_backfill_mainboard_full_reverse_state.json`
+- `D:\market-live-terminal\data\atomic_facts\runs\atomic_backfill_mainboard_full_reverse_report.json`
+- `D:\market-live-terminal\data\atomic_facts\runs\atomic_backfill_mainboard_full_reverse_validation.json`
+
+### 9.5 当前后续顺序
+1. 进入“新原子层 -> 页面/接口对接”；
+2. 再进入选股建模、特征快照、回测与研究页对接。

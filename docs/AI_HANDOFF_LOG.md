@@ -1149,3 +1149,17 @@
 - 风险: 当前长跑仍在继续推进，文档描述的是“截至 2026-04-12 晚间的冻结状态”；如果后续正式口径再变化，需要继续回填这份总说明而不是再分裂出新的平行真相文档。
 - 后续: 持续观察 `mainboard_full_reverse` 长跑，阶段完成后回填进度，并在后续功能对接时明确哪些页面切新数据源。
 - 链接: `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`
+
+## 2026-04-14 01:20 | Codex
+- Task ID: `CHG-20260414-01`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把本轮原子事实层正式回补的真实收尾状态回填到总文档与 runbook：确认主板 `2026-04 -> 2025-01` 主数据已全部落库，当前唯一集中缺口是最后统一回填 `limit_state` 时因磁盘空间不足失败；同时已盘点 `D:\MarketData\202501~202503` 与 `Z:` 上 bench/stage/l2_stage 临时目录的人工可删清单，并把 P0 收尾顺序改成“先清空间，再单独补 limit_state，再做全量校验”。
+- 风险: 当前 `state.json` 仍是假 `running`，且新原子层尚未正式接入旧复盘/盯盘/选股链路；若不先做状态收尾和 limit_state 补跑，就还不能进入功能迁移。
+- 链接: `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-14 23:05 | Codex
+- Task ID: `CHG-20260414-01`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成本轮正式回补的 P0 收尾：新增 `finalize_atomic_backfill_run.py / validate_atomic_backfill_run.py`，在 Windows 上单独补完 `atomic_limit_state_5m / daily`，并生成最终 `state/report/validation` 三份产物。当前正式库状态已收口为 `done`，`limit_state_daily=974571`、`limit_state_5m=47545635`，可进入“新原子层 -> 复盘/选股功能对接”阶段。
+- 风险: `report/validation` 中的 `expected_day_count` 反映的是**当前 raw 存量快照**，会因为旧 raw 月包已删除而小于历史 `completed_days=307`；验收时应优先看最终表行数、月度覆盖和抽样结果，而不是把该字段当成历史完成天数。
+- 链接: `backend/scripts/finalize_atomic_backfill_run.py`, `backend/scripts/validate_atomic_backfill_run.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`

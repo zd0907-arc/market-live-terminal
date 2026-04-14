@@ -414,18 +414,22 @@
 - 关联任务：`CHG-20260411-09`
 
 ## T-025 原子事实层正式回补执行
-- 状态：`ACTIVE`
+- 状态：`DONE`
 - 当前事实：
   - `2026-04-12` 已新增 Windows 本地正式 runner：`run_atomic_backfill_windows.py`；
-  - 已配套 `ops/win_run_atomic_backfill.bat` 与 `sample/pilot config`；
-  - pilot 已在 Windows 跑通：`2026-02-27` legacy + `2026-03-11` l2 + 4 只样板票；
-  - 当前正式口径已改为：**Windows 本地读 config 执行，不再通过 Mac SSH 传长路径命令**。
-- 目标：
-  1. 阶段 A：跑 `2026-02` 全市场 legacy；
-  2. 阶段 B：跑 `2026-03 ~ 当前` 全市场 L2；
-  3. 阶段 C：按月回补 `2025` legacy；
-  4. 每阶段输出 state/report，并抽样核条数与失败清单。
-- 关联任务：`CHG-20260412-04`
+  - 已配套 `ops/win_run_atomic_backfill.bat` 与正式 config；
+  - `2026-04-14` 复核确认：主板范围 `2026-04 -> 2025-01` 的主数据已经全部跑完；
+  - 当前正式库：`D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db`，大小约 `19.46GB`；
+  - 当前已落：`trade_daily=974571`、`order_daily=92396`、`book_daily=92396`、`trade_5m=47545635`；
+  - 释放空间后，已单独补跑：
+    - `atomic_limit_state_daily=974571`
+    - `atomic_limit_state_5m=47545635`
+  - `state/report/validation` 已全部生成；
+  - `state.status = done`。
+- 后续：
+  1. 新原子层接复盘 / 选股接口与页面；
+  2. 再做特征快照、信号、回测建模。
+- 关联任务：`CHG-20260412-04`, `CHG-20260414-01`
 
 ## T-024 集合竞价原始数据审计与落库方案冻结
 - 当前新增：已形成《集合竞价 L1/L2 摘要表与 DDL 草案》，明确当前先做数据层，不碰决策层；并建议采用 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三表结构。
