@@ -144,7 +144,8 @@ const HistoryView: React.FC<HistoryViewProps> = ({ activeStock, backendStatus, c
 
     const historySourceLabel = React.useMemo(() => {
         const source = historyData[0]?.source;
-        if (source === 'l2_history') return 'Source: 正式L2历史日线';
+        if (source === 'l2_history') return historySource === 'local' ? 'Source: 正式L2历史（local入口）' : 'Source: 正式L2历史日线';
+        if (source === 'local_history') return 'Source: 旧本地自算兜底';
         if (source === 'realtime_ticks') return 'Source: 当天实时 ticks';
         if (source === 'sina') return 'Source: 新浪兜底';
         return historySource === 'local' ? 'Source: 本地自算' : 'Source: 数据源识别中...';

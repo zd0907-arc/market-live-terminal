@@ -103,3 +103,48 @@ def test_history_analysis_keeps_today_realtime_overlay(monkeypatch, tmp_path):
     assert resp.data[-1]["is_finalized"] is False
     assert resp.data[-1]["preview_level"] == "l1_only"
     assert resp.data[-1]["main_buy_amount"] == 300000.0
+
+
+def test_history_local_merges_legacy_local_and_l2_history(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+    package_path = _build_sample_day(tmp_path)
+    backfill_day_package(package_path, mode="unit-test")
+
+    conn = sqlite3.connect(config.DB_FILE)
+    conn.execute(
+        """
+        INSERT INTO local_history (
+            symbol, date, net_inflow, main_buy_amount, main_sell_amount, close, change_pct, activity_ratio, config_signature
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("sz000833", "2026-03-10", 120000.0, 280000.0, 160000.0, 24.8, 1.2, 18.0, "unit-test"),
+    )
+    conn.commit()
+    conn.close()
+
+    rows = analysis.get_local_history("sz000833")
+    assert [row["date"] for row in rows] == ["2026-03-10", "2026-03-11"]
+    assert rows[0]["source"] == "local_history"
+    assert rows[1]["source"] == "l2_history"
+    assert rows[1]["main_buy_amount"] > rows[0]["main_buy_amount"]
+
+
+def test_history_analysis_local_uses_atomic_or_l2_payload(monkeypatch, tmp_path):
+    config, database, crud, analysis = _reload_runtime_modules(monkeypatch, tmp_path)
+    database.init_db()
+    package_path = _build_sample_day(tmp_path)
+    backfill_day_package(package_path, mode="unit-test")
+
+    monkeypatch.setattr(
+        "backend.app.routers.analysis.MarketClock.get_display_date",
+        lambda: "2026-03-12",
+    )
+
+    resp = asyncio.run(analysis.get_history_analysis("sz000833", source="local"))
+
+    assert resp.code == 200
+    assert len(resp.data) == 1
+    assert resp.data[0]["date"] == "2026-03-11"
+    assert resp.data[0]["source"] == "l2_history"
+    assert resp.data[0]["fallback_used"] is False

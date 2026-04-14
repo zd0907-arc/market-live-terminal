@@ -523,6 +523,47 @@ def _build_realtime_daily_record(symbol: str, today_str: str):
     }
 
 
+def _map_legacy_local_history_row(row: tuple) -> Dict[str, object]:
+    main_buy = _nullable_float(row[3]) or 0.0
+    main_sell = _nullable_float(row[4]) or 0.0
+    total_main = main_buy + main_sell
+    return {
+        "date": str(row[1]),
+        "net_inflow": _nullable_float(row[2]) or 0.0,
+        "main_buy_amount": main_buy,
+        "main_sell_amount": main_sell,
+        "close": _nullable_float(row[5]) or 0.0,
+        "change_pct": _nullable_float(row[6]) or 0.0,
+        "pct_change": _nullable_float(row[6]) or 0.0,
+        "activityRatio": _nullable_float(row[7]) or 0.0,
+        "buyRatio": (main_buy / total_main * 100) if total_main > 0 else 0.0,
+        "sellRatio": (main_sell / total_main * 100) if total_main > 0 else 0.0,
+        "config_sig": row[8] if len(row) > 8 else "unknown",
+        "source": "local_history",
+        "is_finalized": True,
+        "fallback_used": True,
+    }
+
+
+def _merge_history_analysis_rows(
+    primary_rows: List[Dict[str, object]],
+    fallback_rows: List[Dict[str, object]],
+) -> List[Dict[str, object]]:
+    merged: Dict[str, Dict[str, object]] = {}
+    for row in fallback_rows:
+        merged[str(row["date"])] = dict(row)
+    for row in primary_rows:
+        merged[str(row["date"])] = dict(row)
+    return [merged[key] for key in sorted(merged.keys())]
+
+
+def _load_local_history_analysis(symbol: str) -> List[Dict[str, object]]:
+    legacy_rows = get_local_history_data(symbol, None)
+    legacy_payload = [_map_legacy_local_history_row(row) for row in legacy_rows]
+    atomic_payload = query_l2_history_analysis(symbol)
+    return _merge_history_analysis_rows(primary_rows=atomic_payload, fallback_rows=legacy_payload)
+
+
 @router.get("/history/multiframe")
 def get_history_multiframe(
     symbol: str,
@@ -674,25 +715,7 @@ def aggregate_history(symbol: str, date: str = None):
 
 @router.get("/history/local")
 def get_local_history(symbol: str):
-    # Fetch all history for this symbol regardless of signature
-    # This ensures users can see older data even if the configuration changed.
-    rows = get_local_history_data(symbol, None)
-    
-    data = []
-    for r in rows:
-        data.append({
-            "date": r[1],
-            "net_inflow": r[2],
-            "main_buy_amount": r[3],
-            "main_sell_amount": r[4],
-            "close": r[5],
-            "change_pct": r[6],
-            "activityRatio": r[7],
-            "buyRatio": (r[3] / (r[3]+r[4]+1) * 100) if (r[3]+r[4]) > 0 else 0,
-            "sellRatio": (r[4] / (r[3]+r[4]+1) * 100) if (r[3]+r[4]) > 0 else 0,
-            "config_sig": r[8] if len(r) > 8 else "unknown"
-        })
-    return data
+    return _load_local_history_analysis(symbol)
 
 @router.get("/history_analysis")
 async def get_history_analysis(symbol: str, source: str = "sina"):
@@ -700,8 +723,19 @@ async def get_history_analysis(symbol: str, source: str = "sina"):
     核心聚合接口：合并资金流向与K线行情
     """
     if source == "local":
-        data = get_local_history(symbol)
-        return APIResponse(code=200, data=data)
+        result = _load_local_history_analysis(symbol)
+        today_str = MarketClock.get_display_date()
+        today_record = _build_realtime_daily_record(symbol, today_str)
+        if today_record:
+            existing_dates = {r['date']: i for i, r in enumerate(result)}
+            if today_str in existing_dates:
+                base_row = result[existing_dates[today_str]]
+                if base_row.get("is_finalized") is not True:
+                    result[existing_dates[today_str]] = today_record
+            elif today_record["main_buy_amount"] > 0 or today_record["main_sell_amount"] > 0:
+                result.append(today_record)
+        result.sort(key=lambda x: x['date'])
+        return APIResponse(code=200, data=result)
 
     try:
         if not symbol or not symbol.startswith(("sh", "sz", "bj")):

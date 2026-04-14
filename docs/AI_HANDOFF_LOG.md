@@ -1184,3 +1184,10 @@
 - 结论: 已继续把选股链路补到可落地验收：`selection_research` 现在在 `local_history` 为空/覆盖不足时，可直接用 `atomic_trade_daily` 兜底映射日级行情与主力净额，完成 feature/signal/profile 计算；同时新增 `ops/start_local_backend_with_atomic.sh` 作为本地挂正式 atomic 库的统一启动入口，并补了 atomic-only 的选股路由测试。
 - 风险: 这一步解决的是“本地挂 atomic 后选股页能跑起来”的底座问题；真实页面是否直接出候选，还取决于本地是否实际挂到了正式 `market_atomic_mainboard_full_reverse.db`。
 - 链接: `backend/app/services/selection_research.py`, `backend/tests/test_selection_research.py`, `ops/start_local_backend_with_atomic.sh`, `src/version.ts`
+
+## 2026-04-15 01:05 | Codex
+- Task ID: `CHG-20260415-01`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-HISTORY-30M`, `CAP-SELECTION-RESEARCH`, `CAP-WIN-PIPELINE`
+- 结论: 已完成“数据治理生产发布准备”的第一步收口：确认当前生产基线仍为已归档的 `v4.2.32 / 9bbdd3d`，新增发布准备母卡 `MOD-20260415-01-atomic-release-readiness.md`，并把当前 atomic 集成阶段明确归类为 `UNRELEASED_WORK + STAGE_READY_TO_NORMALIZE`。建议后续正式发布时不要沿用零散 patch，而是统一归一到 `v4.3.0` 再切生产。
+- 风险: 当前仍处于工作分支，尚未合回 `main`；atomic 切换虽然本地已基本通，但生产挂库路径、selection DB 与页面最终冒烟仍需正式验证。
+- 链接: `docs/changes/MOD-20260415-01-atomic-release-readiness.md`, `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md`, `backend/app/main.py`

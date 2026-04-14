@@ -143,7 +143,7 @@ const HistoryDailyFusionView: React.FC<HistoryDailyFusionViewProps> = ({ activeS
       setError('');
       try {
         const [historyAnalysis, historyTrend] = await Promise.all([
-          StockService.fetchHistoryAnalysis(activeStock.symbol, 'sina'),
+          StockService.fetchHistoryAnalysis(activeStock.symbol, 'local'),
           StockService.fetchHistoryTrend(activeStock.symbol, FUSION_LOOKBACK_DAYS, '1d'),
         ]);
 

@@ -1,5 +1,7 @@
-export const APP_VERSION = '4.2.34';
+export const APP_VERSION = '4.2.36';
 export const RELEASE_NOTES = [
+    'v4.2.36: 历史日线融合组件也切到 local/atomic 优先，不再默认走新浪兜底，主路径与保留组件的历史展示口径继续统一到原子层',
+    'v4.2.35: 旧历史视图 local/source=local 正式接入 atomic 日线兜底，/api/history/local 与 /api/history_analysis?source=local 会优先展示正式L2底座并保留旧 local_history 缺口补位',
     'v4.2.34: 选股研究新增 atomic_trade_daily 底座兜底，本地可直接挂正式 atomic 库跑候选/画像，复盘多维与选股链路统一原子库路径配置',
     'v4.2.33: 首页顶部新增“去选股”入口，空状态补“去选股研究工作台”，并要求本地每次更新同步升版本号，便于确认当前页面是否为最新',
     'v4.2.32: 散户一致性观察完成股吧单源+星标股AI日评正式收口，新增 5D/20D/60D 热度主图、AI 图表因子与 AI 设置模型名可前端保存，并同步完成文档母卡收口治理',
