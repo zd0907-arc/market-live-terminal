@@ -1163,3 +1163,10 @@
 - 结论: 已完成本轮正式回补的 P0 收尾：新增 `finalize_atomic_backfill_run.py / validate_atomic_backfill_run.py`，在 Windows 上单独补完 `atomic_limit_state_5m / daily`，并生成最终 `state/report/validation` 三份产物。当前正式库状态已收口为 `done`，`limit_state_daily=974571`、`limit_state_5m=47545635`，可进入“新原子层 -> 复盘/选股功能对接”阶段。
 - 风险: `report/validation` 中的 `expected_day_count` 反映的是**当前 raw 存量快照**，会因为旧 raw 月包已删除而小于历史 `completed_days=307`；验收时应优先看最终表行数、月度覆盖和抽样结果，而不是把该字段当成历史完成天数。
 - 链接: `backend/scripts/finalize_atomic_backfill_run.py`, `backend/scripts/validate_atomic_backfill_run.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`, `docs/changes/STG-20260412-04-atomic-formal-backfill-runbook.md`
+
+## 2026-04-14 23:40 | Codex
+- Task ID: `CHG-20260414-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-HISTORY-30M`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成“新原子层 -> 旧功能兼容迁移”的第一层：`l2_history_db` 新增 atomic fallback，旧 `history_daily_l2/history_5m_l2` 有数据时仍优先旧表，缺数据时自动读 `atomic_trade_* / atomic_order_*`；`query_review_pool` 也已能从 `atomic_trade_daily` 补 bounds。与此同时，`selection_research` 的 `_load_l2_daily/_load_l2_5m_daily` 也已接 atomic fallback，因此复盘旧接口和选股研究输入都开始具备读新原子表的能力。
+- 风险: 当前这仍是“兼容层”，不是全量硬切；要真正让本地页面稳定看到新数据，还需要下一步继续处理本地/Windows/生产的 atomic DB 路径与部署口径。
+- 链接: `backend/app/db/l2_history_db.py`, `backend/app/services/selection_research.py`, `backend/tests/test_atomic_review_fallback.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`

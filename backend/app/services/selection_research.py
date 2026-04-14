@@ -4,6 +4,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
@@ -50,6 +51,45 @@ def _main_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(os.getenv("DB_PATH", DB_FILE))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _candidate_atomic_db_paths() -> List[str]:
+    candidates = [
+        os.getenv("ATOMIC_DB_PATH", ""),
+        os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),
+        os.path.join(Path(DB_FILE).resolve().parent, "atomic_facts", "market_atomic_mainboard_full_reverse.db"),
+        os.path.join(Path(DB_FILE).resolve().parent, "atomic_facts", "market_atomic.db"),
+    ]
+    out: List[str] = []
+    seen = set()
+    for raw in candidates:
+        path = str(raw or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
+
+
+def _atomic_connection() -> Optional[sqlite3.Connection]:
+    for path in _candidate_atomic_db_paths():
+        if os.path.exists(path):
+            conn = sqlite3.connect(path)
+            conn.row_factory = sqlite3.Row
+            return conn
+    return None
+
+
+def _merge_symbol_trade_date_frames(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFrame:
+    frames = [frame for frame in (fallback, primary) if frame is not None and not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    merged = pd.concat(frames, ignore_index=True)
+    if merged.empty:
+        return merged
+    merged["symbol"] = merged["symbol"].astype(str).str.lower()
+    merged["trade_date"] = merged["trade_date"].astype(str)
+    return merged.drop_duplicates(["symbol", "trade_date"], keep="last")
 
 
 def _dominant_signature(conn: sqlite3.Connection) -> str:
@@ -179,8 +219,9 @@ def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str
 
 
 def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
+    old_df = pd.DataFrame()
     try:
-        return pd.read_sql_query(
+        old_df = pd.read_sql_query(
             """
             SELECT symbol, date AS trade_date,
                    l1_main_net, l2_main_net,
@@ -194,12 +235,37 @@ def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> 
             params=(start_date, end_date),
         )
     except Exception:
-        return pd.DataFrame()
+        old_df = pd.DataFrame()
+
+    atomic_conn = _atomic_connection()
+    if atomic_conn is None:
+        return old_df
+    try:
+        atomic_df = pd.read_sql_query(
+            """
+            SELECT symbol, trade_date,
+                   l1_main_net_amount AS l1_main_net,
+                   l2_main_net_amount AS l2_main_net,
+                   l1_activity_ratio, l2_activity_ratio,
+                   l1_buy_ratio, l2_buy_ratio,
+                   l1_sell_ratio, l2_sell_ratio
+            FROM atomic_trade_daily
+            WHERE trade_date >= ? AND trade_date <= ?
+            """,
+            atomic_conn,
+            params=(start_date, end_date),
+        )
+    except Exception:
+        atomic_df = pd.DataFrame()
+    finally:
+        atomic_conn.close()
+    return _merge_symbol_trade_date_frames(old_df, atomic_df)
 
 
 def _load_l2_5m_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
+    old_df = pd.DataFrame()
     try:
-        return pd.read_sql_query(
+        old_df = pd.read_sql_query(
             """
             SELECT symbol, source_date AS trade_date,
                    SUM(CASE WHEN total_volume IS NOT NULL THEN total_volume ELSE 0 END) AS total_volume,
@@ -218,7 +284,40 @@ def _load_l2_5m_daily(conn: sqlite3.Connection, start_date: str, end_date: str) 
             params=(start_date, end_date),
         )
     except Exception:
-        return pd.DataFrame()
+        old_df = pd.DataFrame()
+
+    atomic_conn = _atomic_connection()
+    if atomic_conn is None:
+        return old_df
+    try:
+        atomic_df = pd.read_sql_query(
+            """
+            SELECT
+                t.symbol,
+                t.trade_date,
+                SUM(CASE WHEN t.total_volume IS NOT NULL THEN t.total_volume ELSE 0 END) AS total_volume,
+                SUM(CASE WHEN o.add_buy_amount IS NOT NULL THEN o.add_buy_amount ELSE 0 END) AS l2_add_buy,
+                SUM(CASE WHEN o.add_sell_amount IS NOT NULL THEN o.add_sell_amount ELSE 0 END) AS l2_add_sell,
+                SUM(CASE WHEN o.cancel_buy_amount IS NOT NULL THEN o.cancel_buy_amount ELSE 0 END) AS l2_cancel_buy,
+                SUM(CASE WHEN o.cancel_sell_amount IS NOT NULL THEN o.cancel_sell_amount ELSE 0 END) AS l2_cancel_sell,
+                SUM(CASE WHEN o.cvd_delta_amount IS NOT NULL THEN o.cvd_delta_amount ELSE 0 END) AS l2_cvd,
+                SUM(CASE WHEN o.oib_delta_amount IS NOT NULL THEN o.oib_delta_amount ELSE 0 END) AS l2_oib,
+                SUM(CASE WHEN o.add_buy_amount IS NOT NULL OR o.cancel_buy_amount IS NOT NULL OR o.cvd_delta_amount IS NOT NULL OR o.oib_delta_amount IS NOT NULL THEN 1 ELSE 0 END) AS event_points
+            FROM atomic_trade_5m AS t
+            LEFT JOIN atomic_order_5m AS o
+              ON o.symbol = t.symbol
+             AND o.bucket_start = t.bucket_start
+            WHERE t.trade_date >= ? AND t.trade_date <= ?
+            GROUP BY t.symbol, t.trade_date
+            """,
+            atomic_conn,
+            params=(start_date, end_date),
+        )
+    except Exception:
+        atomic_df = pd.DataFrame()
+    finally:
+        atomic_conn.close()
+    return _merge_symbol_trade_date_frames(old_df, atomic_df)
 
 
 def _load_sentiment_events(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:

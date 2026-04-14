@@ -1,9 +1,10 @@
 import os
 import sqlite3
 from datetime import datetime, time
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import DB_FILE
+from backend.app.core.config import DATA_DIR, DB_FILE
 from backend.app.core.time_buckets import map_to_30m_bucket_start
 
 
@@ -70,6 +71,50 @@ def get_l2_history_connection() -> sqlite3.Connection:
     db_path = os.getenv("DB_PATH", DB_FILE)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     return sqlite3.connect(db_path)
+
+
+def _candidate_atomic_db_paths() -> List[str]:
+    env_candidates = [
+        os.getenv("ATOMIC_DB_PATH", ""),
+        os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),
+    ]
+    default_candidates = [
+        os.path.join(DATA_DIR, "atomic_facts", "market_atomic_mainboard_full_reverse.db"),
+        os.path.join(DATA_DIR, "atomic_facts", "market_atomic.db"),
+    ]
+    seen = set()
+    out: List[str] = []
+    for raw in env_candidates + default_candidates:
+        path = str(raw or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
+
+
+def _resolve_atomic_db_path() -> Optional[str]:
+    for path in _candidate_atomic_db_paths():
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _get_atomic_history_connection() -> Optional[sqlite3.Connection]:
+    db_path = _resolve_atomic_db_path()
+    if not db_path:
+        return None
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return bool(row)
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -477,6 +522,191 @@ def _to_optional_float(value: object) -> Optional[float]:
         return None
 
 
+def _merge_quality_info(*parts: object) -> Optional[str]:
+    values: List[str] = []
+    for part in parts:
+        text = str(part or "").strip()
+        if not text or text.lower() in {"none", "null", "nan"}:
+            continue
+        if text not in values:
+            values.append(text)
+    return "；".join(values) if values else None
+
+
+def _calc_super_ratio(buy_amount: object, sell_amount: object, total_amount: object) -> float:
+    total = _to_optional_float(total_amount) or 0.0
+    if total <= 0:
+        return 0.0
+    buy = _to_optional_float(buy_amount) or 0.0
+    sell = _to_optional_float(sell_amount) or 0.0
+    return ((buy + sell) / total) * 100.0
+
+
+def _query_atomic_history_5m_rows(
+    symbol: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> List[Dict[str, object]]:
+    conn = _get_atomic_history_connection()
+    if conn is None:
+        return []
+    try:
+        if not _table_exists(conn, "atomic_trade_5m"):
+            return []
+        clauses = ["t.symbol=?"]
+        params: List[object] = [normalize_l2_symbol(symbol)]
+        if start_date:
+            clauses.append("t.trade_date>=?")
+            params.append(str(start_date))
+        if end_date:
+            clauses.append("t.trade_date<=?")
+            params.append(str(end_date))
+
+        rows = conn.execute(
+            f"""
+            SELECT
+                t.symbol,
+                t.bucket_start AS datetime,
+                t.trade_date AS source_date,
+                t.open,
+                t.high,
+                t.low,
+                t.close,
+                t.total_amount,
+                t.total_volume,
+                t.l1_main_buy_amount AS l1_main_buy,
+                t.l1_main_sell_amount AS l1_main_sell,
+                t.l1_super_buy_amount AS l1_super_buy,
+                t.l1_super_sell_amount AS l1_super_sell,
+                t.l2_main_buy_amount AS l2_main_buy,
+                t.l2_main_sell_amount AS l2_main_sell,
+                t.l2_super_buy_amount AS l2_super_buy,
+                t.l2_super_sell_amount AS l2_super_sell,
+                o.add_buy_amount AS l2_add_buy_amount,
+                o.add_sell_amount AS l2_add_sell_amount,
+                o.cancel_buy_amount AS l2_cancel_buy_amount,
+                o.cancel_sell_amount AS l2_cancel_sell_amount,
+                o.cvd_delta_amount AS l2_cvd_delta,
+                o.oib_delta_amount AS l2_oib_delta,
+                t.quality_info AS trade_quality_info,
+                o.quality_info AS order_quality_info
+            FROM atomic_trade_5m AS t
+            LEFT JOIN atomic_order_5m AS o
+              ON o.symbol = t.symbol
+             AND o.bucket_start = t.bucket_start
+            WHERE {' AND '.join(clauses)}
+            ORDER BY t.bucket_start ASC
+            """,
+            params,
+        ).fetchall()
+        out: List[Dict[str, object]] = []
+        for row in rows:
+            payload = dict(row)
+            payload["quality_info"] = _merge_quality_info(
+                payload.pop("trade_quality_info", None),
+                payload.pop("order_quality_info", None),
+            )
+            out.append(payload)
+        return out
+    finally:
+        conn.close()
+
+
+def _query_atomic_history_daily_rows(
+    symbol: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> List[Dict[str, object]]:
+    conn = _get_atomic_history_connection()
+    if conn is None:
+        return []
+    try:
+        if not _table_exists(conn, "atomic_trade_daily"):
+            return []
+        clauses = ["t.symbol=?"]
+        params: List[object] = [normalize_l2_symbol(symbol)]
+        if start_date:
+            clauses.append("t.trade_date>=?")
+            params.append(str(start_date))
+        if end_date:
+            clauses.append("t.trade_date<=?")
+            params.append(str(end_date))
+
+        rows = conn.execute(
+            f"""
+            SELECT
+                t.symbol,
+                t.trade_date AS date,
+                t.open,
+                t.high,
+                t.low,
+                t.close,
+                t.total_amount,
+                t.l1_main_buy_amount AS l1_main_buy,
+                t.l1_main_sell_amount AS l1_main_sell,
+                t.l1_main_net_amount AS l1_main_net,
+                t.l1_super_buy_amount AS l1_super_buy,
+                t.l1_super_sell_amount AS l1_super_sell,
+                t.l1_super_net_amount AS l1_super_net,
+                t.l2_main_buy_amount AS l2_main_buy,
+                t.l2_main_sell_amount AS l2_main_sell,
+                t.l2_main_net_amount AS l2_main_net,
+                t.l2_super_buy_amount AS l2_super_buy,
+                t.l2_super_sell_amount AS l2_super_sell,
+                t.l2_super_net_amount AS l2_super_net,
+                t.l1_activity_ratio,
+                t.l2_activity_ratio,
+                t.l1_buy_ratio,
+                t.l1_sell_ratio,
+                t.l2_buy_ratio,
+                t.l2_sell_ratio,
+                t.quality_info AS trade_quality_info,
+                o.quality_info AS order_quality_info
+            FROM atomic_trade_daily AS t
+            LEFT JOIN atomic_order_daily AS o
+              ON o.symbol = t.symbol
+             AND o.trade_date = t.trade_date
+            WHERE {' AND '.join(clauses)}
+            ORDER BY t.trade_date DESC
+            """,
+            params,
+        ).fetchall()
+        out: List[Dict[str, object]] = []
+        for row in rows:
+            payload = dict(row)
+            payload["l1_super_ratio"] = _calc_super_ratio(
+                payload.get("l1_super_buy"),
+                payload.get("l1_super_sell"),
+                payload.get("total_amount"),
+            )
+            payload["l2_super_ratio"] = _calc_super_ratio(
+                payload.get("l2_super_buy"),
+                payload.get("l2_super_sell"),
+                payload.get("total_amount"),
+            )
+            payload["quality_info"] = _merge_quality_info(
+                payload.pop("trade_quality_info", None),
+                payload.pop("order_quality_info", None),
+            )
+            out.append(payload)
+        return list(reversed(out))
+    finally:
+        conn.close()
+
+
+def _merge_history_rows(
+    primary_rows: Sequence[Dict[str, object]],
+    fallback_rows: Sequence[Dict[str, object]],
+    key_field: str,
+) -> List[Dict[str, object]]:
+    merged: Dict[str, Dict[str, object]] = {}
+    for row in fallback_rows:
+        merged[str(row[key_field])] = dict(row)
+    for row in primary_rows:
+        merged[str(row[key_field])] = dict(row)
+    return [merged[key] for key in sorted(merged.keys())]
+
+
 def query_l2_history_5m_rows(
     symbol: str,
     start_date: Optional[str] = None,
@@ -488,24 +718,6 @@ def query_l2_history_5m_rows(
     conn = get_l2_history_connection()
     try:
         conn.row_factory = sqlite3.Row
-        if limit_days is not None:
-            dates = [
-                row[0]
-                for row in conn.execute(
-                    """
-                    SELECT DISTINCT source_date
-                    FROM history_5m_l2
-                    WHERE symbol=?
-                    ORDER BY source_date DESC
-                    LIMIT ?
-                    """,
-                    (normalized, int(limit_days)),
-                ).fetchall()
-            ]
-            if not dates:
-                return []
-            start_date = min(dates)
-
         clauses = ["symbol=?"]
         params: List[object] = [normalized]
         if start_date:
@@ -532,9 +744,19 @@ def query_l2_history_5m_rows(
             """,
             params,
         ).fetchall()
-        return [dict(row) for row in rows]
+        old_rows = [dict(row) for row in rows]
     finally:
         conn.close()
+
+    atomic_rows = _query_atomic_history_5m_rows(normalized, start_date=start_date, end_date=end_date)
+    merged_rows = _merge_history_rows(old_rows, atomic_rows, "datetime")
+    if limit_days is not None:
+        dates = sorted({str(row["source_date"]) for row in merged_rows}, reverse=True)[: int(limit_days)]
+        if not dates:
+            return []
+        allowed_dates = set(dates)
+        merged_rows = [row for row in merged_rows if str(row["source_date"]) in allowed_dates]
+    return merged_rows
 
 
 def query_l2_history_daily_rows(
@@ -557,10 +779,6 @@ def query_l2_history_daily_rows(
             clauses.append("date<=?")
             params.append(str(end_date))
 
-        limit_sql = ""
-        if limit_days is not None:
-            limit_sql = f" LIMIT {int(limit_days)}"
-
         rows = conn.execute(
             f"""
             SELECT
@@ -575,14 +793,19 @@ def query_l2_history_daily_rows(
                 quality_info
             FROM history_daily_l2
             WHERE {' AND '.join(clauses)}
-            ORDER BY date DESC{limit_sql}
+            ORDER BY date DESC
             """,
             params,
         ).fetchall()
-        out = [dict(row) for row in reversed(rows)]
-        return out
+        old_rows = [dict(row) for row in reversed(rows)]
     finally:
         conn.close()
+
+    atomic_rows = _query_atomic_history_daily_rows(normalized, start_date=start_date, end_date=end_date)
+    merged_rows = _merge_history_rows(old_rows, atomic_rows, "date")
+    if limit_days is not None:
+        merged_rows = merged_rows[-int(limit_days) :]
+    return merged_rows
 
 
 def query_l2_history_daily_row(symbol: str, trade_date: str) -> Optional[Dict[str, object]]:
@@ -913,6 +1136,46 @@ def _is_valid_review_symbol(symbol: str) -> bool:
     return text.startswith(("sh60", "sh68", "sz00", "sz30", "bj"))
 
 
+def _fetch_old_review_bounds(conn: sqlite3.Connection) -> Dict[str, Dict[str, str]]:
+    if not _table_exists(conn, "history_daily_l2"):
+        return {}
+    rows = conn.execute(
+        """
+        SELECT symbol, MIN(date) AS min_date, MAX(date) AS max_date
+        FROM history_daily_l2
+        GROUP BY symbol
+        """
+    ).fetchall()
+    return {
+        str(row[0]): {"min_date": str(row[1] or ""), "max_date": str(row[2] or "")}
+        for row in rows
+        if row[0]
+    }
+
+
+def _fetch_atomic_review_bounds() -> Dict[str, Dict[str, str]]:
+    conn = _get_atomic_history_connection()
+    if conn is None:
+        return {}
+    try:
+        if not _table_exists(conn, "atomic_trade_daily"):
+            return {}
+        rows = conn.execute(
+            """
+            SELECT symbol, MIN(trade_date) AS min_date, MAX(trade_date) AS max_date
+            FROM atomic_trade_daily
+            GROUP BY symbol
+            """
+        ).fetchall()
+        return {
+            str(row[0]): {"min_date": str(row[1] or ""), "max_date": str(row[2] or "")}
+            for row in rows
+            if row[0]
+        }
+    finally:
+        conn.close()
+
+
 def query_review_pool(
     keyword: str = "",
     limit: Optional[int] = None,
@@ -921,80 +1184,71 @@ def query_review_pool(
     conn = get_l2_history_connection()
     try:
         conn.row_factory = sqlite3.Row
-        clauses = [
-            "("
-            "bounds.symbol GLOB 'sh60[0-9][0-9][0-9][0-9]' OR "
-            "bounds.symbol GLOB 'sh68[0-9][0-9][0-9][0-9]' OR "
-            "bounds.symbol GLOB 'sz00[0-9][0-9][0-9][0-9]' OR "
-            "bounds.symbol GLOB 'sz30[0-9][0-9][0-9][0-9]' OR "
-            "bounds.symbol GLOB 'bj[0-9][0-9][0-9][0-9][0-9][0-9]'"
-            ")",
-            "(meta.name IS NULL OR UPPER(meta.name) NOT LIKE '%ST%')",
-        ]
-        params: List[object] = []
-        keyword_text = str(keyword or "").strip()
-        if keyword_text:
-            clauses.append("(bounds.symbol LIKE ? OR COALESCE(meta.name, '') LIKE ?)")
-            like_value = f"%{keyword_text}%"
-            params.extend([like_value, like_value])
-
-        where_sql = f"WHERE {' AND '.join(clauses)}"
-        count_row = conn.execute(
-            f"""
-            WITH bounds AS (
-                SELECT symbol, MIN(date) AS min_date, MAX(date) AS max_date
-                FROM history_daily_l2
-                GROUP BY symbol
-            )
-            SELECT COUNT(*)
-            FROM bounds
-            LEFT JOIN stock_universe_meta AS meta
-              ON meta.symbol = bounds.symbol
-            {where_sql}
-            """,
-            params,
-        ).fetchone()
-        total = int(count_row[0] or 0) if count_row else 0
-
-        limit_sql = ""
-        data_params = list(params)
-        if limit is not None and int(limit) > 0:
-            limit_sql = " LIMIT ?"
-            data_params.append(int(limit))
-
-        rows = conn.execute(
-            f"""
-            WITH bounds AS (
-                SELECT symbol, MIN(date) AS min_date, MAX(date) AS max_date
-                FROM history_daily_l2
-                GROUP BY symbol
-            )
-            SELECT
-                bounds.symbol,
-                COALESCE(meta.name, bounds.symbol) AS name,
-                COALESCE(meta.market_cap, 0) AS market_cap,
-                COALESCE(meta.as_of_date, '') AS as_of_date,
-                COALESCE(meta.source, 'history_daily_l2') AS source,
-                COALESCE(meta.updated_at, '') AS updated_at,
-                bounds.min_date,
-                bounds.max_date,
-                bounds.max_date AS latest_date
-            FROM bounds
-            LEFT JOIN stock_universe_meta AS meta
-              ON meta.symbol = bounds.symbol
-            {where_sql}
-            ORDER BY COALESCE(meta.market_cap, 0) DESC, bounds.symbol ASC
-            {limit_sql}
-            """,
-            data_params,
+        meta_rows = conn.execute(
+            """
+            SELECT symbol, name, market_cap, as_of_date, source, updated_at
+            FROM stock_universe_meta
+            """
         ).fetchall()
-        items = [dict(row) for row in rows if _is_valid_review_symbol(str(row["symbol"]))]
+        meta_map = {
+            str(row[0]): {
+                "name": str(row[1] or row[0]),
+                "market_cap": float(row[2] or 0.0),
+                "as_of_date": str(row[3] or ""),
+                "source": str(row[4] or "stock_universe_meta"),
+                "updated_at": str(row[5] or ""),
+            }
+            for row in meta_rows
+            if row[0]
+        }
+        old_bounds = _fetch_old_review_bounds(conn)
+        atomic_bounds = _fetch_atomic_review_bounds()
+        merged_bounds: Dict[str, Dict[str, str]] = {}
+        for source_bounds in (atomic_bounds, old_bounds):
+            for symbol, payload in source_bounds.items():
+                item = merged_bounds.setdefault(symbol, dict(payload))
+                if not item.get("min_date") or (payload.get("min_date") and payload["min_date"] < item["min_date"]):
+                    item["min_date"] = payload["min_date"]
+                if not item.get("max_date") or (payload.get("max_date") and payload["max_date"] > item["max_date"]):
+                    item["max_date"] = payload["max_date"]
+
+        keyword_text = str(keyword or "").strip().lower()
+        items: List[Dict[str, object]] = []
+        latest_date = ""
+        for symbol, bounds in merged_bounds.items():
+            if not _is_valid_review_symbol(symbol):
+                continue
+            meta = meta_map.get(symbol, {})
+            name = str(meta.get("name") or symbol)
+            if "ST" in name.upper():
+                continue
+            if keyword_text and keyword_text not in symbol.lower() and keyword_text not in name.lower():
+                continue
+            max_date = str(bounds.get("max_date") or "")
+            if max_date and max_date > latest_date:
+                latest_date = max_date
+            items.append(
+                {
+                    "symbol": symbol,
+                    "name": name,
+                    "market_cap": float(meta.get("market_cap") or 0.0),
+                    "as_of_date": str(meta.get("as_of_date") or ""),
+                    "source": str(meta.get("source") or ("history_daily_l2" if symbol in old_bounds else "atomic_trade_daily")),
+                    "updated_at": str(meta.get("updated_at") or ""),
+                    "min_date": str(bounds.get("min_date") or ""),
+                    "max_date": max_date,
+                    "latest_date": max_date,
+                }
+            )
+        items.sort(key=lambda item: (-float(item.get("market_cap") or 0.0), str(item["symbol"])))
+        total = len(items)
+        if limit is not None and int(limit) > 0:
+            items = items[: int(limit)]
         as_of_row = conn.execute("SELECT MAX(as_of_date) FROM stock_universe_meta").fetchone()
-        latest_row = conn.execute("SELECT MAX(date) FROM history_daily_l2").fetchone()
         return {
             "total": total,
             "as_of_date": str(as_of_row[0] or ""),
-            "latest_date": str(latest_row[0] or ""),
+            "latest_date": latest_date,
             "items": items,
         }
     finally:
