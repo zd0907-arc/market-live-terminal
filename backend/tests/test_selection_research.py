@@ -2,6 +2,7 @@ import json
 import importlib
 import sqlite3
 from pathlib import Path
+import pandas as pd
 
 from backend.app.db.database import init_db
 import backend.app.db.database as database_module
@@ -114,6 +115,83 @@ def _init_atomic_selection_db(tmp_path: Path) -> Path:
     finally:
         conn.close()
     return atomic_db
+
+
+def _seed_atomic_daily_series(atomic_db: Path, symbol: str, start_price: float, trend_bias: float, inflow_bias: float, days: int = 70):
+    dates = pd.bdate_range("2026-01-05", periods=days)
+    conn = sqlite3.connect(str(atomic_db))
+    try:
+        rows = []
+        price = start_price
+        for idx, dt in enumerate(dates):
+            trade_date = dt.strftime("%Y-%m-%d")
+            if idx > days - 8:
+                price += trend_bias * 2.5
+            else:
+                price += trend_bias
+            l1_net = inflow_bias + idx * 80_000.0 + (4_000_000.0 if idx > days - 8 else 0.0)
+            l2_net = l1_net * 1.2
+            total_amount = 120_000_000.0 + idx * 1_500_000.0
+            l1_buy = 30_000_000.0 + idx * 250_000.0 + max(l1_net, 0.0)
+            l1_sell = max(5_000_000.0, l1_buy - l1_net)
+            l2_buy = 34_000_000.0 + idx * 280_000.0 + max(l2_net, 0.0)
+            l2_sell = max(5_000_000.0, l2_buy - l2_net)
+            rows.append(
+                (
+                    symbol, trade_date, price - 0.15, price + 0.25, price - 0.30, price, total_amount, 2_500_000.0 + idx * 10_000.0, 200 + idx,
+                    10, 8, 4, 3, 6, 4, 2, 1,
+                    l1_buy, l1_sell, l1_net,
+                    10_000_000.0, 4_000_000.0, 6_000_000.0,
+                    l2_buy, l2_sell, l2_net,
+                    12_000_000.0, 5_000_000.0, 7_000_000.0,
+                    30.0 + (idx % 5), 36.0 + (idx % 7), 22.0, 11.0, 25.0, 10.0,
+                    3_000_000.0, 120_000.0, 5_000_000.0, 0.45,
+                    l2_net * 0.45, l2_net * 0.55, l2_net * 0.35, l2_net * 0.30,
+                    5, 1, "unit-test", None,
+                )
+            )
+        conn.executemany(
+            """
+            INSERT INTO atomic_trade_daily (
+                symbol, trade_date, open, high, low, close, total_amount, total_volume, trade_count,
+                l1_main_buy_count, l1_main_sell_count, l1_super_buy_count, l1_super_sell_count,
+                l2_main_buy_count, l2_main_sell_count, l2_super_buy_count, l2_super_sell_count,
+                l1_main_buy_amount, l1_main_sell_amount, l1_main_net_amount,
+                l1_super_buy_amount, l1_super_sell_amount, l1_super_net_amount,
+                l2_main_buy_amount, l2_main_sell_amount, l2_main_net_amount,
+                l2_super_buy_amount, l2_super_sell_amount, l2_super_net_amount,
+                l1_activity_ratio, l2_activity_ratio, l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio,
+                max_trade_amount, avg_trade_amount, max_parent_order_amount, top5_parent_concentration_ratio,
+                am_l2_main_net_amount, pm_l2_main_net_amount, open_30m_l2_main_net_amount, last_30m_l2_main_net_amount,
+                positive_l2_net_bar_count, negative_l2_net_bar_count, source_type, quality_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        latest_date = dates[-1].strftime("%Y-%m-%d")
+        conn.execute(
+            """
+            INSERT INTO atomic_order_daily (
+                symbol, trade_date, add_buy_amount, add_sell_amount, cancel_buy_amount, cancel_sell_amount,
+                cvd_delta_amount, oib_delta_amount, add_buy_count, add_sell_count, cancel_buy_count, cancel_sell_count,
+                am_oib_delta_amount, pm_oib_delta_amount, open_60m_oib_delta_amount, last_30m_oib_delta_amount,
+                open_60m_cvd_delta_amount, last_30m_cvd_delta_amount, positive_oib_bar_count, negative_oib_bar_count,
+                positive_cvd_bar_count, negative_cvd_bar_count, order_event_count, oib_top3_concentration_ratio,
+                moderate_positive_oib_bar_count, moderate_positive_oib_bar_ratio, positive_oib_streak_max,
+                buy_support_ratio, sell_pressure_ratio, quality_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                symbol, latest_date, 18_000_000.0, 6_000_000.0, 2_000_000.0, 1_000_000.0,
+                9_000_000.0, 11_000_000.0, 20, 12, 8, 6,
+                5_000_000.0, 6_000_000.0, 4_000_000.0, 3_000_000.0,
+                7_000_000.0, 5_000_000.0, 8, 1, 8, 1, 46, 0.68,
+                7, 0.78, 6, 0.72, 0.28, None,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _seed_local_history(db_path: Path, symbol: str, start_price: float, trend_bias: float, inflow_bias: float, days: int = 90):
@@ -316,3 +394,54 @@ def test_selection_research_loaders_fall_back_to_atomic(monkeypatch, tmp_path):
     assert len(order_df) == 1
     assert float(order_df.iloc[0]['l2_add_buy']) == 12000000.0
     assert int(order_df.iloc[0]['event_points']) == 2
+
+
+def test_selection_routes_work_with_atomic_only_history(monkeypatch, tmp_path):
+    db_path = tmp_path / 'market_data.db'
+    user_db_path = tmp_path / 'user_data.db'
+    selection_db_path = tmp_path / 'selection_research.db'
+    atomic_db_path = _init_atomic_selection_db(tmp_path)
+    _seed_atomic_daily_series(atomic_db_path, 'sh603629', 18.0, 0.18, 2_000_000.0, days=70)
+    _seed_atomic_daily_series(atomic_db_path, 'sz000759', 9.0, 0.04, 300_000.0, days=70)
+
+    monkeypatch.setenv('DB_PATH', str(db_path))
+    monkeypatch.setenv('USER_DB_PATH', str(user_db_path))
+    monkeypatch.setenv('SELECTION_DB_PATH', str(selection_db_path))
+    monkeypatch.setenv('ATOMIC_DB_PATH', str(atomic_db_path))
+    database_module.DB_FILE = str(db_path)
+    database_module.USER_DB_FILE = str(user_db_path)
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+    init_db()
+
+    import backend.app.services.selection_research as selection_research_module
+    import backend.app.routers.selection as selection_router_module
+    importlib.reload(selection_research_module)
+    importlib.reload(selection_router_module)
+
+    replace_stock_universe_meta(
+        [('sh603629', '利通电子', 8_800_000_000.0), ('sz000759', '中百集团', 5_500_000_000.0)],
+        '2026-04-10',
+        'unit-test',
+    )
+
+    result = selection_research_module.refresh_selection_research(end_date='2026-04-10')
+    assert result.feature_rows > 0
+    assert result.signal_rows > 0
+
+    health = selection_router_module.selection_health()
+    assert health.code == 200
+    assert health.data['latest_signal_date'] == '2026-04-10'
+    assert health.data['source_snapshot']['atomic_trade_daily']['row_count'] > 0
+
+    candidates = selection_router_module.selection_candidates(date='2026-04-10', strategy='breakout', limit=10)
+    assert candidates.code == 200
+    assert candidates.data['trade_date'] == '2026-04-10'
+    assert any(item['symbol'] == 'sh603629' for item in candidates.data['items'])
+    litong = next(item for item in candidates.data['items'] if item['symbol'] == 'sh603629')
+    assert litong['name'] == '利通电子'
+
+    profile = selection_router_module.selection_profile('sh603629', date='2026-04-10')
+    assert profile.code == 200
+    assert profile.data['symbol'] == 'sh603629'
+    assert profile.data['name'] == '利通电子'
+    assert len(profile.data['series']) > 0

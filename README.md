@@ -1,4 +1,4 @@
-# ZhangData 金融实时终端（v4.2.32）
+# ZhangData 金融实时终端（v4.2.34）
 
 ## 项目定位
 - 云端 FastAPI + 前端 Vite 的 A 股实时资金流终端。
@@ -13,6 +13,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m backend.app.main
+```
+
+如需直接吃新原子层：
+```bash
+bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/start_local_backend_with_atomic.sh /绝对路径/market_atomic_mainboard_full_reverse.db
 ```
 
 ### 2) 前端

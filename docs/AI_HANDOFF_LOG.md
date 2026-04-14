@@ -1177,3 +1177,10 @@
 - 结论: 已完成兼容迁移第二层收口：把 `ATOMIC_DB_PATH / ATOMIC_MAINBOARD_DB_PATH` 上收为统一配置入口，Docker 默认也能显式挂接 `market_atomic_mainboard_full_reverse.db`；同时新增 `test_atomic_history_multiframe_fallback.py`，覆盖“旧历史表为空、仅 atomic 有数据”时 `/api/history/multiframe` 的 `1d/30m` 返回，确保复盘多维链路在 atomic-only 场景下也有测试兜底。
 - 风险: 当前还是“兼容迁移”而非真实页面硬切；本地若未挂到真实 atomic DB 文件，页面仍看不到新原子层数据。
 - 链接: `backend/app/core/config.py`, `deploy/docker-compose.yml`, `backend/tests/test_atomic_history_multiframe_fallback.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`
+
+## 2026-04-15 00:20 | Codex
+- Task ID: `CHG-20260414-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续把选股链路补到可落地验收：`selection_research` 现在在 `local_history` 为空/覆盖不足时，可直接用 `atomic_trade_daily` 兜底映射日级行情与主力净额，完成 feature/signal/profile 计算；同时新增 `ops/start_local_backend_with_atomic.sh` 作为本地挂正式 atomic 库的统一启动入口，并补了 atomic-only 的选股路由测试。
+- 风险: 这一步解决的是“本地挂 atomic 后选股页能跑起来”的底座问题；真实页面是否直接出候选，还取决于本地是否实际挂到了正式 `market_atomic_mainboard_full_reverse.db`。
+- 链接: `backend/app/services/selection_research.py`, `backend/tests/test_selection_research.py`, `ops/start_local_backend_with_atomic.sh`, `src/version.ts`

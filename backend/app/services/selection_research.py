@@ -88,12 +88,25 @@ def _source_snapshot(conn: sqlite3.Connection, start_date: str, end_date: str) -
         ("local_history", "date"),
         ("history_daily_l2", "date"),
         ("history_5m_l2", "source_date"),
+        ("atomic_trade_daily", "trade_date"),
+        ("atomic_trade_5m", "trade_date"),
         ("sentiment_events", "substr(pub_time,1,10)"),
     ]:
         try:
-            row = conn.execute(
-                f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date, COUNT(*) AS row_count FROM {table}"
-            ).fetchone()
+            if table.startswith("atomic_"):
+                atomic_conn = _atomic_connection()
+                if atomic_conn is None:
+                    raise RuntimeError("atomic db unavailable")
+                try:
+                    row = atomic_conn.execute(
+                        f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date, COUNT(*) AS row_count FROM {table}"
+                    ).fetchone()
+                finally:
+                    atomic_conn.close()
+            else:
+                row = conn.execute(
+                    f"SELECT MIN({date_col}) AS min_date, MAX({date_col}) AS max_date, COUNT(*) AS row_count FROM {table}"
+                ).fetchone()
             payload[table] = {
                 "min_date": row[0] if row else None,
                 "max_date": row[1] if row else None,
@@ -109,6 +122,54 @@ def _available_local_history_bounds(conn: sqlite3.Connection) -> Tuple[Optional[
     if not row:
         return None, None
     return (str(row[0]) if row[0] else None, str(row[1]) if row[1] else None)
+
+
+def _available_atomic_trade_bounds() -> Tuple[Optional[str], Optional[str]]:
+    atomic_conn = _atomic_connection()
+    if atomic_conn is None:
+        return None, None
+    try:
+        row = atomic_conn.execute("SELECT MIN(trade_date), MAX(trade_date) FROM atomic_trade_daily").fetchone()
+        if not row:
+            return None, None
+        return (str(row[0]) if row[0] else None, str(row[1]) if row[1] else None)
+    except Exception:
+        return None, None
+    finally:
+        atomic_conn.close()
+
+
+def _available_selection_history_bounds(conn: sqlite3.Connection) -> Tuple[Optional[str], Optional[str]]:
+    local_min, local_max = _available_local_history_bounds(conn)
+    atomic_min, atomic_max = _available_atomic_trade_bounds()
+    mins = [item for item in [local_min, atomic_min] if item]
+    maxs = [item for item in [local_max, atomic_max] if item]
+    return (min(mins) if mins else None, max(maxs) if maxs else None)
+
+
+def _load_atomic_local_history_fallback(start_date: str, end_date: str) -> pd.DataFrame:
+    atomic_conn = _atomic_connection()
+    if atomic_conn is None:
+        return pd.DataFrame()
+    try:
+        return pd.read_sql_query(
+            """
+            SELECT symbol, trade_date,
+                   l1_main_net_amount AS net_inflow,
+                   l1_main_buy_amount AS main_buy_amount,
+                   l1_main_sell_amount AS main_sell_amount,
+                   close, l1_activity_ratio AS activity_ratio,
+                   'atomic_trade_daily_fallback_v1' AS config_signature
+            FROM atomic_trade_daily
+            WHERE trade_date >= ? AND trade_date <= ?
+            """,
+            atomic_conn,
+            params=(start_date, end_date),
+        )
+    except Exception:
+        return pd.DataFrame()
+    finally:
+        atomic_conn.close()
 
 
 def _coerce_date(date_text: Optional[str]) -> Optional[str]:
@@ -178,7 +239,7 @@ def _symbol_in_selection_universe(symbol: Optional[str]) -> bool:
 
 def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
     signature = _dominant_signature(conn)
-    df = pd.read_sql_query(
+    old_df = pd.read_sql_query(
         """
         SELECT symbol, date AS trade_date, net_inflow, main_buy_amount, main_sell_amount,
                close, activity_ratio, config_signature
@@ -188,8 +249,13 @@ def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str
         conn,
         params=(start_date, end_date),
     )
-    if df.empty:
-        return df
+    atomic_df = _load_atomic_local_history_fallback(start_date, end_date)
+    frames = [frame for frame in [atomic_df, old_df] if frame is not None and not frame.empty]
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df["symbol"] = df["symbol"].astype(str).str.lower()
+    df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.strftime("%Y-%m-%d")
     df["config_rank"] = (df["config_signature"] == signature).astype(int)
     df = (
         df.sort_values(["symbol", "trade_date", "config_rank"], ascending=[True, True, False])
@@ -660,9 +726,9 @@ def _compute_signal_frame(feature_df: pd.DataFrame) -> pd.DataFrame:
 def refresh_selection_research(start_date: Optional[str] = None, end_date: Optional[str] = None) -> RefreshResult:
     ensure_selection_schema()
     with _main_connection() as conn:
-        min_date, max_date = _available_local_history_bounds(conn)
+        min_date, max_date = _available_selection_history_bounds(conn)
         if not min_date or not max_date:
-            raise ValueError("local_history 无可用数据，无法生成选股研究结果")
+            raise ValueError("缺少可用行情数据，无法生成选股研究结果")
         resolved_end = _coerce_date(end_date) or max_date
         resolved_start = _coerce_date(start_date) or min_date
         padded_start = max(min_date, _history_padding_start(resolved_start, days=150))
@@ -781,9 +847,9 @@ def _ensure_trade_date_ready(trade_date: Optional[str]) -> str:
     if resolved and query_candidates(resolved, "breakout", limit=1):
         return resolved
     with _main_connection() as conn:
-        min_date, max_date = _available_local_history_bounds(conn)
+        min_date, max_date = _available_selection_history_bounds(conn)
         if not max_date:
-            raise ValueError("缺少 local_history 数据")
+            raise ValueError("缺少可用行情数据")
         target_date = resolved or max_date
     refresh_selection_research(start_date=_history_padding_start(target_date, 120), end_date=target_date)
     return target_date
@@ -801,7 +867,7 @@ def get_selection_health() -> Dict[str, object]:
     ensure_selection_schema()
     latest_signal_date = fetch_latest_signal_date()
     with _main_connection() as conn:
-        min_date, max_date = _available_local_history_bounds(conn)
+        min_date, max_date = _available_selection_history_bounds(conn)
         source_snapshot = _source_snapshot(conn, min_date or "", max_date or "") if min_date and max_date else "{}"
     with get_selection_connection() as conn:
         feature_count = int(conn.execute("SELECT COUNT(*) FROM selection_feature_daily").fetchone()[0])
@@ -873,18 +939,10 @@ def get_candidates(trade_date: Optional[str], strategy: str = "breakout", limit:
 
 def _query_recent_profile_series(symbol: str, trade_date: str, days: int = 60) -> List[Dict[str, object]]:
     with _main_connection() as conn:
-        signature = _dominant_signature(conn)
         start_date = (pd.Timestamp(trade_date) - pd.Timedelta(days=days * 2)).strftime("%Y-%m-%d")
-        daily = pd.read_sql_query(
-            """
-            SELECT symbol, date AS trade_date, close, net_inflow, activity_ratio, main_buy_amount, main_sell_amount
-            FROM local_history
-            WHERE symbol = ? AND date >= ? AND date <= ? AND config_signature = ?
-            ORDER BY date ASC
-            """,
-            conn,
-            params=(symbol, start_date, trade_date, signature),
-        )
+        daily = _load_local_history(conn, start_date, trade_date)
+        if not daily.empty:
+            daily = daily[daily["symbol"] == symbol].copy()
         l2_daily = _load_l2_daily(conn, start_date, trade_date)
         sentiment = _load_sentiment_events(conn, start_date, trade_date)
 
@@ -985,9 +1043,9 @@ def get_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, object]:
         target_date = latest_signal_date
     else:
         with _main_connection() as conn:
-            _, max_date = _available_local_history_bounds(conn)
+            _, max_date = _available_selection_history_bounds(conn)
         if not max_date:
-            raise ValueError("缺少 local_history 数据")
+            raise ValueError("缺少可用行情数据")
         target_date = max_date
 
     row = query_feature_profile(normalized_symbol, target_date)
