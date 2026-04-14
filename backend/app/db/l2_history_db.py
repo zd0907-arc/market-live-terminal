@@ -1,10 +1,9 @@
 import os
 import sqlite3
 from datetime import datetime, time
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import DATA_DIR, DB_FILE
+from backend.app.core.config import DB_FILE, candidate_atomic_db_paths
 from backend.app.core.time_buckets import map_to_30m_bucket_start
 
 
@@ -73,28 +72,8 @@ def get_l2_history_connection() -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
-def _candidate_atomic_db_paths() -> List[str]:
-    env_candidates = [
-        os.getenv("ATOMIC_DB_PATH", ""),
-        os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),
-    ]
-    default_candidates = [
-        os.path.join(DATA_DIR, "atomic_facts", "market_atomic_mainboard_full_reverse.db"),
-        os.path.join(DATA_DIR, "atomic_facts", "market_atomic.db"),
-    ]
-    seen = set()
-    out: List[str] = []
-    for raw in env_candidates + default_candidates:
-        path = str(raw or "").strip()
-        if not path or path in seen:
-            continue
-        seen.add(path)
-        out.append(path)
-    return out
-
-
 def _resolve_atomic_db_path() -> Optional[str]:
-    for path in _candidate_atomic_db_paths():
+    for path in candidate_atomic_db_paths():
         if os.path.exists(path):
             return path
     return None

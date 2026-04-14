@@ -4,12 +4,11 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from backend.app.core.config import DB_FILE, USER_DB_FILE
+from backend.app.core.config import DB_FILE, USER_DB_FILE, candidate_atomic_db_paths
 from backend.app.db.selection_db import (
     create_backtest_run,
     ensure_selection_schema,
@@ -53,26 +52,8 @@ def _main_connection() -> sqlite3.Connection:
     return conn
 
 
-def _candidate_atomic_db_paths() -> List[str]:
-    candidates = [
-        os.getenv("ATOMIC_DB_PATH", ""),
-        os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),
-        os.path.join(Path(DB_FILE).resolve().parent, "atomic_facts", "market_atomic_mainboard_full_reverse.db"),
-        os.path.join(Path(DB_FILE).resolve().parent, "atomic_facts", "market_atomic.db"),
-    ]
-    out: List[str] = []
-    seen = set()
-    for raw in candidates:
-        path = str(raw or "").strip()
-        if not path or path in seen:
-            continue
-        seen.add(path)
-        out.append(path)
-    return out
-
-
 def _atomic_connection() -> Optional[sqlite3.Connection]:
-    for path in _candidate_atomic_db_paths():
+    for path in candidate_atomic_db_paths():
         if os.path.exists(path):
             conn = sqlite3.connect(path)
             conn.row_factory = sqlite3.Row

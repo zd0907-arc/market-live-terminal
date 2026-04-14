@@ -13,6 +13,8 @@ services:
       # 数据库路径
       - DB_PATH=/app/data/market_data.db
       - USER_DB_PATH=/app/data/user_data.db
+      - ATOMIC_MAINBOARD_DB_PATH=${ATOMIC_MAINBOARD_DB_PATH:-/app/data/atomic_facts/market_atomic_mainboard_full_reverse.db}
+      - ATOMIC_DB_PATH=${ATOMIC_DB_PATH:-/app/data/atomic_facts/market_atomic_mainboard_full_reverse.db}
       # 时区
       - TZ=Asia/Shanghai
       # LLM 配置 (从宿主机环境变量透传，需在服务器上配置)

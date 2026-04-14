@@ -1170,3 +1170,10 @@
 - 结论: 已完成“新原子层 -> 旧功能兼容迁移”的第一层：`l2_history_db` 新增 atomic fallback，旧 `history_daily_l2/history_5m_l2` 有数据时仍优先旧表，缺数据时自动读 `atomic_trade_* / atomic_order_*`；`query_review_pool` 也已能从 `atomic_trade_daily` 补 bounds。与此同时，`selection_research` 的 `_load_l2_daily/_load_l2_5m_daily` 也已接 atomic fallback，因此复盘旧接口和选股研究输入都开始具备读新原子表的能力。
 - 风险: 当前这仍是“兼容层”，不是全量硬切；要真正让本地页面稳定看到新数据，还需要下一步继续处理本地/Windows/生产的 atomic DB 路径与部署口径。
 - 链接: `backend/app/db/l2_history_db.py`, `backend/app/services/selection_research.py`, `backend/tests/test_atomic_review_fallback.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`
+
+## 2026-04-14 23:58 | Codex
+- Task ID: `CHG-20260414-02`
+- CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-HISTORY-30M`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成兼容迁移第二层收口：把 `ATOMIC_DB_PATH / ATOMIC_MAINBOARD_DB_PATH` 上收为统一配置入口，Docker 默认也能显式挂接 `market_atomic_mainboard_full_reverse.db`；同时新增 `test_atomic_history_multiframe_fallback.py`，覆盖“旧历史表为空、仅 atomic 有数据”时 `/api/history/multiframe` 的 `1d/30m` 返回，确保复盘多维链路在 atomic-only 场景下也有测试兜底。
+- 风险: 当前还是“兼容迁移”而非真实页面硬切；本地若未挂到真实 atomic DB 文件，页面仍看不到新原子层数据。
+- 链接: `backend/app/core/config.py`, `deploy/docker-compose.yml`, `backend/tests/test_atomic_history_multiframe_fallback.py`, `docs/changes/MOD-20260412-05-selection-atomic-backfill-retrospective.md`
