@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.3.0';
+export const APP_VERSION = '4.3.1';
 export const RELEASE_NOTES = [
+    'v4.3.1: 修复生产选股接口在无预生成结果时读请求卡死，关闭读接口自动重算；选股 health 改为轻量快照，便于先同步小型 selection DB 再逐步扩正式研究链路',
     'v4.3.0: 原子事实层进入正式发布候选，历史多维/复盘/选股研究主路径切到 atomic 优先，生产发布目标从旧历史兼容迁移升级为新底座正式切换',
     'v4.2.36: 历史日线融合组件也切到 local/atomic 优先，不再默认走新浪兜底，主路径与保留组件的历史展示口径继续统一到原子层',
     'v4.2.35: 旧历史视图 local/source=local 正式接入 atomic 日线兜底，/api/history/local 与 /api/history_analysis?source=local 会优先展示正式L2底座并保留旧 local_history 缺口补位',

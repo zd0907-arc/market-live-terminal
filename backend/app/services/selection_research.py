@@ -35,6 +35,7 @@ DEFAULT_SELECTION_UNIVERSE_PREFIXES = tuple(
     if prefix.strip()
 )
 DEFAULT_SELECTION_UNIVERSE_LABEL = "沪深A（默认排除科创板/北交所）"
+SELECTION_AUTO_REFRESH_ON_READ = os.getenv("SELECTION_AUTO_REFRESH_ON_READ", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -843,15 +844,18 @@ def refresh_selection_research(start_date: Optional[str] = None, end_date: Optio
 def _ensure_trade_date_ready(trade_date: Optional[str]) -> str:
     ensure_selection_schema()
     resolved = _coerce_date(trade_date)
-    latest_signal_date = fetch_latest_signal_date()
     if resolved and query_candidates(resolved, "breakout", limit=1):
         return resolved
+    latest_signal_date = fetch_latest_signal_date()
+    if latest_signal_date:
+        return resolved or latest_signal_date
     with _main_connection() as conn:
         min_date, max_date = _available_selection_history_bounds(conn)
         if not max_date:
             raise ValueError("缺少可用行情数据")
         target_date = resolved or max_date
-    refresh_selection_research(start_date=_history_padding_start(target_date, 120), end_date=target_date)
+    if SELECTION_AUTO_REFRESH_ON_READ:
+        refresh_selection_research(start_date=_history_padding_start(target_date, 120), end_date=target_date)
     return target_date
 
 
@@ -868,7 +872,7 @@ def get_selection_health() -> Dict[str, object]:
     latest_signal_date = fetch_latest_signal_date()
     with _main_connection() as conn:
         min_date, max_date = _available_selection_history_bounds(conn)
-        source_snapshot = _source_snapshot(conn, min_date or "", max_date or "") if min_date and max_date else "{}"
+        atomic_min, atomic_max = _available_atomic_trade_bounds()
     with get_selection_connection() as conn:
         feature_count = int(conn.execute("SELECT COUNT(*) FROM selection_feature_daily").fetchone()[0])
         signal_count = int(conn.execute("SELECT COUNT(*) FROM selection_signal_daily").fetchone()[0])
@@ -884,7 +888,13 @@ def get_selection_health() -> Dict[str, object]:
         "feature_rows": feature_count,
         "signal_rows": signal_count,
         "backtest_runs": run_count,
-        "source_snapshot": json.loads(source_snapshot or "{}"),
+        "source_snapshot": {
+            "history_bounds": {"min_date": min_date, "max_date": max_date},
+            "local_history": {"min_date": min_date, "max_date": max_date, "row_count": None},
+            "atomic_bounds": {"min_date": atomic_min, "max_date": atomic_max},
+            "atomic_trade_daily": {"min_date": atomic_min, "max_date": atomic_max, "row_count": None},
+            "auto_refresh_on_read": SELECTION_AUTO_REFRESH_ON_READ,
+        },
     }
 
 

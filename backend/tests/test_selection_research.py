@@ -431,7 +431,7 @@ def test_selection_routes_work_with_atomic_only_history(monkeypatch, tmp_path):
     health = selection_router_module.selection_health()
     assert health.code == 200
     assert health.data['latest_signal_date'] == '2026-04-10'
-    assert health.data['source_snapshot']['atomic_trade_daily']['row_count'] > 0
+    assert health.data['source_snapshot']['atomic_trade_daily']['max_date'] == '2026-04-10'
 
     candidates = selection_router_module.selection_candidates(date='2026-04-10', strategy='breakout', limit=10)
     assert candidates.code == 200
