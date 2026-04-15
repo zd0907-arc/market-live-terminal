@@ -172,8 +172,12 @@ def _extract_latest_intraday_time(data) -> Optional[dt_time]:
 def _expected_floor_time(market_context: dict) -> Optional[dt_time]:
     market_status = str(market_context.get("market_status") or "")
     now = MarketClock._now_china()
+    natural_today = str(market_context.get("natural_today") or "")
+    actual_today = now.strftime("%Y-%m-%d")
 
     if market_status == "trading":
+        if natural_today and natural_today != actual_today:
+            return None
         current_floor = (now - timedelta(minutes=10)).time()
         if current_floor < dt_time(9, 25):
             return dt_time(9, 25)

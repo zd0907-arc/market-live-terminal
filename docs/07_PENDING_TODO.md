@@ -486,9 +486,19 @@
 - 关联任务：`CHG-20260415-02`
 
 ## T-021 Windows -> Mac 研究快照同步链路
-- 状态：`TODO`
+- 状态：`ACTIVE`
 - 目标：
   - 建立盘后从 Windows 向 Mac 同步 `selection_research.db + 复盘裁剪库 + 元数据` 的稳定链路。
+- 当前事实：
+  - 已新增：
+    - `backend/scripts/build_local_research_snapshot.py`
+    - `ops/sync_windows_research_snapshot.sh`
+  - 已完成一次真实 Windows -> Mac 拉取验证；
+  - 当前已能拿回：
+    - `research_snapshot.db`
+    - `selection_research.db`
+    - `research_snapshot_manifest.json`
+  - 但 Windows 端正式 `selection_research.db` 还未稳定落地，当前仍保留本地 bootstrap selection DB 兜底。
 - 解除条件：
   1. 同步目录与覆盖策略冻结；
   2. Mac 能一键拉取最新快照；
@@ -496,10 +506,12 @@
 - 关联任务：`CHG-20260415-02`
 
 ## T-022 Mac 本地复盘/选股切换到研究快照
-- 状态：`TODO`
+- 状态：`ACTIVE`
 - 当前事实：
   - 代码层已具备 atomic / selection 的本地能力；
-  - 但还未统一收口到“Mac 本地研究快照”为正式读口径。
+  - 已新增 `ops/start_local_research_station.sh`；
+  - 已验证本地 `selection` 与 `review` 接口可以直接读取研究快照工作；
+  - 但前端主页面与更多实际使用路径还未做完整 smoke。
 - 下一步：
   1. 明确复盘裁剪库最小表集；
   2. 本地接口切换到快照读路径；

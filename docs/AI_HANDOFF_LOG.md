@@ -1199,3 +1199,9 @@
 - 风险: Windows -> Mac 研究快照同步链路与 Mac 本地复盘裁剪库尚未正式落地，当前只是完成了架构收口与待办冻结。
 - 链接: `docs/changes/MOD-20260415-02-local-research-station-architecture.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
 
+## 2026-04-15 22:05 | Codex
+- Task ID: `CHG-20260415-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成本地研究站 Phase B/P2 的第一轮落地：新增 `build_local_research_snapshot.py + sync_windows_research_snapshot.sh + start_local_research_station.sh`，并完成一次真实 Windows -> Mac 快照同步验证；随后用 `PORT=8001` 启动本地研究站，已验证 `/api/selection/health`、`/api/selection/candidates`、`/api/review/pool`、`/api/review/data` 都能直接读本地快照工作。
+- 风险: Windows 端正式 `selection_research.db` 仍未稳定产出，当前同步脚本还保留本地 bootstrap selection DB 兜底；后续需单独补齐 Windows selection 产出链路。
+- 链接: `backend/scripts/build_local_research_snapshot.py`, `ops/sync_windows_research_snapshot.sh`, `ops/start_local_research_station.sh`, `docs/changes/STG-20260415-03-local-research-station-rollout-plan.md`

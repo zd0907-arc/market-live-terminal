@@ -43,6 +43,10 @@ npm run check:baseline
 3. Mac 优先读取 Windows 导出的研究快照，不直接跨网络读 Windows sqlite 主库。
 4. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
+## 当前关键脚本
+- Windows -> Mac 同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
+- 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
+
 ## 当前回退入口
 - 生产轻量版回退：`v4.2.32`
 - 当前生产代码版本：`v4.3.1`

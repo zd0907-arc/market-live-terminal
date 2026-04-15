@@ -40,6 +40,10 @@ from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
 from datetime import datetime
 
+
+def is_background_runtime_enabled() -> bool:
+    return os.getenv("ENABLE_BACKGROUND_RUNTIME", "true").strip().lower() in {"1", "true", "yes", "on"}
+
 # 禁用不安全的HTTPS警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -87,19 +91,21 @@ from backend.app.services.collector import collector
 @app.on_event("startup")
 async def startup_event():
     init_db()
-    
-    collector.start()
-    
-    sentiment_monitor.start()
-    init_scheduler()
+    if is_background_runtime_enabled():
+        collector.start()
+        sentiment_monitor.start()
+        init_scheduler()
+    else:
+        logger.info("Background runtime is disabled by ENABLE_BACKGROUND_RUNTIME=false")
     for route in app.routes:
         print(f"Registered Route: {route.path} [{route.methods}]")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    if collector:
-        collector.stop()
-    sentiment_monitor.stop()
+    if is_background_runtime_enabled():
+        if collector:
+            collector.stop()
+        sentiment_monitor.stop()
 
 @app.get("/")
 def health_check():
@@ -111,4 +117,4 @@ def health_check():
     }
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

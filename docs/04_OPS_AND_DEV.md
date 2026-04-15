@@ -712,3 +712,26 @@ git checkout main && git merge --no-ff <branch>
 - 必须检查文件大小 / 时间戳；
 - 覆盖前保留上一份可回退快照；
 - 页面验收以 Mac 本地接口为准，不以 Windows 文件存在即视为成功。
+
+### 5. 当前推荐命令
+```bash
+# 1) 从 Windows 构建并拉取本地研究快照
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+EXTRA_SYMBOLS='sz000977,sh600382,sz003019,sh603629' \
+DAILY_DAYS=45 INTRADAY_DAYS=20 SENTIMENT_DAYS=20 \
+bash ops/sync_windows_research_snapshot.sh
+
+# 2) 启动本地研究站后端（默认禁后台任务）
+PORT=8001 bash ops/start_local_research_station.sh
+```
+
+### 6. 当前同步脚本说明
+- `backend/scripts/build_local_research_snapshot.py`
+  - 在 Windows 上运行；
+  - 从 full atomic + main DB 构建轻量 `research_snapshot.db`
+- `ops/sync_windows_research_snapshot.sh`
+  - 在 Mac 上运行；
+  - 自动上传 builder、远程生成 snapshot、拉回 `snapshot + selection + manifest`
+- `ops/start_local_research_station.sh`
+  - 在 Mac 上运行；
+  - 强制使用本地研究快照启动后端，并关闭后台采集/调度

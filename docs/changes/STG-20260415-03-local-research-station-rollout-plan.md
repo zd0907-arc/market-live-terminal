@@ -32,6 +32,14 @@
   - Mac 拉取
   - 本地覆盖前保留回退快照
 - 结果：Mac 可一键拿到最新研究快照
+- 当前已落地：
+  - `backend/scripts/build_local_research_snapshot.py`
+  - `ops/sync_windows_research_snapshot.sh`
+  - `ops/start_local_research_station.sh`
+- 当前默认策略：
+  - 以 `latest selection + extra symbols` 作为 focus symbol 集；
+  - 导出 `history_daily_l2 / history_5m_l2 / local_history / stock_universe_meta / sentiment_events / sentiment_daily_scores`；
+  - 当前已验证可从 Windows 拉回本地 `research_snapshot.db + selection_research.db + manifest.json`。
 
 ### Phase C：Mac 本地读路径切换
 - 复盘页切到本地研究快照
@@ -51,11 +59,22 @@
 ### P1 验收
 - Mac 能手动/脚本拉取最新快照
 - 快照有时间戳/大小校验
+- 已验证：
+  - Windows -> Mac 真实拉取成功；
+  - 本地生成文件：
+    - `data/local_research/research_snapshot.db`
+    - `data/local_research/selection/selection_research.db`
+    - `data/local_research/research_snapshot_manifest.json`
 
 ### P2 验收
 - 本地 `/api/selection/*` 正常
 - 本地复盘主页面读取快照正常
 - 不依赖跨网络直读 Windows sqlite
+- 已验证：
+  - `PORT=8001 bash ops/start_local_research_station.sh`
+  - `/api/selection/health` 正常
+  - `/api/selection/candidates?trade_date=2026-04-10&strategy=breakout&limit=3` 正常
+  - `/api/review/pool` 与 `/api/review/data?symbol=sh603629...` 正常
 
 ### P3 验收
 - 云端盯盘仍正常
@@ -66,3 +85,8 @@
 - 不把 38G full atomic 默认同步到 Mac
 - 不让 Mac 页面长期依赖远程 Windows sqlite
 - 不把本地研究型能力误发布成“生产必备能力”
+
+## 6. 当前已知缺口
+- Windows 端正式 `selection_research.db` 还未稳定产出；
+- 因此当前同步脚本仍保留一个 **Mac 本地 bootstrap selection DB** 兜底；
+- 后续要把这块彻底扶正，需要单独补 Windows 端的 selection 产出流程。

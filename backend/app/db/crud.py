@@ -9,7 +9,30 @@ def get_db_connection():
 
 def get_user_db_connection():
     conn = sqlite3.connect(USER_DB_FILE)
+    _ensure_user_schema(conn)
     return conn
+
+
+def _ensure_user_schema(conn: sqlite3.Connection):
+    c = conn.cursor()
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS watchlist (
+             symbol TEXT PRIMARY KEY,
+             name TEXT,
+             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''
+    )
+    c.execute(
+        '''CREATE TABLE IF NOT EXISTS app_config (
+             key TEXT PRIMARY KEY,
+             value TEXT,
+             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''
+    )
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('super_large_threshold', '1000000')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('large_threshold', '200000')")
+    c.execute("INSERT OR IGNORE INTO app_config (key, value) VALUES ('llm_model', '')")
+    conn.commit()
 
 def get_watchlist_items():
     conn = get_user_db_connection()
