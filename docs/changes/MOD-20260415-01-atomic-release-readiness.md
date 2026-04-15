@@ -1,5 +1,8 @@
 # MOD-20260415-01-atomic-release-readiness
 
+> **当前真实运行架构已更新：请优先阅读 `docs/changes/MOD-20260415-02-local-research-station-architecture.md`。**
+
+
 ## 1. 基本信息
 - 标题：原子事实层切换与数据治理生产发布准备
 - 状态：DRAFT
@@ -26,7 +29,7 @@
    - 选股 research atomic fallback
    - `local` 历史入口 atomic 优先
 
-本卡目标不是立即发布，而是冻结“**从当前生产版 -> 原子事实层版**”的真实切换路径，并明确发布 gate。
+本卡记录的是“曾准备把 atomic 主路径切生产”的阶段判断；截至 `2026-04-15` 晚间，真实运行架构已改为“云端只保留盯盘 / Windows 数据主站 / Mac 本地研究站”，当前请以 `MOD-20260415-02-local-research-station-architecture.md` 为准。
 
 ## 3. 方案与边界
 

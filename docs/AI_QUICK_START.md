@@ -2,15 +2,11 @@
 
 ## 当前真相
 - 当前权威工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
-- 当前版本：`v4.2.29`
 - 当前主线分支：`main`
-- 当前临时工作分支规范：`codex/<feat|fix|chore>-<topic>-YYYYMMDD`
-- 当前产品回退 Tag：`v4.2.29`
-- 显式回滚别名 Tag：`baseline-v4.2.28-legacy-toggle`
-- 上一产品版本 Tag：`v4.2.28`
-- 当前基线归档：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
-- 深度治理回退 Tag：`snapshot-20260318-pre-governance`
-- 当前回退分支：`codex/archive-pre-governance-20260318`
+- 当前生产代码版本：`v4.3.1`
+- 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
+- 当前运行架构总入口：`docs/changes/MOD-20260415-02-local-research-station-architecture.md`
+- 当前生产回滚锚点：`v4.2.32`
 
 ## 只允许修改的主区域
 - 前端源码：`/Users/dong/Desktop/AIGC/market-live-terminal/src`
@@ -23,10 +19,17 @@
 - 本地虚拟环境：`/Users/dong/Desktop/AIGC/market-live-terminal/.venv`
 - 本地运行产物：`/Users/dong/Desktop/AIGC/market-live-terminal/.run`
 
-## 权威数据路径
-- 主业务库：`/Users/dong/Desktop/AIGC/market-live-terminal/data/market_data.db`
-- 用户配置库：`/Users/dong/Desktop/AIGC/market-live-terminal/data/user_data.db`
-- 沙盒复盘库：`/Users/dong/Desktop/AIGC/market-live-terminal/data/sandbox_review.db`
+## 当前 worktree / 分支纪律
+- 稳定基线 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal`（仅保留 `main`）
+- 本轮主开发 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research`
+- 本轮主开发分支：`codex/local-research-station-20260415`
+- 历史热修/数据治理 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-data-governance`
+- 当前原则：**本轮新架构与本地研究站实现，一律在 `market-live-terminal-local-research / codex/local-research-station-20260415` 上推进**
+
+## 当前数据职责
+- 云端：盯盘 / 手机应急查看
+- Windows：raw + full atomic + 跑数 + 研究结果产出
+- Mac：复盘 + 选股 + 本地前后端 + 文档/开发
 
 ## 最小自检
 ```bash
@@ -34,25 +37,13 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 npm run check:baseline
 ```
 
-## 标准开分支模板
-```bash
-git checkout main && git pull
-git checkout -b codex/<feat|fix|chore>-<topic>-YYYYMMDD
-# 改代码 → 小步提交
-npm run check:baseline
-git checkout main && git merge --no-ff <branch>
-# 若已影响生产：同步 bump 版本 + tag
-```
-
-## 发布前最小检查项
-1. 只在仓库根目录开发，不进入旧副本目录。
-2. `npm run check:baseline` 必须通过。
-3. `package.json`、`src/version.ts`、`README.md`、`backend/app/main.py` 版本必须一致。
-4. 前端不得持有 `WRITE_API_TOKEN`；写鉴权仅允许通过服务端代理/环境变量注入。
+## 当前工作原则
+1. 复盘/选股/研究型改动优先按 **Mac 本地研究站** 设计，不默认以上生产为目标。
+2. 不把 `38GB+` full atomic 主库当作云端或 Mac 的默认常驻库。
+3. Mac 优先读取 Windows 导出的研究快照，不直接跨网络读 Windows sqlite 主库。
+4. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
 ## 当前回退入口
-- 产品代码回退：优先切回 `v4.2.29`（本次发布 tag）或上一版 `v4.2.28`
-- 最后一版支持“旧版 / 新版切换”的回退：`baseline-v4.2.28-legacy-toggle`（commit `c1eec34`）
-- 当前版本页面/数据基线：`docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`
-- 深度治理回退：`snapshot-20260318-pre-governance` 或 `codex/archive-pre-governance-20260318`
-- 数据/配置回退目录：`/Users/dong/Desktop/AIGC/backups/market-live-terminal/20260318-pre-governance/`
+- 生产轻量版回退：`v4.2.32`
+- 当前生产代码版本：`v4.3.1`
+- 运行架构回看：`docs/changes/MOD-20260415-02-local-research-station-architecture.md`

@@ -6,6 +6,27 @@
 >
 > **边界提醒**：交易时段判定、回溯展示等业务语义不在本文件裁决，统一以 `docs/02_BUSINESS_DOMAIN.md`（尤其 `CAP-MKT-TIME`）为准。
 
+
+## 0. 当前运行拓扑（2026-04-15 起冻结）
+
+### 0.1 三端职责
+- **云端**：只保留轻量盯盘 / 手机应急查看；
+- **Windows**：原始包、正式跑数、full atomic、研究结果产出；
+- **Mac**：本地前后端、复盘、选股、文档与策略开发。
+
+### 0.2 当前总原则
+- 不再把“full atomic 全量切生产”作为当前主线；
+- 不要求把 `38GB+` atomic 主库常驻到云端或 Mac；
+- Windows 是数据真相源；
+- Mac 只读 Windows 导出的研究快照，不直接跨网络读 Windows sqlite 主库。
+
+### 0.3 本地研究站日常流程
+1. Windows 盘后跑 atomic / selection；
+2. Windows 导出 Mac 所需裁剪快照；
+3. Mac 通过 Tailscale/SSH 拉取快照；
+4. Mac 启动本地前后端；
+5. 复盘/选股页面都读本地快照。
+
 ## 一、 网络联通测试规范 (The Tailscale Gate)
 
 在进行任何 Mac <-> Windows 的联动开发和代码推送前，必须确认虚拟内网组网通畅。所有对家庭主机的操作，**废弃 `192.168.3.108` 的原始局域网称呼，统一切换为 Tailscale 魔方化局域网 IP**。
@@ -669,3 +690,25 @@ git checkout main && git merge --no-ff <branch>
   - 若当前目标池只做沪深主板，必须同时开启：
     - `include_gem = false`
     - `main_board_only = true`
+
+
+## 本地研究站数据同步原则（2026-04-15 新冻结）
+
+### 1. 同步方向
+- 默认只允许：**Windows -> Mac**
+- 云端不再承担 full atomic 中转站职责。
+
+### 2. 同步对象
+- `selection/selection_research.db`
+- 复盘裁剪库（后续单独冻结库名与表集）
+- 必要元数据表 / 名称映射
+
+### 3. 不推荐方式
+- 不直接在 Mac 上远程挂载并查询 Windows sqlite；
+- 不把 raw 包同步到 Mac；
+- 不默认同步 full atomic 主库到 Mac。
+
+### 4. 同步验真
+- 必须检查文件大小 / 时间戳；
+- 覆盖前保留上一份可回退快照；
+- 页面验收以 Mac 本地接口为准，不以 Windows 文件存在即视为成功。

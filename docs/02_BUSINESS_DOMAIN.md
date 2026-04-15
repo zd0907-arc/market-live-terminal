@@ -315,41 +315,50 @@
 
 ---
 
-### CAP-WIN-PIPELINE（Windows离线节点与云端注入）
+### CAP-WIN-PIPELINE（Windows离线节点与本地研究站数据主站）
 
 1. **业务目标**
-- 利用 Windows 节点承担离线重建与盘中采集，向云端被动注入数据，保证在云端禁外采约束下系统可持续运行。
+- 以 Windows 节点作为**原始数据真相源 + 跑数工厂**，承担盘中采集、盘后 ETL、atomic 主库、研究快照产出；云端只保留轻量盯盘入口，Mac 作为本地研究工作台消费 Windows 产物。
 
 2. **业务规则（强约束）**
-- **节点职责**：
-  - Windows：采集/ETL 产出；
-  - 云端：只接收 ingest 与提供查询；
-  - Mac：开发与运维中控。
+- **节点职责冻结**：
+  - Windows：采集 / ETL / atomic 主库 / 研究快照导出；
+  - Mac：开发、复盘、选股、本地前后端运行；
+  - 云端：轻量盯盘与手机临时查看。
 - **路径约定**：Windows 统一目录 `D:\market-live-terminal`。
 - **数据流红线**：
   - 云端默认不主动外采（`ENABLE_CLOUD_COLLECTOR=false` for production）；
-  - Windows 不作为 Git 主仓操作节点。
+  - Windows 不作为 Git 主仓操作节点；
+  - Mac 不直接跨网络读 Windows 上的 sqlite 主库；
+  - 全量 atomic 主库默认留在 Windows，不要求常驻同步到云端或 Mac。
+- **同步红线**：
+  - Windows -> Mac 只同步“研究快照 / 裁剪库 / 结果库”，不直接同步 raw；
+  - 大文件同步必须有完整性校验；
+  - 不在连接不稳条件下做无校验覆盖。
 - **禁止行为（红线）**：
-  - 在连接不稳定条件下进行无校验大文件覆盖；
-  - 未核对文件完整性即执行云端 merge。
+  - 未核对文件完整性即执行覆盖；
+  - 把 38G 全量 atomic 当作 Mac 日常必备本地库；
+  - 让研究型页面长期依赖云端重型数据查询。
 
 3. **实现摘要（当前方案）**
-- 通过 Tailscale + SSH/SCP 远程驱动 Windows 脚本与 ETL；产物回传后在云端执行 merge。
-- 目前已实现免密登录，但连接稳定性（active但不通）仍是短板。
+- 通过 Tailscale + SSH/SCP 远程驱动 Windows 跑数与同步；
+- 截至 `2026-04-15`，新的真实目标已从“full atomic 切生产”调整为“Windows 数据主站 + Mac 本地研究站”；
+- 生产环境继续保留轻量盯盘，不再作为复盘/选股重型研究链路的第一落点。
 
 4. **验收案例（Given / When / Then）**
-- **正常**：Given Windows在线且SSH可达，When 执行 `sync_to_windows.sh`，Then 脚本同步成功且可远程触发 ETL。
-- **边界**：Given 95MB 历史库通过 DERP 回传，When 传输完成，Then 本地文件大小/校验必须与源文件一致。
-- **异常防线**：Given `tailscale status` 显示 active 但 `ping/ssh` 超时，When 触发流程，Then 任务必须进入阻塞待办而不是盲目继续。
+- **正常**：Given Windows 在线且 SSH 可达，When 执行同步脚本，Then Mac 可拉到最新研究快照并本地读取。
+- **边界**：Given 大文件通过 Tailscale 回传，When 传输完成，Then 文件大小/校验必须与源文件一致。
+- **异常防线**：Given `tailscale status` 显示 active 但 `ping/ssh` 超时，When 触发同步流程，Then 任务必须进入阻塞待办而不是盲目继续。
 
 5. **可观测性与告警**
-- 观测点：`tailscale ping` 成功率、SSH连接成功率、大文件回传时延、Windows `sshd` 服务状态。
-- 告警条件：连续连接失败、ETL产物回传中断、merge前校验失败。
+- 观测点：`tailscale ping` 成功率、SSH 连接成功率、大文件回传时延、Windows `sshd` 服务状态、Mac 快照更新时间。
+- 告警条件：连续连接失败、快照同步中断、校验失败、Mac 读到过期快照。
 
 6. **变更记录（任务ID）**
 - `CHG-20260308-02`：Windows SSH 免密打通与脚本同步恢复。
 - `CHG-20260309-03`：确认 ETL 已重建完成但回传/merge受连接抖动阻塞（登记 `T-002/T-003`）。
 - `CHG-20260310-01`：生产 ingest 链路恢复（补齐 `akshare`、修正 `CLOUD_API_URL` 到 Nginx 入口、新增登录触发任务 `ZhangDataLiveCrawler`）。
+- `CHG-20260415-02`：节点职责重规划为“Windows 数据主站 / Mac 本地研究站 / 云端轻量盯盘”。
 
 ---
 
@@ -404,10 +413,12 @@
 
 3. **实现摘要（当前方案）**
 - `2026-03-14` 已完成前置验真：Windows 上 `2026-03-11` 日包可读，且 `逐笔成交.csv::叫买/叫卖序号` 可与 `逐笔委托.csv::交易所委托号` 完整对齐。
-- 截至 `2026-04-15`，正式原子事实层主板库已完成回补，当前发布候选口径升级为：
-  - 复盘页、历史多维、旧历史视图统一改为 **atomic 优先**；
-  - 旧 `history_5m_l2 / history_daily_l2` 与 `history_30m / local_history` 仅保留缺口兜底，不再作为正式优先来源；
-  - 本轮发布目标从“兼容新底座”升级为“正式切 atomic 主路径”。
+- 截至 `2026-04-15`，正式原子事实层主板库已完成回补；
+- 但由于云端磁盘不足以承载约 `38.2GB` 的 full atomic 主库，**当前真实运行策略已调整为：Windows 保留全量 atomic 真相源，Mac 通过同步研究快照本地消费，云端不再作为 atomic 全量主落点。**
+- 因此本 CAP 当前重点不再是“full atomic 立即切生产”，而是：
+  - Windows 继续作为 atomic 正式主库；
+  - Mac 逐步切到本地研究快照读路径；
+  - 云端仅保留轻量盯盘所需链路。
 - 截至 `2026-03-14` 当前已完成：
   - 正式表：`history_5m_l2`、`history_daily_l2`、回补状态表；
   - 预览表：`realtime_5m_preview`、`realtime_daily_preview` 已落 schema 与实时写透链路；
@@ -556,7 +567,7 @@
 ### CAP-SELECTION-RESEARCH（选股研究与回测闭环）
 
 1. **业务目标**
-- 在不干扰原有盯盘/复盘/舆情正式链路的前提下，建立一个独立的选股研究工作台，核心服务“每日 Top10 启动确认候选 -> 右侧复盘决策 -> 人工波段决策”主流程。
+- 在不干扰原有盯盘正式链路的前提下，建立一个独立的选股研究工作台；该能力当前默认服务于 **Mac 本地研究站**，而不是生产云端主链路，核心服务“每日 Top10 启动确认候选 -> 右侧复盘决策 -> 人工波段决策”主流程。
 
 2. **业务规则（强约束）**
 - **解耦红线**：
@@ -566,7 +577,8 @@
   - 禁止把选股计算塞进旧 `/api/realtime/*`、`/api/review/*`、`/api/sentiment/*` 请求链路。
 - **存储红线**：
   - 选股特征、信号、回测结果必须写入独立库 `data/selection/selection_research.db`；
-  - 任何策略升级只重跑独立库，不回写旧主库。
+  - 任何策略升级只重跑独立库，不回写旧主库；
+  - 生产云端当前只保留轻量候选展示能力，不再要求承担全量选股研究计算。
 - **一期信号职责冻结**：
   - `stealth`：内部前置 / 解释信号；
   - `breakout`：唯一主筛选信号，负责左侧候选池；
@@ -598,7 +610,9 @@
 - 已提供 runner：`backend/scripts/run_selection_research.py`。
 - 截至 `2026-04-15`：
   - 选股 research 已支持在 `local_history` 不足时直接读取 `atomic_trade_daily / atomic_trade_5m`；
-  - 本轮发布目标不是继续依赖旧本地历史，而是以 atomic 为正式研究底座。
+  - 选股页的真实目标环境已调整为 **Mac 本地研究站**；
+  - Windows 负责生成研究结果，Mac 本地读取同步后的 `selection_research.db`；
+  - 生产云端不再作为选股研究全量主环境，只保留轻量可选展示。
 
 4. **验收案例（Given / When / Then）**
 - **正常**：Given 主库已存在 `local_history` 历史，When 刷新选股研究数据，Then 特征与信号应仅写入独立库，不影响旧表。
@@ -613,3 +627,4 @@
 6. **变更记录（任务ID）**
 - `CHG-20260404-01`：完成选股研究一期基础设施、独立接口、独立研究页与文档总册/需求卡。
 - `CHG-20260415-01`：进入 `v4.3.0` 发布准备，选股 research / 历史视图 / 复盘主路径统一切 atomic 优先。
+- `CHG-20260415-02`：选股工作台定位调整为 Mac 本地研究站能力，生产云端不再作为全量研究主环境。

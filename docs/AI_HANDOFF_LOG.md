@@ -1191,3 +1191,11 @@
 - 结论: 已完成“数据治理生产发布准备”的第一步收口：确认当前生产基线仍为已归档的 `v4.2.32 / 9bbdd3d`，新增发布准备母卡 `MOD-20260415-01-atomic-release-readiness.md`，并把当前 atomic 集成阶段明确归类为 `UNRELEASED_WORK + STAGE_READY_TO_NORMALIZE`。建议后续正式发布时不要沿用零散 patch，而是统一归一到 `v4.3.0` 再切生产。
 - 风险: 当前仍处于工作分支，尚未合回 `main`；atomic 切换虽然本地已基本通，但生产挂库路径、selection DB 与页面最终冒烟仍需正式验证。
 - 链接: `docs/changes/MOD-20260415-01-atomic-release-readiness.md`, `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md`, `backend/app/main.py`
+
+## 2026-04-15 01:20 | Codex
+- Task ID: `CHG-20260415-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把本轮数据治理后的真实运行架构收口为“云端只保留轻量盯盘 / Windows 做数据主站 / Mac 做本地研究工作台”，并新增母卡 `MOD-20260415-02-local-research-station-architecture.md` 作为当前真相入口；同时回填 `02/04/07/AI_QUICK_START`，停止把“full atomic 切生产”作为当前主线目标；当前主开发分支：`codex/local-research-station-20260415`，主开发 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research`。
+- 风险: Windows -> Mac 研究快照同步链路与 Mac 本地复盘裁剪库尚未正式落地，当前只是完成了架构收口与待办冻结。
+- 链接: `docs/changes/MOD-20260415-02-local-research-station-architecture.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
+
