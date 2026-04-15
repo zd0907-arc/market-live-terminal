@@ -488,7 +488,8 @@
 ## T-021 Windows -> Mac 研究快照同步链路
 - 状态：`ACTIVE`
 - 目标：
-  - 建立盘后从 Windows 向 Mac 同步 `selection_research.db + 复盘裁剪库 + 元数据` 的稳定链路。
+  - 建立盘后从 Windows 向 Mac 同步**处理后全量库**的稳定链路；
+  - 旧 snapshot 链路仅保留为开发验证过渡工具。
 - 当前事实：
   - 已新增：
     - `backend/scripts/build_local_research_snapshot.py`
@@ -500,9 +501,9 @@
     - `research_snapshot_manifest.json`
   - `2026-04-15` 已确认 Windows 正式库文件名为 `selection_research_windows.db`，并已把同步脚本改为自动识别两种正式命名。
 - 解除条件：
-  1. 同步目录与覆盖策略冻结；
-  2. Mac 能一键拉取最新快照；
-  3. Mac 本地页面可直接读到同步结果。
+  1. 首次整库同步对象冻结；
+  2. 每日增量同步对象冻结；
+  3. `./ops/run_postclose_l2.sh` 升级为新日常入口。
 - 关联任务：`CHG-20260415-02`
 
 ## T-022 Mac 本地复盘/选股切换到研究快照

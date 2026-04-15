@@ -25,17 +25,30 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 
 WIN_HOST = os.getenv("L2_WIN_HOST", "laqiyuan@100.115.228.56")
 CLOUD_HOST = os.getenv("L2_CLOUD_HOST", "ubuntu@111.229.144.202")
+WIN_PROJECT_ROOT = os.getenv("L2_WIN_PROJECT_ROOT", r"D:\market-live-terminal")
+WIN_PY_CMD = os.getenv("L2_WIN_PY_CMD", "py -3")
 WIN_MARKET_ROOT = os.getenv("L2_WIN_MARKET_ROOT", r"D:\MarketData")
 WIN_STAGE_ROOT = os.getenv("L2_WIN_STAGE_ROOT", r"Z:\l2_stage")
 WIN_OUTPUT_ROOT = os.getenv("L2_WIN_OUTPUT_ROOT", r"D:\market-live-terminal\.run\l2_postclose")
 WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", r"D:\market-live-terminal\ops\win_prepare_l2_day.bat")
 WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", r"D:\market-live-terminal\ops\win_run_l2_shard.bat")
+WIN_MARKET_DB = os.getenv("L2_WIN_MARKET_DB", r"D:\market-live-terminal\data\market_data.db")
+WIN_ATOMIC_DB = os.getenv("L2_WIN_ATOMIC_DB", r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
+WIN_SELECTION_DB = os.getenv("L2_WIN_SELECTION_DB", "")
 CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal")
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
+LOCAL_DATA_ROOT = Path(os.getenv("LOCAL_PROCESSED_DATA_ROOT", str(ROOT_DIR / "data")))
+LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
+LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
+LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 SOFT_WARNING_PATTERNS = (
     "无有效 bar：交易时段内无可用逐笔",
 )
 PROGRESS_ENABLED = True
+WINDOWS_REQUIRED_SCRIPTS = [
+    "backend/scripts/export_atomic_day_delta.py",
+    "backend/scripts/export_selection_day_delta.py",
+]
 
 
 def _now_text() -> str:
@@ -123,6 +136,78 @@ def _win_scp_path(path: str) -> str:
     if re.match(r"^[A-Za-z]:/", text):
         return text
     return text
+
+
+def _compact_to_iso(trade_date: str) -> str:
+    text = str(trade_date or "").replace("-", "").strip()
+    if len(text) != 8 or not text.isdigit():
+        raise ValueError(f"非法 trade_date: {trade_date}")
+    return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+
+
+def _parse_json_output(stdout: str) -> Dict[str, object]:
+    text = str(stdout or "").strip()
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    first = text.find("{")
+    last = text.rfind("}")
+    if first >= 0 and last > first:
+        candidate = text[first:last + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+    raise ValueError(f"无法解析 JSON 输出: {text[:500]}")
+
+
+def _resolve_windows_selection_db() -> str:
+    if WIN_SELECTION_DB:
+        return WIN_SELECTION_DB
+    win_root_py = WIN_PROJECT_ROOT.replace("\\", "/")
+    python_code = (
+        "from pathlib import Path; "
+        f"candidates=[Path(r'{win_root_py}/data/selection/selection_research.db'), "
+        f"Path(r'{win_root_py}/data/selection/selection_research_windows.db')]; "
+        "print(next((str(p) for p in candidates if p.exists()), ''))"
+    )
+    result = _ssh(
+        WIN_HOST,
+        f"{WIN_PY_CMD} -c {shlex.quote(python_code)}",
+    )
+    return str((result.stdout or "").strip().splitlines()[-1] if (result.stdout or "").strip() else "")
+
+
+def _backup_local_file(path: Path) -> None:
+    if not path.exists():
+        return
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = path.with_name(f"{path.name}.bak.{stamp}")
+    path.replace(backup)
+
+
+def _ensure_local_parent(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _sync_required_windows_scripts() -> None:
+    for rel_path in WINDOWS_REQUIRED_SCRIPTS:
+        local_path = ROOT_DIR / rel_path
+        remote_path = f"{WIN_PROJECT_ROOT}/{rel_path.replace(os.sep, '/')}"
+        remote_dir = str(PureWindowsPath(str(Path(remote_path).parent))).replace("/", "\\")
+        _ssh(WIN_HOST, f'cmd /c if not exist "{remote_dir}" mkdir "{remote_dir}"', check=False)
+        _run(["scp", str(local_path), f"{WIN_HOST}:{_win_scp_path(remote_path)}"], check=True)
 
 
 def _prepare_day(trade_date: str, workers: int, stable_seconds: int) -> Dict[str, object]:
@@ -269,6 +354,201 @@ def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str
         f"failure_count={merge_report.get('failure_count')}"
     )
     return merge_report
+
+
+def _merge_on_windows(trade_date: str, remote_artifacts: Sequence[str]) -> Dict[str, object]:
+    _progress(f"[{trade_date}] 开始 merge 回 Windows 本地 market_data.db")
+    artifacts_arg = ",".join(remote_artifacts)
+    remote_cmd = (
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\merge_l2_day_delta.py {trade_date} '
+        f'--artifacts "{artifacts_arg}" --db-path "{WIN_MARKET_DB}" --json'
+    )
+    result = _ssh(WIN_HOST, f'cmd /c "{remote_cmd}"')
+    report = _parse_json_output(result.stdout)
+    _progress(
+        f"[{trade_date}] Windows merge 完成：status={report.get('status')} "
+        f"rows_daily={report.get('rows_daily')} rows_5m={report.get('rows_5m')}"
+    )
+    return report
+
+
+def _merge_on_local_market(trade_date: str, local_artifacts: Sequence[str]) -> Dict[str, object]:
+    _progress(f"[{trade_date}] 开始 merge 回 Mac 本地 market_data.db")
+    _ensure_local_parent(LOCAL_MARKET_DB)
+    artifacts_arg = ",".join(str(Path(p)) for p in local_artifacts)
+    result = _run(
+        [
+            sys.executable,
+            str(ROOT_DIR / "backend" / "scripts" / "merge_l2_day_delta.py"),
+            trade_date,
+            "--artifacts",
+            artifacts_arg,
+            "--db-path",
+            str(LOCAL_MARKET_DB),
+            "--json",
+        ]
+    )
+    report = _parse_json_output(result.stdout)
+    _progress(
+        f"[{trade_date}] Mac market merge 完成：status={report.get('status')} "
+        f"rows_daily={report.get('rows_daily')} rows_5m={report.get('rows_5m')}"
+    )
+    return report
+
+
+def _write_windows_atomic_single_day_config(trade_date: str, local_day_root: Path) -> str:
+    iso_date = _compact_to_iso(trade_date)
+    kind = "l2" if trade_date >= "20260301" else "legacy"
+    win_root_py = WIN_PROJECT_ROOT.replace("\\", "/")
+    config = {
+        "atomic_db": WIN_ATOMIC_DB.replace("\\", "/"),
+        "market_root": WIN_MARKET_ROOT.replace("\\", "/"),
+        "extract_root": r"Z:/atomic_stage",
+        "workers": 12,
+        "large_threshold": 200000.0,
+        "super_threshold": 1000000.0,
+        "include_bj": False,
+        "include_star": False,
+        "include_gem": False,
+        "main_board_only": True,
+        "stop_on_failure": True,
+        "cleanup_extracted": True,
+        "state_file": f"{win_root_py}/.run/postclose_atomic/{trade_date}/state.json",
+        "report_file": f"{win_root_py}/.run/postclose_atomic/{trade_date}/report.json",
+        "batches": [
+            {
+                "name": f"postclose_{trade_date}",
+                "kind": kind,
+                "date_from": iso_date,
+                "date_to": iso_date,
+            }
+        ],
+        "extractor": "tar",
+    }
+    local_config = local_day_root / "atomic_config.json"
+    local_config.parent.mkdir(parents=True, exist_ok=True)
+    local_config.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    remote_dir = f"{WIN_PROJECT_ROOT}\\.run\\postclose_atomic\\{trade_date}"
+    remote_config = f"{WIN_PROJECT_ROOT}/.run/postclose_atomic/{trade_date}/atomic_config.json"
+    _ssh(WIN_HOST, f'cmd /c if not exist "{remote_dir}" mkdir "{remote_dir}"', check=False)
+    _run(["scp", str(local_config), f"{WIN_HOST}:{_win_scp_path(remote_config)}"], check=True)
+    return remote_config
+
+
+def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+    _progress(f"[{trade_date}] 开始更新 Windows 本地 atomic 主库")
+    remote_config = _write_windows_atomic_single_day_config(trade_date, local_day_root)
+    remote_cmd = (
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\run_atomic_backfill_windows.py --config "{remote_config}"'
+    )
+    result = _ssh(WIN_HOST, f'cmd /c "{remote_cmd}"')
+    report = _parse_json_output(result.stdout)
+    _progress(
+        f"[{trade_date}] Windows atomic 更新完成：status={report.get('status')} "
+        f"completed_day_count={report.get('completed_day_count')}"
+    )
+    remote_delta = f"{WIN_PROJECT_ROOT}/.run/postclose_atomic/{trade_date}/atomic_day_delta_{trade_date}.db"
+    export_cmd = (
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\export_atomic_day_delta.py {trade_date} '
+        f'--source-db "{WIN_ATOMIC_DB}" --output-db "{remote_delta}"'
+    )
+    export_result = _ssh(WIN_HOST, f'cmd /c "{export_cmd}"')
+    export_report = _parse_json_output(export_result.stdout)
+    local_delta = local_day_root / "processed" / f"atomic_day_delta_{trade_date}.db"
+    local_delta.parent.mkdir(parents=True, exist_ok=True)
+    _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_delta)}", str(local_delta)], check=True)
+    merge_result = _run(
+        [
+            sys.executable,
+            str(ROOT_DIR / "backend" / "scripts" / "merge_atomic_day_delta.py"),
+            trade_date,
+            "--delta-db",
+            str(local_delta),
+            "--target-db",
+            str(LOCAL_ATOMIC_DB),
+        ]
+    )
+    merge_report = _parse_json_output(merge_result.stdout)
+    _progress(
+        f"[{trade_date}] Mac atomic 增量合并完成：tables={len(merge_report.get('row_counts', {}))}"
+    )
+    return {
+        "windows_atomic": report,
+        "atomic_delta_export": export_report,
+        "local_atomic_merge": merge_report,
+        "local_delta_path": str(local_delta),
+    }
+
+
+def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    selection_db = _resolve_windows_selection_db()
+    if not selection_db:
+        raise RuntimeError("Windows 未解析到 selection_research DB")
+    _progress(f"[{trade_date}] 开始更新 Windows 本地 selection 主库")
+    refresh_cmd = (
+        f'cmd /c "set DB_PATH={WIN_MARKET_DB}&& '
+        f'set ATOMIC_MAINBOARD_DB_PATH={WIN_ATOMIC_DB}&& '
+        f'set ATOMIC_DB_PATH={WIN_ATOMIC_DB}&& '
+        f'set SELECTION_DB_PATH={selection_db}&& '
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\run_selection_research.py refresh --start-date {iso_date} --end-date {iso_date}"'
+    )
+    refresh_result = _ssh(WIN_HOST, refresh_cmd)
+    refresh_report = _parse_json_output(refresh_result.stdout)
+    remote_delta = f"{WIN_PROJECT_ROOT}/.run/postclose_atomic/{trade_date}/selection_day_delta_{trade_date}.db"
+    export_cmd = (
+        f'cmd /c "set SELECTION_DB_PATH={selection_db}&& '
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\export_selection_day_delta.py {trade_date} '
+        f'--source-db \\"{selection_db}\\" --output-db \\"{remote_delta}\\""'
+    )
+    export_result = _ssh(WIN_HOST, export_cmd)
+    export_report = _parse_json_output(export_result.stdout)
+    local_delta = local_day_root / "processed" / f"selection_day_delta_{trade_date}.db"
+    local_delta.parent.mkdir(parents=True, exist_ok=True)
+    _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_delta)}", str(local_delta)], check=True)
+    merge_result = _run(
+        [
+            sys.executable,
+            str(ROOT_DIR / "backend" / "scripts" / "merge_selection_day_delta.py"),
+            trade_date,
+            "--delta-db",
+            str(local_delta),
+            "--target-db",
+            str(LOCAL_SELECTION_DB),
+        ]
+    )
+    merge_report = _parse_json_output(merge_result.stdout)
+    _progress(f"[{trade_date}] Mac selection 增量合并完成")
+    return {
+        "windows_selection_refresh": refresh_report,
+        "selection_delta_export": export_report,
+        "local_selection_merge": merge_report,
+        "local_delta_path": str(local_delta),
+    }
+
+
+def _bootstrap_mac_full_sync() -> Dict[str, object]:
+    selection_db = _resolve_windows_selection_db()
+    if not selection_db:
+        raise RuntimeError("Windows 未解析到 selection_research DB")
+    mapping = [
+        (WIN_MARKET_DB, LOCAL_MARKET_DB),
+        (WIN_ATOMIC_DB, LOCAL_ATOMIC_DB),
+        (selection_db, LOCAL_SELECTION_DB),
+    ]
+    copied: List[Dict[str, str]] = []
+    for remote_path, local_path in mapping:
+        _progress(f"[bootstrap] 同步全量库到 Mac: {remote_path} -> {local_path}")
+        _ensure_local_parent(local_path)
+        _backup_local_file(local_path)
+        _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_path)}", str(local_path)], check=True)
+        copied.append({"remote": remote_path, "local": str(local_path)})
+    return {"status": "done", "copied": copied}
 
 
 def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
@@ -425,16 +705,27 @@ def _write_local_report(local_day_root: Path, report: Dict[str, object]) -> None
     latest.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def run_day(trade_date: str, workers: int, stable_seconds: int, skip_cloud_merge: bool = False) -> Dict[str, object]:
+def run_day(
+    trade_date: str,
+    workers: int,
+    stable_seconds: int,
+    skip_cloud_merge: bool = False,
+    skip_mac_sync: bool = False,
+) -> Dict[str, object]:
     local_day_root = ROOT_DIR / ".run" / "postclose_l2" / trade_date
     _progress(f"[{trade_date}] ===== 开始处理 =====")
     prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
     worker_results = _run_workers(prepared, local_day_root=local_day_root)
+    windows_merge_report = _merge_on_windows(
+        trade_date=trade_date,
+        remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
+    )
     local_artifacts = _copy_artifacts_to_local(
         trade_date=trade_date,
         remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
         local_day_root=local_day_root,
     )
+    local_market_merge_report = _merge_on_local_market(trade_date=trade_date, local_artifacts=local_artifacts)
 
     merge_report: Optional[Dict[str, object]] = None
     verify_report: Optional[Dict[str, object]] = None
@@ -445,16 +736,28 @@ def run_day(trade_date: str, workers: int, stable_seconds: int, skip_cloud_merge
         verify_report = _verify_cloud_day(trade_date=trade_date)
         _cleanup_remote_day(trade_date)
 
+    atomic_sync_report: Optional[Dict[str, object]] = None
+    selection_sync_report: Optional[Dict[str, object]] = None
+    if not skip_mac_sync:
+        _sync_required_windows_scripts()
+        atomic_sync_report = _run_windows_atomic_pipeline(trade_date=trade_date, local_day_root=local_day_root)
+        selection_sync_report = _run_windows_selection_pipeline(trade_date=trade_date, local_day_root=local_day_root)
+
     report = {
         "trade_date": trade_date,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "prepared": prepared,
         "worker_results": worker_results,
+        "windows_merge_report": windows_merge_report,
         "local_artifacts": local_artifacts,
+        "local_market_merge_report": local_market_merge_report,
         "cloud_artifacts": cloud_artifacts,
         "merge_report": merge_report,
         "verify_report": verify_report,
         "skip_cloud_merge": skip_cloud_merge,
+        "skip_mac_sync": skip_mac_sync,
+        "atomic_sync_report": atomic_sync_report,
+        "selection_sync_report": selection_sync_report,
     }
     report["execution_summary"] = _classify_day_report(report)
     _write_local_report(local_day_root, report)
@@ -474,6 +777,8 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--stable-seconds", type=int, default=30)
     parser.add_argument("--skip-cloud-merge", action="store_true")
+    parser.add_argument("--skip-mac-sync", action="store_true")
+    parser.add_argument("--bootstrap-mac-full-sync", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -496,11 +801,13 @@ def main() -> None:
         target_days = _pending_days(ready_days, existing_cloud_days)
 
     if not target_days:
+        bootstrap_report = _bootstrap_mac_full_sync() if args.bootstrap_mac_full_sync else None
         result = {
-            "status": "noop",
+            "status": "done" if bootstrap_report else "noop",
             "ready_days": ready_days,
             "existing_cloud_days_count": len(existing_cloud_days),
-            "message": "无待跑交易日",
+            "message": "无待跑交易日" if not bootstrap_report else "无待跑交易日，但已完成 Mac 全量同步",
+            "bootstrap_mac_full_sync": bootstrap_report,
         }
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -516,6 +823,7 @@ def main() -> None:
             "ready_days": ready_days,
             "target_days": target_days,
             "existing_cloud_days_count": len(existing_cloud_days),
+            "bootstrap_mac_full_sync": bool(args.bootstrap_mac_full_sync),
         }
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -529,9 +837,13 @@ def main() -> None:
             workers=int(args.workers),
             stable_seconds=int(args.stable_seconds),
             skip_cloud_merge=bool(args.skip_cloud_merge),
+            skip_mac_sync=bool(args.skip_mac_sync),
         )
         for day in target_days
     ]
+    bootstrap_report = None
+    if args.bootstrap_mac_full_sync:
+        bootstrap_report = _bootstrap_mac_full_sync()
     final_status = "PASS"
     if any((report.get("execution_summary") or {}).get("final_status") == "FAIL" for report in day_reports):
         final_status = "FAIL"
@@ -543,6 +855,7 @@ def main() -> None:
         "final_status": final_status,
         "target_days": target_days,
         "day_reports": day_reports,
+        "bootstrap_mac_full_sync": bootstrap_report,
     }
     if args.json:
         print(json.dumps(final_result, ensure_ascii=False, indent=2))

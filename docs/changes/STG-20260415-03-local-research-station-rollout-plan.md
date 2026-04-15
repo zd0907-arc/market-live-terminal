@@ -22,36 +22,43 @@
 - 明确 worktree / branch 纪律
 - 结果：后续开发不再以“full atomic 切生产”为默认目标
 
-### Phase B：Windows -> Mac 快照同步链路
+### Phase B：Windows -> Mac 全量处理后库同步链路
 - 冻结同步对象：
-  - `selection_research.db`
-  - 复盘裁剪库
-  - 元数据映射
+  - `data/market_data.db`
+  - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+  - `data/selection/selection_research*.db`
 - 冻结同步方式：
-  - Windows 产出
-  - Mac 拉取
-  - 本地覆盖前保留回退快照
-- 结果：Mac 可一键拿到最新研究快照
-- 当前已落地：
+  - 首次：整库全量同步到 Mac；
+  - 后续：按交易日做增量同步；
+  - 本地覆盖前保留回退快照。
+- 结果：Mac 持有与 Windows 同口径的处理后全量库。
+- 当前已落地（过渡态工具）：
   - `backend/scripts/build_local_research_snapshot.py`
   - `ops/sync_windows_research_snapshot.sh`
   - `ops/start_local_research_station.sh`
   - `ops/start_local_research_frontend.sh`
-- 当前默认策略：
-  - 以 `latest selection + extra symbols` 作为 focus symbol 集；
-  - 导出 `history_daily_l2 / history_5m_l2 / local_history / stock_universe_meta / sentiment_events / sentiment_daily_scores`；
-  - Windows 侧 `selection DB` 允许自动识别：
-    - `data/selection/selection_research.db`
-    - `data/selection/selection_research_windows.db`
-  - 当前已验证可从 Windows 拉回本地 `research_snapshot.db + selection_research.db + manifest.json`。
+- 当前结论：
+  - 以上“snapshot”链路只作为开发验证过渡，不再是最终日常方案；
+  - 下一步要把 `./ops/run_postclose_l2.sh` 升级为：
+    1. Windows 跑当日处理；
+    2. 云端同步轻量盯盘数据；
+    3. Mac 同步处理后全量库的日增量。
+  - 当前已落地第一版：
+    - Windows `market_data.db` 单日 merge
+    - Mac `market_data.db` 单日 merge
+    - Windows `atomic / selection` 单日更新
+    - Mac `atomic / selection` 单日增量合并
+    - `--bootstrap-mac-full-sync` 首次整库同步
 
 ### Phase C：Mac 本地读路径切换
-- 复盘页切到本地研究快照
-- 选股页切到本地 `selection_research.db`
+- 复盘页切到本地 full processed DB
+- 选股页切到本地 full `selection_research.db`
 - 页面 smoke：
   - 选股页能出候选
   - 复盘页能看图和资金流
-- 本地前端默认代理到 `http://127.0.0.1:8001`
+- 盯盘页能同时看到：
+  - 历史 finalized 数据
+  - 本地今日实时数据
 - 结果：Mac 成为可稳定使用的研究工作台
 
 ### Phase D：云端收口

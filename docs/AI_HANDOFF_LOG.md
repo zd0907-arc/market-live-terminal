@@ -1212,3 +1212,17 @@
 - 结论: 已继续推进本地研究站可用性：确认 Windows 正式选股库实际文件名为 `selection_research_windows.db`，并把 `build_local_research_snapshot.py + sync_windows_research_snapshot.sh` 改为自动识别 `selection_research.db / selection_research_windows.db`；同时补了 `ops/start_local_research_frontend.sh` 与 `VITE_API_PROXY_TARGET` 代理开关，Mac 本地前后端启动链路已收口。
 - 风险: 还需再做一轮完整 smoke，确认最新同步确实不再依赖本地 bootstrap，且页面层使用体验稳定。
 - 链接: `backend/scripts/build_local_research_snapshot.py`, `ops/sync_windows_research_snapshot.sh`, `ops/start_local_research_frontend.sh`, `vite.config.ts`
+
+## 2026-04-15 23:45 | Codex
+- Task ID: `CHG-20260415-03`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已根据最新确认把架构真相再次收口：旧的“Windows -> Mac 裁剪快照”不再作为最终目标，改为“raw 只留 Windows；处理后全量库 Windows / Mac 各保留一份；Cloud 只保留轻量盯盘”；同时明确旧 `./ops/run_postclose_l2.sh` 只覆盖数据治理前的盘后结果，不包含 atomic / selection 等新增表，后续需要升级成“首次整库同步 + 每日增量同步”的统一入口。
+- 风险: 这一步目前先完成文档收口，新的日常总控命令还未真正实现。
+- 链接: `docs/changes/MOD-20260415-02-local-research-station-architecture.md`, `docs/changes/STG-20260415-03-local-research-station-rollout-plan.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-04-16 00:20 | Codex
+- Task ID: `CHG-20260415-03`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已实现新版日常总控第一版：`run_postclose_l2_daily.py` 现在除旧的 Cloud L2 merge 外，还新增了 Windows 本地 `market_data.db` merge、Mac 本地 `market_data.db` merge、Windows 单日 `atomic` 更新、Windows 单日 `selection` 刷新，以及 `atomic_day_delta / selection_day_delta` 导出回流 Mac；并支持 `--bootstrap-mac-full-sync` 做首次整库同步。
+- 风险: 目前已完成本地脚本级验证与 dry-run；还未对整条远程真实链路做一轮完整实跑。
+- 链接: `backend/scripts/run_postclose_l2_daily.py`, `backend/scripts/export_atomic_day_delta.py`, `backend/scripts/merge_atomic_day_delta.py`, `backend/scripts/export_selection_day_delta.py`, `backend/scripts/merge_selection_day_delta.py`

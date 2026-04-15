@@ -692,30 +692,38 @@ git checkout main && git merge --no-ff <branch>
     - `main_board_only = true`
 
 
-## 本地研究站数据同步原则（2026-04-15 新冻结）
+## 本地研究站数据同步原则（2026-04-15 最新冻结）
 
 ### 1. 同步方向
-- 默认只允许：**Windows -> Mac**
+- 主方向：
+  - **Windows -> Cloud（轻量盯盘）**
+  - **Windows -> Mac（处理后全量库）**
 - 云端不再承担 full atomic 中转站职责。
 
 ### 2. 同步对象
-- `selection/selection_research.db`
-- 复盘裁剪库（后续单独冻结库名与表集）
-- 必要元数据表 / 名称映射
+- **同步到 Cloud：**
+  - 轻量盯盘所需数据
+  - 不含 full atomic
+- **同步到 Mac：**
+  - `data/market_data.db`
+  - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+  - `data/selection/selection_research*.db`
+  - 首次整库同步，后续按交易日做增量同步
 
 ### 3. 不推荐方式
 - 不直接在 Mac 上远程挂载并查询 Windows sqlite；
 - 不把 raw 包同步到 Mac；
-- 不默认同步 full atomic 主库到 Mac。
+- 不把解压 staging / shard artifact 当成长期数据放到 Mac。
 
 ### 4. 同步验真
 - 必须检查文件大小 / 时间戳；
 - 覆盖前保留上一份可回退快照；
-- 页面验收以 Mac 本地接口为准，不以 Windows 文件存在即视为成功。
+- 页面验收以 Mac 本地接口为准，不以 Windows 文件存在即视为成功；
+- `user_data.db` 保持 Mac 本机独立，不从 Windows 覆盖。
 
-### 5. 当前推荐命令
+### 5. 当前过渡命令（仅开发验证）
 ```bash
-# 1) 从 Windows 构建并拉取本地研究快照
+# 1) 从 Windows 构建并拉取本地研究快照（过渡态，不是最终日常方案）
 cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
 EXTRA_SYMBOLS='sz000977,sh600382,sz003019,sh603629' \
 DAILY_DAYS=45 INTRADAY_DAYS=20 SENTIMENT_DAYS=20 \
@@ -728,16 +736,50 @@ PORT=8001 bash ops/start_local_research_station.sh
 BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
-### 6. 当前同步脚本说明
+### 6. 最终日常命令目标（待升级）
+旧命令：
+```bash
+./ops/run_postclose_l2.sh
+```
+
+新语义应升级为：
+1. Windows 跑当天日包，产出**数据治理后的新增表/新增库结果**；
+2. 需要上传 Cloud 的轻量数据继续上传；
+3. 需要回流 Mac 的处理后全量库增量同步回 Mac；
+4. 首次全量同步与后续每日增量同步共用一套主入口。
+
+### 6.1 当前已落地的新总控语义（2026-04-15）
+`backend/scripts/run_postclose_l2_daily.py` 已新增：
+- Windows 本地 `market_data.db` merge；
+- Mac 本地 `market_data.db` merge；
+- Windows 单日 `atomic` 更新；
+- Windows 单日 `selection` 刷新；
+- `atomic_day_delta / selection_day_delta` 导出并回流 Mac；
+- `--bootstrap-mac-full-sync`：
+  - 首次把 Windows 的处理后全量库整库同步到 Mac；
+  - 同步对象：
+    - `data/market_data.db`
+    - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+    - `data/selection/selection_research*.db`
+
+### 6.2 新增增量脚本
+- `backend/scripts/export_atomic_day_delta.py`
+- `backend/scripts/merge_atomic_day_delta.py`
+- `backend/scripts/export_selection_day_delta.py`
+- `backend/scripts/merge_selection_day_delta.py`
+
+### 7. 当前同步脚本说明
 - `backend/scripts/build_local_research_snapshot.py`
   - 在 Windows 上运行；
   - 从 full atomic + main DB 构建轻量 `research_snapshot.db`
+  - **当前仅用于开发验证，不是最终日常全量同步方案**
   - 自动识别 Windows 侧正式选股库：
     - `data/selection/selection_research.db`
     - `data/selection/selection_research_windows.db`
 - `ops/sync_windows_research_snapshot.sh`
   - 在 Mac 上运行；
   - 自动上传 builder、远程生成 snapshot、拉回 `snapshot + selection + manifest`
+  - **当前仅用于开发验证**
 - `ops/start_local_research_station.sh`
   - 在 Mac 上运行；
   - 强制使用本地研究快照启动后端，并关闭后台采集/调度

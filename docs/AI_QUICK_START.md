@@ -40,13 +40,15 @@ npm run check:baseline
 ## 当前工作原则
 1. 复盘/选股/研究型改动优先按 **Mac 本地研究站** 设计，不默认以上生产为目标。
 2. 不把 `38GB+` full atomic 主库当作云端或 Mac 的默认常驻库。
-3. Mac 优先读取 Windows 导出的研究快照，不直接跨网络读 Windows sqlite 主库。
+3. 当前最新冻结：**raw 只留 Windows；处理后全量库 Windows / Mac 各保留一份；Cloud 只保留轻量盯盘数据。**
+4. Mac 不直接跨网络读 Windows sqlite 主库。
 4. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
 ## 当前关键脚本
 - Windows -> Mac 同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
 - 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_frontend.sh`
+- 历史盘后总控旧入口：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/run_postclose_l2.sh`
 
 ## 本地研究站最小启动顺序
 ```bash
@@ -57,10 +59,11 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
 ## 当前同步约定
-- Windows 侧选股库允许两种正式文件名：
-  - `D:\\market-live-terminal\\data\\selection\\selection_research.db`
-  - `D:\\market-live-terminal\\data\\selection\\selection_research_windows.db`
-- Mac 同步脚本优先自动识别 Windows 正式库，不再把本地 bootstrap 当默认主路径。
+- 当前过渡态 `snapshot` 只用于开发验证；
+- 最终目标是：
+  - 首次把 Windows 的处理后全量库整库同步到 Mac；
+  - 后续每天只同步新增交易日的处理结果；
+  - `./ops/run_postclose_l2.sh` 需要升级为这套新语义的一键入口。
 
 ## 当前回退入口
 - 生产轻量版回退：`v4.2.32`
