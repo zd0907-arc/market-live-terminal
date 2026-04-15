@@ -1,7 +1,7 @@
 # AI_QUICK_START
 
 ## 当前真相
-- 当前权威工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前稳定基线目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前主线分支：`main`
 - 当前生产代码版本：`v4.3.1`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
@@ -33,7 +33,7 @@
 
 ## 最小自检
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
 npm run check:baseline
 ```
 
@@ -46,6 +46,21 @@ npm run check:baseline
 ## 当前关键脚本
 - Windows -> Mac 同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
+- 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_frontend.sh`
+
+## 本地研究站最小启动顺序
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+bash ops/sync_windows_research_snapshot.sh
+PORT=8001 bash ops/start_local_research_station.sh
+BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
+```
+
+## 当前同步约定
+- Windows 侧选股库允许两种正式文件名：
+  - `D:\\market-live-terminal\\data\\selection\\selection_research.db`
+  - `D:\\market-live-terminal\\data\\selection\\selection_research_windows.db`
+- Mac 同步脚本优先自动识别 Windows 正式库，不再把本地 bootstrap 当默认主路径。
 
 ## 当前回退入口
 - 生产轻量版回退：`v4.2.32`

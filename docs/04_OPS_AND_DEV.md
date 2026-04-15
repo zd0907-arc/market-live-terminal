@@ -723,15 +723,24 @@ bash ops/sync_windows_research_snapshot.sh
 
 # 2) 启动本地研究站后端（默认禁后台任务）
 PORT=8001 bash ops/start_local_research_station.sh
+
+# 3) 另开一个终端启动前端（默认代理到 8001）
+BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
 ### 6. 当前同步脚本说明
 - `backend/scripts/build_local_research_snapshot.py`
   - 在 Windows 上运行；
   - 从 full atomic + main DB 构建轻量 `research_snapshot.db`
+  - 自动识别 Windows 侧正式选股库：
+    - `data/selection/selection_research.db`
+    - `data/selection/selection_research_windows.db`
 - `ops/sync_windows_research_snapshot.sh`
   - 在 Mac 上运行；
   - 自动上传 builder、远程生成 snapshot、拉回 `snapshot + selection + manifest`
 - `ops/start_local_research_station.sh`
   - 在 Mac 上运行；
   - 强制使用本地研究快照启动后端，并关闭后台采集/调度
+- `ops/start_local_research_frontend.sh`
+  - 在 Mac 上运行；
+  - 默认把前端 `3001` 代理到本地研究站后端 `8001`

@@ -498,7 +498,7 @@
     - `research_snapshot.db`
     - `selection_research.db`
     - `research_snapshot_manifest.json`
-  - 但 Windows 端正式 `selection_research.db` 还未稳定落地，当前仍保留本地 bootstrap selection DB 兜底。
+  - `2026-04-15` 已确认 Windows 正式库文件名为 `selection_research_windows.db`，并已把同步脚本改为自动识别两种正式命名。
 - 解除条件：
   1. 同步目录与覆盖策略冻结；
   2. Mac 能一键拉取最新快照；
@@ -515,5 +515,6 @@
 - 下一步：
   1. 明确复盘裁剪库最小表集；
   2. 本地接口切换到快照读路径；
-  3. 做页面 smoke（复盘页 + 选股页）。
+  3. 做页面 smoke（复盘页 + 选股页）；
+  4. 固化前端启动脚本与代理口径。
 - 关联任务：`CHG-20260415-02`

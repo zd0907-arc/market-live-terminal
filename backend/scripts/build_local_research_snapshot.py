@@ -5,7 +5,7 @@ import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Optional, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -14,6 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 DEFAULT_MAIN_DB = Path(r"D:\market-live-terminal\data\market_data.db")
 DEFAULT_ATOMIC_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
 DEFAULT_SELECTION_DB = Path(r"D:\market-live-terminal\data\selection\selection_research.db")
+DEFAULT_SELECTION_DB_CANDIDATES = (
+    DEFAULT_SELECTION_DB,
+    Path(r"D:\market-live-terminal\data\selection\selection_research_windows.db"),
+)
 DEFAULT_OUTPUT_DB = Path(r"D:\market-live-terminal\data\local_research\research_snapshot.db")
 DEFAULT_MANIFEST = Path(r"D:\market-live-terminal\data\local_research\research_snapshot_manifest.json")
 DEFAULT_PREFIXES = ("sh60", "sz00", "sz30")
@@ -38,6 +42,17 @@ def _connect(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
+
+
+def _resolve_selection_db(path: Path) -> Optional[Path]:
+    candidates: List[Path] = [path]
+    for item in DEFAULT_SELECTION_DB_CANDIDATES:
+        if item not in candidates:
+            candidates.append(item)
+    for item in candidates:
+        if item.exists():
+            return item
+    return None
 
 
 def _sqlite_path_literal(path: Path) -> str:
@@ -251,14 +266,14 @@ def _resolve_latest_atomic_trade_date(atomic_db: Path) -> str:
 
 
 def _resolve_focus_symbols(
-    selection_db: Path,
+    selection_db: Optional[Path],
     extra_symbols: Sequence[str],
     prefixes: Sequence[str],
     signal_days: int,
     signal_limit: int,
 ) -> List[str]:
     symbols = set()
-    if selection_db.exists():
+    if selection_db and selection_db.exists():
         with _connect(selection_db) as conn:
             latest_row = conn.execute("SELECT MAX(trade_date) FROM selection_signal_daily").fetchone()
             latest_signal_date = str(latest_row[0]) if latest_row and latest_row[0] else None
@@ -565,6 +580,7 @@ def _manifest_counts(conn: sqlite3.Connection) -> dict:
 def build_snapshot(args: argparse.Namespace) -> dict:
     if not args.atomic_db.exists():
         raise SystemExit(f"atomic db 不存在: {args.atomic_db}")
+    resolved_selection_db = _resolve_selection_db(args.selection_db)
     prefixes = tuple(_parse_symbols(",".join(args.prefixes)))
     extra_symbols = _parse_symbols(args.extra_symbols)
     end_date = _coerce_date(args.end_date) if args.end_date else _resolve_latest_atomic_trade_date(args.atomic_db)
@@ -572,7 +588,7 @@ def build_snapshot(args: argparse.Namespace) -> dict:
     intraday_start = _date_minus(end_date, args.intraday_days)
     sentiment_start = _date_minus(end_date, args.sentiment_days)
     symbols = _resolve_focus_symbols(
-        selection_db=args.selection_db,
+        selection_db=resolved_selection_db,
         extra_symbols=extra_symbols,
         prefixes=prefixes,
         signal_days=args.signal_days,
@@ -590,8 +606,8 @@ def build_snapshot(args: argparse.Namespace) -> dict:
         conn.execute(f"ATTACH DATABASE '{_sqlite_path_literal(args.atomic_db)}' AS atomic")
         if args.main_db.exists():
             conn.execute(f"ATTACH DATABASE '{_sqlite_path_literal(args.main_db)}' AS src")
-        if args.selection_db.exists():
-            conn.execute(f"ATTACH DATABASE '{_sqlite_path_literal(args.selection_db)}' AS sel")
+        if resolved_selection_db and resolved_selection_db.exists():
+            conn.execute(f"ATTACH DATABASE '{_sqlite_path_literal(resolved_selection_db)}' AS sel")
         _insert_scope_symbols(conn, symbols)
 
         metadata_rows = _copy_stock_universe_meta(conn)
@@ -607,7 +623,7 @@ def build_snapshot(args: argparse.Namespace) -> dict:
             "output_db": str(args.output_db),
             "main_db": str(args.main_db),
             "atomic_db": str(args.atomic_db),
-            "selection_db": str(args.selection_db),
+            "selection_db": str(resolved_selection_db or ""),
             "symbol_count": len(symbols),
             "symbols": symbols,
             "date_range": {

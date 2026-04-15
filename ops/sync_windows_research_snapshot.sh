@@ -5,7 +5,8 @@ ROOT="/Users/dong/Desktop/AIGC/market-live-terminal-local-research"
 WIN_HOST="${WIN_HOST:-laqiyuan@100.115.228.56}"
 WIN_ROOT="${WIN_ROOT:-D:\\market-live-terminal}"
 WIN_PY_CMD="${WIN_PY_CMD:-py -3}"
-BOOTSTRAP_SELECTION_DB="${BOOTSTRAP_SELECTION_DB:-/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/data/selection/selection_research.db}"
+WIN_ROOT_PY="${WIN_ROOT_PY:-${WIN_ROOT//\\//}}"
+BOOTSTRAP_SELECTION_DB="${BOOTSTRAP_SELECTION_DB:-}"
 
 LOCAL_ROOT="${LOCAL_RESEARCH_ROOT:-$ROOT/data/local_research}"
 LOCAL_SELECTION_DIR="$LOCAL_ROOT/selection"
@@ -16,7 +17,7 @@ LOCAL_SELECTION_DB="${LOCAL_SELECTION_DB:-$LOCAL_SELECTION_DIR/selection_researc
 REMOTE_SCRIPT="${WIN_ROOT}/backend/scripts/build_local_research_snapshot.py"
 REMOTE_OUTPUT_DB="${REMOTE_OUTPUT_DB:-${WIN_ROOT}/data/local_research/research_snapshot.db}"
 REMOTE_MANIFEST_JSON="${REMOTE_MANIFEST_JSON:-${WIN_ROOT}/data/local_research/research_snapshot_manifest.json}"
-REMOTE_SELECTION_DB="${REMOTE_SELECTION_DB:-${WIN_ROOT}/data/selection/selection_research.db}"
+REMOTE_SELECTION_DB="${REMOTE_SELECTION_DB:-}"
 
 EXTRA_SYMBOLS="${EXTRA_SYMBOLS:-${1:-}}"
 DAILY_DAYS="${DAILY_DAYS:-180}"
@@ -36,7 +37,21 @@ ssh "$WIN_HOST" "cmd /c if not exist \"${WIN_ROOT}\\backend\\scripts\" mkdir \"$
 echo "[research-sync] upload snapshot builder"
 scp "$ROOT/backend/scripts/build_local_research_snapshot.py" "$WIN_HOST:${REMOTE_SCRIPT}"
 
+if [ -z "$REMOTE_SELECTION_DB" ]; then
+  REMOTE_SELECTION_DB="$(ssh "$WIN_HOST" "${WIN_PY_CMD} -c \"from pathlib import Path; candidates=[Path(r'${WIN_ROOT_PY}/data/selection/selection_research.db'), Path(r'${WIN_ROOT_PY}/data/selection/selection_research_windows.db')]; print(next((str(p) for p in candidates if p.exists()), ''))\"" | tr -d '\r' | tail -n 1)"
+fi
+
+if [ -n "$REMOTE_SELECTION_DB" ]; then
+  echo "[research-sync] resolved remote selection db: $REMOTE_SELECTION_DB"
+else
+  echo "[research-sync] remote selection db not found on Windows" >&2
+fi
+REMOTE_SELECTION_DB_SCP="${REMOTE_SELECTION_DB//\\//}"
+
 REMOTE_CMD="cd /d ${WIN_ROOT} && ${WIN_PY_CMD} backend\\scripts\\build_local_research_snapshot.py --output-db \"${REMOTE_OUTPUT_DB}\" --manifest-json \"${REMOTE_MANIFEST_JSON}\" --daily-days ${DAILY_DAYS} --intraday-days ${INTRADAY_DAYS} --sentiment-days ${SENTIMENT_DAYS} --signal-days ${SIGNAL_DAYS} --signal-limit ${SIGNAL_LIMIT}"
+if [ -n "$REMOTE_SELECTION_DB" ]; then
+  REMOTE_CMD="${REMOTE_CMD} --selection-db \"${REMOTE_SELECTION_DB}\""
+fi
 if [ -n "$EXTRA_SYMBOLS" ]; then
   REMOTE_CMD="${REMOTE_CMD} --extra-symbols \"${EXTRA_SYMBOLS}\""
 fi
@@ -53,14 +68,14 @@ done
 
 echo "[research-sync] download snapshot db"
 scp "$WIN_HOST:${REMOTE_OUTPUT_DB}" "$LOCAL_SNAPSHOT_DB"
-if ssh "$WIN_HOST" "cmd /c if exist \"${REMOTE_SELECTION_DB}\" (exit 0) else (exit 1)" >/dev/null 2>&1; then
+if [ -n "$REMOTE_SELECTION_DB" ] && ssh "$WIN_HOST" "${WIN_PY_CMD} -c \"from pathlib import Path; raise SystemExit(0 if Path(r'${REMOTE_SELECTION_DB}').exists() else 1)\"" >/dev/null 2>&1; then
   echo "[research-sync] download selection db"
-  scp "$WIN_HOST:${REMOTE_SELECTION_DB}" "$LOCAL_SELECTION_DB"
-elif [ -f "$BOOTSTRAP_SELECTION_DB" ]; then
+  scp "$WIN_HOST:${REMOTE_SELECTION_DB_SCP}" "$LOCAL_SELECTION_DB"
+elif [ -n "$BOOTSTRAP_SELECTION_DB" ] && [ -f "$BOOTSTRAP_SELECTION_DB" ]; then
   echo "[research-sync] remote selection db missing, use local bootstrap: $BOOTSTRAP_SELECTION_DB"
   cp "$BOOTSTRAP_SELECTION_DB" "$LOCAL_SELECTION_DB"
 else
-  echo "[research-sync] remote selection db missing and no local bootstrap found" >&2
+  echo "[research-sync] remote selection db missing and no local bootstrap configured" >&2
   exit 1
 fi
 echo "[research-sync] download manifest"

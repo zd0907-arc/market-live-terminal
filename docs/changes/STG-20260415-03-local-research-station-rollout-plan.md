@@ -36,9 +36,13 @@
   - `backend/scripts/build_local_research_snapshot.py`
   - `ops/sync_windows_research_snapshot.sh`
   - `ops/start_local_research_station.sh`
+  - `ops/start_local_research_frontend.sh`
 - 当前默认策略：
   - 以 `latest selection + extra symbols` 作为 focus symbol 集；
   - 导出 `history_daily_l2 / history_5m_l2 / local_history / stock_universe_meta / sentiment_events / sentiment_daily_scores`；
+  - Windows 侧 `selection DB` 允许自动识别：
+    - `data/selection/selection_research.db`
+    - `data/selection/selection_research_windows.db`
   - 当前已验证可从 Windows 拉回本地 `research_snapshot.db + selection_research.db + manifest.json`。
 
 ### Phase C：Mac 本地读路径切换
@@ -47,6 +51,7 @@
 - 页面 smoke：
   - 选股页能出候选
   - 复盘页能看图和资金流
+- 本地前端默认代理到 `http://127.0.0.1:8001`
 - 结果：Mac 成为可稳定使用的研究工作台
 
 ### Phase D：云端收口

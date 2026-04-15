@@ -1205,3 +1205,10 @@
 - 结论: 已完成本地研究站 Phase B/P2 的第一轮落地：新增 `build_local_research_snapshot.py + sync_windows_research_snapshot.sh + start_local_research_station.sh`，并完成一次真实 Windows -> Mac 快照同步验证；随后用 `PORT=8001` 启动本地研究站，已验证 `/api/selection/health`、`/api/selection/candidates`、`/api/review/pool`、`/api/review/data` 都能直接读本地快照工作。
 - 风险: Windows 端正式 `selection_research.db` 仍未稳定产出，当前同步脚本还保留本地 bootstrap selection DB 兜底；后续需单独补齐 Windows selection 产出链路。
 - 链接: `backend/scripts/build_local_research_snapshot.py`, `ops/sync_windows_research_snapshot.sh`, `ops/start_local_research_station.sh`, `docs/changes/STG-20260415-03-local-research-station-rollout-plan.md`
+
+## 2026-04-15 23:10 | Codex
+- Task ID: `CHG-20260415-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续推进本地研究站可用性：确认 Windows 正式选股库实际文件名为 `selection_research_windows.db`，并把 `build_local_research_snapshot.py + sync_windows_research_snapshot.sh` 改为自动识别 `selection_research.db / selection_research_windows.db`；同时补了 `ops/start_local_research_frontend.sh` 与 `VITE_API_PROXY_TARGET` 代理开关，Mac 本地前后端启动链路已收口。
+- 风险: 还需再做一轮完整 smoke，确认最新同步确实不再依赖本地 bootstrap，且页面层使用体验稳定。
+- 链接: `backend/scripts/build_local_research_snapshot.py`, `ops/sync_windows_research_snapshot.sh`, `ops/start_local_research_frontend.sh`, `vite.config.ts`
