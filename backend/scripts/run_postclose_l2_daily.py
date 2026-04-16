@@ -10,23 +10,34 @@ Mac 一条命令盘后 L2 日增量总控：
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
-from typing import Dict, List, Optional, Sequence, Set
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
-WIN_HOST = os.getenv("L2_WIN_HOST", "laqiyuan@100.115.228.56")
+WIN_HOST = os.getenv("L2_WIN_HOST", "")
+WIN_HOST_CANDIDATES = [
+    item.strip()
+    for item in os.getenv("L2_WIN_HOST_CANDIDATES", "laqiyuan@192.168.3.108,laqiyuan@100.115.228.56").split(",")
+    if item.strip()
+]
 CLOUD_HOST = os.getenv("L2_CLOUD_HOST", "ubuntu@111.229.144.202")
 WIN_PROJECT_ROOT = os.getenv("L2_WIN_PROJECT_ROOT", r"D:\market-live-terminal")
 WIN_PY_CMD = os.getenv("L2_WIN_PY_CMD", "py -3")
+WIN_PYTHON_EXE = os.getenv(
+    "L2_WIN_PYTHON_EXE",
+    r"C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe",
+)
 WIN_MARKET_ROOT = os.getenv("L2_WIN_MARKET_ROOT", r"D:\MarketData")
 WIN_STAGE_ROOT = os.getenv("L2_WIN_STAGE_ROOT", r"Z:\l2_stage")
 WIN_OUTPUT_ROOT = os.getenv("L2_WIN_OUTPUT_ROOT", r"D:\market-live-terminal\.run\l2_postclose")
@@ -48,6 +59,7 @@ PROGRESS_ENABLED = True
 WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/export_atomic_day_delta.py",
     "backend/scripts/export_selection_day_delta.py",
+    "backend/scripts/run_selection_research.py",
 ]
 
 
@@ -64,6 +76,43 @@ def _run(cmd: Sequence[str], *, check: bool = True, capture_output: bool = True,
     return subprocess.run(list(cmd), check=check, capture_output=capture_output, text=text)
 
 
+def _extract_host_endpoint(host: str) -> str:
+    text = str(host or "").strip()
+    if not text:
+        return ""
+    if "@" in text:
+        return text.split("@", 1)[1]
+    return text
+
+
+def _tcp_reachable(host: str, port: int = 22, timeout: float = 1.5) -> bool:
+    endpoint = _extract_host_endpoint(host)
+    if not endpoint:
+        return False
+    sock = socket.socket()
+    sock.settimeout(timeout)
+    try:
+        sock.connect((endpoint, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def _resolve_windows_host() -> str:
+    explicit = str(WIN_HOST or "").strip()
+    if explicit:
+        return explicit
+    for candidate in WIN_HOST_CANDIDATES:
+        if _tcp_reachable(candidate, port=22):
+            return candidate
+    return WIN_HOST_CANDIDATES[0] if WIN_HOST_CANDIDATES else "laqiyuan@100.115.228.56"
+
+
+WIN_HOST = _resolve_windows_host()
+
+
 def _decode_maybe_gbk(data: bytes) -> str:
     if not data:
         return ""
@@ -76,9 +125,7 @@ def _decode_maybe_gbk(data: bytes) -> str:
 
 
 def _ssh(host: str, remote_command: str, *, check: bool = True) -> subprocess.CompletedProcess:
-    escaped = remote_command.replace("\\", "\\\\").replace('"', '\\"')
-    command = f'ssh {shlex.quote(host)} "{escaped}"'
-    result = subprocess.run(["bash", "-lc", command], check=False, capture_output=True, text=False)
+    result = subprocess.run(["ssh", host, remote_command], check=False, capture_output=True, text=False)
     decoded = subprocess.CompletedProcess(
         result.args,
         result.returncode,
@@ -93,6 +140,11 @@ def _ssh(host: str, remote_command: str, *, check: bool = True) -> subprocess.Co
             stderr=decoded.stderr,
         )
     return decoded
+
+
+def _powershell_encoded(script: str) -> str:
+    encoded = base64.b64encode(str(script).encode("utf-16le")).decode("ascii")
+    return f"powershell -NoProfile -EncodedCommand {encoded}"
 
 
 def _discover_windows_archives(market_root: str) -> List[str]:
@@ -175,17 +227,10 @@ def _parse_json_output(stdout: str) -> Dict[str, object]:
 def _resolve_windows_selection_db() -> str:
     if WIN_SELECTION_DB:
         return WIN_SELECTION_DB
-    win_root_py = WIN_PROJECT_ROOT.replace("\\", "/")
-    python_code = (
-        "from pathlib import Path; "
-        f"candidates=[Path(r'{win_root_py}/data/selection/selection_research.db'), "
-        f"Path(r'{win_root_py}/data/selection/selection_research_windows.db')]; "
-        "print(next((str(p) for p in candidates if p.exists()), ''))"
-    )
-    result = _ssh(
-        WIN_HOST,
-        f"{WIN_PY_CMD} -c {shlex.quote(python_code)}",
-    )
+    preferred = f"{WIN_PROJECT_ROOT}\data\selection\selection_research_windows.db"
+    fallback = f"{WIN_PROJECT_ROOT}\data\selection\selection_research.db"
+    cmd = f'cmd /c if exist "{preferred}" (echo {preferred}) else if exist "{fallback}" (echo {fallback})'
+    result = _ssh(WIN_HOST, cmd)
     return str((result.stdout or "").strip().splitlines()[-1] if (result.stdout or "").strip() else "")
 
 
@@ -195,6 +240,36 @@ def _backup_local_file(path: Path) -> None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = path.with_name(f"{path.name}.bak.{stamp}")
     path.replace(backup)
+
+
+def _remote_file_stat(remote_path: str) -> Tuple[int, str]:
+    py_path = str(remote_path).replace("\\", "\\\\")
+    cmd = f'py -3 -c "import os; p=r\'{py_path}\'; print(str(os.path.getsize(p))+\'|\'+p)"'
+    result = _ssh(WIN_HOST, cmd)
+    text = str(result.stdout or "").strip().splitlines()[-1]
+    size_text, _, real_path = text.partition("|")
+    return int(size_text or 0), real_path or remote_path
+
+def _copy_windows_file_to_local(remote_path: str, local_path: Path) -> Dict[str, object]:
+    remote_size, resolved_remote = _remote_file_stat(remote_path)
+    _ensure_local_parent(local_path)
+    tmp_path = local_path.with_name(f"{local_path.name}.part")
+    if tmp_path.exists():
+        tmp_path.unlink()
+    _run(["scp", f"{WIN_HOST}:{_win_scp_path(resolved_remote)}", str(tmp_path)], check=True)
+    local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
+    if remote_size != local_size:
+        raise RuntimeError(
+            f"copy size mismatch: remote={remote_size} local={local_size} path={resolved_remote}"
+        )
+    if local_path.exists():
+        _backup_local_file(local_path)
+    tmp_path.replace(local_path)
+    return {
+        "remote": resolved_remote,
+        "local": str(local_path),
+        "bytes": local_size,
+    }
 
 
 def _ensure_local_parent(path: Path) -> None:
@@ -499,14 +574,27 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path) -> Di
     )
     refresh_result = _ssh(WIN_HOST, refresh_cmd)
     refresh_report = _parse_json_output(refresh_result.stdout)
-    remote_delta = f"{WIN_PROJECT_ROOT}/.run/postclose_atomic/{trade_date}/selection_day_delta_{trade_date}.db"
+    remote_delta_dir = f"{WIN_PROJECT_ROOT}\\.run\\postclose_atomic\\{trade_date}"
+    remote_delta = f"{remote_delta_dir}\\selection_day_delta_{trade_date}.db"
+    _ssh(WIN_HOST, f'cmd /c if not exist "{remote_delta_dir}" mkdir "{remote_delta_dir}"', check=False)
     export_cmd = (
         f'cmd /c "set SELECTION_DB_PATH={selection_db}&& '
         f'cd /d {WIN_PROJECT_ROOT} && '
         f'{WIN_PY_CMD} backend\\scripts\\export_selection_day_delta.py {trade_date} '
-        f'--source-db \\"{selection_db}\\" --output-db \\"{remote_delta}\\""'
+        f'--source-db "{selection_db}" --output-db "{remote_delta}""'
     )
-    export_result = _ssh(WIN_HOST, export_cmd)
+    export_result = None
+    last_error: Optional[Exception] = None
+    for _ in range(3):
+        try:
+            export_result = _ssh(WIN_HOST, export_cmd)
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            time.sleep(2)
+    if export_result is None:
+        raise RuntimeError(f"[{trade_date}] selection day delta 导出失败: {last_error}")
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"selection_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
@@ -541,14 +629,11 @@ def _bootstrap_mac_full_sync() -> Dict[str, object]:
         (WIN_ATOMIC_DB, LOCAL_ATOMIC_DB),
         (selection_db, LOCAL_SELECTION_DB),
     ]
-    copied: List[Dict[str, str]] = []
+    copied: List[Dict[str, object]] = []
     for remote_path, local_path in mapping:
         _progress(f"[bootstrap] 同步全量库到 Mac: {remote_path} -> {local_path}")
-        _ensure_local_parent(local_path)
-        _backup_local_file(local_path)
-        _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_path)}", str(local_path)], check=True)
-        copied.append({"remote": remote_path, "local": str(local_path)})
-    return {"status": "done", "copied": copied}
+        copied.append(_copy_windows_file_to_local(remote_path, local_path))
+    return {"status": "done", "host": WIN_HOST, "copied": copied}
 
 
 def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
@@ -779,6 +864,7 @@ def main() -> None:
     parser.add_argument("--skip-cloud-merge", action="store_true")
     parser.add_argument("--skip-mac-sync", action="store_true")
     parser.add_argument("--bootstrap-mac-full-sync", action="store_true")
+    parser.add_argument("--bootstrap-only", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -800,15 +886,54 @@ def main() -> None:
     else:
         target_days = _pending_days(ready_days, existing_cloud_days)
 
+    bootstrap_requested = bool(args.bootstrap_mac_full_sync)
+
+    if args.bootstrap_only:
+        if args.dry_run:
+            result = {
+                "status": "dry_run",
+                "ready_days": ready_days,
+                "existing_cloud_days_count": len(existing_cloud_days),
+                "message": "仅预演 Mac 全量同步",
+                "bootstrap_mac_full_sync": bootstrap_requested,
+                "windows_host": WIN_HOST,
+            }
+        else:
+            bootstrap_report = _bootstrap_mac_full_sync() if bootstrap_requested else None
+            result = {
+                "status": "done" if bootstrap_report else "noop",
+                "ready_days": ready_days,
+                "existing_cloud_days_count": len(existing_cloud_days),
+                "message": "仅执行 Mac 全量同步" if bootstrap_report else "未启用 Mac 全量同步",
+                "bootstrap_mac_full_sync": bootstrap_report,
+                "windows_host": WIN_HOST,
+            }
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"[postclose-l2] bootstrap_only host={WIN_HOST}")
+        return
+
     if not target_days:
-        bootstrap_report = _bootstrap_mac_full_sync() if args.bootstrap_mac_full_sync else None
-        result = {
-            "status": "done" if bootstrap_report else "noop",
-            "ready_days": ready_days,
-            "existing_cloud_days_count": len(existing_cloud_days),
-            "message": "无待跑交易日" if not bootstrap_report else "无待跑交易日，但已完成 Mac 全量同步",
-            "bootstrap_mac_full_sync": bootstrap_report,
-        }
+        if args.dry_run:
+            result = {
+                "status": "dry_run",
+                "ready_days": ready_days,
+                "existing_cloud_days_count": len(existing_cloud_days),
+                "message": "无待跑交易日",
+                "bootstrap_mac_full_sync": bootstrap_requested,
+                "windows_host": WIN_HOST,
+            }
+        else:
+            bootstrap_report = _bootstrap_mac_full_sync() if bootstrap_requested else None
+            result = {
+                "status": "done" if bootstrap_report else "noop",
+                "ready_days": ready_days,
+                "existing_cloud_days_count": len(existing_cloud_days),
+                "message": "无待跑交易日" if not bootstrap_report else "无待跑交易日，但已完成 Mac 全量同步",
+                "bootstrap_mac_full_sync": bootstrap_report,
+                "windows_host": WIN_HOST,
+            }
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -823,13 +948,16 @@ def main() -> None:
             "ready_days": ready_days,
             "target_days": target_days,
             "existing_cloud_days_count": len(existing_cloud_days),
-            "bootstrap_mac_full_sync": bool(args.bootstrap_mac_full_sync),
+            "bootstrap_mac_full_sync": bootstrap_requested,
+            "windows_host": WIN_HOST,
         }
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"[postclose-l2] dry_run target_days={','.join(target_days)}")
         return
+
+    bootstrap_report = _bootstrap_mac_full_sync() if bootstrap_requested else None
 
     day_reports = [
         run_day(
@@ -841,9 +969,6 @@ def main() -> None:
         )
         for day in target_days
     ]
-    bootstrap_report = None
-    if args.bootstrap_mac_full_sync:
-        bootstrap_report = _bootstrap_mac_full_sync()
     final_status = "PASS"
     if any((report.get("execution_summary") or {}).get("final_status") == "FAIL" for report in day_reports):
         final_status = "FAIL"
@@ -861,6 +986,18 @@ def main() -> None:
         print(json.dumps(final_result, ensure_ascii=False, indent=2))
     else:
         _progress(f"全部完成：final_status={final_status} 完成交易日={','.join(target_days)}")
+        for report in day_reports:
+            summary = report.get("execution_summary") or {}
+            verify = report.get("verify_report") or {}
+            print(
+                "[postclose-l2] summary "
+                f"date={report.get('trade_date')} "
+                f"status={summary.get('final_status')} "
+                f"reason={summary.get('reason')} "
+                f"rows_daily={verify.get('rows_daily')} "
+                f"rows_5m={verify.get('rows_5m')}",
+                flush=True,
+            )
 
 
 if __name__ == "__main__":

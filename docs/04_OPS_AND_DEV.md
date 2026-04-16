@@ -748,7 +748,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 3. 需要回流 Mac 的处理后全量库增量同步回 Mac；
 4. 首次全量同步与后续每日增量同步共用一套主入口。
 
-### 6.1 当前已落地的新总控语义（2026-04-15）
+### 6.1 当前已落地的新总控语义（2026-04-16）
 `backend/scripts/run_postclose_l2_daily.py` 已新增：
 - Windows 本地 `market_data.db` merge；
 - Mac 本地 `market_data.db` merge；
@@ -757,10 +757,21 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `atomic_day_delta / selection_day_delta` 导出并回流 Mac；
 - `--bootstrap-mac-full-sync`：
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
-  - 同步对象：
-    - `data/market_data.db`
-    - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
-    - `data/selection/selection_research*.db`
+  - 默认优先探测并使用局域网 `192.168.3.108`，不可达时回退 `100.115.228.56`；
+  - 下载到 `.part` 临时文件后校验文件大小一致，再原子替换正式文件；
+- `--bootstrap-only`：
+  - 只执行首次全量同步，不顺带跑日增量。
+
+推荐首次命令：
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+bash ops/bootstrap_mac_full_processed_sync.sh
+```
+
+同步对象：
+- `data/market_data.db`
+- `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+- `data/selection/selection_research*.db`
 
 ### 6.2 新增增量脚本
 - `backend/scripts/export_atomic_day_delta.py`
@@ -786,3 +797,12 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `ops/start_local_research_frontend.sh`
   - 在 Mac 上运行；
   - 默认把前端 `3001` 代理到本地研究站后端 `8001`
+
+### 7.1 Mac 本地旧验证数据处理（2026-04-16）
+- `data/local_research/` 目录下的 `research_snapshot.db*`、`selection/selection_research.db*`、`*.bak.*`、`*-wal`、`*-shm` 均属于**旧快照验证产物**；
+- 首次 full sync 成功后，这批文件不再作为正式研究库来源；
+- 正式 Mac 处理后全量库路径冻结为：
+  - `data/market_data.db`
+  - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+  - `data/selection/selection_research.db`
+- `data/user_data.db` 保留，不删除。

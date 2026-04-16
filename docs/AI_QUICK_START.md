@@ -39,13 +39,14 @@ npm run check:baseline
 
 ## 当前工作原则
 1. 复盘/选股/研究型改动优先按 **Mac 本地研究站** 设计，不默认以上生产为目标。
-2. 不把 `38GB+` full atomic 主库当作云端或 Mac 的默认常驻库。
+2. 不把 `38GB+` full atomic 主库放到云端；**Mac 允许保留一份处理后全量库**。
 3. 当前最新冻结：**raw 只留 Windows；处理后全量库 Windows / Mac 各保留一份；Cloud 只保留轻量盯盘数据。**
 4. Mac 不直接跨网络读 Windows sqlite 主库。
-4. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
+5. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
 ## 当前关键脚本
-- Windows -> Mac 同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
+- Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/bootstrap_mac_full_processed_sync.sh`
+- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
 - 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_frontend.sh`
 - 历史盘后总控旧入口：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/run_postclose_l2.sh`
@@ -53,7 +54,10 @@ npm run check:baseline
 ## 本地研究站最小启动顺序
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
-bash ops/sync_windows_research_snapshot.sh
+# 首次：先把 Windows 处理后全量库同步到 Mac（同 WiFi 默认优先走 192.168.3.108）
+bash ops/bootstrap_mac_full_processed_sync.sh
+
+# 启动本地研究站
 PORT=8001 bash ops/start_local_research_station.sh
 BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
