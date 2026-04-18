@@ -1226,3 +1226,10 @@
 - 结论: 已实现新版日常总控第一版：`run_postclose_l2_daily.py` 现在除旧的 Cloud L2 merge 外，还新增了 Windows 本地 `market_data.db` merge、Mac 本地 `market_data.db` merge、Windows 单日 `atomic` 更新、Windows 单日 `selection` 刷新，以及 `atomic_day_delta / selection_day_delta` 导出回流 Mac；并支持 `--bootstrap-mac-full-sync` 做首次整库同步。
 - 风险: 目前已完成本地脚本级验证与 dry-run；还未对整条远程真实链路做一轮完整实跑。
 - 链接: `backend/scripts/run_postclose_l2_daily.py`, `backend/scripts/export_atomic_day_delta.py`, `backend/scripts/merge_atomic_day_delta.py`, `backend/scripts/export_selection_day_delta.py`, `backend/scripts/merge_selection_day_delta.py`
+
+## 2026-04-17 12:35 | Codex
+- Task ID: `CHG-20260417-01`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成“本地研究站当前真实状态”文档总收口，并核实 Mac 本地三套正式库都已到 `2026-04-15`；同时补做本地接口 smoke，确认 `/api/health`、`/api/selection/health`、`/api/selection/candidates`、`/api/review/pool`、`/api/history/local` 可正常返回。新表/老表边界已重新写清：atomic/selection 与 `history_*_l2` 属于新治理主线，但 `trade_ticks/history_1m/history_30m/local_history/realtime_* / sentiment_*` 仍属运行时活跃存量表，**不能直接在正式库删除**，只能先在测试副本验证剥离。
+- 风险: 目前链路已进入可日用阶段，但仍建议继续观察几天自然盘后日跑；旧表依赖剥离还没开始做代码切换。
+- 链接: `docs/changes/MOD-20260417-01-local-research-current-state.md`, `docs/AI_QUICK_START.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`

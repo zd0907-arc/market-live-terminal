@@ -5,7 +5,7 @@
 - 当前主线分支：`main`
 - 当前生产代码版本：`v4.3.1`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
-- 当前运行架构总入口：`docs/changes/MOD-20260415-02-local-research-station-architecture.md`
+- 当前运行架构总入口：`docs/changes/MOD-20260417-01-local-research-current-state.md`
 - 当前生产回滚锚点：`v4.2.32`
 
 ## 只允许修改的主区域
@@ -46,10 +46,11 @@ npm run check:baseline
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/bootstrap_mac_full_processed_sync.sh`
-- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
 - 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_frontend.sh`
-- 历史盘后总控旧入口：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/run_postclose_l2.sh`
+- 每日盘后总控：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/run_postclose_l2.sh`
+- 每日盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/check_postclose_l2_status.sh`
+- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
 
 ## 本地研究站最小启动顺序
 ```bash
@@ -63,13 +64,18 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
 ## 当前同步约定
-- 当前过渡态 `snapshot` 只用于开发验证；
-- 最终目标是：
+- `snapshot` 已降级为过渡验证工具，不是正式主方案；
+- 当前正式方案是：
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
-  - 后续每天只同步新增交易日的处理结果；
-  - `./ops/run_postclose_l2.sh` 需要升级为这套新语义的一键入口。
+  - 后续每天执行 `./ops/run_postclose_l2.sh` 做增量日跑；
+  - 查询状态用 `./ops/check_postclose_l2_status.sh`；
+  - 当前本地正式库已验证到 `2026-04-15`。
+
+## 当前清理原则
+- 不要直接在正式 `data/market_data.db` 里删旧表；
+- 若要验证旧表是否还能删，先复制测试库，再让本地服务指向测试副本做回归。
 
 ## 当前回退入口
 - 生产轻量版回退：`v4.2.32`
 - 当前生产代码版本：`v4.3.1`
-- 运行架构回看：`docs/changes/MOD-20260415-02-local-research-station-architecture.md`
+- 运行架构回看：`docs/changes/MOD-20260417-01-local-research-current-state.md`

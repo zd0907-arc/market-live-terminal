@@ -692,7 +692,7 @@ git checkout main && git merge --no-ff <branch>
     - `main_board_only = true`
 
 
-## 本地研究站数据同步原则（2026-04-15 最新冻结）
+## 本地研究站数据同步原则（2026-04-17 最新冻结）
 
 ### 1. 同步方向
 - 主方向：
@@ -721,35 +721,28 @@ git checkout main && git merge --no-ff <branch>
 - 页面验收以 Mac 本地接口为准，不以 Windows 文件存在即视为成功；
 - `user_data.db` 保持 Mac 本机独立，不从 Windows 覆盖。
 
-### 5. 当前过渡命令（仅开发验证）
+### 5. 当前正式命令
+
+#### 5.1 首次整库同步
 ```bash
-# 1) 从 Windows 构建并拉取本地研究快照（过渡态，不是最终日常方案）
 cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
-EXTRA_SYMBOLS='sz000977,sh600382,sz003019,sh603629' \
-DAILY_DAYS=45 INTRADAY_DAYS=20 SENTIMENT_DAYS=20 \
-bash ops/sync_windows_research_snapshot.sh
-
-# 2) 启动本地研究站后端（默认禁后台任务）
-PORT=8001 bash ops/start_local_research_station.sh
-
-# 3) 另开一个终端启动前端（默认代理到 8001）
-BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
+bash ops/bootstrap_mac_full_processed_sync.sh
 ```
 
-### 6. 最终日常命令目标（待升级）
-旧命令：
+#### 5.2 每日盘后总控
 ```bash
-./ops/run_postclose_l2.sh
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+bash ops/run_postclose_l2.sh
 ```
 
-新语义应升级为：
-1. Windows 跑当天日包，产出**数据治理后的新增表/新增库结果**；
-2. 需要上传 Cloud 的轻量数据继续上传；
-3. 需要回流 Mac 的处理后全量库增量同步回 Mac；
-4. 首次全量同步与后续每日增量同步共用一套主入口。
+#### 5.3 人话版状态查询
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+bash ops/check_postclose_l2_status.sh
+```
 
-### 6.1 当前已落地的新总控语义（2026-04-16）
-`backend/scripts/run_postclose_l2_daily.py` 已新增：
+### 6. 当前正式总控语义
+`backend/scripts/run_postclose_l2_daily.py` 当前已落地：
 - Windows 本地 `market_data.db` merge；
 - Mac 本地 `market_data.db` merge；
 - Windows 单日 `atomic` 更新；
@@ -762,16 +755,22 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `--bootstrap-only`：
   - 只执行首次全量同步，不顺带跑日增量。
 
-推荐首次命令：
-```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
-bash ops/bootstrap_mac_full_processed_sync.sh
-```
-
 同步对象：
 - `data/market_data.db`
 - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
 - `data/selection/selection_research*.db`
+
+### 6.1 当前已验证状态
+- Mac 本地正式库当前已验证到 `2026-04-15`：
+  - `market_data.db`
+  - `atomic_facts/market_atomic_mainboard_full_reverse.db`
+  - `selection/selection_research.db`
+- 本地接口 smoke 已通过：
+  - `/api/health`
+  - `/api/selection/health`
+  - `/api/selection/candidates?trade_date=2026-04-15`
+  - `/api/review/pool`
+  - `/api/history/local?symbol=sh603629`
 
 ### 6.2 新增增量脚本
 - `backend/scripts/export_atomic_day_delta.py`
@@ -793,7 +792,7 @@ bash ops/bootstrap_mac_full_processed_sync.sh
   - **当前仅用于开发验证**
 - `ops/start_local_research_station.sh`
   - 在 Mac 上运行；
-  - 强制使用本地研究快照启动后端，并关闭后台采集/调度
+  - 使用 Mac 本地正式 processed 库启动后端，并关闭后台采集/调度
 - `ops/start_local_research_frontend.sh`
   - 在 Mac 上运行；
   - 默认把前端 `3001` 代理到本地研究站后端 `8001`
@@ -806,3 +805,20 @@ bash ops/bootstrap_mac_full_processed_sync.sh
   - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
   - `data/selection/selection_research.db`
 - `data/user_data.db` 保留，不删除。
+
+### 7.2 旧表清理验证原则
+- **不要**直接在正式 `data/market_data.db` 上删表；
+- 若要验证某批旧表是否还能删，必须：
+  1. 复制一份测试库；
+  2. 在测试库删表；
+  3. 让本地服务临时指向测试库；
+  4. 做页面/API 回归；
+  5. 通过后再决定是否正式清理。
+- 当前运行时代码仍直接读取以下存量表，删正式库会高概率影响功能：
+  - `trade_ticks`
+  - `history_1m`
+  - `history_30m`
+  - `local_history`
+  - `realtime_5m_preview`
+  - `realtime_daily_preview`
+  - `sentiment_*`

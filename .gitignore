@@ -29,6 +29,7 @@ dist-ssr
 *.db-shm
 *.db-wal
 data/
+data
 __pycache__/
 .trae/
 .pytest_cache/

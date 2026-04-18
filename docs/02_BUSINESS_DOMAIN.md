@@ -322,43 +322,49 @@
 
 2. **业务规则（强约束）**
 - **节点职责冻结**：
-  - Windows：采集 / ETL / atomic 主库 / 研究快照导出；
-  - Mac：开发、复盘、选股、本地前后端运行；
+  - Windows：raw 原始包、盘后跑数、processed 主库真相源；
+  - Mac：开发、复盘、选股、本地前后端运行，并保留一份 processed 正式副本；
   - 云端：轻量盯盘与手机临时查看。
 - **路径约定**：Windows 统一目录 `D:\market-live-terminal`。
 - **数据流红线**：
   - 云端默认不主动外采（`ENABLE_CLOUD_COLLECTOR=false` for production）；
   - Windows 不作为 Git 主仓操作节点；
   - Mac 不直接跨网络读 Windows 上的 sqlite 主库；
-  - 全量 atomic 主库默认留在 Windows，不要求常驻同步到云端或 Mac。
+  - full processed 只在 Windows / Mac 两端保留，不推云端重型研究查询。
 - **同步红线**：
-  - Windows -> Mac 只同步“研究快照 / 裁剪库 / 结果库”，不直接同步 raw；
+  - Windows -> Mac 同步的是 processed 正式库增量，不同步 raw；
   - 大文件同步必须有完整性校验；
   - 不在连接不稳条件下做无校验覆盖。
 - **禁止行为（红线）**：
   - 未核对文件完整性即执行覆盖；
-  - 把 38G 全量 atomic 当作 Mac 日常必备本地库；
+  - 直接在正式 `market_data.db` 上删旧表做验证；
   - 让研究型页面长期依赖云端重型数据查询。
 
 3. **实现摘要（当前方案）**
 - 通过 Tailscale + SSH/SCP 远程驱动 Windows 跑数与同步；
-- 截至 `2026-04-15`，新的真实目标已从“full atomic 切生产”调整为“Windows 数据主站 + Mac 本地研究站”；
-- 生产环境继续保留轻量盯盘，不再作为复盘/选股重型研究链路的第一落点。
+- 当前正式主路径已经冻结为：
+  - Windows 跑盘后日包；
+  - Cloud 继续收轻量盯盘增量；
+  - Mac 持有 processed 正式库并承接复盘/选股/研究；
+- `ops/bootstrap_mac_full_processed_sync.sh` 负责首次整库同步；
+- `ops/run_postclose_l2.sh` 负责日常增量总控；
+- `ops/check_postclose_l2_status.sh` 负责人话版状态查询。
 
 4. **验收案例（Given / When / Then）**
-- **正常**：Given Windows 在线且 SSH 可达，When 执行同步脚本，Then Mac 可拉到最新研究快照并本地读取。
+- **正常**：Given Windows 在线且 SSH 可达，When 执行首次同步脚本，Then Mac 可拉到最新 processed 正式库并本地读取。
 - **边界**：Given 大文件通过 Tailscale 回传，When 传输完成，Then 文件大小/校验必须与源文件一致。
 - **异常防线**：Given `tailscale status` 显示 active 但 `ping/ssh` 超时，When 触发同步流程，Then 任务必须进入阻塞待办而不是盲目继续。
 
 5. **可观测性与告警**
-- 观测点：`tailscale ping` 成功率、SSH 连接成功率、大文件回传时延、Windows `sshd` 服务状态、Mac 快照更新时间。
-- 告警条件：连续连接失败、快照同步中断、校验失败、Mac 读到过期快照。
+- 观测点：`tailscale ping` 成功率、SSH 连接成功率、大文件回传时延、Windows `sshd` 服务状态、Mac 正式库最新交易日。
+- 告警条件：连续连接失败、同步中断、校验失败、Mac 正式库落后 Windows。
 
 6. **变更记录（任务ID）**
 - `CHG-20260308-02`：Windows SSH 免密打通与脚本同步恢复。
 - `CHG-20260309-03`：确认 ETL 已重建完成但回传/merge受连接抖动阻塞（登记 `T-002/T-003`）。
 - `CHG-20260310-01`：生产 ingest 链路恢复（补齐 `akshare`、修正 `CLOUD_API_URL` 到 Nginx 入口、新增登录触发任务 `ZhangDataLiveCrawler`）。
 - `CHG-20260415-02`：节点职责重规划为“Windows 数据主站 / Mac 本地研究站 / 云端轻量盯盘”。
+- `CHG-20260417-01`：本地研究站进入可日用阶段，首次整库同步与每日增量总控已实跑到 `2026-04-15`，并冻结“旧表只能在测试副本验证删除”的清理原则。
 
 ---
 

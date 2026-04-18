@@ -473,49 +473,42 @@
 - 关联任务：`CHG-20260415-01`
 
 
-## T-020 本地研究站模式切换（云端降级为轻量盯盘）
+## T-020 本地研究站稳定性观察
 - 状态：`ACTIVE`
 - 当前事实：
-  - Windows full atomic 主库已完成；
-  - 云端磁盘不足以承载 full atomic；
-  - 用户已明确接受“云端只盯盘，复盘/选股回到本地”的新模式。
+  - 三端职责已冻结为：Windows 数据主站 / Mac 本地研究站 / Cloud 轻量盯盘；
+  - 首次整库同步已完成；
+  - 每日盘后总控已实跑补齐到 `2026-04-15`；
+  - 当前 Mac 本地正式库：
+    - `data/market_data.db`
+    - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+    - `data/selection/selection_research.db`
+  - 当前 smoke 已通过：
+    - `/api/health`
+    - `/api/selection/health`
+    - `/api/selection/candidates`
+    - `/api/review/pool`
+    - `/api/history/local`
 - 下一步：
-  1. 冻结 Windows / Mac / Cloud 三端职责；
-  2. 把相关核心文档统一到本地研究站模式；
-  3. 停止把“full atomic 切生产”作为当前主线目标。
-- 关联任务：`CHG-20260415-02`
+  1. 再观察几天自然盘后日跑；
+  2. 若无新故障，则把“链路稳定”从观察态转为正式日用结论。
+- 关联任务：`CHG-20260417-01`
 
-## T-021 Windows -> Mac 研究快照同步链路
-- 状态：`ACTIVE`
-- 目标：
-  - 建立盘后从 Windows 向 Mac 同步**处理后全量库**的稳定链路；
-  - 旧 snapshot 链路仅保留为开发验证过渡工具。
-- 当前事实：
-  - 已新增：
-    - `backend/scripts/build_local_research_snapshot.py`
-    - `ops/sync_windows_research_snapshot.sh`
-  - 已完成一次真实 Windows -> Mac 拉取验证；
-  - 当前已能拿回：
-    - `research_snapshot.db`
-    - `selection_research.db`
-    - `research_snapshot_manifest.json`
-  - `2026-04-15` 已确认 Windows 正式库文件名为 `selection_research_windows.db`，并已把同步脚本改为自动识别两种正式命名。
-- 解除条件：
-  1. 首次整库同步对象冻结；
-  2. 每日增量同步对象冻结；
-  3. `./ops/run_postclose_l2.sh` 升级为新日常入口。
-- 关联任务：`CHG-20260415-02`
-
-## T-022 Mac 本地复盘/选股切换到研究快照
+## T-021 存量表依赖剥离验证
 - 状态：`ACTIVE`
 - 当前事实：
-  - 代码层已具备 atomic / selection 的本地能力；
-  - 已新增 `ops/start_local_research_station.sh`；
-  - 已验证本地 `selection` 与 `review` 接口可以直接读取研究快照工作；
-  - 但前端主页面与更多实际使用路径还未做完整 smoke。
+  - 数据治理后的新主线表已经落稳，但运行时代码仍直接依赖一批存量表：
+    - `trade_ticks`
+    - `history_1m`
+    - `history_30m`
+    - `local_history`
+    - `realtime_5m_preview`
+    - `realtime_daily_preview`
+    - `sentiment_*`
+  - 因此“旧表”不等于“现在能删”。
 - 下一步：
-  1. 明确复盘裁剪库最小表集；
-  2. 本地接口切换到快照读路径；
-  3. 做页面 smoke（复盘页 + 选股页）；
-  4. 固化前端启动脚本与代理口径。
-- 关联任务：`CHG-20260415-02`
+  1. 复制测试版 `market_data.db`；
+  2. 按表组删除存量表；
+  3. 让本地服务指向测试库做回归；
+  4. 记录哪些调用关系还没切干净。
+- 关联任务：`CHG-20260417-01`

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/dong/Desktop/AIGC/market-live-terminal-local-research"
-DATA_ROOT="${LOCAL_DATA_ROOT:-$ROOT/data}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEFAULT_MARKET_DATA_ROOT="/Users/dong/Desktop/AIGC/market-data"
+if [ -d "$DEFAULT_MARKET_DATA_ROOT" ]; then
+  DEFAULT_DATA_ROOT="$DEFAULT_MARKET_DATA_ROOT"
+else
+  DEFAULT_DATA_ROOT="$ROOT/data"
+fi
+DATA_ROOT="${LOCAL_DATA_ROOT:-${MARKET_DATA_ROOT:-$DEFAULT_DATA_ROOT}}"
 DB_PATH_DEFAULT="$DATA_ROOT/market_data.db"
 USER_DB_PATH_DEFAULT="$DATA_ROOT/user_data.db"
 SELECTION_DB_DEFAULT="$DATA_ROOT/selection/selection_research.db"

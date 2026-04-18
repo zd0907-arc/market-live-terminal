@@ -11,19 +11,23 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import json
 import os
 import re
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_MAC_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
 
 WIN_HOST = os.getenv("L2_WIN_HOST", "")
 WIN_HOST_CANDIDATES = [
@@ -48,15 +52,21 @@ WIN_ATOMIC_DB = os.getenv("L2_WIN_ATOMIC_DB", r"D:\market-live-terminal\data\ato
 WIN_SELECTION_DB = os.getenv("L2_WIN_SELECTION_DB", "")
 CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal")
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
-LOCAL_DATA_ROOT = Path(os.getenv("LOCAL_PROCESSED_DATA_ROOT", str(ROOT_DIR / "data")))
+LOCAL_DATA_ROOT = Path(
+    os.getenv("LOCAL_PROCESSED_DATA_ROOT")
+    or os.getenv("MARKET_DATA_ROOT")
+    or (str(DEFAULT_MAC_DATA_ROOT) if DEFAULT_MAC_DATA_ROOT.exists() else str(ROOT_DIR / "data"))
+)
 LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
 LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
+LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", shutil.which("python3") or sys.executable)
 SOFT_WARNING_PATTERNS = (
     "无有效 bar：交易时段内无可用逐笔",
 )
 PROGRESS_ENABLED = True
 WINDOWS_REQUIRED_SCRIPTS = [
+    "backend/scripts/export_l2_day_delta.py",
     "backend/scripts/export_atomic_day_delta.py",
     "backend/scripts/export_selection_day_delta.py",
     "backend/scripts/run_selection_research.py",
@@ -100,12 +110,33 @@ def _tcp_reachable(host: str, port: int = 22, timeout: float = 1.5) -> bool:
         sock.close()
 
 
+def _ssh_reachable(host: str, timeout: int = 5) -> bool:
+    text = str(host or "").strip()
+    if not text:
+        return False
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            f"ConnectTimeout={timeout}",
+            text,
+            "echo ok",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and (result.stdout or "").strip() == "ok"
+
+
 def _resolve_windows_host() -> str:
     explicit = str(WIN_HOST or "").strip()
     if explicit:
         return explicit
     for candidate in WIN_HOST_CANDIDATES:
-        if _tcp_reachable(candidate, port=22):
+        if _ssh_reachable(candidate, timeout=5):
             return candidate
     return WIN_HOST_CANDIDATES[0] if WIN_HOST_CANDIDATES else "laqiyuan@100.115.228.56"
 
@@ -272,6 +303,69 @@ def _copy_windows_file_to_local(remote_path: str, local_path: Path) -> Dict[str,
     }
 
 
+def _copy_windows_small_file_via_ssh(remote_path: str, local_path: Path) -> Dict[str, object]:
+    remote_size, resolved_remote = _remote_file_stat(remote_path)
+    _ensure_local_parent(local_path)
+    tmp_path = local_path.with_name(f"{local_path.name}.part")
+    if tmp_path.exists():
+        tmp_path.unlink()
+    py_path = str(resolved_remote).replace("\\", "\\\\")
+    remote_cmd = (
+        f'{WIN_PY_CMD} -c "import sys,gzip,shutil; '
+        f'f=open(r\'{py_path}\', \'rb\'); '
+        f'gz=gzip.GzipFile(fileobj=sys.stdout.buffer, mode=\'wb\', compresslevel=1); '
+        f'shutil.copyfileobj(f, gz, 1024*1024); '
+        f'gz.close(); '
+        f'f.close()"'
+    )
+    proc = subprocess.Popen(
+        [
+            "ssh",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=6",
+            WIN_HOST,
+            remote_cmd,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False,
+    )
+    stderr_text = ""
+    try:
+        assert proc.stdout is not None
+        with gzip.GzipFile(fileobj=proc.stdout, mode="rb") as gz_fh, open(tmp_path, "wb") as out_fh:
+            shutil.copyfileobj(gz_fh, out_fh, 1024 * 1024)
+        _, stderr = proc.communicate()
+        stderr_text = _decode_maybe_gbk(stderr)
+    except Exception:
+        proc.kill()
+        _, stderr = proc.communicate()
+        stderr_text = _decode_maybe_gbk(stderr)
+        raise
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            proc.returncode,
+            proc.args,
+            output="",
+            stderr=stderr_text,
+        )
+    local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
+    if remote_size != local_size:
+        raise RuntimeError(
+            f"copy size mismatch: remote={remote_size} local={local_size} path={resolved_remote}"
+        )
+    if local_path.exists():
+        _backup_local_file(local_path)
+    tmp_path.replace(local_path)
+    return {
+        "remote": resolved_remote,
+        "local": str(local_path),
+        "bytes": local_size,
+    }
+
+
 def _ensure_local_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -312,9 +406,31 @@ def _worker_command(day_root: str, symbols_file: str, artifact_db: str, trade_da
     )
 
 
+def _spawn_worker_process(manifest: Dict[str, object], shard: Dict[str, object], log_fh) -> subprocess.Popen:
+    return subprocess.Popen(
+        [
+            "ssh",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=6",
+            WIN_HOST,
+            _worker_command(
+                day_root=str(manifest["day_root"]),
+                symbols_file=str(shard["symbols_file"]),
+                artifact_db=str(shard["artifact_db"]),
+                trade_date=str(manifest["trade_date"]),
+                worker=int(shard["worker"]),
+            ),
+        ],
+        stdout=log_fh,
+        stderr=log_fh,
+        text=True,
+    )
+
+
 def _run_workers(manifest: Dict[str, object], local_day_root: Path) -> List[Dict[str, object]]:
     shards = manifest.get("shards", [])
-    day_root = str(manifest["day_root"])
     processes = []
     results: List[Dict[str, object]] = []
     worker_logs_root = local_day_root / "worker_logs"
@@ -326,25 +442,11 @@ def _run_workers(manifest: Dict[str, object], local_day_root: Path) -> List[Dict
         worker = int(shard["worker"])
         log_path = worker_logs_root / f"worker_{worker}.log"
         log_fh = open(log_path, "w", encoding="utf-8")
-        proc = subprocess.Popen(
-            [
-                "ssh",
-                WIN_HOST,
-                _worker_command(
-                    day_root=day_root,
-                    symbols_file=str(shard["symbols_file"]),
-                    artifact_db=str(shard["artifact_db"]),
-                    trade_date=str(manifest["trade_date"]),
-                    worker=worker,
-                ),
-            ],
-            stdout=log_fh,
-            stderr=log_fh,
-            text=True,
-        )
+        proc = _spawn_worker_process(manifest, shard, log_fh)
         processes.append(
             {
                 "worker": worker,
+                "shard": shard,
                 "process": proc,
                 "log_path": str(log_path),
                 "log_fh": log_fh,
@@ -376,7 +478,33 @@ def _run_workers(manifest: Dict[str, object], local_day_root: Path) -> List[Dict
 
     failed = [item for item in results if item["return_code"] != 0]
     if failed:
+        _progress(f"[{manifest['trade_date']}] 检测到 {len(failed)} 个失败 worker，开始单独重试")
+    recovered_workers = set()
+    for item in failed:
+        worker = int(item["worker"])
+        shard = item["shard"]
+        log_path = Path(item["log_path"])
+        for attempt in range(1, 3):
+            with open(log_path, "a", encoding="utf-8") as log_fh:
+                log_fh.write(f"\n=== RETRY {attempt} START {_now_text()} ===\n")
+                proc = _spawn_worker_process(manifest, shard, log_fh)
+                rc = proc.wait()
+                log_fh.write(f"\n=== RETRY {attempt} END rc={rc} {_now_text()} ===\n")
+            if int(rc) == 0:
+                item["return_code"] = 0
+                recovered_workers.add(worker)
+                _progress(f"[{manifest['trade_date']}] worker {worker} 重试成功 attempt={attempt}")
+                break
+            _progress(f"[{manifest['trade_date']}] worker {worker} 重试失败 attempt={attempt} rc={rc}")
+
+    failed = [item for item in results if item["return_code"] != 0]
+    if failed:
         raise RuntimeError(f"存在 worker 非零退出: {failed}")
+    if recovered_workers:
+        _progress(
+            f"[{manifest['trade_date']}] 全部 worker 执行完成（含重试恢复: {','.join(str(x) for x in sorted(recovered_workers))}）"
+        )
+        return results
     _progress(f"[{manifest['trade_date']}] 全部 worker 执行完成")
     return results
 
@@ -397,6 +525,28 @@ def _copy_artifacts_to_local(trade_date: str, remote_artifacts: Sequence[str], l
     return local_paths
 
 
+def _export_windows_l2_day_delta(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+    remote_delta_dir = f"{WIN_PROJECT_ROOT}\\.run\\postclose_l2\\{trade_date}\\processed"
+    remote_delta = f"{remote_delta_dir}\\l2_day_delta_{trade_date}.db"
+    _ssh(WIN_HOST, f'cmd /c if not exist "{remote_delta_dir}" mkdir "{remote_delta_dir}"', check=False)
+    export_cmd = (
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\export_l2_day_delta.py {trade_date} '
+        f'--source-db "{WIN_MARKET_DB}" --output-db "{remote_delta}"'
+    )
+    export_result = _ssh(WIN_HOST, f'cmd /c "{export_cmd}"')
+    export_report = _parse_json_output(export_result.stdout)
+    local_delta = local_day_root / "processed" / f"l2_day_delta_{trade_date}.db"
+    local_delta.parent.mkdir(parents=True, exist_ok=True)
+    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
+    _progress(f"[{trade_date}] 已回传 Windows L2 单日 delta 到本地")
+    return {
+        "l2_delta_export": export_report,
+        "local_delta_path": str(local_delta),
+        "remote_delta_path": str(remote_delta),
+    }
+
+
 def _upload_artifacts_to_cloud(trade_date: str, local_artifacts: Sequence[str]) -> List[str]:
     _progress(f"[{trade_date}] 开始上传 {len(local_artifacts)} 份 artifact 到云端")
     cloud_tmp_dir = f"{CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}"
@@ -409,6 +559,16 @@ def _upload_artifacts_to_cloud(trade_date: str, local_artifacts: Sequence[str]) 
         _progress(f"[{trade_date}] 已上传云端 artifact: {Path(local_path).name}")
     _progress(f"[{trade_date}] artifact 已全部上传到云端")
     return cloud_paths
+
+
+def _upload_single_file_to_cloud(trade_date: str, local_file: str, remote_name: str) -> str:
+    _progress(f"[{trade_date}] 开始上传云端文件: {Path(local_file).name}")
+    cloud_tmp_dir = f"{CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}"
+    _ssh(CLOUD_HOST, f"mkdir -p {cloud_tmp_dir}")
+    remote_path = f"{cloud_tmp_dir}/{remote_name}"
+    _run(["scp", str(local_file), f"{CLOUD_HOST}:{remote_path}"], check=True)
+    _progress(f"[{trade_date}] 已上传云端文件: {remote_name}")
+    return remote_path
 
 
 def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str, object]:
@@ -454,7 +614,7 @@ def _merge_on_local_market(trade_date: str, local_artifacts: Sequence[str]) -> D
     artifacts_arg = ",".join(str(Path(p)) for p in local_artifacts)
     result = _run(
         [
-            sys.executable,
+            LOCAL_PY_CMD,
             str(ROOT_DIR / "backend" / "scripts" / "merge_l2_day_delta.py"),
             trade_date,
             "--artifacts",
@@ -534,10 +694,10 @@ def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path) -> Dict[
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"atomic_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
-    _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_delta)}", str(local_delta)], check=True)
+    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
     merge_result = _run(
         [
-            sys.executable,
+            LOCAL_PY_CMD,
             str(ROOT_DIR / "backend" / "scripts" / "merge_atomic_day_delta.py"),
             trade_date,
             "--delta-db",
@@ -598,10 +758,10 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path) -> Di
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"selection_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
-    _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_delta)}", str(local_delta)], check=True)
+    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
     merge_result = _run(
         [
-            sys.executable,
+            LOCAL_PY_CMD,
             str(ROOT_DIR / "backend" / "scripts" / "merge_selection_day_delta.py"),
             trade_date,
             "--delta-db",
@@ -799,24 +959,28 @@ def run_day(
 ) -> Dict[str, object]:
     local_day_root = ROOT_DIR / ".run" / "postclose_l2" / trade_date
     _progress(f"[{trade_date}] ===== 开始处理 =====")
+    _sync_required_windows_scripts()
     prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
     worker_results = _run_workers(prepared, local_day_root=local_day_root)
     windows_merge_report = _merge_on_windows(
         trade_date=trade_date,
         remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
     )
-    local_artifacts = _copy_artifacts_to_local(
-        trade_date=trade_date,
-        remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
-        local_day_root=local_day_root,
-    )
-    local_market_merge_report = _merge_on_local_market(trade_date=trade_date, local_artifacts=local_artifacts)
+    l2_delta_report = _export_windows_l2_day_delta(trade_date=trade_date, local_day_root=local_day_root)
+    local_delta = str(l2_delta_report["local_delta_path"])
+    local_market_merge_report = _merge_on_local_market(trade_date=trade_date, local_artifacts=[local_delta])
 
     merge_report: Optional[Dict[str, object]] = None
     verify_report: Optional[Dict[str, object]] = None
     cloud_artifacts: List[str] = []
     if not skip_cloud_merge:
-        cloud_artifacts = _upload_artifacts_to_cloud(trade_date=trade_date, local_artifacts=local_artifacts)
+        cloud_artifacts = [
+            _upload_single_file_to_cloud(
+                trade_date=trade_date,
+                local_file=local_delta,
+                remote_name=Path(local_delta).name,
+            )
+        ]
         merge_report = _merge_on_cloud(trade_date=trade_date, cloud_artifacts=cloud_artifacts)
         verify_report = _verify_cloud_day(trade_date=trade_date)
         _cleanup_remote_day(trade_date)
@@ -824,7 +988,6 @@ def run_day(
     atomic_sync_report: Optional[Dict[str, object]] = None
     selection_sync_report: Optional[Dict[str, object]] = None
     if not skip_mac_sync:
-        _sync_required_windows_scripts()
         atomic_sync_report = _run_windows_atomic_pipeline(trade_date=trade_date, local_day_root=local_day_root)
         selection_sync_report = _run_windows_selection_pipeline(trade_date=trade_date, local_day_root=local_day_root)
 
@@ -834,7 +997,8 @@ def run_day(
         "prepared": prepared,
         "worker_results": worker_results,
         "windows_merge_report": windows_merge_report,
-        "local_artifacts": local_artifacts,
+        "l2_delta_report": l2_delta_report,
+        "local_artifacts": [local_delta],
         "local_market_merge_report": local_market_merge_report,
         "cloud_artifacts": cloud_artifacts,
         "merge_report": merge_report,
