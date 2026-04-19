@@ -52,10 +52,12 @@ LLM_PROXY=
 # === v4.2.3+ 生产运行必需 ===
 INGEST_TOKEN=replace-with-strong-token
 WRITE_API_TOKEN=replace-with-strong-token
+TUSHARE_TOKEN=replace-with-licensed-token
 ENABLE_CLOUD_COLLECTOR=false
 ```
 
 > `WRITE_API_TOKEN` 仅允许存在于服务端环境变量（backend / frontend 代理容器 / 本地 Vite dev proxy 所在进程）中。  
+> `TUSHARE_TOKEN` 同样只允许存在于服务端环境变量 / 本地 `.env.local`，不得写入前端静态资源或提交到 Git。  
 > **禁止**继续使用 `VITE_WRITE_API_TOKEN`、禁止把共享写 token 打包进浏览器静态资源。
 
 保存并退出 (`Ctrl+X` → `Y` → `Enter`)。
@@ -108,6 +110,9 @@ LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_API_KEY=sk-你的开发用API密钥
 LLM_MODEL=qwen3-max
 LLM_PROXY=
+
+# === 官方事件源配置 ===
+TUSHARE_TOKEN=replace-with-dev-token
 
 # === 其他开发配置 ===
 MOCK_DATA_DATE=2026-03-06

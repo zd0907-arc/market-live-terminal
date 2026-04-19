@@ -1233,3 +1233,73 @@
 - 结论: 已完成“本地研究站当前真实状态”文档总收口，并核实 Mac 本地三套正式库都已到 `2026-04-15`；同时补做本地接口 smoke，确认 `/api/health`、`/api/selection/health`、`/api/selection/candidates`、`/api/review/pool`、`/api/history/local` 可正常返回。新表/老表边界已重新写清：atomic/selection 与 `history_*_l2` 属于新治理主线，但 `trade_ticks/history_1m/history_30m/local_history/realtime_* / sentiment_*` 仍属运行时活跃存量表，**不能直接在正式库删除**，只能先在测试副本验证剥离。
 - 风险: 目前链路已进入可日用阶段，但仍建议继续观察几天自然盘后日跑；旧表依赖剥离还没开始做代码切换。
 - 链接: `docs/changes/MOD-20260417-01-local-research-current-state.md`, `docs/AI_QUICK_START.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-12 20:45 | 事件层规划 / 新闻公告调研 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已新建独立 worktree 分支，完成单票新闻 / 公告 / 互动问答事件层的第一轮外部调研，并在文档中冻结推荐路线：**公告优先、问答第二、新闻第三**。当前建议不要复用 `sentiment_events`，而是新增独立 `stock_events` 事件事实层；公告建议以 `巨潮资讯官方披露 + Tushare anns_d` 为主，问答建议以 `irm_qa_sz / irm_qa_sh` 为主，资讯建议后续接 `news / major_news` 做补充催化层。
+- 风险: 若直接抓官网前端页面，后续容易受 JS / 反爬 / 参数漂移影响；而新闻层天然存在单条资讯关联多股票、误绑和版权边界问题，因此第一阶段不宜让新闻压过官方公告与互动问答。
+- 链接: `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 21:20 | 事件层实现 / 单票公告底座 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已把单票官方事件层的第一期代码底座落地：新增 `stock_events / stock_event_entities / stock_event_ingest_runs / stock_event_daily_rollup` 四张表，新增 `backend/app/services/stock_events.py` 与 `/api/stock_events/*` 路由，并实现基于 `Tushare anns_d` 的单票公告同步/回补第一版。watchlist 新增股票时会 best-effort 触发最近 `365D` 公告回补，选股画像时间线也已开始合并显示 `stock_events`，不再只依赖股吧与情绪日评分。
+- 风险: 当前真正接通的只有公告链路，且依赖服务端 `TUSHARE_TOKEN` 与对应权限；深证互动易 / 上证e互动 / 新闻快讯仍未接入，多实体资讯归属也尚未开始，因此第一阶段还不能把它当成完整“事件+舆情+资金”融合方案。
+- 链接: `backend/app/db/database.py`, `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/app/routers/watchlist.py`, `backend/app/services/selection_research.py`, `backend/tests/test_stock_events.py`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 21:40 | 事件层实现 / 上市公司互动问答 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已在官方事件层第一期代码基础上继续接通“上市公司互动问答”链路：新增深市互动问答同步、沪市互动问答同步、单票回补与 watchlist 批量回补入口，并把问答事件统一写入 `stock_events`，使用 `question_text / answer_text / published_at` 持久化。watchlist 新增股票时，现在会同时 best-effort 触发公告回补和互动问答回补。
+- 风险: 当前仍依赖 `TUSHARE_TOKEN` 与对应问答权限；虽然问答已经进入事件层和选股时间线，但财经快讯/长文资讯尚未接入，因此“官方事件 + 舆情 + 资金”这条线还差新闻催化层。
+- 链接: `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/app/routers/watchlist.py`, `backend/tests/test_stock_events.py`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 22:00 | 事件层实现 / 财经资讯 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已继续把官方事件层第一期补到“财经资讯”层：新增单票财经快讯同步、单票长篇资讯同步、单票资讯回补与 watchlist 批量资讯回补入口，并统一写入 `stock_events`。当前实现会先从财经快讯/长文源拉取指定日期窗口，再按股票名称/代码做首版单票归属过滤，匹配上的资讯会进入 feed 和选股画像时间线。
+- 风险: 当前财经资讯归属还是首版字符串匹配，适合先做单票研究与盘后辅助，不适合直接当成全市场高精度实体识别；后续仍需补 alias/曾用名/多实体映射，避免错绑或漏绑。
+- 链接: `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/app/routers/watchlist.py`, `backend/tests/test_stock_events.py`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 22:20 | 事件层增强 / 资讯归属与按需事件包 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已继续把单票事件层往“研究可用”推进：财经资讯归属从首版简单字符串匹配升级为“股票代码 + 公司名称 + 简称裁剪”的多证据匹配，并把匹配方法/置信度写入事件元数据；同时新增 `POST /api/stock_events/bundle/{symbol}`，可按需一次性拉取某只股票的公告、互动问答和财经资讯，更符合复盘/选股后再对少量股票做深度研究的使用路径。
+- 风险: 当前依然没有正式的曾用名/别名词典，也没有完整的多实体映射；因此它已经比首版稳很多，但还不适合直接当作全市场级新闻实体识别引擎。
+- 链接: `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 22:40 | 事件层增强 / alias词典与多实体归属 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已继续补强财经资讯归属：新增 `stock_symbol_aliases` 别名字典表，资讯匹配改为优先读取 alias 词典做“代码 + ts_code + 公司名 + 简称裁剪”多证据识别；同时新增 related 实体落库基础版，对目标股票之外的 watchlist/跟踪股票补写 `stock_event_entities.relation_role=related`，并把 `_related_symbols` 写入 `extra_json`。另外，资讯 `source_event_id` 已改为“目标股票作用域”，避免同一篇文章在不同股票同步时相互覆盖。
+- 风险: 当前 alias 仍主要来自 `stock_universe_meta / watchlist / fallback`，还不是正式曾用名词典；多实体识别范围目前也偏研究池/关注池，不是全市场实体消歧。
+- 链接: `backend/app/services/stock_events.py`, `backend/app/db/database.py`, `backend/tests/test_stock_events.py`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`
+
+## 2026-04-19 22:50 | 事件层增强 / 单票覆盖摘要 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已新增 `GET /api/stock_events/coverage/{symbol}`，用于看某只股票在最近窗口内财报 / 公告 / 互动问答 / 财经资讯 / 监管五类采集是否覆盖、各类最新时间、来源分布和 alias 数量。这样后续做“采集完整性”时，不用只看 feed，可直接先看覆盖摘要判断还缺哪一块。
+- 风险: 覆盖摘要只反映“系统里已有多少”，不代表第三方源本身绝对完整；真实完整性仍需用实票抽检核对。
+- 链接: `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/03_DATA_CONTRACTS.md`, `docs/changes/REQ-20260412-01-single-stock-news-event-foundation.md`
+
+## 2026-04-19 22:58 | 事件层增强 / alias seed 与采集审计 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已继续往“采集完善”推进两步：一是新增本地 `backend/app/data/stock_alias_seeds.json` 作为正式 alias seed 入口，可补法定全称 / 历史简称等，当前已先给 `sz000833` 加入 seed；二是新增 `GET /api/stock_events/audit/{symbol}`，在 coverage 之上给出 `official/company/media` 三组数量、最近事件及 `audit_flags`，便于后续对单票做采集完整性抽检。
+- 风险: 当前 alias seed 还是人工沉淀入口，不是自动化全市场曾用名库；采集审计也仍然只反映“系统里现有结果”，真实是否漏抓仍需和外部 truth set 对照。
+- 链接: `backend/app/data/stock_alias_seeds.json`, `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/03_DATA_CONTRACTS.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-04-19 23:14 | 事件层抽检 / 三只样本票 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已按你指定的三只样本票继续抽检：`利通电子(sh603629)`、`中百集团(sz000759)`、`贝因美(sz002570)`。外部公开基线已确认三只票最近窗口都存在较多官方事件（公告/业绩预告/重整诉讼/异动等），但本地 `stock_events` 仍为 `0`，`audit` 也全部报缺口。这说明当前主问题不是设计，而是**真实采集执行尚未跑到本地**。同时已把这三只票加入 alias seed，便于后续采后识别更稳。
+- 风险: 当前这轮抽检证明了“有明显缺口”，但还没有用真实 Tushare 数据把缺口补上；因此在真正合主线前，最好至少把样本票回补和 audit 复核跑一轮。
+- 链接: `docs/changes/INV-20260419-02-three-sample-event-audit.md`, `backend/app/data/stock_alias_seeds.json`, `backend/app/services/stock_events.py`
+
+## 2026-04-19 23:40 | 事件层精修 / 无 Token 公告公开源回补 AI
+- Task ID: `CHG-20260412-01`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已在无 `TUSHARE_TOKEN` 前提下，把公告链路切到新浪公开页 fallback，并继续把解析质量补到可用：新增公告分页抓取、逐条日期解析、按 source+symbol+日期窗口重跑前清理旧数据，避免之前“整页公告共用第一页日期 / 旧脏数据残留”的问题。随后已对 `利通电子 / 中百集团 / 贝因美` 实跑最近 `365D` 回补，当前分别落地 `193 / 91 / 129` 条官方事件；其中 `利通电子` 最近窗口已能看到异动公告与问询函回复，`中百集团` 已能看到董事会决议 / 解散清算 / 业绩预告，`贝因美` 已能看到诉讼进展 / 回购 / 控股股东重整等事件。
+- 风险: 当前无 Token 模式仍只稳定覆盖“公告/财报”这条线；`QA / media news` 仍未接公开源自动链路。另一个已知问题是部分 `业绩预告` 标题目前仍偏“法定全称/代码风格”，后续可以再做展示友好化，但不影响事件事实落库。
+- 链接: `backend/app/services/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/changes/INV-20260419-02-three-sample-event-audit.md`

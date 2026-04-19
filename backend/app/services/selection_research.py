@@ -1016,6 +1016,30 @@ def _query_recent_event_timeline(symbol: str, trade_date: str, limit: int = 12) 
         except Exception:
             pass
         try:
+            stock_rows = conn.execute(
+                """
+                SELECT source, source_type, event_subtype, title, published_at
+                FROM stock_events
+                WHERE symbol = ? AND substr(published_at, 1, 10) <= ?
+                ORDER BY published_at DESC
+                LIMIT ?
+                """,
+                (symbol, trade_date, int(limit)),
+            ).fetchall()
+            timeline.extend(
+                {
+                    "kind": "event",
+                    "time": str(row[4] or ""),
+                    "event_type": str(row[2] or row[1] or ""),
+                    "source": str(row[0] or ""),
+                    "content": str(row[3] or "")[:120],
+                    "author_name": "",
+                }
+                for row in stock_rows
+            )
+        except Exception:
+            pass
+        try:
             score_rows = conn.execute(
                 """
                 SELECT trade_date, sentiment_score, direction_label, risk_tag, summary_text

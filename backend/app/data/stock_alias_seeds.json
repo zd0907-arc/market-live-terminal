@@ -1,0 +1,48 @@
+{
+  "sz000833": {
+    "aliases": [
+      {
+        "alias": "广西粤桂广业控股股份有限公司",
+        "alias_type": "legal_name",
+        "confidence": 1.0
+      },
+      {
+        "alias": "广西粤桂广业控股",
+        "alias_type": "legal_name_variant",
+        "confidence": 0.96
+      },
+      {
+        "alias": "粤桂广业",
+        "alias_type": "historical_short_name",
+        "confidence": 0.9
+      }
+    ]
+  },
+  "sh603629": {
+    "aliases": [
+      {
+        "alias": "江苏利通电子股份有限公司",
+        "alias_type": "legal_name",
+        "confidence": 1.0
+      }
+    ]
+  },
+  "sz000759": {
+    "aliases": [
+      {
+        "alias": "中百控股集团股份有限公司",
+        "alias_type": "legal_name",
+        "confidence": 1.0
+      }
+    ]
+  },
+  "sz002570": {
+    "aliases": [
+      {
+        "alias": "贝因美股份有限公司",
+        "alias_type": "legal_name",
+        "confidence": 1.0
+      }
+    ]
+  }
+}

@@ -361,6 +361,9 @@ INGEST_TOKEN=replace-with-strong-token
 # 业务写接口鉴权（仅服务端环境变量保存）
 WRITE_API_TOKEN=replace-with-strong-token
 
+# 单票公告 / 问答 / 资讯接入（服务端保存）
+TUSHARE_TOKEN=replace-with-licensed-token
+
 # 架构护栏：云端默认只被动 ingest
 ENABLE_CLOUD_COLLECTOR=false
 ```
@@ -368,7 +371,7 @@ ENABLE_CLOUD_COLLECTOR=false
 云端快速核验：
 ```bash
 cd ~/market-live-terminal/deploy
-sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|ENABLE_CLOUD_COLLECTOR"
+sudo docker exec market-backend env | grep -E "INGEST_TOKEN|WRITE_API_TOKEN|TUSHARE_TOKEN|ENABLE_CLOUD_COLLECTOR"
 ```
 
 发布 atomic 版本前，额外核验：
@@ -448,6 +451,7 @@ echo %CLOUD_API_URL%
 ### 本地开发写接口约束（2026-03-18 起）
 - 本地 `npm run dev` 不再向浏览器注入 `VITE_WRITE_API_TOKEN`。
 - 若本地需要使用官方前端执行写操作（watchlist/config/sentiment 手动触发），请在 `.env.local` 中设置服务端变量 `WRITE_API_TOKEN`，由 Vite dev proxy 在代理层注入 `X-Write-Token`。
+- 若本地需要手动触发 `stock_events` 公告同步，还需在 `.env.local` 或服务端环境中设置 `TUSHARE_TOKEN`；未配置时接口会明确失败，不做静默降级。
 - 浏览器源码、前端静态产物、Git 仓库中均不得出现真实 `WRITE_API_TOKEN`。
 
 ### 目的 B：隔空装填 Windows 洗地/抓取节点

@@ -12,8 +12,8 @@
 
 | 层级 | 表 | 写入规则 | 说明 |
 |------|-----|---------|------|
-| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments`, `sentiment_events` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/舆情事件源数据 |
-| **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/LLM 生成 |
+| **Raw（原始层）** | `trade_ticks`, `sentiment_snapshots`, `sentiment_comments`, `sentiment_events`, `stock_events` | 默认追加；`trade_ticks` 在 ingest 场景允许按 `symbol+date` 全量覆盖写入 | 逐笔/盘口/舆情/官方事件源数据 |
+| **Derived（派生层）** | `local_history`, `history_30m`, `sentiment_summaries`, `stock_event_entities`, `stock_event_daily_rollup` | 带版本号（`config_signature`），**可重算可覆写** | 由原始层聚合/映射/摘要生成 |
 | **Derived（生产L2历史层）** | `history_5m_l2`, `history_daily_l2`, `l2_daily_ingest_runs`, `l2_daily_ingest_failures` | 仅允许按 `symbol+trade_date` 整日覆盖重写 | 盘后L2正式结算结果（含同源 L1/L2 双派生） |
 | **Derived（盘中预览层）** | `realtime_5m_preview`, `realtime_daily_preview` | 仅允许按 `symbol+trade_date` 整日覆盖重写；只存 preview，不得伪装 finalized | 盘中临时 L1 预览层，服务新版多维历史/当日衔接 |
 | **Config（配置层）** | `watchlist`, `app_config` | 用户直接操作 | 自选股、阈值等（⚠️ v4.0 起 LLM 配置已迁移至环境变量） |
@@ -122,6 +122,93 @@
 > - 不做跨源去重；
 > - 旧 `sentiment_comments` 允许按 symbol 懒回填为 `source=guba,event_type=post` 的兼容事件。
 > - 截至 `2026-03-24` 的正式可见链路仍以 `guba + post` 为主，`reply` 事件虽在 schema 中保留，但首页主消费尚未完整切到 reply 级展示。
+
+### 4B. `stock_events`（单票官方事件事实表）
+> **官方事件层底座**：承接公告 / 财报 / 问答 / 资讯，不与 `sentiment_events` 混表。
+
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `event_id` | `TEXT` | 主键，单条事件唯一标识 |
+| `source` | `TEXT` | `NOT NULL`，如 `tushare_anns_d / cninfo / szse_irm / sse_einteractive / tushare_news` |
+| `source_type` | `TEXT` | `NOT NULL`，`announcement | report | qa | news | regulatory` |
+| `event_subtype` | `TEXT` | Allow `NULL`，如 `annual_report / board_resolution / inquiry_letter` |
+| `symbol` | `TEXT` | Allow `NULL`，当前公告期望写标准前缀代码，如 `sz000833` |
+| `ts_code` | `TEXT` | Allow `NULL`，如 `000833.SZ` |
+| `title` | `TEXT` | `NOT NULL`，事件标题 |
+| `content_text` | `TEXT` | Allow `NULL`，正文或首期兼容标题文本 |
+| `question_text` / `answer_text` | `TEXT` | Allow `NULL`，问答类事件专用 |
+| `raw_url` / `pdf_url` | `TEXT` | Allow `NULL` |
+| `published_at` / `ingested_at` | `DATETIME` | Allow `NULL` |
+| `importance` | `INTEGER` | 默认 `50`，内部优先级 |
+| `is_official` | `INTEGER` | 默认 `0`，布尔语义：官方源写 `1` |
+| `source_event_id` | `TEXT` | Allow `NULL`，与 `source` 组合唯一 |
+| `hash_digest` | `TEXT` | Allow `NULL`，源 payload 摘要 |
+| `extra_json` | `TEXT` | Allow `NULL`，仅允许 JSON Object / Array 字符串 |
+| `created_at` / `updated_at` | `TIMESTAMP` | 自动写入 |
+
+> 说明：
+> - 第一阶段 `stock_events` 已接入公告 / 互动问答 / 财经资讯；
+> - `sentiment_events` 继续只承接散户舆情；
+> - 财经资讯当前会在 `extra_json` 记录 `_match_method / _match_confidence / _matched_aliases / _related_symbols`；
+> - 公告全文优先以 `title + pdf_url/raw_url` 供产品层跳转回看，不要求第一期就全文直出。
+
+### 4C. `stock_event_entities`（事件-股票映射表）
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `id` | `INTEGER` | 主键自增 |
+| `event_id` | `TEXT` | `NOT NULL` |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `ts_code` | `TEXT` | Allow `NULL` |
+| `company_name` | `TEXT` | Allow `NULL` |
+| `relation_role` | `TEXT` | 默认 `primary` |
+| `match_method` | `TEXT` | Allow `NULL`，如 `direct_ts_code / alias_match` |
+| `confidence` | `REAL` | Allow `NULL` |
+| `created_at` | `TIMESTAMP` | 自动写入 |
+**唯一约束**: `UNIQUE(event_id, symbol)`
+
+### 4C.1 `stock_symbol_aliases`（股票别名词典）
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL`，标准前缀代码 |
+| `alias` | `TEXT` | `NOT NULL`，已做基础规范化 |
+| `alias_type` | `TEXT` | `NOT NULL`，如 `symbol_prefixed / symbol_code / ts_code / company_name_variant` |
+| `confidence` | `REAL` | 默认 `1.0` |
+| `source` | `TEXT` | Allow `NULL`，如 `stock_universe_meta / watchlist / fallback` |
+| `updated_at` | `TIMESTAMP` | 自动写入 |
+**主键**: `PRIMARY KEY(symbol, alias)`
+
+> 说明：
+> - 当前用于财经资讯归属匹配；
+> - 第一阶段别名以代码、ts_code、公司名、简称裁剪为主；
+> - 当前已支持本地 `seed_file` 补充正式别名、法定全称、历史简称等；
+> - 更完整全市场曾用名词典仍属后续增强项。
+
+### 4D. `stock_event_ingest_runs`（事件抓取运行日志）
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `id` | `INTEGER` | 主键自增 |
+| `source` | `TEXT` | `NOT NULL` |
+| `mode` | `TEXT` | `NOT NULL`，如 `manual / watchlist / watchlist_batch` |
+| `symbol` / `ts_code` | `TEXT` | Allow `NULL` |
+| `start_date` / `end_date` | `TEXT` | Allow `NULL` |
+| `status` | `TEXT` | `NOT NULL`，`running | success | failed` |
+| `fetched_count` / `inserted_count` / `updated_count` | `INTEGER` | 默认 `0` |
+| `message` | `TEXT` | Allow `NULL` |
+| `extra_json` | `TEXT` | Allow `NULL` |
+| `started_at` / `finished_at` | `DATETIME` | 运行起止时间 |
+
+### 4E. `stock_event_daily_rollup`（事件日级摘要表）
+| 字段名 | 数据类型 | 约束 / 备注 |
+| :--- | :--- | :--- |
+| `symbol` | `TEXT` | `NOT NULL` |
+| `trade_date` | `TEXT` | `NOT NULL`，`%Y-%m-%d` |
+| `total_events` | `INTEGER` | 默认 `0` |
+| `announcement_count` / `report_count` / `qa_count` / `news_count` / `regulatory_count` | `INTEGER` | 默认 `0` |
+| `latest_event_time` | `DATETIME` | Allow `NULL` |
+| `sources_json` / `subtypes_json` | `TEXT` | Allow `NULL`，仅允许 JSON Array 字符串 |
+| `updated_at` | `TIMESTAMP` | 自动写入 |
+**主键**: `PRIMARY KEY(symbol, trade_date)`
+
 
 ### 5. `history_5m_l2`（生产正式 L2 历史 5 分钟底座）
 > **生产正式层**：该表属于 `data/market_data.db`，用于盯盘历史模式、日后复盘页正式查询、多周期聚合源。
@@ -404,7 +491,7 @@
     - 历史正式值当前默认输出 L2 主指标，同时预留同源 `l1_* / l2_*` 扩展字段供后续页面做对比分析。
 
 > 写接口鉴权约束（v4.2.3+）：
-> - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
+> - 业务写接口（如 `/api/watchlist` 的 POST/DELETE、`/api/config` POST、`/api/sentiment/crawl/*` POST、`/api/stock_events/*` 的 POST）必须携带请求头 `X-Write-Token`，并与服务端 `WRITE_API_TOKEN` 一致。
 > - 官方前端不再把 `WRITE_API_TOKEN` 注入浏览器；开发环境由 Vite 代理注入，生产环境由 Nginx 代理注入。若绕过官方代理直接调用 API，调用方必须自行提供 `X-Write-Token`。
 > - 内部高速 ingest 接口继续使用 `INGEST_TOKEN`，且服务端不再提供默认 token。
 
@@ -542,8 +629,46 @@ D:\MarketData\
 ## 六、 v4.0 新增/变更接口
 
 ### 1. 星标管理（Watchlist）— 新增 DELETE
+*   **`GET /api/stock_events/feed/{symbol}?limit=50&source_type=report|announcement|qa|news|regulatory&source=...`**:
+    - 返回 `APIResponse`；
+    - `data.items` 为官方事件流；
+    - 首期按 `published_at DESC` 排序，当前重点消费 `title / published_at / raw_url / pdf_url / source_type`。
+*   **`GET /api/stock_events/coverage/{symbol}?days=365`**:
+    - 返回单票事件覆盖摘要；
+    - `data.modules` 固定输出 `财报 / 公告 / 互动问答 / 财经资讯 / 监管` 五类模块的 covered/count/latest；
+    - `data.by_source` / `data.by_source_type` 用于判断最近窗口内到底采到了哪些源、缺了哪些模块。
+*   **`GET /api/stock_events/audit/{symbol}?days=365&recent_limit=12`**:
+    - 返回单票事件采集审计摘要；
+    - 在 coverage 基础上，额外给出 `official/company/media` 三组数量、最近事件、以及 `audit_flags`（例如最近窗口缺公告、缺财报、缺公司交流等）。
+*   **`POST /api/stock_events/announcements/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
+    - 手动触发单票公告同步；
+    - 当前实现读取 `Tushare anns_d`，并写入 `stock_events + stock_event_entities + stock_event_ingest_runs + stock_event_daily_rollup`。
+*   **`POST /api/stock_events/internal/backfill_announcements/{symbol}?days=365`**:
+    - 用于单票回补最近 N 天公告。
+*   **`POST /api/stock_events/qa/shenzhen/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
+    - 手动同步深市互动问答。
+*   **`POST /api/stock_events/qa/shanghai/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
+    - 手动同步沪市互动问答。
+*   **`POST /api/stock_events/internal/backfill_qa/{symbol}?days=180&market=auto|sz|sh`**:
+    - 用于单票回补最近 N 天互动问答。
+*   **`POST /api/stock_events/news/short/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
+    - 手动同步单票财经快讯。
+*   **`POST /api/stock_events/news/major/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
+    - 手动同步单票长篇资讯。
+*   **`POST /api/stock_events/bundle/{symbol}?announcement_days=365&qa_days=180&news_days=30`**:
+    - 按需一次性同步单票事件包（公告 + 互动问答 + 财经资讯）；
+    - 适用于复盘/深度研究前的单票补齐。
+*   **`POST /api/stock_events/internal/backfill_news/{symbol}?days=30`**:
+    - 用于单票回补最近 N 天财经资讯；
+    - 当前按股票代码 + 公司名称 + 简称裁剪做归属过滤，并记录 `match_method / confidence / related_symbols`。
+*   **`POST /api/stock_events/internal/run_watchlist_announcements?days=365`**:
+    - 依次回补当前 watchlist 的公告事件。
+*   **`POST /api/stock_events/internal/run_watchlist_qa?days=180`**:
+    - 依次回补当前 watchlist 的互动问答事件。
+*   **`POST /api/stock_events/internal/run_watchlist_news?days=30`**:
+    - 依次回补当前 watchlist 的财经资讯事件。
 *   **`GET /api/watchlist`**: 返回全部自选股列表。
-*   **`POST /api/watchlist?symbol=sh600519&name=贵州茅台`**: 添加自选股，后台自动触发历史回填和情绪爬取。
+*   **`POST /api/watchlist?symbol=sh600519&name=贵州茅台`**: 添加自选股，后台自动触发历史回填、股吧情绪抓取、最近 `365D` 公告回补、最近 `180D` 互动问答回补与最近 `30D` 财经资讯回补（best-effort）。
 *   **`DELETE /api/watchlist?symbol=sh600519`**: 移除自选股。
 
 ### 2. LLM 配置（Security-First）

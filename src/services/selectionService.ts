@@ -7,6 +7,8 @@ import {
   SelectionHealthData,
   SelectionProfileData,
   SelectionStrategy,
+  StockEventCoverageData,
+  StockEventFeedData,
 } from '../types';
 
 const parseApiData = async <T>(res: Response): Promise<T | null> => {
@@ -140,5 +142,39 @@ export const fetchSelectionHistoryMultiframe = async (
   } catch (e) {
     console.error('Fetch selection history multiframe error:', e);
     return [];
+  }
+};
+
+export const fetchStockEventFeed = async (
+  symbol: string,
+  options: {
+    limit?: number;
+    sourceType?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}
+): Promise<StockEventFeedData | null> => {
+  try {
+    const params = new URLSearchParams();
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.sourceType) params.set('source_type', options.sourceType);
+    if (options.startDate) params.set('start_date', options.startDate);
+    if (options.endDate) params.set('end_date', options.endDate);
+    const query = params.toString();
+    const res = await fetch(`${API_BASE_URL}/stock_events/feed/${symbol}${query ? `?${query}` : ''}`);
+    return await parseApiData<StockEventFeedData>(res);
+  } catch (e) {
+    console.error('Fetch stock event feed error:', e);
+    return null;
+  }
+};
+
+export const fetchStockEventCoverage = async (symbol: string, days = 365): Promise<StockEventCoverageData | null> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/stock_events/coverage/${symbol}?days=${days}`);
+    return await parseApiData<StockEventCoverageData>(res);
+  } catch (e) {
+    console.error('Fetch stock event coverage error:', e);
+    return null;
   }
 };
