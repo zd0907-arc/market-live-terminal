@@ -359,6 +359,55 @@ export interface SelectionEventTimelineItem {
   summary_text?: string;
 }
 
+export interface StockEventFeedItem {
+  event_id: string;
+  source: string;
+  source_label?: string;
+  source_type: string;
+  source_type_label?: string;
+  event_subtype?: string;
+  title: string;
+  content?: string;
+  raw_url?: string | null;
+  pdf_url?: string | null;
+  published_at?: string | null;
+  importance?: number;
+  is_official?: boolean;
+}
+
+export interface StockEventFeedData {
+  items: StockEventFeedItem[];
+  latest_event_time?: string | null;
+  coverage_status?: string;
+}
+
+export interface StockEventCoverageModuleItem {
+  module: string;
+  label: string;
+  covered: boolean;
+  count: number;
+  latest_event_time?: string | null;
+}
+
+export interface StockEventCoverageData {
+  symbol: string;
+  coverage_status: string;
+  alias_count?: number;
+  modules: StockEventCoverageModuleItem[];
+  by_source_type?: Array<{
+    source_type: string;
+    label: string;
+    count: number;
+    latest_event_time?: string | null;
+  }>;
+  by_source?: Array<{
+    source: string;
+    source_label: string;
+    count: number;
+    latest_event_time?: string | null;
+  }>;
+}
+
 export interface SelectionProfileData {
   symbol: string;
   trade_date: string;

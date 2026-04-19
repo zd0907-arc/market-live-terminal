@@ -240,6 +240,63 @@
 
 ---
 
+### CAP-STOCK-EVENTS（单票官方事件层：公告 / 问答 / 资讯）
+
+1. **业务目标**
+- 为选股 / 复盘提供独立于 `sentiment_events` 的**官方事件事实层**，回答“为什么这一天主力敢这么走”；
+- 第一阶段先服务盘后研究，不承担盘中秒级交易响应职责。
+
+2. **业务规则（强约束）**
+- **模型隔离**：
+  - `sentiment_events` 继续只承接股吧/散户舆情；
+  - `stock_events` 独立承接 `公告 / 财报 / 互动问答 / 财经资讯`；
+  - 存储层禁止把官方事件混写到 `sentiment_events`。
+- **优先级冻结（`CHG-20260412-01`）**：
+  1. 公告 / 财报；
+  2. 互动问答；
+  3. 财经资讯。
+- **第一期来源冻结**：
+  - 公告接入层：`Tushare anns_d`；
+  - 审计/回查层：`巨潮资讯`；
+  - 资讯与问答接口先保留 schema / route 位，不要求本轮全部接完。
+- **产品接入边界**：
+  - 第一阶段先打通后端 schema / 拉取 / 查询；
+  - 选股画像时间线允许优先显示 `stock_events.title`；
+  - 不要求本轮就做独立前端页面。
+
+3. **实现摘要（当前方案）**
+- 截至 `2026-04-19`，已落地：
+  - `stock_events / stock_event_entities / stock_event_ingest_runs / stock_event_daily_rollup` 四张表；
+  - `POST /api/stock_events/announcements/{symbol}`、`POST /api/stock_events/qa/shenzhen/{symbol}`、`POST /api/stock_events/qa/shanghai/{symbol}`；
+  - `POST /api/stock_events/news/short/{symbol}`、`POST /api/stock_events/news/major/{symbol}`；
+  - `POST /api/stock_events/internal/backfill_announcements/{symbol}`、`POST /api/stock_events/internal/backfill_qa/{symbol}`、`POST /api/stock_events/internal/backfill_news/{symbol}`；
+  - `GET /api/stock_events/feed/{symbol}`；
+  - watchlist 新增股票时，会 best-effort 触发最近 `365D` 公告回补 + 最近 `180D` 互动问答回补 + 最近 `30D` 财经资讯回补；
+  - 选股画像时间线开始合并读取 `stock_events`。
+- 当前未完成：
+  - 多股票资讯归属增强；
+  - 更稳的 alias / 曾用名 / 主题映射。
+
+4. **验收案例（Given / When / Then）**
+- **正常**：Given `2026-04-19 20:30` 手动触发 `POST /api/stock_events/announcements/sz000833`，When Tushare 公告接口可用，Then 本地必须写入 `stock_events`，并在 `stock_event_daily_rollup` 出现同日聚合行。
+- **正常**：Given `2026-04-19 21:00` 打开选股画像，When 该票最近存在公告，Then `event_timeline` 中应能看到公告标题。
+- **异常防线**：Given 服务端未配置 `TUSHARE_TOKEN`，When 手动触发公告同步，Then 接口必须明确返回失败原因，而不是静默成功。
+
+5. **可观测性与告警**
+- 观测点：
+  - `stock_event_ingest_runs.status / fetched_count / inserted_count`；
+  - `stock_event_daily_rollup.latest_event_time`；
+  - `GET /api/stock_events/feed/{symbol}` 返回条数。
+- 告警条件：
+  - watchlist 新增后公告回补长期失败；
+  - 有 ingest run，但 `stock_events` 和 `stock_event_daily_rollup` 为空；
+  - 时间线只剩股吧事件，没有任何官方事件且接口报错被吞掉。
+
+6. **变更记录（任务ID）**
+- `CHG-20260412-01`：冻结“公告优先、问答第二、新闻第三”的单票事件层方案；当前第一期已落地公告底座与最小查询链路。
+
+---
+
 ### CAP-HISTORY-30M（30分钟历史趋势与口径）
 
 1. **业务目标**

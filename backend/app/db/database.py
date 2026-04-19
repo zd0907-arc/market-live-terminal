@@ -164,6 +164,99 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_events_symbol_source_time ON sentiment_events (symbol, source, pub_time)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_sentiment_events_thread_time ON sentiment_events (thread_id, pub_time)")
 
+    # 单票官方/新闻事件流 (Stock Events)
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_events (
+                 event_id TEXT PRIMARY KEY,
+                 source TEXT NOT NULL,
+                 source_type TEXT NOT NULL,
+                 event_subtype TEXT,
+                 symbol TEXT,
+                 ts_code TEXT,
+                 title TEXT NOT NULL,
+                 content_text TEXT,
+                 question_text TEXT,
+                 answer_text TEXT,
+                 raw_url TEXT,
+                 pdf_url TEXT,
+                 published_at DATETIME,
+                 ingested_at DATETIME,
+                 importance INTEGER DEFAULT 50,
+                 is_official INTEGER DEFAULT 0,
+                 source_event_id TEXT,
+                 hash_digest TEXT,
+                 extra_json TEXT,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                 )''')
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_events_source_source_event ON stock_events (source, source_event_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_events_symbol_time ON stock_events (symbol, published_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_events_symbol_type_time ON stock_events (symbol, source_type, published_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_events_ts_code_time ON stock_events (ts_code, published_at)")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_event_entities (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 event_id TEXT NOT NULL,
+                 symbol TEXT NOT NULL,
+                 ts_code TEXT,
+                 company_name TEXT,
+                 relation_role TEXT DEFAULT 'primary',
+                 match_method TEXT,
+                 confidence REAL,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 UNIQUE(event_id, symbol)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_entities_symbol ON stock_event_entities (symbol)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_entities_event_id ON stock_event_entities (event_id)")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_symbol_aliases (
+                 symbol TEXT NOT NULL,
+                 alias TEXT NOT NULL,
+                 alias_type TEXT NOT NULL,
+                 confidence REAL DEFAULT 1.0,
+                 source TEXT,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 PRIMARY KEY(symbol, alias)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_symbol_aliases_alias ON stock_symbol_aliases (alias)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_symbol_aliases_symbol ON stock_symbol_aliases (symbol)")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_event_ingest_runs (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 source TEXT NOT NULL,
+                 mode TEXT NOT NULL,
+                 symbol TEXT,
+                 ts_code TEXT,
+                 start_date TEXT,
+                 end_date TEXT,
+                 status TEXT NOT NULL,
+                 fetched_count INTEGER DEFAULT 0,
+                 inserted_count INTEGER DEFAULT 0,
+                 updated_count INTEGER DEFAULT 0,
+                 message TEXT,
+                 extra_json TEXT,
+                 started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 finished_at DATETIME
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_ingest_runs_source_started ON stock_event_ingest_runs (source, started_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_ingest_runs_symbol_started ON stock_event_ingest_runs (symbol, started_at)")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_event_daily_rollup (
+                 symbol TEXT NOT NULL,
+                 trade_date TEXT NOT NULL,
+                 total_events INTEGER DEFAULT 0,
+                 announcement_count INTEGER DEFAULT 0,
+                 report_count INTEGER DEFAULT 0,
+                 qa_count INTEGER DEFAULT 0,
+                 news_count INTEGER DEFAULT 0,
+                 regulatory_count INTEGER DEFAULT 0,
+                 latest_event_time DATETIME,
+                 sources_json TEXT,
+                 subtypes_json TEXT,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 PRIMARY KEY(symbol, trade_date)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_daily_rollup_date ON stock_event_daily_rollup (trade_date)")
+
     # AI 情绪摘要表 (Sentiment Summaries)
     c.execute('''CREATE TABLE IF NOT EXISTS sentiment_summaries (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,

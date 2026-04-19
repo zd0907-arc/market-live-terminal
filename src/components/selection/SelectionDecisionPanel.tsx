@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { AlertTriangle, CheckCircle2, Clock3, Newspaper, ShieldAlert, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, FileText, Newspaper, ShieldAlert, TrendingUp } from 'lucide-react';
 
 import QuoteMetaRow from '../common/QuoteMetaRow';
 import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import HistoryView from '../dashboard/HistoryView';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
 import * as StockService from '../../services/stockService';
-import { fetchSelectionHistoryMultiframe } from '../../services/selectionService';
-import { HistoryMultiframeGranularity, SearchResult, SelectionCandidateItem, SelectionProfileData } from '../../types';
+import { fetchSelectionHistoryMultiframe, fetchStockEventCoverage, fetchStockEventFeed } from '../../services/selectionService';
+import { HistoryMultiframeGranularity, SearchResult, SelectionCandidateItem, SelectionProfileData, StockEventCoverageData, StockEventFeedItem } from '../../types';
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
 const fmtNum = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -54,6 +54,28 @@ interface Props {
   displayName?: string;
 }
 
+type EventGroupKey = 'official' | 'company' | 'media';
+
+const EVENT_GROUP_META: Record<EventGroupKey, { label: string; desc: string }> = {
+  official: { label: '官方披露', desc: '财报 / 公告 / 监管 / 再融资' },
+  company: { label: '公司交流', desc: '互动问答 / 业绩说明会 / 投资者关系' },
+  media: { label: '媒体资讯', desc: '快讯 / 长文 / 解读 / 调研速递' },
+};
+
+const classifyEventGroup = (item: StockEventFeedItem): EventGroupKey => {
+  const title = String(item.title || '');
+  if (
+    item.source_type === 'qa' ||
+    /投资者关系|说明会|互动|问答|调研|接待/i.test(title)
+  ) {
+    return 'company';
+  }
+  if (item.source_type === 'news') return 'media';
+  return 'official';
+};
+
+const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
+
 const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName }) => {
   const [quote, setQuote] = useState<any | null>(null);
   const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
@@ -70,6 +92,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     rowCount: 0,
     dataOrigin: 'none' as 'local' | 'cloud' | 'none',
   });
+  const [eventFeed, setEventFeed] = useState<StockEventFeedItem[]>([]);
+  const [eventCoverage, setEventCoverage] = useState<StockEventCoverageData | null>(null);
+  const [loadingEvents, setLoadingEvents] = useState(false);
 
   const activeStock = useMemo<SearchResult | null>(() => {
     if (!candidate) return null;
@@ -120,6 +145,31 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   }, [candidate]);
 
   useEffect(() => {
+    if (!candidate) {
+      setEventFeed([]);
+      setEventCoverage(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingEvents(true);
+    Promise.all([
+      fetchStockEventFeed(candidate.symbol.toLowerCase(), { limit: 24 }),
+      fetchStockEventCoverage(candidate.symbol.toLowerCase(), 365),
+    ])
+      .then(([feed, coverage]) => {
+        if (cancelled) return;
+        setEventFeed(feed?.items || []);
+        setEventCoverage(coverage);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingEvents(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidate]);
+
+  useEffect(() => {
     if (!candidate?.trade_date) return;
     const signalDate = candidate.trade_date;
     const today = formatDateInput(new Date());
@@ -157,6 +207,25 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     setWindowEnd(nextEnd > today ? today : nextEnd);
   };
 
+  const effectiveStartDate = useMemo(() => {
+    if (!windowStart || !windowEnd) return undefined;
+    if (granularity === '1d') return windowStart;
+    const maxLookback = granularity === '1h' ? 60 : 30;
+    const clippedStart = shiftDate(windowEnd, -maxLookback);
+    return clippedStart > windowStart ? clippedStart : windowStart;
+  }, [granularity, windowEnd, windowStart]);
+  const effectiveEndDate = windowEnd || undefined;
+  const intradayWindowClipped = granularity !== '1d' && !!windowStart && !!effectiveStartDate && effectiveStartDate !== windowStart;
+  const groupedEventFeed = useMemo(() => {
+    const groups: Record<EventGroupKey, StockEventFeedItem[]> = {
+      official: [],
+      company: [],
+      media: [],
+    };
+    eventFeed.forEach((item) => groups[classifyEventGroup(item)].push(item));
+    return groups;
+  }, [eventFeed]);
+
   if (!candidate || !profile || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
   }
@@ -167,15 +236,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const high = Number(quote?.high ?? profile.close ?? 0);
   const low = Number(quote?.low ?? profile.close ?? 0);
   const heroName = (quote?.name || displayName || profile.name || candidate.name || candidate.symbol).trim();
-  const effectiveStartDate = useMemo(() => {
-    if (!windowStart || !windowEnd) return undefined;
-    if (granularity === '1d') return windowStart;
-    const maxLookback = granularity === '1h' ? 60 : 30;
-    const clippedStart = shiftDate(windowEnd, -maxLookback);
-    return clippedStart > windowStart ? clippedStart : windowStart;
-  }, [granularity, windowEnd, windowStart]);
-  const effectiveEndDate = windowEnd || undefined;
-  const intradayWindowClipped = granularity !== '1d' && !!windowStart && !!effectiveStartDate && effectiveStartDate !== windowStart;
 
   return (
     <div className="space-y-4">
@@ -408,6 +468,104 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Newspaper className="h-4 w-4 text-fuchsia-400" />
+              事件依据 / 信息来源
+            </div>
+            <div className="mt-1 text-xs text-slate-500">AI 提到财报、公告、交流或新闻时，你可以直接从这里点开原文核对。</div>
+          </div>
+          <div className="text-xs text-slate-500">
+            {eventCoverage?.coverage_status === 'covered'
+              ? `最近覆盖：${eventCoverage?.modules?.filter((item) => item.covered).length || 0} / ${eventCoverage?.modules?.length || 0} 类`
+              : '当前无事件覆盖摘要'}
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {(eventCoverage?.modules || [
+            { module: 'report', label: '财报', covered: false, count: 0 },
+            { module: 'announcement', label: '公告', covered: false, count: 0 },
+            { module: 'qa', label: '互动问答', covered: false, count: 0 },
+            { module: 'news', label: '财经资讯', covered: false, count: 0 },
+            { module: 'regulatory', label: '监管', covered: false, count: 0 },
+          ]).map((item) => (
+            <div key={item.module} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[11px] text-slate-500">{item.label}</div>
+                <div className={`text-[11px] ${item.covered ? 'text-emerald-300' : 'text-slate-500'}`}>{item.covered ? '已覆盖' : '暂无'}</div>
+              </div>
+              <div className="mt-1 text-lg font-semibold text-slate-100">{item.count || 0}</div>
+              <div className="mt-1 text-[11px] text-slate-500">{compactTime(item.latest_event_time)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-3">
+          {(Object.keys(EVENT_GROUP_META) as EventGroupKey[]).map((groupKey) => {
+            const group = EVENT_GROUP_META[groupKey];
+            const items = groupedEventFeed[groupKey];
+            return (
+              <div key={groupKey} className="rounded-2xl border border-slate-800 bg-slate-950/30 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-white">{group.label}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">{group.desc}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400">{items.length}</div>
+                </div>
+                <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
+                  {loadingEvents ? (
+                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">正在加载事件依据...</div>
+                  ) : items.length > 0 ? (
+                    items.map((item) => (
+                      <div key={item.event_id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                          <span>{item.source_label || item.source_type_label || item.source || '事件源'}</span>
+                          <span>{compactTime(item.published_at)}</span>
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-slate-100">{item.title || '--'}</div>
+                        {item.content && item.content !== item.title ? (
+                          <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.content}</div>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {item.raw_url ? (
+                            <a
+                              href={item.raw_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              查看原文
+                            </a>
+                          ) : null}
+                          {item.pdf_url ? (
+                            <a
+                              href={item.pdf_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 hover:border-cyan-500"
+                            >
+                              <FileText className="h-3 w-3" />
+                              查看PDF
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">当前分组暂无可展示事件。</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 };
