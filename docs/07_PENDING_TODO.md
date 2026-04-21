@@ -4,11 +4,6 @@
 > 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 > 说明：本文件保留了历史编号与过程项；若历史任务已经完成但仍留作上下文，不代表它仍是当前主优先级。
 
-## T-001 Windows SSH 免密
-- 状态：`DONE`（2026-03-08）
-- 结果：`authorized_keys` 已配置，`sync_to_windows.sh` 可执行。
-- 关联任务：`CHG-20260308-02`
-
 ## T-002 Windows ETL 产物回传与云端 merge
 - 状态：`BLOCKED`
 - 当前事实：
@@ -42,33 +37,6 @@
   3. 复盘页主区与累计区在 1-2 月窗口通过一次回归冒烟。
 - 关联任务：`CHG-20260311-08`
 
-## T-006 Sandbox V2 股票池首构建（数据源短时断连）
-- 状态：`DONE`（2026-03-11）
-- 当前事实：
-  - V2 代码与接口已就绪（`/api/sandbox/pool` + 1m 分库存储）。
-  - 已新增 fallback（`stock_info_a_code_name/stock_zh_a_spot` + `stock_individual_info_em`）并在 Windows 成功落地。
-- 结果回填：
-  1. 股票池数量：`2788`（`as_of_date=2026-03-11`）；
-  2. 冒烟回放：`run_id=1`，`symbol_count=20`，`total_rows=1317759`，`failed_count=0`；
-  3. 当前样本占用：`data/sandbox` 约 `231.25MB`。
-- 关联任务：`CHG-20260311-09`
-
-## T-007 Sandbox V2 全量回放与云端可用打通
-- 状态：`DONE`
-- 当前事实：
-  - Windows 已完成 `2025-01-01 ~ 2026-02-28` 全量 5m 回放，总控状态为 `done`；
-  - 云端已完成 `data/sandbox/review_v2/` 首轮全量同步，`/api/sandbox/pool` 与 `/api/sandbox/review_data` 均可返回真实数据；
-  - 已定位并修复“云端数据文件存在但接口空数组”的根因：容器内仍加载旧版 1m 查询模块，重建前后端容器后恢复正常。
-- 解除条件：
-  1. Windows 完成全量 `sandbox_review_v2_run_all_months.py`（一次启动、逐月逆序、按 `symbol+trade_date` 续跑），失败清单可追溯；
-  2. `data/sandbox/review_v2/` 首轮同步到云端完成；
-  3. 云端部署后 `/api/sandbox/pool` 与 `/api/sandbox/review_data` 可用，复盘页可正常查询。
-- 结果回填：
-  1. 股票池固定为 `2788`（`as_of_date=2026-03-11`），云端 symbol 分库首轮同步数为 `2789`（额外包含人工补跑样本 `sz000759`）；
-  2. 云端目录 `data/sandbox/review_v2/` 占用约 `7.9G`；
-  3. `sz000833/sz000759` 在 `2026-01-01 ~ 2026-02-28` 查询已可正常返回真实 5m 数据（接口层去重后为 `1666` 条）。
-- 关联任务：`CHG-20260311-09`
-
 ## T-008 生产盯盘二态发布联动
 - 状态：`ACTIVE`
 - 当前事实：
@@ -78,21 +46,6 @@
 - 解除条件：
   1. 生产实测确认实时页在周期刷新时无“先清空后回显”闪烁。
 - 关联任务：`CHG-20260312-02`
-
-## T-009 每日盘后 L2 日包融合方案（基础阶段）
-- 状态：`DONE`（2026-03-14）
-- 当前事实：
-  - 已在 Windows 验证 `2026-03-11` 新日日包存在：`D:\\MarketData\\20260311\\20260311\\{symbol}`。
-  - 抽样 `000833.SZ` 已确认三类文件齐全：`行情.csv`、`逐笔成交.csv`、`逐笔委托.csv`。
-  - 样本成交文件包含 `叫买序号/叫卖序号`，且与委托文件 `交易所委托号` 可对齐，具备真实 L2 母单聚合前提。
-  - `2026-03-14` 已冻结总方案：生产正式历史层固定为 `5m + daily`，并要求同源同时产出 L1/L2 双派生；复盘页未来并库到生产 L2 底座，sandbox 回归实验用途。
-- 结果回填：
-  1. Phase 1：`history_5m_l2/history_daily_l2/回补状态表` schema 与 `YYYYMM/YYYYMMDD` 目录 helper 已完成；
-  2. Phase 2：`l2_daily_backfill.py` 已支持把盘后日包映射为 L1/L2 的 `5m + daily` 双派生并写入正式表；
-  3. Phase 3：`/api/history/trend` 与 `/api/history_analysis` 已优先读取 `history_5m_l2/history_daily_l2`，并补充 `source/is_finalized/fallback_used`；
-  4. Phase 3.5：历史日期回溯分时图已优先读取正式 `history_5m_l2`，`2026-03-11` 这类历史日期可直接在盯盘分时里看到 5m 的 L2 派生结果；
-  5. 剩余产品化工作已拆分到新的待办 `T-010/T-011/T-012`，不再挂在本基础卡下。
-- 关联任务：`CHG-20260314-02`
 
 ## T-010 2026年3月 L2 日包清洗与正式历史入库
 - 状态：`ACTIVE`
@@ -218,21 +171,6 @@
   4. 若要继续升级为全自动，则需再完成定时触发与跨重启稳定性验证。
 - 关联任务：`CHG-20260315-02`
 
-## T-015 新版历史多维历史月份扩展（固定池、按月回补、按月上线）
-- 状态：`DONE`（2026-03-16）
-- 当前事实：
-  - 新版历史多维当前正式覆盖主要集中在 `2026-03`；
-  - sandbox V2 已沉淀固定股票池：`50~300亿市值、沪深A、排除 ST`，当前池子规模约 `2788`；
-  - 对 `2026-02` 及更早月份，首选路径已收敛为：**直接复用 sandbox V2 的固定池 5m 产物，按月提升到生产 `history_5m_l2/history_daily_l2`**，不先重跑 Windows 原始 ZIP；
-  - 已新增月度提升脚本：`promote_sandbox_review_v2_month.py`、`run_l2_history_monthly_rollout.py`；
-  - 云端月度 rollout 已完成：`2026-02 -> 2025-01` 全部 done；
-  - 用户已明确冻结范围：**`2025-01` 之前不再继续回补**。
-- 结果回填：
-  1. 历史多维正式覆盖已扩展到 `2025-01-02 ~ 2026-03-13`；
-  2. `2025-01` 之前的更老月份不再继续纳入本项目范围；
-  3. 后续工作重心已切换为“每天盘后新增日包的日增量回补”。
-- 关联任务：`CHG-20260316-05`
-
 ## T-016 Windows 实时采集计划任务稳态化
 - 状态：`ACTIVE`
 - 当前事实：
@@ -285,19 +223,6 @@
   2. 各粒度默认视窗、tooltip 密度、空态策略仍需依赖真实数据调优。
 - 关联任务：`CHG-20260315-01`
 
-## T-012 复盘页正式底座并库与 sandbox 角色重定义
-- 状态：`DONE`
-- 当前事实：
-  - `2026-03-21` 已完成正式复盘并库首轮实现；
-  - 当前复盘页股票池与数据主链路已切到 `/api/review/pool`、`/api/review/data`；
-  - sandbox `/api/sandbox/*` 保留实验/验真角色，不再承担正式主链路。
-- 收口结果：
-  1. 已新增 `stock_universe_meta`、正式复盘接口与单股票后台补历史脚本；
-  2. 复盘页日期边界已改为按当前股票 `min_date/max_date` 动态限制；
-  3. sandbox 角色已在 `02/03` core docs 中重新定义为实验层。
-- 关联任务：`CHG-20260314-06`, `CHG-20260314-08`
-
-
 ## T-017 当日分时页 L1/L2 双轨重构后置项
 - 状态：`ACTIVE`
 - 当前事实：
@@ -322,7 +247,6 @@
   3. 必要时评估把主动自愈从“仅 watchlist”扩展到页面最近访问热点股票。
 - 关联任务：`CHG-20260320-01`
 
-
 ## T-019 正式复盘股票元数据自动刷新
 - 状态：`ACTIVE`
 - 当前事实：
@@ -333,20 +257,6 @@
   2. 保证复盘股票池名称、市值与过滤结果不会长期陈旧；
   3. 明确失败告警与回填流程。
 - 关联任务：`CHG-20260314-06`
-
-## T-020 首页去旧版、只保留新版
-- 状态：`DONE`（2026-04-21 文档归一确认）
-- 当前事实：
-  - `2026-03-21` 已完成 `v4.2.28` 页面基线冻结与回滚归档；
-  - 同日已在分支 `codex/fusion-only-remove-legacy` 完成首页入口收敛：去掉 `旧版 / 新版` 按钮，首页只保留 `当日分时 + 历史多维 + 散户情绪`；
-  - 截至 `2026-04-21`，主线 `main` 已以“只保留新版壳层”为当前真相；旧链路仅作为代码兼容/回滚残留。
-- 后续：
-  1. 若要物理删除 `HistoryView` 与旧链路死代码，需单开卡处理；
-  2. 当前不再把“旧版 / 新版切换”视为待完成产品项。
-- 风险控制：
-  1. 产品回滚锚点固定为 `v4.2.28 / c1eec34 / baseline-v4.2.28-legacy-toggle`；
-  2. 详细基线说明见 `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`。
-- 关联任务：`CHG-20260321-02`
 
 ## T-021 散户一致性观察模块重构后置项
 - 状态：`ACTIVE`
@@ -414,24 +324,6 @@
      - Windows 批量任务路径口径已修正；下一步改为直接按正式批次开始回补。
 - 关联任务：`CHG-20260411-09`
 
-## T-025 原子事实层正式回补执行
-- 状态：`DONE`
-- 当前事实：
-  - `2026-04-12` 已新增 Windows 本地正式 runner：`run_atomic_backfill_windows.py`；
-  - 已配套 `ops/win_run_atomic_backfill.bat` 与正式 config；
-  - `2026-04-14` 复核确认：主板范围 `2026-04 -> 2025-01` 的主数据已经全部跑完；
-  - 当前正式库：`D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db`，大小约 `19.46GB`；
-  - 当前已落：`trade_daily=974571`、`order_daily=92396`、`book_daily=92396`、`trade_5m=47545635`；
-  - 释放空间后，已单独补跑：
-    - `atomic_limit_state_daily=974571`
-    - `atomic_limit_state_5m=47545635`
-  - `state/report/validation` 已全部生成；
-  - `state.status = done`。
-- 后续：
-  1. 新原子层接复盘 / 选股接口与页面；
-  2. 再做特征快照、信号、回测建模。
-- 关联任务：`CHG-20260412-04`, `CHG-20260414-01`
-
 ## T-024 集合竞价原始数据审计与落库方案冻结
 - 当前新增：已形成《集合竞价 L1/L2 摘要表与 DDL 草案》，明确当前先做数据层，不碰决策层；并建议采用 `atomic_open_auction_l1_daily / atomic_open_auction_l2_daily / atomic_open_auction_manifest` 三表结构。
 - 状态：`ACTIVE`
@@ -472,7 +364,6 @@
   4. 生产挂正式 atomic DB 后做首页 / 复盘 / 选股三点 smoke；
   5. smoke 通过后再打 tag 和发布。
 - 关联任务：`CHG-20260415-01`
-
 
 ## T-020 本地研究站稳定性观察
 - 状态：`ACTIVE`

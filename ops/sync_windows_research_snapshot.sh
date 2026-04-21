@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/dong/Desktop/AIGC/market-live-terminal-local-research"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WIN_HOST="${WIN_HOST:-laqiyuan@100.115.228.56}"
 WIN_ROOT="${WIN_ROOT:-D:\\market-live-terminal}"
 WIN_PY_CMD="${WIN_PY_CMD:-py -3}"

@@ -63,6 +63,36 @@
 - 存量旧表依赖剥离仍未完成；
 - 部分历史数据治理卡仍是过程性设计文档，尚未全部转为单一最终态说明。
 
-## 6. 风险
+## 6. 当前代码主路径盘点
+
+### 6.1 前端 canonical 入口
+- 首页：`src/App.tsx`
+- 正式复盘页：`src/components/sandbox/SandboxReviewPage.tsx`
+  - canonical 路由：`/review`
+  - `/sandbox-review` 仅兼容跳转
+- 选股研究页：`src/components/selection/SelectionResearchPage.tsx`
+- 实时盯盘：`src/components/dashboard/RealtimeView.tsx`
+- 散户情绪：`src/components/sentiment/SentimentDashboard.tsx`
+
+### 6.2 后端 canonical 入口
+- 应用入口：`backend/app/main.py`
+- 正式复盘路由：`backend/app/routers/review.py`
+- 选股研究路由：`backend/app/routers/selection.py`
+- 事件层路由：`backend/app/routers/stock_events.py`
+- sandbox 兼容路由：`backend/app/routers/sandbox_review.py`
+
+### 6.3 当前仍保留的兼容/历史路径
+- `/sandbox-review`：前端兼容入口
+- `/api/sandbox/*`：实验 / 验真链路
+- `HistoryView`、部分旧接口和旧数据表：仍可能作为兼容/回滚残留存在，但不再作为“当前产品真相”描述
+
+### 6.4 本轮顺手修正的脚本漂移
+- 已把以下脚本从“写死旧 worktree 路径”改为“按当前仓库根目录解析”：
+  - `ops/start_local_research_frontend.sh`
+  - `ops/start_local_research_station.sh`
+  - `ops/sync_windows_research_snapshot.sh`
+  - `ops/check_postclose_l2_status.sh`
+
+## 7. 风险
 - 如果后续继续直接阅读早期 `REQ/STG` 卡而不先看本卡，仍可能误把历史计划当当前真相；
 - 当前仓库仍保留大量历史过程卡，信息量大，但已经通过本卡显式把“当前入口”固定下来。

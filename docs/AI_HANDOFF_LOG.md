@@ -1310,3 +1310,10 @@
 - 结论: 已按当前主线代码重新审计 core docs，并新增一张“当前真相母卡”统一收口：主工作目录已固定回 `market-live-terminal/main`，首页当前真相已改为“只保留新版壳层”，正式复盘 canonical 路由已明确为 `/review`，`/sandbox-review` 只保留兼容入口语义；同时已修正 `AI_QUICK_START / 04_OPS_AND_DEV / 07_PENDING_TODO` 中仍指向历史 worktree 或未完成状态的描述，减少后续 AI/人读文档时把历史过程误当当前真相的风险。
 - 风险: 历史 `REQ/STG/INV` 卡仍然很多，现阶段采用“母卡入口 + 保留历史过程”的压缩策略，而不是粗暴删除；后续若继续治理，可再按主题把更老的过程卡补充 pointer 或归档规范化。
 - 链接: `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
+
+## 2026-04-21 18:10 | 文档治理 / 待办压缩与脚本路径归一 AI
+- Task ID: `CHG-20260421-01`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续做第二轮轻量治理：`07_PENDING_TODO` 中所有 `DONE` 项已移出，只保留真实未完成 / 阻塞事项；同时把 `ops/sync_windows_research_snapshot.sh`、`ops/check_postclose_l2_status.sh` 中仍写死旧 worktree 路径的问题改为“按当前仓库根目录解析”，避免后续再因为历史目录名漂移导致误操作。母卡中也已补充“当前代码主路径 / 兼容路径 / 脚本归一”盘点。
+- 风险: 这轮压缩的是“当前待办视图”和最明显的脚本漂移；更深层的历史 change cards 仍保留，需要后续按主题分批补 pointer，而不是一次性暴力清理。
+- 链接: `docs/07_PENDING_TODO.md`, `ops/sync_windows_research_snapshot.sh`, `ops/check_postclose_l2_status.sh`, `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
