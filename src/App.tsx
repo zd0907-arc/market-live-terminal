@@ -11,7 +11,7 @@ import { isCurrentCnTradingSession } from './utils/marketTime';
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
-const SandboxReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
+const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
@@ -60,11 +60,15 @@ class ViewErrorBoundary extends React.Component<{ title: string; children: React
 }
 
 const App: React.FC = () => {
-  const isSandboxRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/sandbox-review');
-  if (isSandboxRoute) {
+  const isReviewRoute = typeof window !== 'undefined' && (window.location.pathname.startsWith('/review') || window.location.pathname.startsWith('/sandbox-review'));
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/sandbox-review')) {
+    const next = `/review${window.location.search}${window.location.hash}`;
+    window.history.replaceState(null, '', next);
+  }
+  if (isReviewRoute) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">复盘页面加载中...</div>}>
-        <SandboxReviewPage />
+        <ReviewPage />
       </Suspense>
     );
   }
@@ -383,7 +387,7 @@ const App: React.FC = () => {
       组件加载中...
     </div>
   );
-  const reviewHref = activeStock?.symbol ? `/sandbox-review?symbol=${activeStock.symbol.toLowerCase()}` : '/sandbox-review';
+  const reviewHref = activeStock?.symbol ? `/review?symbol=${activeStock.symbol.toLowerCase()}` : '/review';
   const selectionHref = '/selection-research';
 
   return (
@@ -391,7 +395,7 @@ const App: React.FC = () => {
       <MarketTopHeader
         routeHref={reviewHref}
         routeLabel="去复盘"
-        routeTitle="打开沙盒复盘页面"
+        routeTitle="打开复盘页面"
         secondaryRouteHref={selectionHref}
         secondaryRouteLabel="去选股"
         secondaryRouteTitle="打开选股研究工作台"

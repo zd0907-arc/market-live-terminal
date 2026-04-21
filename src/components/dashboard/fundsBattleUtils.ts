@@ -124,7 +124,8 @@ export function buildBattleSeries(
   const enableSignals = options?.enableSignals ?? true;
 
   for (const bar of bars) {
-    if (track === 'l2' && !hasL2Payload(bar)) continue;
+    const hasL2 = hasL2Payload(bar);
+    if (track === 'l2' && !hasL2) continue;
 
     const totalAmount = Number(bar.total_amount ?? 0);
     const totalVolume = Number(bar.total_volume ?? 0);
@@ -164,16 +165,24 @@ export function buildBattleSeries(
 
     let signal: SignalMark | undefined;
     if (enableSignals) {
-      const diffBuy = l2Net - l1Net;
-      const diffSell = l1Net - l2Net;
-      if (diffBuy > tuning.diffThreshold && belowVwap && volumeResonance) {
-        signal = { label: '吃', color: '#ef4444' };
-      } else if (cancelSell > tuning.cancelThreshold && (belowVwap || lowZone) && volumeResonance) {
-        signal = { label: '诱空', color: '#ef4444' };
-      } else if (diffSell > tuning.diffThreshold && aboveVwap && volumeResonance) {
-        signal = { label: '出', color: '#22c55e' };
-      } else if (cancelBuy > tuning.cancelThreshold && (aboveVwap || highZone) && volumeResonance) {
-        signal = { label: '诱多', color: '#22c55e' };
+      if (track === 'l1' && !hasL2) {
+        if (l1Net > tuning.diffThreshold && belowVwap && volumeResonance) {
+          signal = { label: '吃', color: '#ef4444' };
+        } else if (-l1Net > tuning.diffThreshold && aboveVwap && volumeResonance) {
+          signal = { label: '出', color: '#22c55e' };
+        }
+      } else {
+        const diffBuy = l2Net - l1Net;
+        const diffSell = l1Net - l2Net;
+        if (diffBuy > tuning.diffThreshold && belowVwap && volumeResonance) {
+          signal = { label: '吃', color: '#ef4444' };
+        } else if (cancelSell > tuning.cancelThreshold && (belowVwap || lowZone) && volumeResonance) {
+          signal = { label: '诱空', color: '#ef4444' };
+        } else if (diffSell > tuning.diffThreshold && aboveVwap && volumeResonance) {
+          signal = { label: '出', color: '#22c55e' };
+        } else if (cancelBuy > tuning.cancelThreshold && (aboveVwap || highZone) && volumeResonance) {
+          signal = { label: '诱多', color: '#22c55e' };
+        }
       }
     }
 

@@ -57,8 +57,12 @@ const CommentList: React.FC<CommentListProps> = ({
         }
         if (!focusDayKey) return;
         const target = groupRefs.current[focusDayKey];
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const container = containerRef.current;
+        if (target && container) {
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const nextTop = container.scrollTop + (targetRect.top - containerRect.top) - 8;
+            container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
         }
     }, [focusDayKey, groups, sort]);
 

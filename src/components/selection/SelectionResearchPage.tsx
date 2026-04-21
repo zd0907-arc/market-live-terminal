@@ -54,6 +54,7 @@ const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ lab
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
   const [tradeDate, setTradeDate] = useState('');
+  const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
   const [selected, setSelected] = useState<SelectionCandidateItem | null>(null);
   const [profile, setProfile] = useState<SelectionProfileData | null>(null);
@@ -87,7 +88,10 @@ const SelectionResearchPage: React.FC = () => {
   const loadHealth = async () => {
     const data = await fetchSelectionHealth();
     setHealth(data);
-    if (data?.latest_signal_date && !tradeDate) setTradeDate(data.latest_signal_date);
+    if (data?.latest_signal_date && !tradeDate) {
+      setTradeDate(data.latest_signal_date);
+      setPendingTradeDate(data.latest_signal_date);
+    }
   };
 
   const loadCandidates = async (dateArg = tradeDate) => {
@@ -129,6 +133,15 @@ const SelectionResearchPage: React.FC = () => {
     loadCandidates(tradeDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeDate]);
+
+  const handleApplyTradeDate = async () => {
+    if (!pendingTradeDate) return;
+    if (pendingTradeDate === tradeDate) {
+      await loadCandidates(pendingTradeDate);
+      return;
+    }
+    setTradeDate(pendingTradeDate);
+  };
 
   useEffect(() => {
     if (!selected) {
@@ -193,7 +206,7 @@ const SelectionResearchPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200">
-      <div className="mx-auto max-w-[1800px] px-4 py-5 md:px-6 md:py-6 space-y-4">
+      <div className="mx-auto max-w-[1800px] px-4 py-5 md:px-6 md:py-6 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-3">
@@ -204,98 +217,102 @@ const SelectionResearchPage: React.FC = () => {
                 <ArrowLeft className="h-3.5 w-3.5" />
                 返回主页面
               </a>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
-                Top10 启动确认 / 右侧复盘决策
-              </span>
             </div>
             <h1 className="mt-3 text-2xl font-bold text-white">选股研究工作台</h1>
-            <p className="mt-1 text-sm text-slate-400">左边只看当日最值得先看的 Top10，默认聚焦沪深A（先排除科创板/北交所），右边直接复用复盘能力做决策判断。</p>
+            <p className="mt-1 text-sm text-slate-400">先选交易日，再快速扫当天 Top10 候选；右侧直接做单票决策判断。</p>
           </div>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 hover:border-slate-500"
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            刷新研究数据
-          </button>
         </div>
 
         {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
-        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-          <SectionCard
-            title="模块状态"
-            icon={<ShieldCheck className="h-4 w-4 text-emerald-400" />}
-            right={<span className="text-xs text-slate-500">最新信号日：{health?.latest_signal_date || '--'}</span>}
-          >
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="Feature Rows" value={String(health?.feature_rows ?? '--')} />
-              <Metric label="Signal Rows" value={String(health?.signal_rows ?? '--')} />
-              <Metric label="Backtest Runs" value={String(health?.backtest_runs ?? '--')} />
-              <Metric label="当前策略" value="启动确认 Top10" tone="text-sky-300" />
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="min-w-[180px] text-xs text-slate-400">
+              交易日
+              <input
+                type="date"
+                value={pendingTradeDate}
+                onChange={(e) => setPendingTradeDate(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleApplyTradeDate}
+              disabled={!pendingTradeDate || loadingCandidates}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <ShieldCheck className={`h-4 w-4 ${loadingCandidates ? 'animate-pulse' : ''}`} />
+              {loadingCandidates ? '查询中...' : '查询候选'}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              刷新数据
+            </button>
+            <div className="ml-auto flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-sky-300">策略：启动确认 Top10</span>
+              <span className="text-slate-500">最新信号日：{health?.latest_signal_date || '--'}</span>
+              <span className="text-slate-500">候选数：{loadingCandidates ? '--' : displayCandidates.length}</span>
             </div>
-          </SectionCard>
-
-          <SectionCard title="研究控制" icon={<TrendingUp className="h-4 w-4 text-sky-400" />}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-slate-400">
-                交易日
-                <input type="date" value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-              </label>
-              <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
-                <div className="text-[11px] text-slate-500">当前规则</div>
-                <div className="mt-1 text-sm font-medium text-slate-100">仅输出 breakout Top10</div>
-                <div className="mt-1 text-xs text-slate-400">默认范围：沪深A（排除科创板/北交所）；stealth 做前置解释，distribution 只在右侧详情里看。</div>
-              </div>
-            </div>
-          </SectionCard>
+          </div>
         </div>
 
-        <SectionCard title="怎么用" icon={<ShieldCheck className="h-4 w-4 text-cyan-400" />}>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs leading-5 text-slate-400">先选日期。系统只给你当天最值得先看的 Top10 启动确认候选。</div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs leading-5 text-slate-400">点左侧某只票，右边直接加载复盘决策视图，不再让你跳去别的页面。</div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-xs leading-5 text-slate-400">底部回测同时看固定持有结果和窗口内最高机会，判断这套规则值不值得继续做。</div>
-          </div>
-        </SectionCard>
-
-        <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <SectionCard
-            title="当日 Top10 候选池"
-            icon={<TrendingUp className="h-4 w-4 text-amber-400" />}
-            right={<span className="text-xs text-slate-500">{loadingCandidates ? '加载中...' : `${displayCandidates.length} 条`}</span>}
-          >
-            <div className="max-h-[calc(100vh-260px)] space-y-3 overflow-auto pr-1">
+        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <TrendingUp className="h-4 w-4 text-amber-400" />
+                当日 Top10 候选
+              </div>
+              <span className="text-xs text-slate-500">{loadingCandidates ? '加载中...' : `${displayCandidates.length} 条`}</span>
+            </div>
+            <div className="divide-y divide-slate-800/80">
               {displayCandidates.map((item) => (
                 <button
                   key={`${item.symbol}-${item.trade_date}`}
                   type="button"
                   onClick={() => setSelected(item)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${selected?.symbol === item.symbol ? 'border-sky-500 bg-sky-500/10' : 'border-slate-800 bg-slate-950/40 hover:border-slate-600'}`}
+                  className={`w-full px-4 py-3 text-left transition ${selected?.symbol === item.symbol ? 'bg-sky-500/10' : 'hover:bg-slate-950/35'}`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-white">#{item.rank || '--'} {item.displayName}</div>
-                      <div className="mt-1 text-xs text-slate-500">{item.symbol}</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-500">#{item.rank || '--'}</span>
+                        <span className="truncate text-sm font-semibold text-white">{item.displayName}</span>
+                        <span className="shrink-0 text-[11px] text-slate-500">{item.symbol}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-sky-300">{item.signal_label || '启动确认'}</span>
+                        <span className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300">{item.current_judgement || '继续观察'}</span>
+                        <span className={`${item.risk_level === '高' ? 'text-red-300' : item.risk_level === '中' ? 'text-amber-300' : 'text-emerald-300'}`}>风险{item.risk_level || '低'}</span>
+                      </div>
                     </div>
-                    <div className={`text-right text-lg font-bold ${scoreTone(item.score)}`}>{fmtNum(item.score)}</div>
+                    <div className="shrink-0 text-right">
+                      <div className={`text-base font-semibold ${scoreTone(item.score)}`}>{fmtNum(item.score)}</div>
+                      <div className="text-[11px] text-slate-500">确认分</div>
+                    </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                    <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-sky-300">{item.signal_label || '启动确认'}</span>
-                    <span className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-300">{item.current_judgement || '继续观察'}</span>
-                    <span className={`rounded-full border px-2 py-0.5 ${item.risk_level === '高' ? 'border-red-500/20 bg-red-500/10 text-red-300' : item.risk_level === '中' ? 'border-amber-500/20 bg-amber-500/10 text-amber-300' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}>风险{item.risk_level || '低'}</span>
+                  <div className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
+                    {item.reason_summary || '当前未生成解释'}
                   </div>
-                  <div className="mt-3 text-sm leading-6 text-slate-300">{item.reason_summary || '当前未生成解释'}</div>
                 </button>
               ))}
               {!loadingCandidates && displayCandidates.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">暂无候选，请先刷新研究数据或切换日期。</div>
+                <div className="px-4 py-10 text-center text-sm text-slate-500">暂无候选，请先刷新数据或切换日期。</div>
               )}
             </div>
-          </SectionCard>
+          </div>
 
-          <SectionCard title="复盘决策视图" icon={<ShieldCheck className="h-4 w-4 text-violet-400" />}>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+              <ShieldCheck className="h-4 w-4 text-violet-400" />
+              复盘决策视图
+            </div>
             {loadingProfile ? (
               <div className="py-16 text-center text-sm text-slate-500">右侧复盘视图加载中...</div>
             ) : (
@@ -305,12 +322,19 @@ const SelectionResearchPage: React.FC = () => {
                 displayName={selectedDisplayName}
               />
             )}
-          </SectionCard>
+          </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-          <SectionCard title="回测实验室" icon={<BarChart3 className="h-4 w-4 text-emerald-400" />}>
-            <div className="grid gap-3 md:grid-cols-2">
+        <details className="rounded-2xl border border-slate-800 bg-slate-900/70">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-white">
+            <span className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-emerald-400" />
+              策略验证 / 回测
+            </span>
+            <span className="text-xs font-normal text-slate-500">默认收起，不影响日常选股</span>
+          </summary>
+          <div className="space-y-4 border-t border-slate-800 px-4 py-4">
+            <div className="grid gap-3 md:grid-cols-[180px_180px_auto_auto] md:items-end">
               <label className="text-xs text-slate-400">
                 开始日期
                 <input type="date" value={backtestStartDate} onChange={(e) => setBacktestStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
@@ -319,20 +343,18 @@ const SelectionResearchPage: React.FC = () => {
                 结束日期
                 <input type="date" value={backtestEndDate} onChange={(e) => setBacktestEndDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
               </label>
+              <button
+                type="button"
+                onClick={handleRunBacktest}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500"
+              >
+                <RefreshCw className={`h-4 w-4 ${runningBacktest ? 'animate-spin' : ''}`} />
+                运行回测
+              </button>
+              <div className="text-xs text-slate-500">看固定持有收益，也看窗口内最高机会。</div>
             </div>
-            <button
-              type="button"
-              onClick={handleRunBacktest}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
-            >
-              <RefreshCw className={`h-4 w-4 ${runningBacktest ? 'animate-spin' : ''}`} />
-              运行 Top10 启动确认回测
-            </button>
-            <div className="mt-3 text-xs text-slate-500">固定持有与窗口内最高机会会同时输出，用于评估中期波段可行性。</div>
-          </SectionCard>
 
-          <SectionCard title="回测结果" icon={<BarChart3 className="h-4 w-4 text-sky-400" />} right={<span className="text-xs text-slate-500">最近 {backtestRuns.length} 次</span>}>
-            <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
               <div className="space-y-2">
                 {backtestRuns.map((run) => (
                   <button
@@ -357,7 +379,7 @@ const SelectionResearchPage: React.FC = () => {
                       <div className="text-sm font-semibold text-white">Run #{backtestDetail.run.id}</div>
                       <div className="text-xs text-slate-500">{backtestDetail.run.strategy_name} · {backtestDetail.run.start_date} ~ {backtestDetail.run.end_date}</div>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
                       <table className="min-w-full text-xs">
                         <thead className="text-left text-slate-500">
                           <tr>
@@ -385,7 +407,7 @@ const SelectionResearchPage: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
-                    <div className="max-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                    <div className="max-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
                       <div className="mb-2 text-xs font-semibold text-slate-400">样本交易（前 40 条）</div>
                       <table className="min-w-full text-xs">
                         <thead className="text-left text-slate-500">
@@ -416,8 +438,8 @@ const SelectionResearchPage: React.FC = () => {
                 )}
               </div>
             </div>
-          </SectionCard>
-        </div>
+          </div>
+        </details>
       </div>
     </div>
   );

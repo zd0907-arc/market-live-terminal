@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/dong/Desktop/AIGC/market-live-terminal-local-research"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}"

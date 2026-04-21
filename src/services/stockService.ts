@@ -16,6 +16,19 @@ import {
 } from '../types';
 import { API_BASE_URL, getWriteHeaders } from '../config';
 
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 10000): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
 // ==========================================
 // 基础网络层：JSONP / Script Injection
 // ==========================================
@@ -260,7 +273,7 @@ export const fetchTicksLive = async (symbol: string): Promise<TickData[]> => {
 export const fetchRealtimeDashboard = async (symbol: string, date?: string): Promise<RealtimeDashboardData | null> => {
   const url = `${API_BASE_URL}/realtime/dashboard?symbol=${symbol}${date ? `&date=${date}` : ''}`;
   try {
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 10000);
     if (!response.ok) return null;
     const json = await response.json();
     if (json.code === 200) {
@@ -276,7 +289,7 @@ export const fetchRealtimeDashboard = async (symbol: string, date?: string): Pro
 export const fetchIntradayFusion = async (symbol: string, date?: string): Promise<IntradayFusionData | null> => {
   const url = `${API_BASE_URL}/realtime/intraday_fusion?symbol=${symbol}${date ? `&date=${date}` : ''}`;
   try {
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 10000);
     if (!response.ok) return null;
     const json = await response.json();
     if (json.code === 200) {

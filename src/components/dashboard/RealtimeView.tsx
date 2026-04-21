@@ -484,6 +484,23 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
     };
 
     const statusBadge = getStatusBadge();
+    const getUpdateText = () => {
+        const effectiveMeta = sourceMeta.market_status ? sourceMeta : getProvisionalMeta();
+        const hasLoadedData = chartData.length > 0 || cumulativeData.length > 0 || displayTicks.length > 0;
+        const updatedSuffix = lastUpdated ? ` · ${lastUpdated}` : '';
+        if (isLoadingDashboard) {
+            return hasLoadedData ? `静默刷新中...${updatedSuffix}` : '数据加载中...';
+        }
+        if (hasLoadedData) {
+            if (effectiveMeta.view_mode === 'manual_date') return `指定日期数据已加载${updatedSuffix}`;
+            if (effectiveMeta.default_display_scope === 'previous_trade_day') return `上一交易日数据已加载${updatedSuffix}`;
+            if (effectiveMeta.market_status === 'post_close') return `盘后数据已加载${updatedSuffix}`;
+            if (effectiveMeta.market_status === 'closed_day') return `休盘日历史数据已加载${updatedSuffix}`;
+            if (effectiveMeta.market_status === 'trading') return lastUpdated ? `Updated: ${lastUpdated}` : '盘中数据已加载';
+            return `数据已加载${updatedSuffix}`;
+        }
+        return lastUpdated ? `Updated: ${lastUpdated}` : '暂无可展示数据';
+    };
 
     return (
         <div className="space-y-2">
@@ -530,7 +547,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                         </span>
                         {/* Last Updated */}
                         <span className="text-[10px] text-slate-500 font-mono">
-                            {lastUpdated ? `Updated: ${lastUpdated}` : '正在同步数据...'}
+                            {getUpdateText()}
                         </span>
                     </div>
                 </div>

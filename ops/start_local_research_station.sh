@@ -49,4 +49,19 @@ echo "[local-research] USER_DB_PATH=$USER_DB_PATH"
 echo "[local-research] SELECTION_DB_PATH=$SELECTION_DB_PATH"
 echo "[local-research] ATOMIC_MAINBOARD_DB_PATH=$ATOMIC_MAINBOARD_DB_PATH"
 echo "[local-research] ENABLE_BACKGROUND_RUNTIME=$ENABLE_BACKGROUND_RUNTIME"
-python3 -m backend.app.main
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ]; then
+  for candidate in "$ROOT/.venv/bin/python" "/usr/bin/python3" "python3" "/Users/dong/.browser-use-env/bin/python3"; do
+    if [ "$candidate" = "python3" ]; then
+      if python3 -c "import fastapi" >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+        break
+      fi
+    elif [ -x "$candidate" ] && "$candidate" -c "import fastapi" >/dev/null 2>&1; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  done
+fi
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+"$PYTHON_BIN" -m backend.app.main

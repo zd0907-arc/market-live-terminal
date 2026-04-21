@@ -47,6 +47,14 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
   onSelectHistory,
   rightSlot,
 }) => {
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const blurSearchInput = () => {
+    window.setTimeout(() => {
+      searchInputRef.current?.blur();
+    }, 0);
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-[#0f1623]/95 backdrop-blur border-b border-slate-800 shadow-md transition-all duration-300">
       <div className="max-w-[1600px] mx-auto p-3 md:p-4 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
@@ -79,6 +87,7 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4 md:w-5 md:h-5" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="代码(600519) 或 简称(茅台)"
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-9 py-1.5 md:pl-10 md:pr-10 md:py-2 text-sm md:text-base text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
@@ -108,7 +117,10 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
                     <button
                       key={res.symbol}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => onSelectHistory(res)}
+                      onClick={() => {
+                        void onSelectHistory(res);
+                        blurSearchInput();
+                      }}
                       className="w-full text-left px-3 py-2 md:px-4 md:py-2 hover:bg-slate-700 flex justify-between items-center group transition-colors border-b border-slate-800/50 last:border-0"
                     >
                       <div className="flex items-center gap-2">
@@ -128,7 +140,10 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
                     <button
                       key={res.symbol}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => onSelectSearchResult(res)}
+                      onClick={() => {
+                        void onSelectSearchResult(res);
+                        blurSearchInput();
+                      }}
                       className="w-full text-left px-3 py-2 md:px-4 md:py-3 hover:bg-slate-700 flex justify-between items-center group transition-colors"
                     >
                       <div>

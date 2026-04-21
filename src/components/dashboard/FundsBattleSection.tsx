@@ -136,9 +136,9 @@ export const FundsBattleSection: React.FC<FundsBattleSectionProps> = ({ data, is
   const l1Result = useMemo(
     () =>
       buildBattleSeries(data?.bars ?? [], 'l1', tuning, {
-        enableSignals: canUseL2Signals,
+        enableSignals: true,
       }),
-    [data?.bars, tuning, canUseL2Signals]
+    [data?.bars, tuning]
   );
 
   const l2Result = useMemo(
