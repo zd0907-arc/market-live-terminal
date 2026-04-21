@@ -681,7 +681,7 @@ D:\MarketData\
 
 > ⚠️ **当前安全边界**：前端仍**不能**修改 `API Key / Base URL / Proxy`；只允许修改 `llm_model` 这个非敏感显示/调用模型名。详见 `docs/05_LLM_KEY_SECURITY.md`。
 
-### 3. 沙盒复盘接口（v4.2.11+，非生产主链路）
+### 3. 沙盒复盘接口（v4.2.11+，实验/兼容链路）
 * **`GET /api/sandbox/review_data?symbol=sh603629&start_date=2026-01-01&end_date=2026-02-28`**
   - 描述：查询 sandbox 5m 复盘数据（L1/L2 buy/sell/net + OHLC）。
   - 参数扩展：支持 `granularity=5m|15m|30m|60m|1d`（默认 `5m`）。
@@ -707,7 +707,8 @@ D:\MarketData\
   - 返回：`APIResponse`，`data` 包含 `running/started_at/finished_at/exit_code/log_tail`。
 
 > 前端展示补充（v4.2.12+）：
-> - `/sandbox-review` 使用双端时间范围滑块横向拖动；
+> - 当前正式复盘页面 canonical 路由为 `/review`；
+> - `/sandbox-review` 保留为兼容入口，前端可自动收口到 `/review`；
 > - 可视跨度动态聚合：`1日=5m`、`3/5日=15m`、`20日=60m`、`60日/全部=1d`；
 > - 提供手动粒度覆盖：`自动 | 5m | 15m | 30m | 60m | 1d`；
 > - 前端采用 Fail-Closed：接口失败或空数据时不展示预置回退图，只展示错误/空状态。
@@ -719,6 +720,7 @@ D:\MarketData\
 > - （v4.2.14+）累计终点跟随当前可视窗口右边界；百分比轴展示整数 `%`（无小数）。
 
 ### 4. 正式复盘接口（v4.2.27+，生产主链路）
+> 当前前端正式入口：`/review`
 * **`GET /api/review/pool?keyword=&limit=`**
   - 描述：返回正式复盘可选股票池。
   - 数据源：`history_daily_l2` + `stock_universe_meta`。

@@ -5,6 +5,8 @@
 > **文档边界**：从 2026-03-09 起，Mac/Windows/Cloud 远程控制步骤统一收敛到本文件。`REMOTE_CONTROL_GUIDE.md` 仅保留索引说明，不再维护独立步骤。
 >
 > **边界提醒**：交易时段判定、回溯展示等业务语义不在本文件裁决，统一以 `docs/02_BUSINESS_DOMAIN.md`（尤其 `CAP-MKT-TIME`）为准。
+>
+> **当前入口提醒（2026-04-21）**：当前唯一主工作目录是 `/Users/dong/Desktop/AIGC/market-live-terminal`，请不要再默认使用历史 worktree 路径。项目真相总入口见 `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`。
 
 
 ## 0. 当前运行拓扑（2026-04-15 起冻结）
@@ -729,19 +731,19 @@ git checkout main && git merge --no-ff <branch>
 
 #### 5.1 首次整库同步
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/bootstrap_mac_full_processed_sync.sh
 ```
 
 #### 5.2 每日盘后总控
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_postclose_l2.sh
 ```
 
 #### 5.3 人话版状态查询
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/check_postclose_l2_status.sh
 ```
 

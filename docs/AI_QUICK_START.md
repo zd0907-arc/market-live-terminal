@@ -5,6 +5,7 @@
 - 当前主线分支：`main`
 - 当前生产代码版本：`v4.3.1`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
+- 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前运行架构总入口：`docs/changes/MOD-20260417-01-local-research-current-state.md`
 - 当前生产回滚锚点：`v4.2.32`
 
@@ -20,11 +21,9 @@
 - 本地运行产物：`/Users/dong/Desktop/AIGC/market-live-terminal/.run`
 
 ## 当前 worktree / 分支纪律
-- 稳定基线 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal`（仅保留 `main`）
-- 本轮主开发 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research`
-- 本轮主开发分支：`codex/local-research-station-20260415`
-- 历史热修/数据治理 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-data-governance`
-- 当前原则：**本轮新架构与本地研究站实现，一律在 `market-live-terminal-local-research / codex/local-research-station-20260415` 上推进**
+- 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前唯一主线分支：`main`
+- 历史 worktree / 临时分支只作为备份，不再作为默认开发入口
 
 ## 当前数据职责
 - 云端：盯盘 / 手机应急查看
@@ -33,7 +32,7 @@
 
 ## 最小自检
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 npm run check:baseline
 ```
 
@@ -45,16 +44,16 @@ npm run check:baseline
 5. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
 ## 当前关键脚本
-- Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/bootstrap_mac_full_processed_sync.sh`
-- 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_station.sh`
-- 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/start_local_research_frontend.sh`
-- 每日盘后总控：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/run_postclose_l2.sh`
-- 每日盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/check_postclose_l2_status.sh`
-- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research/ops/sync_windows_research_snapshot.sh`
+- Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
+- 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_station.sh`
+- 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_frontend.sh`
+- 每日盘后总控：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/run_postclose_l2.sh`
+- 每日盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/check_postclose_l2_status.sh`
+- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/sync_windows_research_snapshot.sh`
 
 ## 本地研究站最小启动顺序
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal-local-research
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 # 首次：先把 Windows 处理后全量库同步到 Mac（同 WiFi 默认优先走 192.168.3.108）
 bash ops/bootstrap_mac_full_processed_sync.sh
 

@@ -1303,3 +1303,10 @@
 - 结论: 已在无 `TUSHARE_TOKEN` 前提下，把公告链路切到新浪公开页 fallback，并继续把解析质量补到可用：新增公告分页抓取、逐条日期解析、按 source+symbol+日期窗口重跑前清理旧数据，避免之前“整页公告共用第一页日期 / 旧脏数据残留”的问题。随后已对 `利通电子 / 中百集团 / 贝因美` 实跑最近 `365D` 回补，当前分别落地 `193 / 91 / 129` 条官方事件；其中 `利通电子` 最近窗口已能看到异动公告与问询函回复，`中百集团` 已能看到董事会决议 / 解散清算 / 业绩预告，`贝因美` 已能看到诉讼进展 / 回购 / 控股股东重整等事件。
 - 风险: 当前无 Token 模式仍只稳定覆盖“公告/财报”这条线；`QA / media news` 仍未接公开源自动链路。另一个已知问题是部分 `业绩预告` 标题目前仍偏“法定全称/代码风格”，后续可以再做展示友好化，但不影响事件事实落库。
 - 链接: `backend/app/services/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/changes/INV-20260419-02-three-sample-event-audit.md`
+
+## 2026-04-21 17:55 | 文档治理 / 当前真相归一 AI
+- Task ID: `CHG-20260421-01`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`, `CAP-RETAIL-SENTIMENT`
+- 结论: 已按当前主线代码重新审计 core docs，并新增一张“当前真相母卡”统一收口：主工作目录已固定回 `market-live-terminal/main`，首页当前真相已改为“只保留新版壳层”，正式复盘 canonical 路由已明确为 `/review`，`/sandbox-review` 只保留兼容入口语义；同时已修正 `AI_QUICK_START / 04_OPS_AND_DEV / 07_PENDING_TODO` 中仍指向历史 worktree 或未完成状态的描述，减少后续 AI/人读文档时把历史过程误当当前真相的风险。
+- 风险: 历史 `REQ/STG/INV` 卡仍然很多，现阶段采用“母卡入口 + 保留历史过程”的压缩策略，而不是粗暴删除；后续若继续治理，可再按主题把更老的过程卡补充 pointer 或归档规范化。
+- 链接: `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
