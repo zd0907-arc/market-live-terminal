@@ -294,6 +294,7 @@ def test_selection_profile_timeline_includes_stock_events(monkeypatch, tmp_path)
 
 def test_sync_shenzhen_qa_inserts_events_and_rollups(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
 
     class _FakePro:
@@ -345,6 +346,7 @@ def test_sync_shenzhen_qa_inserts_events_and_rollups(monkeypatch, tmp_path):
 
 def test_sync_shanghai_qa_inserts_events(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
 
     class _FakePro:
@@ -391,6 +393,7 @@ def test_sync_shanghai_qa_inserts_events(monkeypatch, tmp_path):
 
 def test_sync_short_news_filters_single_symbol(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
     _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
 
@@ -441,6 +444,7 @@ def test_sync_short_news_filters_single_symbol(monkeypatch, tmp_path):
 
 def test_sync_major_news_filters_single_symbol(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
     _seed_stock_meta(Path(config.DB_FILE), "sh600519", "贵州茅台")
 
@@ -480,6 +484,171 @@ def test_sync_major_news_filters_single_symbol(monkeypatch, tmp_path):
     )
 
 
+def test_sync_public_sina_stock_news_without_token(monkeypatch, tmp_path):
+    config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+    _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
+    stock_events.rebuild_symbol_aliases(["sz000833"])
+
+    page1 = """
+    <html><body><div class="datelist"><ul>
+    2026-04-23 15:13 <a target='_blank' href='https://finance.sina.com.cn/stock/aiassist/ggsp/2026-04-23/doc-a.shtml'>粤桂股份跌4.26%，成交额10.34亿元，今日主力净流入-1.08亿</a><br>
+    2026-04-22 17:50 <a target='_blank' href='https://finance.sina.com.cn/roll/2026-04-22/doc-b.shtml'>矿石及硫酸产品价格上涨，粤桂股份一季度净利润预增超六成</a><br>
+    2026-04-22 11:00 <a target='_blank' href='https://finance.sina.com.cn/stock/other/2026-04-22/doc-c.shtml'>另一家公司获大单</a><br>
+    </ul></div>
+    <a href='http://vip.stock.finance.sina.com.cn/corp/view/vCB_AllNewsStock.php?symbol=sz000833&Page=2'>下一页</a>
+    </body></html>
+    """
+    page2 = """
+    <html><body><div class="datelist"><ul>
+    2026-04-21 09:00 <a target='_blank' href='https://finance.sina.com.cn/stock/relnews/dongmiqa/2026-04-21/doc-d.shtml'>粤桂股份：我司硫酸无出口业务</a><br>
+    2026-04-01 09:00 <a target='_blank' href='https://finance.sina.com.cn/stock/relnews/cn/2026-04-01/doc-e.shtml'>过早新闻，不应纳入</a><br>
+    </ul></div></body></html>
+    """
+
+    def _fake_fetch(url: str) -> str:
+        if "Page=2" in url:
+            return page2
+        return page1
+
+    monkeypatch.setattr(stock_events, "_fetch_public_html", _fake_fetch)
+    result = stock_events.sync_public_sina_stock_news("sz000833", start_date="2026-04-20", end_date="2026-04-23", mode="unit_test")
+
+    assert result["source_mode"] == "public_fallback"
+    assert result["matched_count"] == 3
+    assert result["upserted_count"] == 3
+    conn = sqlite3.connect(config.DB_FILE)
+    try:
+        rows = conn.execute(
+            "SELECT source, title, substr(published_at, 1, 16) FROM stock_events WHERE symbol='sz000833' AND source='public_sina_stock_news' ORDER BY published_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 3
+    assert rows[0][0] == "public_sina_stock_news"
+    assert any("主力净流入" in row[1] for row in rows)
+    assert any(row[2] == "2026-04-21 09:00" for row in rows)
+
+
+def test_parse_public_sina_dongmiqa_detail():
+    import backend.app.services.stock_events as stock_events
+
+    html = """
+    <div id="artibody">
+      投资者提问：若糖价大幅上涨公司是否有提价计划，目前产能利用情况如何
+      董秘回答(粤桂股份SZ000833)：您好。糖价是市场定价。公司糖的生产是按照设计及计划产能进行生产。谢谢。
+      查看更多董秘问答>>
+      免责声明：略
+    </div>
+    """
+    question, answer = stock_events._parse_public_sina_dongmiqa_detail(html)
+    assert "提价计划" in question
+    assert "市场定价" in answer
+
+
+def test_sync_public_sina_dongmiqa_without_token(monkeypatch, tmp_path):
+    config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+    _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
+
+    page1 = """
+    <html><body><div class="datelist"><ul>
+    2026-04-22 08:50 <a target='_blank' href='https://finance.sina.com.cn/stock/relnews/dongmiqa/2026-04-22/doc-a.shtml'>粤桂股份：糖价市场定价，公司按设计及计划产能生产</a><br>
+    2026-04-21 08:42 <a target='_blank' href='https://finance.sina.com.cn/stock/relnews/dongmiqa/2026-04-21/doc-b.shtml'>粤桂股份：投资者询问合作、定增等进展，董秘作出回应</a><br>
+    2026-04-01 08:42 <a target='_blank' href='https://finance.sina.com.cn/stock/relnews/dongmiqa/2026-04-01/doc-c.shtml'>过早问答，不应纳入</a><br>
+    </ul></div></body></html>
+    """
+    detail_a = """
+    <div id="artibody">
+      投资者提问：若糖价大幅上涨公司是否有提价计划，目前产能利用情况如何
+      董秘回答(粤桂股份SZ000833)：您好。糖价是市场定价。公司糖的生产是按照设计及计划产能进行生产。谢谢。
+      查看更多董秘问答>>免责声明：略
+    </div>
+    """
+    detail_b = """
+    <div id="artibody">
+      投资者提问：请问公司合作、定增是否有新进展？
+      董秘回答(粤桂股份SZ000833)：您好，请以公司公告为准，谢谢关注。
+    </div>
+    """
+
+    def _fake_fetch(url: str) -> str:
+        if "doc-a" in url:
+            return detail_a
+        if "doc-b" in url:
+            return detail_b
+        return page1
+
+    monkeypatch.setattr(stock_events, "_fetch_public_html", _fake_fetch)
+    result = stock_events.sync_public_sina_dongmiqa("sz000833", start_date="2026-04-20", end_date="2026-04-23", mode="unit_test")
+
+    assert result["source_mode"] == "public_fallback"
+    assert result["matched_count"] == 2
+    assert result["upserted_count"] == 2
+    conn = sqlite3.connect(config.DB_FILE)
+    try:
+        rows = conn.execute(
+            "SELECT source, question_text, answer_text FROM stock_events WHERE symbol='sz000833' AND source='public_sina_dongmiqa' ORDER BY published_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 2
+    assert all(row[0] == "public_sina_dongmiqa" for row in rows)
+    assert any("提价计划" in str(row[1]) for row in rows)
+    assert any("公司公告为准" in str(row[2]) for row in rows)
+
+
+def test_backfill_symbol_qa_uses_public_fallback_without_token(monkeypatch, tmp_path):
+    _config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+
+    monkeypatch.setattr(
+        stock_events,
+        "sync_public_sina_dongmiqa",
+        lambda symbol, start_date=None, end_date=None, mode="manual_public", max_pages=8: {
+            "symbol": symbol,
+            "source_mode": "public_fallback",
+            "upserted_count": 3,
+            "matched_count": 3,
+            "message": "ok",
+        },
+    )
+
+    result = stock_events.backfill_symbol_qa("sz000833", days=20, mode="unit_test")
+
+    assert result["source_mode"] == "public_fallback"
+    assert result["upserted_count"] == 3
+
+
+def test_backfill_symbol_news_uses_public_fallback_without_token(monkeypatch, tmp_path):
+    _config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+
+    monkeypatch.setattr(
+        stock_events,
+        "sync_public_sina_stock_news",
+        lambda symbol, start_date=None, end_date=None, mode="manual_public", max_pages=8: {
+            "symbol": symbol,
+            "source_mode": "public_fallback",
+            "upserted_count": 2,
+            "matched_count": 2,
+            "message": "ok",
+        },
+    )
+
+    result = stock_events.backfill_symbol_news("sz000833", days=15, mode="unit_test")
+
+    assert result["source_mode"] == "public_fallback"
+    assert result["upserted_count"] == 2
+    assert result["matched_count"] == 2
+    assert result["short_news"]["source_mode"] == "public_fallback"
+    assert result["major_news"]["source_mode"] == "shared_public_fallback"
+
+
 def test_news_match_supports_suffix_stripping(monkeypatch, tmp_path):
     _config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
     database.init_db()
@@ -510,6 +679,7 @@ def test_alias_seed_file_extends_symbol_aliases(monkeypatch, tmp_path):
 
 def test_sync_news_adds_related_symbol_entities(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
     _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
     _seed_stock_meta(Path(config.DB_FILE), "sh600519", "贵州茅台")
@@ -563,6 +733,7 @@ def test_sync_news_adds_related_symbol_entities(monkeypatch, tmp_path):
 
 def test_sync_news_does_not_overwrite_different_target_symbols(monkeypatch, tmp_path):
     config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.setenv("TUSHARE_TOKEN", "unit-test-token")
     database.init_db()
     _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
     _seed_stock_meta(Path(config.DB_FILE), "sh600519", "贵州茅台")
@@ -633,6 +804,70 @@ def test_sync_symbol_event_bundle_aggregates_all_sources(monkeypatch, tmp_path):
     assert result["symbol"] == "sz000833"
     assert result["summary"]["upserted_count"] == 9
     assert result["summary"]["matched_news_count"] == 5
+
+
+def test_stock_event_source_capabilities_without_token(monkeypatch, tmp_path):
+    _config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+
+    payload = stock_events.get_stock_event_source_capabilities()
+    modules = {item["module"]: item for item in payload["modules"]}
+
+    assert payload["token_configured"] is False
+    assert modules["announcement"]["available"] is True
+    assert modules["announcement"]["source_mode"] == "public_fallback"
+    assert modules["qa"]["available"] is True
+    assert modules["qa"]["source_mode"] == "public_fallback"
+    assert modules["news"]["available"] is True
+    assert modules["news"]["source_mode"] == "public_fallback"
+
+
+def test_hydrate_symbol_event_context_returns_sync_coverage_and_feed(monkeypatch, tmp_path):
+    _config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    database.init_db()
+
+    monkeypatch.setattr(
+        stock_events,
+        "sync_symbol_event_bundle",
+        lambda symbol, announcement_days=365, qa_days=180, news_days=30, mode="manual_bundle": {
+            "symbol": symbol,
+            "summary": {"upserted_count": 4, "matched_news_count": 2},
+        },
+    )
+    monkeypatch.setattr(
+        stock_events,
+        "get_stock_event_coverage",
+        lambda symbol, days=365: {
+            "symbol": symbol,
+            "date_window": {"start_date": "2026-04-01", "end_date": "2026-04-23", "days": days},
+            "modules": [{"module": "announcement", "count": 2, "covered": True}],
+            "capabilities": stock_events.get_stock_event_source_capabilities(),
+        },
+    )
+    monkeypatch.setattr(
+        stock_events,
+        "list_stock_event_feed",
+        lambda symbol, limit=50, source_type=None, source=None, start_date=None, end_date=None: {
+            "items": [{"event_id": "evt-1", "title": "粤桂股份：2025年年度报告", "source_type": "report"}],
+            "coverage_status": "covered",
+        },
+    )
+    monkeypatch.setattr(
+        stock_events,
+        "audit_stock_event_collection",
+        lambda symbol, days=365, recent_limit=12: {"symbol": symbol, "collection_status": "good"},
+    )
+
+    payload = stock_events.hydrate_symbol_event_context("sz000833", announcement_days=90, qa_days=30, news_days=7, recent_limit=5)
+
+    assert payload["symbol"] == "sz000833"
+    assert payload["trigger_mode"] == "selection_candidate"
+    assert payload["requested_windows"]["news_days"] == 7
+    assert payload["sync"]["summary"]["upserted_count"] == 4
+    assert payload["coverage"]["symbol"] == "sz000833"
+    assert len(payload["recent_feed"]) == 1
+    assert payload["audit"]["collection_status"] == "good"
 
 
 def test_stock_event_coverage_summary(monkeypatch, tmp_path):
@@ -747,3 +982,32 @@ def test_stock_event_collection_audit(monkeypatch, tmp_path):
     assert payload["group_counts"]["company"] >= 1
     assert payload["group_counts"]["media"] >= 1
     assert any(item["code"] == "announcement_missing" for item in payload["audit_flags"])
+
+
+def test_stock_event_collection_audit_marks_source_unavailable_without_token(monkeypatch, tmp_path):
+    config, database, _selection_db, stock_events = _reload_modules(monkeypatch, tmp_path)
+    monkeypatch.delenv("TUSHARE_TOKEN", raising=False)
+    database.init_db()
+    _seed_stock_meta(Path(config.DB_FILE), "sz000833", "粤桂股份")
+    stock_events.rebuild_symbol_aliases(["sz000833"])
+
+    conn = sqlite3.connect(config.DB_FILE)
+    try:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO stock_events
+            (event_id, source, source_type, event_subtype, symbol, ts_code, title, content_text, published_at, ingested_at, importance, is_official, source_event_id, hash_digest, extra_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("evt-ann", "public_sina_announcements", "announcement", "other_announcement", "sz000833", "000833.SZ", "粤桂股份：董事会决议公告", "粤桂股份：董事会决议公告", "2026-04-03 20:00:00", "2026-04-03 20:01:00", 60, 1, "evt-ann", "digest-ann", None),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    payload = stock_events.audit_stock_event_collection("sz000833", days=30, recent_limit=5)
+    codes = {item["code"] for item in payload["audit_flags"]}
+
+    assert "company_exchange_missing" in codes
+    assert "media_news_missing" in codes
+    assert payload["capabilities"]["token_configured"] is False

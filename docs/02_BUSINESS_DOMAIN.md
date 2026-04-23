@@ -242,6 +242,9 @@
 
 ### CAP-STOCK-EVENTS（单票官方事件层：公告 / 问答 / 资讯）
 
+> 当前真相先看：
+> `docs/changes/MOD-20260424-01-stock-events-current-state.md`
+
 1. **业务目标**
 - 为选股 / 复盘提供独立于 `sentiment_events` 的**官方事件事实层**，回答“为什么这一天主力敢这么走”；
 - 第一阶段先服务盘后研究，不承担盘中秒级交易响应职责。
@@ -259,21 +262,31 @@
   - 公告接入层：`Tushare anns_d`；
   - 审计/回查层：`巨潮资讯`；
   - 资讯与问答接口先保留 schema / route 位，不要求本轮全部接完。
+- **第二期增强（`CHG-20260423-01`）**：
+  - 重点从“先有接口”转到“按需可用 + 能解释缺口”；
+  - 必须补 `source capabilities / hydrate-on-demand / selection candidate trigger` 三件套；
+  - 无 `TUSHARE_TOKEN` 时，系统必须显式告诉上层哪些模块因源能力不足被跳过，禁止把“采集不可用”误显示成“最近没有事件”。
 - **产品接入边界**：
   - 第一阶段先打通后端 schema / 拉取 / 查询；
   - 选股画像时间线允许优先显示 `stock_events.title`；
   - 不要求本轮就做独立前端页面。
 
 3. **实现摘要（当前方案）**
-- 截至 `2026-04-19`，已落地：
+- 截至 `2026-04-24`，已落地：
   - `stock_events / stock_event_entities / stock_event_ingest_runs / stock_event_daily_rollup` 四张表；
+  - `GET /api/stock_events/capabilities`、`GET /api/stock_events/feed/{symbol}`、`GET /api/stock_events/coverage/{symbol}`、`GET /api/stock_events/audit/{symbol}`；
   - `POST /api/stock_events/announcements/{symbol}`、`POST /api/stock_events/qa/shenzhen/{symbol}`、`POST /api/stock_events/qa/shanghai/{symbol}`；
   - `POST /api/stock_events/news/short/{symbol}`、`POST /api/stock_events/news/major/{symbol}`；
+  - `POST /api/stock_events/bundle/{symbol}`、`POST /api/stock_events/hydrate/{symbol}`；
   - `POST /api/stock_events/internal/backfill_announcements/{symbol}`、`POST /api/stock_events/internal/backfill_qa/{symbol}`、`POST /api/stock_events/internal/backfill_news/{symbol}`；
-  - `GET /api/stock_events/feed/{symbol}`；
   - watchlist 新增股票时，会 best-effort 触发最近 `365D` 公告回补 + 最近 `180D` 互动问答回补 + 最近 `30D` 财经资讯回补；
   - 选股画像时间线开始合并读取 `stock_events`。
+- 当前 source 模式：
+  - 公告 / 财报：`Tushare anns_d`，无 token 时降级到 `public_sina_announcements + public_sina_earnings_notice`；
+  - 问答：`tushare_irm_sz / tushare_irm_sh`，无 token 时降级到 `public_sina_dongmiqa`；
+  - 资讯：`tushare_news / tushare_major_news`，无 token 时降级到 `public_sina_stock_news`。
 - 当前未完成：
+  - 事件理解层（利好/利空/持续性）；
   - 多股票资讯归属增强；
   - 更稳的 alias / 曾用名 / 主题映射。
 
@@ -294,6 +307,7 @@
 
 6. **变更记录（任务ID）**
 - `CHG-20260412-01`：冻结“公告优先、问答第二、新闻第三”的单票事件层方案；当前第一期已落地公告底座与最小查询链路。
+- `CHG-20260423-01`：启动二期增强，先补“源能力透明 + 单票按需触发上下文 + 选股候选触发入口”，把“没采到”与“当前源不可用”明确区分。
 
 ---
 

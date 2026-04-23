@@ -636,31 +636,46 @@ D:\MarketData\
 *   **`GET /api/stock_events/coverage/{symbol}?days=365`**:
     - 返回单票事件覆盖摘要；
     - `data.modules` 固定输出 `财报 / 公告 / 互动问答 / 财经资讯 / 监管` 五类模块的 covered/count/latest；
+    - 每个模块额外带 `source_available / source_mode / availability_note`，用于区分“当前没采到”与“当前源不可用”；
+    - `data.capabilities` 返回当前服务端事件源能力摘要。
     - `data.by_source` / `data.by_source_type` 用于判断最近窗口内到底采到了哪些源、缺了哪些模块。
 *   **`GET /api/stock_events/audit/{symbol}?days=365&recent_limit=12`**:
     - 返回单票事件采集审计摘要；
-    - 在 coverage 基础上，额外给出 `official/company/media` 三组数量、最近事件、以及 `audit_flags`（例如最近窗口缺公告、缺财报、缺公司交流等）。
+    - 在 coverage 基础上，额外给出 `official/company/media` 三组数量、最近事件、以及 `audit_flags`（例如最近窗口缺公告、缺财报、缺公司交流等）；
+    - `audit_flags` 允许输出 `*_missing` 或 `*_unavailable`，用于区分“最近没采到”与“当前源能力不可用”。
+*   **`GET /api/stock_events/capabilities`**:
+    - 返回当前服务端事件源能力摘要；
+    - 用于上层判断当前是否配置了 `TUSHARE_TOKEN`，以及公告/问答/新闻分别能否执行。
 *   **`POST /api/stock_events/announcements/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
     - 手动触发单票公告同步；
     - 当前实现读取 `Tushare anns_d`，并写入 `stock_events + stock_event_entities + stock_event_ingest_runs + stock_event_daily_rollup`。
 *   **`POST /api/stock_events/internal/backfill_announcements/{symbol}?days=365`**:
     - 用于单票回补最近 N 天公告。
 *   **`POST /api/stock_events/qa/shenzhen/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
-    - 手动同步深市互动问答。
+    - 手动同步深市互动问答；
+    - 无 `TUSHARE_TOKEN` 时自动降级到 `public_sina_dongmiqa` 公共页。
 *   **`POST /api/stock_events/qa/shanghai/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
-    - 手动同步沪市互动问答。
+    - 手动同步沪市互动问答；
+    - 无 `TUSHARE_TOKEN` 时自动降级到 `public_sina_dongmiqa` 公共页。
 *   **`POST /api/stock_events/internal/backfill_qa/{symbol}?days=180&market=auto|sz|sh`**:
-    - 用于单票回补最近 N 天互动问答。
+    - 用于单票回补最近 N 天互动问答；
+    - 无 `TUSHARE_TOKEN` 时走 `public_sina_dongmiqa` 公共 fallback。
 *   **`POST /api/stock_events/news/short/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
-    - 手动同步单票财经快讯。
+    - 手动同步单票财经快讯；
+    - 无 `TUSHARE_TOKEN` 时自动降级到 `public_sina_stock_news` 公共页。
 *   **`POST /api/stock_events/news/major/{symbol}?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`**:
-    - 手动同步单票长篇资讯。
+    - 手动同步单票长篇资讯；
+    - 无 `TUSHARE_TOKEN` 时当前与公共资讯页共用 fallback。
 *   **`POST /api/stock_events/bundle/{symbol}?announcement_days=365&qa_days=180&news_days=30`**:
     - 按需一次性同步单票事件包（公告 + 互动问答 + 财经资讯）；
     - 适用于复盘/深度研究前的单票补齐。
+*   **`POST /api/stock_events/hydrate/{symbol}?announcement_days=365&qa_days=180&news_days=30&recent_limit=12`**:
+    - 为选股候选票/研究票准备单票事件上下文；
+    - 返回 `sync + coverage + recent_feed + audit + capabilities`，便于上层直接进入 AI 解释链路。
 *   **`POST /api/stock_events/internal/backfill_news/{symbol}?days=30`**:
     - 用于单票回补最近 N 天财经资讯；
-    - 当前按股票代码 + 公司名称 + 简称裁剪做归属过滤，并记录 `match_method / confidence / related_symbols`。
+    - 当前按股票代码 + 公司名称 + 简称裁剪做归属过滤，并记录 `match_method / confidence / related_symbols`；
+    - 无 `TUSHARE_TOKEN` 时走 `public_sina_stock_news` 公共 fallback。
 *   **`POST /api/stock_events/internal/run_watchlist_announcements?days=365`**:
     - 依次回补当前 watchlist 的公告事件。
 *   **`POST /api/stock_events/internal/run_watchlist_qa?days=180`**:

@@ -7,7 +7,9 @@ from backend.app.services.stock_events import (
     backfill_symbol_announcements,
     backfill_symbol_news,
     backfill_symbol_qa,
+    get_stock_event_source_capabilities,
     get_stock_event_coverage,
+    hydrate_symbol_event_context,
     list_stock_event_feed,
     run_watchlist_news_backfill,
     run_watchlist_announcement_backfill,
@@ -21,6 +23,15 @@ from backend.app.services.stock_events import (
 )
 
 router = APIRouter(prefix="/stock_events", tags=["Stock Events"])
+
+
+@router.get("/capabilities", response_model=APIResponse)
+def stock_event_capabilities():
+    try:
+        payload = get_stock_event_source_capabilities()
+        return APIResponse(code=200, data=payload)
+    except Exception as exc:
+        return APIResponse(code=500, message=f"事件源能力查询失败: {exc}", data={})
 
 
 @router.get("/feed/{symbol}", response_model=APIResponse)
@@ -154,6 +165,28 @@ def stock_event_sync_bundle(
         return APIResponse(code=200, message="单票事件包同步完成", data=result)
     except Exception as exc:
         return APIResponse(code=500, message=f"单票事件包同步失败: {exc}", data={})
+
+
+@router.post("/hydrate/{symbol}", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def stock_event_hydrate(
+    symbol: str,
+    announcement_days: int = Query(365, ge=1, le=3650),
+    qa_days: int = Query(180, ge=1, le=3650),
+    news_days: int = Query(30, ge=1, le=3650),
+    recent_limit: int = Query(12, ge=1, le=100),
+):
+    try:
+        result = hydrate_symbol_event_context(
+            symbol,
+            announcement_days=announcement_days,
+            qa_days=qa_days,
+            news_days=news_days,
+            recent_limit=recent_limit,
+            mode="selection_candidate",
+        )
+        return APIResponse(code=200, message="单票事件上下文准备完成", data=result)
+    except Exception as exc:
+        return APIResponse(code=500, message=f"单票事件上下文准备失败: {exc}", data={})
 
 
 @router.post("/internal/backfill_announcements/{symbol}", response_model=APIResponse, dependencies=[Depends(require_write_access)])

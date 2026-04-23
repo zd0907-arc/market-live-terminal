@@ -28,6 +28,34 @@
 
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-04-23 19:30 | Codex
+- Task ID: `CHG-20260423-01`
+- CAP: `CAP-STOCK-EVENTS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已按 STRICT 流程冻结单票事件层二期需求卡，并落地第一阶段后端底座：新增 `GET /api/stock_events/capabilities` 与 `POST /api/stock_events/hydrate/{symbol}`，同时把 coverage/audit 补成“能区分无数据 vs 当前源不可用”。
+- 风险: 当前无 token 模式下，问答/新闻公共源仍未真正接入，只是先把能力缺口透明化并打通候选票触发入口；下一步仍要补公共新闻源与问答 fallback。
+- 链接: `docs/changes/REQ-20260423-01-stock-event-refine-and-selection-fusion.md`, `backend/app/services/stock_events.py`, `backend/app/routers/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/03_DATA_CONTRACTS.md`
+
+## 2026-04-23 19:55 | Codex
+- Task ID: `CHG-20260423-01`
+- CAP: `CAP-STOCK-EVENTS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续把 `news` 无 token 模式接到 `public_sina_stock_news`：`sync_short_news / sync_major_news / backfill_symbol_news` 现可自动走新浪个股资讯公共页 fallback，支持分页、时间窗过滤、单票匹配和 related symbol 映射。
+- 风险: 当前公共 fallback 仍是标题级抓取，不是正文级抓取；问答公共 fallback 仍未接入，下一步优先补这块。
+- 链接: `backend/app/services/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/changes/REQ-20260423-01-stock-event-refine-and-selection-fusion.md`, `docs/03_DATA_CONTRACTS.md`
+
+## 2026-04-23 20:20 | Codex
+- Task ID: `CHG-20260423-01`
+- CAP: `CAP-STOCK-EVENTS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把 `qa` 无 token 模式接到 `public_sina_dongmiqa`：`sync_shenzhen_qa / sync_shanghai_qa / backfill_symbol_qa` 现可自动走新浪董秘问答公共页 fallback，并增加公开页面 charset 识别，避免新浪 UTF-8 问答详情页乱码。
+- 风险: 当前公共问答 fallback 依赖新浪转写页，稳定性仍低于交易所/Tushare 原始源；但已足够支撑盘后候选票研究。
+- 链接: `backend/app/services/stock_events.py`, `backend/tests/test_stock_events.py`, `docs/03_DATA_CONTRACTS.md`, `docs/changes/REQ-20260423-01-stock-event-refine-and-selection-fusion.md`
+
+## 2026-04-24 00:10 | Codex
+- Task ID: `CHG-20260423-01`
+- CAP: `CAP-STOCK-EVENTS`
+- 结论: 已补一张新闻事件层当前真相母卡，明确写清“现在实际能拿到哪些数据、哪些是 token 主源、哪些是公共 fallback、还缺什么”，避免继续靠多张过程卡拼现状。
+- 风险: 当前母卡只收“事件采集现状”，不包含后续事件理解层；那部分还没开始实现。
+- 链接: `docs/changes/MOD-20260424-01-stock-events-current-state.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/03_DATA_CONTRACTS.md`
+
 ## 2026-04-12 13:40 | Codex
 - Task ID: `CHG-20260412-05`
 - CAP: `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`

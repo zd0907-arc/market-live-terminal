@@ -18,6 +18,8 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 ALIAS_SEED_FILE = Path(__file__).resolve().parent.parent / "data" / "stock_alias_seeds.json"
 PUBLIC_DATE_PATTERN = re.compile(r"(20\d{2}-\d{2}-\d{2})")
+PUBLIC_DATETIME_PATTERN = re.compile(r"(20\d{2}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?")
+HTML_CHARSET_PATTERN = re.compile(br"charset=['\"]?([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
 SHORT_NEWS_SOURCES = ("sina", "wallstreetcn", "10jqka", "eastmoney", "cls", "yicai")
 MAJOR_NEWS_SOURCES = ("新浪财经", "华尔街见闻", "同花顺", "东方财富", "财联社", "第一财经")
@@ -36,6 +38,8 @@ SOURCE_LABELS = {
     "tushare_anns_d": "Tushare公告",
     "public_sina_announcements": "新浪公告聚合",
     "public_sina_earnings_notice": "新浪业绩预告",
+    "public_sina_stock_news": "新浪个股资讯",
+    "public_sina_dongmiqa": "新浪董秘问答",
     "tushare_news": "Tushare快讯",
     "tushare_major_news": "Tushare长文",
     "cninfo": "巨潮资讯",
@@ -180,6 +184,70 @@ def _has_tushare_token() -> bool:
     return bool(os.getenv("TUSHARE_TOKEN", "").strip())
 
 
+def _build_source_capability_modules() -> List[Dict[str, Any]]:
+    has_token = _has_tushare_token()
+    return [
+        {
+            "module": "report",
+            "label": "财报",
+            "available": True,
+            "source_mode": "tushare" if has_token else "public_fallback",
+            "primary_sources": ["tushare_anns_d"] if has_token else ["public_sina_announcements", "public_sina_earnings_notice"],
+            "note": "有 token 时走 Tushare 公告；无 token 时降级到新浪公告/业绩预告公共源。",
+        },
+        {
+            "module": "announcement",
+            "label": "公告",
+            "available": True,
+            "source_mode": "tushare" if has_token else "public_fallback",
+            "primary_sources": ["tushare_anns_d"] if has_token else ["public_sina_announcements"],
+            "note": "公告链路始终可用；无 token 时走公共 fallback。",
+        },
+        {
+            "module": "qa",
+            "label": "互动问答",
+            "available": True,
+            "source_mode": "tushare" if has_token else "public_fallback",
+            "primary_sources": ["tushare_irm_sz", "tushare_irm_sh"] if has_token else ["public_sina_dongmiqa"],
+            "note": "有 token 时走 Tushare 互动问答；无 token 时降级到新浪董秘问答公共页。",
+        },
+        {
+            "module": "news",
+            "label": "财经资讯",
+            "available": True,
+            "source_mode": "tushare" if has_token else "public_fallback",
+            "primary_sources": ["tushare_news", "tushare_major_news"] if has_token else ["public_sina_stock_news"],
+            "note": "有 token 时走 Tushare 快讯/长文；无 token 时降级到新浪个股资讯公共页。",
+        },
+        {
+            "module": "regulatory",
+            "label": "监管",
+            "available": True,
+            "source_mode": "announcement_chain",
+            "primary_sources": ["tushare_anns_d"] if has_token else ["public_sina_announcements"],
+            "note": "监管类事件当前通过公告标题分类归入监管模块。",
+        },
+    ]
+
+
+def get_stock_event_source_capabilities() -> Dict[str, Any]:
+    modules = _build_source_capability_modules()
+    available_count = len([item for item in modules if item["available"]])
+    return {
+        "token_configured": _has_tushare_token(),
+        "summary": {
+            "module_count": len(modules),
+            "available_count": available_count,
+            "unavailable_count": len(modules) - available_count,
+        },
+        "modules": modules,
+    }
+
+
+def _capability_map() -> Dict[str, Dict[str, Any]]:
+    return {str(item["module"]): item for item in _build_source_capability_modules()}
+
+
 def _classify_qa_event(question_text: str, answer_text: str) -> Tuple[str, int, int]:
     combined = f"{question_text or ''}\n{answer_text or ''}"
     if any(keyword in combined for keyword in ("分红", "回购", "增持", "减持", "重组", "订单", "合作", "算力", "业绩")):
@@ -239,7 +307,22 @@ def _fetch_public_html(url: str) -> str:
             ["curl", "-L", "--max-time", "20", url],
             stderr=subprocess.DEVNULL,
         )
-        return output.decode("gb2312", "ignore")
+        header = bytes(output[:2048] or b"")
+        declared = None
+        match = HTML_CHARSET_PATTERN.search(header)
+        if match:
+            declared = match.group(1).decode("ascii", "ignore").lower()
+        candidates = [declared, "utf-8", "gb18030", "gb2312"]
+        seen = set()
+        for encoding in candidates:
+            if not encoding or encoding in seen:
+                continue
+            seen.add(encoding)
+            try:
+                return output.decode(encoding)
+            except Exception:
+                continue
+        return output.decode("utf-8", "ignore")
     except Exception as exc:
         raise RuntimeError(f"公开页面抓取失败: {url} / {exc}") from exc
 
@@ -257,6 +340,22 @@ def _extract_public_sina_anchor_date(anchor: Any) -> Optional[str]:
         match = PUBLIC_DATE_PATTERN.search(parent.get_text(" ", strip=True))
         if match:
             return match.group(1)
+    return None
+
+
+def _extract_public_sina_anchor_datetime(anchor: Any) -> Optional[str]:
+    parent = anchor.parent
+    if parent is not None:
+        match = PUBLIC_DATETIME_PATTERN.search(parent.get_text(" ", strip=True))
+        if match:
+            return _normalize_datetime_text(f"{match.group(1)} {(match.group(2) or '00:00')}:00")
+    for sibling in anchor.previous_siblings:
+        if getattr(sibling, "name", None) == "br":
+            break
+        text = sibling.get_text(" ", strip=True) if hasattr(sibling, "get_text") else str(sibling or "")
+        match = PUBLIC_DATETIME_PATTERN.search(text)
+        if match:
+            return _normalize_datetime_text(f"{match.group(1)} {(match.group(2) or '00:00')}:00")
     return None
 
 
@@ -280,6 +379,31 @@ def _extract_public_sina_next_page_url(soup: BeautifulSoup, current_url: str) ->
             continue
         return urljoin(current_url, href)
     return None
+
+
+def _parse_public_sina_dongmiqa_detail(html: str) -> Tuple[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    node = soup.select_one("#artibody") or soup.select_one(".article") or soup.select_one(".main-text")
+    text = node.get_text("\n", strip=True) if node is not None else soup.get_text("\n", strip=True)
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = text.replace("查看更多董秘问答>>", "").strip()
+    text = text.split("免责声明：", 1)[0].strip()
+
+    question = ""
+    answer = ""
+    q_match = re.search(r"投资者提问[:：]\s*(.+?)\s*董秘回答", text)
+    a_match = re.search(r"董秘回答(?:\([^)]+\))?[:：]\s*(.+)$", text)
+    if q_match:
+        question = q_match.group(1).strip()
+    if a_match:
+        answer = a_match.group(1).strip()
+    if not question and "投资者提问" in text:
+        question = text.split("投资者提问", 1)[-1].strip(" ：:")
+        if "董秘回答" in question:
+            question = question.split("董秘回答", 1)[0].strip()
+    if not answer and "董秘回答" in text:
+        answer = text.split("董秘回答", 1)[-1].strip(" ：:")
+    return question[:1000], answer[:4000]
 
 
 def _normalize_alias_text(text: str) -> str:
@@ -1058,6 +1182,338 @@ def _sync_tushare_news_like(
             raise
 
 
+def sync_public_sina_stock_news(
+    symbol: str,
+    *,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mode: str = "manual_public",
+    max_pages: int = 8,
+) -> Dict[str, Any]:
+    normalized_symbol = normalize_stock_event_symbol(symbol)
+    ts_code = symbol_to_ts_code(normalized_symbol)
+    normalized_end = _normalize_date_text(end_date, datetime.now().strftime("%Y-%m-%d"))
+    normalized_start = _normalize_date_text(start_date, (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"))
+    base_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCB_AllNewsStock/symbol/{normalized_symbol}.phtml"
+    with get_db_connection() as conn:
+        run_id = _create_ingest_run(
+            conn,
+            source="public_sina_stock_news",
+            mode=mode,
+            symbol=normalized_symbol,
+            ts_code=ts_code,
+            start_date=normalized_start,
+            end_date=normalized_end,
+        )
+        try:
+            page_url = base_url
+            page_count = 0
+            fetched_count = 0
+            matched_count = 0
+            now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            company_name = _load_company_name(normalized_symbol)
+            events: List[Dict[str, Any]] = []
+            entities: List[Tuple[str, str, str, Optional[str], str, str, float]] = []
+            seen_source_ids = set()
+
+            while page_url and page_count < max_pages:
+                html = _fetch_public_html(page_url)
+                soup = BeautifulSoup(html, "html.parser")
+                datelist = soup.select_one("div.datelist")
+                if datelist is None:
+                    break
+                stop_paging = False
+                for anchor in datelist.select("a[href]"):
+                    raw_url = str(anchor.get("href") or "").strip()
+                    title = anchor.get_text(" ", strip=True)
+                    if not raw_url or not title:
+                        continue
+                    published_at = _extract_public_sina_anchor_datetime(anchor) or (
+                        (_extract_public_sina_anchor_date(anchor) or normalized_end) + " 00:00:00"
+                    )
+                    published_date = str(published_at)[:10]
+                    if published_date < str(normalized_start):
+                        stop_paging = True
+                        continue
+                    if published_date > str(normalized_end):
+                        continue
+                    fetched_count += 1
+                    matched, match_method, confidence, matched_aliases = _score_news_match(normalized_symbol, title, title)
+                    if not matched:
+                        continue
+                    matched_count += 1
+                    source_event_id = f"{normalized_symbol}:{_extract_public_sina_detail_id(raw_url)}"
+                    if source_event_id in seen_source_ids:
+                        continue
+                    seen_source_ids.add(source_event_id)
+                    subtype, importance, official_flag = _classify_news_item(title, title)
+                    related_entities = _find_related_symbol_entities(normalized_symbol, title, title)
+                    payload = {
+                        "event_id": _make_event_id("public_sina_stock_news", source_event_id),
+                        "source": "public_sina_stock_news",
+                        "source_type": "news",
+                        "event_subtype": subtype,
+                        "symbol": normalized_symbol,
+                        "ts_code": ts_code,
+                        "title": title,
+                        "content_text": title,
+                        "question_text": None,
+                        "answer_text": None,
+                        "raw_url": urljoin(page_url, raw_url),
+                        "pdf_url": None,
+                        "published_at": published_at,
+                        "ingested_at": now_text,
+                        "importance": importance,
+                        "is_official": official_flag,
+                        "source_event_id": source_event_id,
+                        "hash_digest": _digest_payload({"title": title, "url": raw_url, "published_at": published_at}),
+                        "extra_json": json.dumps(
+                            {
+                                "_target_symbol": normalized_symbol,
+                                "_match_method": match_method,
+                                "_match_confidence": confidence,
+                                "_matched_aliases": matched_aliases,
+                                "_related_symbols": [
+                                    {
+                                        "symbol": related_symbol,
+                                        "match_method": related_method,
+                                        "confidence": related_confidence,
+                                        "matched_aliases": related_aliases,
+                                    }
+                                    for related_symbol, related_method, related_confidence, related_aliases in related_entities
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                    events.append(payload)
+                    entities.append(
+                        _materialize_primary_entity(
+                            payload["event_id"],
+                            normalized_symbol,
+                            ts_code,
+                            company_name,
+                            match_method,
+                            confidence,
+                        )
+                    )
+                    for related_symbol, related_method, related_confidence, _related_aliases in related_entities:
+                        entities.append(
+                            (
+                                payload["event_id"],
+                                related_symbol,
+                                symbol_to_ts_code(related_symbol),
+                                _load_company_name(related_symbol),
+                                "related",
+                                related_method,
+                                related_confidence,
+                            )
+                        )
+                if stop_paging:
+                    break
+                next_page_url = _extract_public_sina_next_page_url(soup, page_url)
+                if next_page_url == page_url:
+                    break
+                page_url = next_page_url
+                page_count += 1
+
+            upserted = _upsert_stock_events(conn, events, entities)
+            rollup_rows = rebuild_stock_event_daily_rollup(
+                normalized_symbol,
+                start_date=normalized_start,
+                end_date=normalized_end,
+                conn=conn,
+            )
+            message = f"公共资讯同步完成 fetched={fetched_count} matched={matched_count} upserted={upserted} rollup={rollup_rows}"
+            _finish_ingest_run(
+                conn,
+                run_id,
+                status="success",
+                fetched_count=fetched_count,
+                inserted_count=upserted,
+                message=message,
+                extra_json=json.dumps({"matched_count": matched_count, "page_count": page_count + 1}, ensure_ascii=False),
+            )
+            conn.commit()
+            return {
+                "run_id": run_id,
+                "source": "public_sina_stock_news",
+                "symbol": normalized_symbol,
+                "ts_code": ts_code,
+                "source_mode": "public_fallback",
+                "start_date": normalized_start,
+                "end_date": normalized_end,
+                "fetched_count": fetched_count,
+                "matched_count": matched_count,
+                "upserted_count": upserted,
+                "rollup_rows": rollup_rows,
+                "message": message,
+            }
+        except Exception as exc:
+            logger.error("sync_public_sina_stock_news failed for %s: %s", normalized_symbol, exc)
+            _finish_ingest_run(
+                conn,
+                run_id,
+                status="failed",
+                message=str(exc),
+            )
+            conn.commit()
+            raise
+
+
+def sync_public_sina_dongmiqa(
+    symbol: str,
+    *,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    mode: str = "manual_public",
+    max_pages: int = 8,
+) -> Dict[str, Any]:
+    normalized_symbol = normalize_stock_event_symbol(symbol)
+    ts_code = symbol_to_ts_code(normalized_symbol)
+    normalized_end = _normalize_date_text(end_date, datetime.now().strftime("%Y-%m-%d"))
+    normalized_start = _normalize_date_text(start_date, (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d"))
+    base_url = f"https://vip.stock.finance.sina.com.cn/corp/go.php/vCB_AllNewsStock/symbol/{normalized_symbol}.phtml"
+    with get_db_connection() as conn:
+        run_id = _create_ingest_run(
+            conn,
+            source="public_sina_dongmiqa",
+            mode=mode,
+            symbol=normalized_symbol,
+            ts_code=ts_code,
+            start_date=normalized_start,
+            end_date=normalized_end,
+        )
+        try:
+            page_url = base_url
+            page_count = 0
+            fetched_count = 0
+            matched_count = 0
+            now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            company_name = _load_company_name(normalized_symbol)
+            events: List[Dict[str, Any]] = []
+            entities: List[Tuple[str, str, str, Optional[str], str, str, float]] = []
+            seen_source_ids = set()
+
+            while page_url and page_count < max_pages:
+                html = _fetch_public_html(page_url)
+                soup = BeautifulSoup(html, "html.parser")
+                datelist = soup.select_one("div.datelist")
+                if datelist is None:
+                    break
+                stop_paging = False
+                for anchor in datelist.select("a[href]"):
+                    raw_url = str(anchor.get("href") or "").strip()
+                    title = anchor.get_text(" ", strip=True)
+                    if "/dongmiqa/" not in raw_url or not title:
+                        continue
+                    published_at = _extract_public_sina_anchor_datetime(anchor) or (
+                        (_extract_public_sina_anchor_date(anchor) or normalized_end) + " 00:00:00"
+                    )
+                    published_date = str(published_at)[:10]
+                    if published_date < str(normalized_start):
+                        stop_paging = True
+                        continue
+                    if published_date > str(normalized_end):
+                        continue
+                    fetched_count += 1
+                    detail_url = urljoin(page_url, raw_url)
+                    source_event_id = f"{normalized_symbol}:{_extract_public_sina_detail_id(detail_url)}"
+                    if source_event_id in seen_source_ids:
+                        continue
+                    seen_source_ids.add(source_event_id)
+                    detail_html = _fetch_public_html(detail_url)
+                    question_text, answer_text = _parse_public_sina_dongmiqa_detail(detail_html)
+                    if not question_text and not answer_text:
+                        continue
+                    matched_count += 1
+                    subtype, importance, official_flag = _classify_qa_event(question_text, answer_text)
+                    payload = {
+                        "event_id": _make_event_id("public_sina_dongmiqa", source_event_id),
+                        "source": "public_sina_dongmiqa",
+                        "source_type": "qa",
+                        "event_subtype": subtype,
+                        "symbol": normalized_symbol,
+                        "ts_code": ts_code,
+                        "title": title[:120] if title else (question_text[:120] or "董秘问答"),
+                        "content_text": "\n".join(
+                            [part for part in [f"问：{question_text}" if question_text else "", f"答：{answer_text}" if answer_text else ""] if part]
+                        ).strip(),
+                        "question_text": question_text or None,
+                        "answer_text": answer_text or None,
+                        "raw_url": detail_url,
+                        "pdf_url": None,
+                        "published_at": published_at,
+                        "ingested_at": now_text,
+                        "importance": importance,
+                        "is_official": official_flag,
+                        "source_event_id": source_event_id,
+                        "hash_digest": _digest_payload({"title": title, "question": question_text, "answer": answer_text, "published_at": published_at}),
+                        "extra_json": json.dumps({"_target_symbol": normalized_symbol}, ensure_ascii=False),
+                    }
+                    events.append(payload)
+                    entities.append(
+                        _materialize_primary_entity(
+                            payload["event_id"],
+                            normalized_symbol,
+                            ts_code,
+                            company_name,
+                            "public_dongmiqa_page",
+                            0.92,
+                        )
+                    )
+                if stop_paging:
+                    break
+                next_page_url = _extract_public_sina_next_page_url(soup, page_url)
+                if next_page_url == page_url:
+                    break
+                page_url = next_page_url
+                page_count += 1
+
+            upserted = _upsert_stock_events(conn, events, entities)
+            rollup_rows = rebuild_stock_event_daily_rollup(
+                normalized_symbol,
+                start_date=normalized_start,
+                end_date=normalized_end,
+                conn=conn,
+            )
+            message = f"公共问答同步完成 fetched={fetched_count} matched={matched_count} upserted={upserted} rollup={rollup_rows}"
+            _finish_ingest_run(
+                conn,
+                run_id,
+                status="success",
+                fetched_count=fetched_count,
+                inserted_count=upserted,
+                message=message,
+                extra_json=json.dumps({"matched_count": matched_count, "page_count": page_count + 1}, ensure_ascii=False),
+            )
+            conn.commit()
+            return {
+                "run_id": run_id,
+                "source": "public_sina_dongmiqa",
+                "symbol": normalized_symbol,
+                "ts_code": ts_code,
+                "source_mode": "public_fallback",
+                "start_date": normalized_start,
+                "end_date": normalized_end,
+                "fetched_count": fetched_count,
+                "matched_count": matched_count,
+                "upserted_count": upserted,
+                "rollup_rows": rollup_rows,
+                "message": message,
+            }
+        except Exception as exc:
+            logger.error("sync_public_sina_dongmiqa failed for %s: %s", normalized_symbol, exc)
+            _finish_ingest_run(
+                conn,
+                run_id,
+                status="failed",
+                message=str(exc),
+            )
+            conn.commit()
+            raise
+
+
 def sync_public_sina_announcements(
     symbol: str,
     *,
@@ -1552,6 +2008,8 @@ def sync_shenzhen_qa(
     end_date: Optional[str] = None,
     mode: str = "manual",
 ) -> Dict[str, Any]:
+    if not _has_tushare_token():
+        return sync_public_sina_dongmiqa(symbol, start_date=start_date, end_date=end_date, mode=mode)
     return _sync_tushare_qa(
         symbol,
         source_name="tushare_irm_sz",
@@ -1569,6 +2027,8 @@ def sync_shanghai_qa(
     end_date: Optional[str] = None,
     mode: str = "manual",
 ) -> Dict[str, Any]:
+    if not _has_tushare_token():
+        return sync_public_sina_dongmiqa(symbol, start_date=start_date, end_date=end_date, mode=mode)
     return _sync_tushare_qa(
         symbol,
         source_name="tushare_irm_sh",
@@ -1586,6 +2046,8 @@ def sync_short_news(
     end_date: Optional[str] = None,
     mode: str = "manual",
 ) -> Dict[str, Any]:
+    if not _has_tushare_token():
+        return sync_public_sina_stock_news(symbol, start_date=start_date, end_date=end_date, mode=mode)
     return _sync_tushare_news_like(
         symbol,
         source_name="tushare_news",
@@ -1605,6 +2067,8 @@ def sync_major_news(
     end_date: Optional[str] = None,
     mode: str = "manual",
 ) -> Dict[str, Any]:
+    if not _has_tushare_token():
+        return sync_public_sina_stock_news(symbol, start_date=start_date, end_date=end_date, mode=mode)
     return _sync_tushare_news_like(
         symbol,
         source_name="tushare_major_news",
@@ -1631,12 +2095,13 @@ def backfill_symbol_announcements(symbol: str, days: int = 365, mode: str = "wat
 def backfill_symbol_qa(symbol: str, days: int = 180, market: str = "auto", mode: str = "watchlist") -> Dict[str, Any]:
     normalized_symbol = normalize_stock_event_symbol(symbol)
     if not _has_tushare_token():
-        return {
-            "symbol": normalized_symbol,
-            "source_mode": "skipped_no_token",
-            "upserted_count": 0,
-            "message": "TUSHARE_TOKEN 未配置，互动问答公共源回补暂未接入",
-        }
+        result = sync_public_sina_dongmiqa(
+            normalized_symbol,
+            start_date=(datetime.now() - timedelta(days=max(1, int(days)))).strftime("%Y-%m-%d"),
+            end_date=datetime.now().strftime("%Y-%m-%d"),
+            mode=mode,
+        )
+        return result
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=max(1, int(days)))).strftime("%Y-%m-%d")
     selected_market = market
@@ -1649,16 +2114,25 @@ def backfill_symbol_qa(symbol: str, days: int = 180, market: str = "auto", mode:
 
 def backfill_symbol_news(symbol: str, days: int = 30, mode: str = "watchlist") -> Dict[str, Any]:
     normalized_symbol = normalize_stock_event_symbol(symbol)
-    if not _has_tushare_token():
-        return {
-            "symbol": normalized_symbol,
-            "source_mode": "skipped_no_token",
-            "upserted_count": 0,
-            "matched_count": 0,
-            "message": "TUSHARE_TOKEN 未配置，公共新闻回补暂未接入自动链路",
-        }
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=max(1, int(days)))).strftime("%Y-%m-%d")
+    if not _has_tushare_token():
+        public_result = sync_public_sina_stock_news(symbol, start_date=start_date, end_date=end_date, mode=mode)
+        return {
+            "symbol": normalized_symbol,
+            "source_mode": "public_fallback",
+            "start_date": start_date,
+            "end_date": end_date,
+            "short_news": public_result,
+            "major_news": {
+                "source_mode": "shared_public_fallback",
+                "upserted_count": 0,
+                "matched_count": 0,
+            },
+            "upserted_count": int(public_result.get("upserted_count", 0)),
+            "matched_count": int(public_result.get("matched_count", 0)),
+            "message": public_result.get("message"),
+        }
     short_result = sync_short_news(symbol, start_date=start_date, end_date=end_date, mode=mode)
     major_result = sync_major_news(symbol, start_date=start_date, end_date=end_date, mode=mode)
     return {
@@ -1695,6 +2169,50 @@ def sync_symbol_event_bundle(
             + int(news.get("upserted_count", 0)),
             "matched_news_count": int(news.get("matched_count", 0)),
         },
+    }
+
+
+def hydrate_symbol_event_context(
+    symbol: str,
+    *,
+    announcement_days: int = 365,
+    qa_days: int = 180,
+    news_days: int = 30,
+    recent_limit: int = 12,
+    mode: str = "selection_candidate",
+) -> Dict[str, Any]:
+    normalized_symbol = normalize_stock_event_symbol(symbol)
+    sync_result = sync_symbol_event_bundle(
+        normalized_symbol,
+        announcement_days=announcement_days,
+        qa_days=qa_days,
+        news_days=news_days,
+        mode=mode,
+    )
+    window_days = max(int(announcement_days), int(qa_days), int(news_days))
+    coverage = get_stock_event_coverage(normalized_symbol, days=window_days)
+    recent_feed = list_stock_event_feed(
+        normalized_symbol,
+        limit=recent_limit,
+        start_date=coverage.get("date_window", {}).get("start_date"),
+        end_date=coverage.get("date_window", {}).get("end_date"),
+    )
+    audit = audit_stock_event_collection(normalized_symbol, days=window_days, recent_limit=recent_limit)
+    return {
+        "symbol": normalized_symbol,
+        "trigger_mode": mode,
+        "triggered_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "requested_windows": {
+            "announcement_days": int(announcement_days),
+            "qa_days": int(qa_days),
+            "news_days": int(news_days),
+            "recent_limit": int(recent_limit),
+        },
+        "capabilities": get_stock_event_source_capabilities(),
+        "sync": sync_result,
+        "coverage": coverage,
+        "recent_feed": recent_feed.get("items", []),
+        "audit": audit,
     }
 
 
@@ -1876,6 +2394,7 @@ def get_stock_event_coverage(
         }
         for row in type_rows
     }
+    capability_map = _capability_map()
     modules = []
     for source_type, label in [
         ("report", "财报"),
@@ -1885,6 +2404,7 @@ def get_stock_event_coverage(
         ("regulatory", "监管"),
     ]:
         entry = type_map.get(source_type)
+        capability = capability_map.get(source_type, {})
         modules.append(
             {
                 "module": source_type,
@@ -1892,6 +2412,9 @@ def get_stock_event_coverage(
                 "covered": bool(entry and entry["count"] > 0),
                 "count": int((entry or {}).get("count", 0)),
                 "latest_event_time": (entry or {}).get("latest_event_time"),
+                "source_available": bool(capability.get("available", True)),
+                "source_mode": capability.get("source_mode"),
+                "availability_note": capability.get("note"),
             }
         )
     return {
@@ -1899,6 +2422,7 @@ def get_stock_event_coverage(
         "date_window": {"start_date": start_date, "end_date": end_date, "days": int(days)},
         "coverage_status": "covered" if any(item["covered"] for item in modules) else "no_recent_events",
         "alias_count": int((alias_count or [0])[0] or 0),
+        "capabilities": get_stock_event_source_capabilities(),
         "modules": modules,
         "by_source_type": list(type_map.values()),
         "by_source": [
@@ -1917,6 +2441,8 @@ def audit_stock_event_collection(symbol: str, *, days: int = 365, recent_limit: 
     normalized_symbol = normalize_stock_event_symbol(symbol)
     coverage = get_stock_event_coverage(normalized_symbol, days=days)
     feed = list_stock_event_feed(normalized_symbol, limit=recent_limit, start_date=coverage.get("date_window", {}).get("start_date"), end_date=coverage.get("date_window", {}).get("end_date"))
+    capabilities = coverage.get("capabilities") or get_stock_event_source_capabilities()
+    capability_map = {str(item.get("module") or ""): item for item in capabilities.get("modules", [])}
     official_count = 0
     company_count = 0
     media_count = 0
@@ -1936,12 +2462,19 @@ def audit_stock_event_collection(symbol: str, *, days: int = 365, recent_limit: 
     if int((module_map.get("announcement") or {}).get("count", 0)) <= 0:
         flags.append({"level": "warn", "code": "announcement_missing", "message": "最近窗口未见公告类官方事件"})
     if int((module_map.get("qa") or {}).get("count", 0)) <= 0:
-        flags.append({"level": "warn", "code": "company_exchange_missing", "message": "最近窗口未见互动问答/公司交流类事件"})
+        if capability_map.get("qa", {}).get("available"):
+            flags.append({"level": "warn", "code": "company_exchange_missing", "message": "最近窗口未见互动问答/公司交流类事件"})
+        else:
+            flags.append({"level": "info", "code": "company_exchange_unavailable", "message": "互动问答当前源不可用（通常为未配置 TUSHARE_TOKEN）"})
     if int((module_map.get("news") or {}).get("count", 0)) <= 0:
-        flags.append({"level": "info", "code": "media_news_missing", "message": "最近窗口未见财经资讯，适合再做新闻层补拉"})
+        if capability_map.get("news", {}).get("available"):
+            flags.append({"level": "info", "code": "media_news_missing", "message": "最近窗口未见财经资讯，适合再做新闻层补拉"})
+        else:
+            flags.append({"level": "info", "code": "media_news_unavailable", "message": "财经资讯当前源不可用（通常为未配置 TUSHARE_TOKEN）"})
     return {
         "symbol": normalized_symbol,
         "days": int(days),
+        "capabilities": capabilities,
         "coverage": coverage,
         "recent_items": feed.get("items", []),
         "group_counts": {
