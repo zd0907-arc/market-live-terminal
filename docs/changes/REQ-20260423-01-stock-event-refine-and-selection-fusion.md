@@ -1,5 +1,9 @@
 # REQ-20260423-01-stock-event-refine-and-selection-fusion
 
+> **历史二期增强卡。**
+> 当前事件层真实状态与已落地能力，请优先看：
+> `docs/changes/MOD-20260424-01-stock-events-current-state.md`
+
 ## 1. 基本信息
 - 标题：单票新闻事件层二期增强：无 Token 完整性 + 选股触发式融合
 - 状态：ACTIVE

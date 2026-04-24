@@ -1,6 +1,10 @@
 # MOD-20260415-01-atomic-release-readiness
 
 > **当前真实运行架构已更新：请优先阅读 `docs/changes/MOD-20260415-02-local-research-station-architecture.md`。**
+>
+> 本卡记录的是“曾准备把 atomic 主路径直接切生产”的阶段判断。
+> 当前项目主线真相请优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 
 ## 1. 基本信息

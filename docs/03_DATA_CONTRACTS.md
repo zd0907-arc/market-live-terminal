@@ -825,13 +825,25 @@ D:\MarketData\
 ### 8. `GET /api/selection/profile/{symbol}?date=YYYY-MM-DD`
 - 描述：返回单股票当日特征、信号、最近序列画像、解释卡、风险卡与事件时间线。
 
-### 9. `GET /api/selection/backtests`
+### 9. `GET /api/selection/history/multiframe?symbol=sh600519&granularity=1d&days=20&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&include_today_preview=true`
+- 描述：返回选股右侧画像专用的多粒度历史序列。
+- 说明：
+  - 当前由选股页面专用消费；
+  - 优先读本地正式库，必要时可经 `selection_history_proxy` 走兼容兜底；
+  - 返回 `APIResponse`，`data` 结构与历史多维消费保持一致。
+
+### 10. `POST /api/selection/refresh?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
+- 描述：手动刷新选股研究特征与信号快照。
+- 返回：`APIResponse`，`data={start_date,end_date,feature_rows,signal_rows,source_snapshot}`。
+- 约束：只写独立选股研究库，不得回写主库。
+
+### 11. `GET /api/selection/backtests`
 - 描述：返回最近回测 run 列表。
 
-### 10. `POST /api/selection/backtests/run`
+### 12. `POST /api/selection/backtests/run`
 - 描述：执行固定持有期回测。
 - Body：`{strategy_name,start_date,end_date,holding_days_set,max_positions_per_day,stop_loss_pct?,take_profit_pct?}`。
 - 约束：只写独立选股库，不得回写主库。
 
-### 11. `GET /api/selection/backtests/{run_id}`
+### 13. `GET /api/selection/backtests/{run_id}`
 - 描述：返回单次回测的 run / summaries / trades。

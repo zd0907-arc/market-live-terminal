@@ -11,11 +11,12 @@
   1. **代码当前真相** 与 **core docs 描述** 漂移；
   2. `docs/changes/` 中沉淀了大量过程卡，缺少一个“现在到底什么是真的”的统一入口。
 
-## 2. 当前真相（2026-04-21）
+## 2. 当前真相（2026-04-24）
 
 ### 2.1 主代码与工作目录
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前唯一主线分支：`main`
+- 当前主线版本：`v5.0.0`
 - 当前主线已包含：
   - 本地研究站口径；
   - 正式复盘主链路；
@@ -31,8 +32,8 @@
 - 选股研究页：`/selection-research`
 
 ### 2.3 当前三端职责
-- Windows：raw、正式跑数、重型数据真相源；
-- Mac：当前唯一开发 / 复盘 / 选股 / 文档主工作台；
+- Windows：raw、正式跑数、处理后正式库与研究结果真相源；
+- Mac：当前唯一开发 / 复盘 / 选股 / 文档主工作台，并持有同步后的正式研究库；
 - Cloud：轻量盯盘 / 应急查看。
 
 ### 2.4 当前文档治理原则
@@ -58,7 +59,7 @@
 6. 未完成事项：`docs/07_PENDING_TODO.md`
 
 ## 5. 当前仍未完成的主题（不在本卡假装完成）
-- `stock_events` 的无 Token 公共源仍未补齐 `QA / media news`；
+- `stock_events` 虽已补齐无 Token 的公告 / 问答 / 资讯 fallback，但事件理解层、强实体映射与更深正文理解仍未完成；
 - `stock_universe_meta` 自动刷新仍未正式调度；
 - 存量旧表依赖剥离仍未完成；
 - 部分历史数据治理卡仍是过程性设计文档，尚未全部转为单一最终态说明。
@@ -92,6 +93,14 @@
   - `ops/start_local_research_station.sh`
   - `ops/sync_windows_research_snapshot.sh`
   - `ops/check_postclose_l2_status.sh`
+
+## 6.5 当前正式数据路径
+- Mac 本地研究站当前正式主路径：
+  - `data/market_data.db`
+  - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+  - `data/selection/selection_research.db`
+  - `data/user_data.db`
+- `snapshot` 相关文件仅保留为验证 / 过渡工具，不再描述为正式主路径。
 
 ## 7. 风险
 - 如果后续继续直接阅读早期 `REQ/STG` 卡而不先看本卡，仍可能误把历史计划当当前真相；

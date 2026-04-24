@@ -2,6 +2,11 @@
 
 > 本卡是 `MOD-20260415-02-local-research-station-architecture.md` 的执行卡。
 > 目标不是重复解释为什么改，而是冻结：**接下来按什么顺序做、在哪做、做到什么算完成。**
+>
+> **历史执行卡提醒：**
+> 本卡里出现的 worktree / 分支信息是当时执行现场，不代表当前正式主线。
+> 当前项目真相请优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 ## 1. 当前开发落点（冻结）
 - 主开发 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-local-research`

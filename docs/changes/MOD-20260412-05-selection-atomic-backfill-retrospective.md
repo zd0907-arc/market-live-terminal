@@ -1,6 +1,9 @@
 # 选股数据治理与全量历史回补总说明（2026-04-12 收口版）
 
 > **当前真实运行架构已更新：请优先阅读 `docs/changes/MOD-20260415-02-local-research-station-architecture.md`。**
+>
+> 若问题已经从“数据治理过程复盘”变成“当前项目主线现在到底怎么运行”，请再优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 
 > 本文档是这次“为选股研究重做数据底座”的**单文档总入口**。  

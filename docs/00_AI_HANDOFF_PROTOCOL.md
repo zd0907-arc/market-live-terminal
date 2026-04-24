@@ -12,7 +12,13 @@
 
 ## 2. 任务ID与需求卡机制（强制）
 
-- 任务ID格式：`CHG-YYYYMMDD-序号`（例如 `CHG-20260309-02`）。
+- **当前新建变更卡 ID** 统一使用 `docs/changes/` 的类型化编号：
+  - `MOD-YYYYMMDD-NN-*`
+  - `REQ-YYYYMMDD-NN-*`
+  - `INV-YYYYMMDD-NN-*`
+  - `CFG-YYYYMMDD-NN-*`
+  - `STG-YYYYMMDD-NN-*`
+- 历史 `CHG-YYYYMMDD-序号` 仅作为旧日志 / 旧变更记录保留，不再作为当前新卡标准。
 - 所有业务改动必须绑定至少一个 `CAP-*` 能力卡（见 `02_BUSINESS_DOMAIN.md`）。
 - 不允许“先改代码后补需求卡”；顺序必须是：
   1. 先在 `06_CHANGE_MANAGEMENT.md` 规则下新建变更卡（`docs/changes/`）；
@@ -31,7 +37,7 @@
 
 - `AI_HANDOFF_LOG.md` 仅记录短日志，不写长篇过程。
 - 每条日志必须包含：
-  - `Task ID`
+  - `Task ID / Change Card ID`
   - `涉及 CAP ID`
   - `结论`
   - `风险/阻塞`

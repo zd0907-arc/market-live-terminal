@@ -1,7 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG_FILE="${1:-atomic_backfill_windows.stage_1_202604.json}"
-RAW=$(bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status.sh "$CONFIG_FILE")
+RAW=$(bash "$ROOT/ops/check_atomic_backfill_status.sh" "$CONFIG_FILE")
 python3 - <<'PY' "$RAW"
 import json, sys, os
 j=json.loads(sys.argv[1])

@@ -1,33 +1,42 @@
 # ZhangData 金融实时终端（v5.0.0）
 
 ## 项目定位
-- 云端 FastAPI + 前端 Vite 的 A 股实时资金流终端。
-- Windows 节点负责采集并向云端 ingest；云端是唯一权威数据源。
+- 当前主线版本：`v5.0.0`
+- 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
+- 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 ## 快速启动（本地）
 
-### 1) 后端
+### 1) 准备 Python / Node 依赖
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-python -m backend.app.main
+pip install -r backend/requirements.txt
+npm install
 ```
 
-如需直接吃新原子层：
-```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/start_local_backend_with_atomic.sh /绝对路径/market_atomic_mainboard_full_reverse.db
-```
-
-### 2) 前端
+### 2) 首次把 Windows 处理后全量库同步到 Mac
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-npm install
-npm run dev
+bash ops/bootstrap_mac_full_processed_sync.sh
 ```
 
-默认访问：`http://localhost:3001`
+### 3) 启动本地研究站后端
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+PORT=8001 bash ops/start_local_research_station.sh
+```
+
+### 4) 启动本地研究站前端
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
+```
+
+默认访问：`http://localhost:3001`  
+默认本地后端：`http://127.0.0.1:8001`
 
 ## 关键文档
 - 架构：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
@@ -71,3 +80,4 @@ npm run check:baseline
 - 根目录下存在历史遗留目录 `market-live-terminal/`（旧副本），请勿在其中开发或发版。
 - `WRITE_API_TOKEN` 仅允许保留在服务端环境变量中；前端静态资源不得携带该值。
 - 当前仍使用 CDN Tailwind；后续将迁移到本地构建链路。
+- 后端测试与本地研究站请优先使用 `backend/requirements.txt` 对应环境，不要只装根目录精简依赖。

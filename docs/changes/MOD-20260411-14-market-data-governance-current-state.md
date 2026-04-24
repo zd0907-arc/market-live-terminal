@@ -1,5 +1,9 @@
 # MOD-20260411-14 数据治理当前真实总方案（持续更新母卡）
 
+> **数据治理主题总入口。**
+> 若要看当前项目主线、当前目录、当前分支纪律与当前版本，请优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+
 ## 1. 基本信息
 - 标题：数据治理当前真实总方案（持续更新母卡）
 - 状态：ACTIVE

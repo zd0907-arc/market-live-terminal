@@ -1,3 +1,21 @@
+# AI_HANDOFF_LOG（短日志）
+
+> 当前新日志的 `Task ID` 优先填写当前变更卡 ID（`MOD/REQ/INV/CFG/STG-*`）；历史 `CHG-*` 保留为旧阶段记录，不强行重写。
+
+## 2026-04-24 23:40 | Codex
+- Task ID: `MOD-20260424-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
+- 结论: 已继续完成第二轮历史过程卡入口压缩：为 `STG-20260411-05~13` 和 `INV-20260410-01 ~ INV-20260411-15` 这一批高频数据治理执行/审计卡补上“先看 `MOD-20260421-01` + `MOD-20260411-14`”提示，避免后续直接把旧施工文档当成当前真相。
+- 风险: 当前完成的是“入口治理”，不是重写全部历史卡；若后续主题继续扩张，仍应优先新增/维护母卡，而不是把过程卡重新变成真相入口。
+- 链接: `docs/changes/MOD-20260424-02-project-governance-cleanup-program.md`, `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`, `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+## 2026-04-24 23:10 | Codex
+- Task ID: `MOD-20260424-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
+- 结论: 已完成项目治理收口的前三批首轮落地：`README / 01 / 04 / AI_QUICK_START / MOD-20260421-01` 已统一到 `main / v5.0.0` 与“Windows 数据主站 / Mac 本地研究站 / Cloud 轻量盯盘”口径；`00 / 02 / 06 / 08 / AI_HANDOFF_LOG` 已改为“新卡统一用 `MOD/REQ/INV/CFG/STG-*`，历史 `CHG-*` 只兼容保留”；`03` 已补当前选股接口契约，`07` 已修重复编号与多处过期状态。
+- 风险: 历史过程卡仍然很多，后续还要继续做入口压缩；当前只完成了“当前真相 + 规则口径 + 关键入口脚本”的第一轮治理，不等于所有历史文档都已重写。
+- 链接: `docs/changes/MOD-20260424-02-project-governance-cleanup-program.md`, `README.md`, `docs/01_SYSTEM_ARCHITECTURE.md`, `docs/04_OPS_AND_DEV.md`, `docs/07_PENDING_TODO.md`, `scripts/check_baseline.sh`
+
 ## 2026-04-04 23:25 | Codex
 - Task ID: `CHG-20260404-02`
 - CAP: `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-WIN-PIPELINE`
@@ -25,8 +43,6 @@
 - 结论: 已完成 最后一个支持“旧版 / 新版切换”的生产基线（`v4.2.28`），逐页面写清首页旧版/新版并存、正式复盘并库后的真实链路与数据覆盖；同时已冻结下一阶段“去掉旧版、只保留新版”的 REQ，并准备从新分支推进。
 - 风险: 首页去旧版首期应按“先下入口、后删代码”推进；`HistoryView` 与旧接口若立刻物理删除，会抬高回滚成本。正式复盘元数据 `stock_universe_meta` 仍需后续补自动刷新。
 - 链接: `docs/archive/changes/ARC-CHG-20260321-v4-2-28-last-legacy-toggle-baseline.md`, `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md`, `docs/07_PENDING_TODO.md`, `docs/AI_QUICK_START.md`
-
-# AI_HANDOFF_LOG（短日志）
 
 ## 2026-04-23 19:30 | Codex
 - Task ID: `CHG-20260423-01`

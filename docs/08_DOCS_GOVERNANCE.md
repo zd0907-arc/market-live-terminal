@@ -23,6 +23,7 @@
 ## 3. 非核心文档规则
 - 非核心文档不得使用 `NN_*.md` 命名。
 - 动态变更文档统一放 `docs/changes/`，命名见 `06`。
+- 当前新变更统一使用 `MOD/REQ/INV/CFG/STG` 类型化 ID；历史 `CHG-*` 仅保留为旧记录引用。
 - 交接日志固定为 `AI_HANDOFF_LOG.md`（短日志）。
 - `REMOTE_CONTROL_GUIDE.md` 仅索引，不承载流程正文。
 

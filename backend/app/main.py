@@ -52,8 +52,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="AlphaData Local Server", 
-    description="本地金融数据服务 - 为前端提供历史资金流向与博弈分析数据",
+    title="ZhangData Local Server",
+    description="ZhangData 本地研究站后端服务",
     version="5.0.0"
 )
 
@@ -83,7 +83,7 @@ app.include_router(sandbox_review.router, prefix="/api/sandbox", tags=["Sandbox 
 def api_health_check():
     return {
         "status": "ok",
-        "service": "AlphaData Backend API",
+        "service": "ZhangData Backend API",
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
@@ -112,7 +112,7 @@ async def shutdown_event():
 def health_check():
     return {
         "status": "running", 
-        "service": "AlphaData Backend v2", 
+        "service": "ZhangData Backend v5", 
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "docs": "http://127.0.0.1:8000/docs"
     }

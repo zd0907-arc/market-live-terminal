@@ -7,7 +7,7 @@
 - 任何业务行为变更，先在 `docs/changes/` 建立变更卡（规则见 `06_CHANGE_MANAGEMENT.md`）。
 - 任何业务行为变更，必须先在对应 `CAP-*` 卡片补“拟变更点”。
 - 改动完成后，必须回填同一卡片的“实现摘要 + 验收结果 + 变更记录（任务ID）”。
-- 任务ID统一：`CHG-YYYYMMDD-序号`（示例：`CHG-20260309-02`）。
+- 当前新变更卡统一使用 `MOD/REQ/INV/CFG/STG-YYYYMMDD-NN-*`；历史 `CHG-*` 仅作为旧阶段变更记录保留。
 - 前后端 AI 与人工都以本文件为需求依据，不允许跨文档拼接需求。
 
 ## 1. 能力目录
@@ -17,6 +17,7 @@
 | `CAP-MKT-TIME` | 交易日与交易时段展示状态机 | 前后端共享 | ACTIVE |
 | `CAP-REALTIME-FLOW` | 主力动态实时数据链路 | 后端主责，前端联调 | ACTIVE |
 | `CAP-RETAIL-SENTIMENT` | 散户一致性观察（股吧舆情） | 后端/前端 | ACTIVE |
+| `CAP-STOCK-EVENTS` | 单票官方事件层（公告 / 问答 / 资讯） | 后端/前端（选股/复盘接入） | ACTIVE |
 | `CAP-HISTORY-30M` | 30分钟历史趋势与口径 | 后端主责 | ACTIVE |
 | `CAP-WIN-PIPELINE` | Windows离线节点与云端注入 | 后端/运维 | ACTIVE（有阻塞） |
 | `CAP-L2-HISTORY-FOUNDATION` | 盘后L2历史底座与回补机制 | 后端/前端/运维 | ACTIVE |

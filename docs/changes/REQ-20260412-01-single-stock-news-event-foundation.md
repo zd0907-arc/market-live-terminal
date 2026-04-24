@@ -1,5 +1,9 @@
 # REQ-20260412-01-single-stock-news-event-foundation
 
+> **历史基础方案卡。**
+> 当前新闻/公告/问答事件层的真实状态，请优先看：
+> `docs/changes/MOD-20260424-01-stock-events-current-state.md`
+
 ## 1. 基本信息
 - 标题：单票新闻 / 公告 / 互动问答事件层基础方案
 - 状态：ACTIVE

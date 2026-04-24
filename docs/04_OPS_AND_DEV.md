@@ -6,10 +6,10 @@
 >
 > **边界提醒**：交易时段判定、回溯展示等业务语义不在本文件裁决，统一以 `docs/02_BUSINESS_DOMAIN.md`（尤其 `CAP-MKT-TIME`）为准。
 >
-> **当前入口提醒（2026-04-21）**：当前唯一主工作目录是 `/Users/dong/Desktop/AIGC/market-live-terminal`，请不要再默认使用历史 worktree 路径。项目真相总入口见 `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`。
+> **当前入口提醒（2026-04-24）**：当前唯一主工作目录是 `/Users/dong/Desktop/AIGC/market-live-terminal`，请不要再默认使用历史 worktree 路径。项目真相总入口见 `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`。
 
 
-## 0. 当前运行拓扑（2026-04-15 起冻结）
+## 0. 当前运行拓扑（2026-04-24 冻结）
 
 ### 0.1 三端职责
 - **云端**：只保留轻量盯盘 / 手机应急查看；
@@ -18,16 +18,17 @@
 
 ### 0.2 当前总原则
 - 不再把“full atomic 全量切生产”作为当前主线；
-- 不要求把 `38GB+` atomic 主库常驻到云端或 Mac；
+- 不要求把 `38GB+` atomic 主库常驻到云端；
 - Windows 是数据真相源；
-- Mac 只读 Windows 导出的研究快照，不直接跨网络读 Windows sqlite 主库。
+- Mac 持有一份从 Windows 同步来的处理后正式库，不直接跨网络读 Windows sqlite 主库；
+- `snapshot` 只保留为验证/应急工具，不再描述为正式主方案。
 
 ### 0.3 本地研究站日常流程
 1. Windows 盘后跑 atomic / selection；
-2. Windows 导出 Mac 所需裁剪快照；
-3. Mac 通过 Tailscale/SSH 拉取快照；
+2. Windows 向 Cloud 推轻量盯盘更新；
+3. Windows 向 Mac 同步处理后正式库或单日增量；
 4. Mac 启动本地前后端；
-5. 复盘/选股页面都读本地快照。
+5. 复盘/选股页面都读 Mac 本地正式库。
 
 ## 一、 网络联通测试规范 (The Tailscale Gate)
 
@@ -618,7 +619,19 @@ codex/chore-<topic>-YYYYMMDD           # 治理 / 文档 / 脚本 / 运维
   5. 通过后再合回 `main`；
   6. 只要实际生产状态发生变化，就必须 bump 版本并打 tag。
 
-### 5.3.2 固定 6 行模板（以后默认照抄）
+### 5.3.2 何时只开分支，何时再开 worktree
+- **默认只开分支，不额外开 worktree**：
+  - 当前仓库干净；
+  - 只有一条需求线在推进；
+  - 不需要并行跑两套彼此影响的本地环境。
+- **以下情况才额外开 worktree**：
+  1. 同时并行推进两条以上需求；
+  2. 两条线都需要真实启动本地前后端 / 跑脚本，且会互相污染工作区；
+  3. 某条线必须长期保留独立目录做阶段性验证。
+- **禁止把 worktree 当默认开发方式**：
+  - worktree 是隔离手段，不是每个小改都必须开。
+
+### 5.3.3 固定 6 行模板（以后默认照抄）
 ```bash
 # 1) 先在 main 只读排查，不直接改
 git checkout main && git pull
@@ -629,6 +642,23 @@ git commit -m "<type>: <summary>" && npm run check:baseline
 # 5) 通过后合回 main + 6) 若影响生产则 bump/tag
 git checkout main && git merge --no-ff <branch>
 ```
+
+### 5.3.4 每次需求结束后的收口清单（强制）
+1. **代码收口**
+   - 临时分支只保留当前主题改动；
+   - `npm run check:baseline` 通过；
+   - 若有本地异常临时文件，先清掉或明确忽略规则。
+2. **文档收口**
+   - 当前真相若被改动，回填 `README / 02 / 03 / 04 / 05 / AI_QUICK_START` 中受影响项；
+   - 过程文档写到 `docs/changes/`，不要把过程散落到核心文档正文；
+   - `AI_HANDOFF_LOG` 追加短日志。
+3. **版本收口**
+   - 若生产状态变化：同步 `package.json / src/version.ts / README / backend/app/main.py`；
+   - 必要时打 tag。
+4. **分支 / worktree 收口**
+   - 合回 `main` 后删除临时 `codex/*` 分支；
+   - 若开过额外 worktree，合并完成后应移除 worktree；
+   - 本地最终应回到单一干净 `main`，除非确有并行任务仍在进行。
 
 ---
 
@@ -655,7 +685,7 @@ git checkout main && git merge --no-ff <branch>
 
 1. **建任务与需求定位**  
    - 先在 `docs/changes/` 建立变更卡（遵循 `06_CHANGE_MANAGEMENT.md`）。  
-   - 登记 `Task ID`（`CHG-YYYYMMDD-序号`），在 `02_BUSINESS_DOMAIN.md` 对应 CAP 卡写“拟变更点”。
+   - 登记当前变更卡 ID（`MOD/REQ/INV/CFG/STG-*`），在 `02_BUSINESS_DOMAIN.md` 对应 CAP 卡写“拟变更点”；历史 `CHG-*` 仅作旧记录引用。
 2. **做最小改动并本地验证**  
    - 后端：至少覆盖 1 条目标接口 `curl` 或测试用例。  
    - 前端：至少覆盖 1 条目标视图状态（正常/边界/异常其一）。
@@ -675,11 +705,11 @@ git checkout main && git merge --no-ff <branch>
 - 连续倒序月批 config：`backend/scripts/configs/atomic_backfill_windows.full_reverse_202604_to_202501.json`
 - Mac 启动命令：
   ```bash
-  bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/start_atomic_backfill_full_reverse.sh
+  bash /Users/dong/Desktop/AIGC/market-live-terminal/ops/start_atomic_backfill_full_reverse.sh
   ```
 - Mac 人话状态命令：
   ```bash
-  bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_full_reverse.sh
+  bash /Users/dong/Desktop/AIGC/market-live-terminal/ops/check_atomic_backfill_full_reverse.sh
   ```
 - 状态口径只保留：
   - 当前正在处理哪一天
@@ -784,7 +814,7 @@ bash ops/check_postclose_l2_status.sh
 - `backend/scripts/export_selection_day_delta.py`
 - `backend/scripts/merge_selection_day_delta.py`
 
-### 7. 当前同步脚本说明
+### 7. 当前同步脚本说明（含旧 snapshot 验证工具）
 - `backend/scripts/build_local_research_snapshot.py`
   - 在 Windows 上运行；
   - 从 full atomic + main DB 构建轻量 `research_snapshot.db`

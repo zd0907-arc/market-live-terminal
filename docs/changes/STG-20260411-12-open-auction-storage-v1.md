@@ -1,5 +1,10 @@
 # STG-20260411-12 集合竞价落库方案草案 V1
 
+> **历史过程卡。**
+> 当前项目主线 / 当前目录 / 当前版本 / 当前分支纪律，请优先看：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+> 当前数据治理主题真实状态，请优先看：`docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+
+
 ## 1. 基本信息
 - 标题：集合竞价落库方案草案 V1
 - 状态：ACTIVE

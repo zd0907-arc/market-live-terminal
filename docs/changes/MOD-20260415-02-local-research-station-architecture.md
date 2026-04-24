@@ -2,6 +2,9 @@
 
 > **历史母卡。**
 > `2026-04-17` 起，当前真实状态请优先看：`docs/changes/MOD-20260417-01-local-research-current-state.md`
+>
+> `2026-04-24` 起，如需看**当前项目主线 / 当前主目录 / 当前版本 / 当前分支纪律**，再优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 ## 1. 背景
 

@@ -2,6 +2,9 @@
 
 > **当前真实方案母卡。**
 > 现在关于“数据治理做到哪、三端怎么分工、每天怎么跑、删旧表怎么验证”，统一先看本卡。
+>
+> 若问题已经扩大到“当前主线版本 / 当前主目录 / 当前分支与文档治理纪律”，请再优先看：
+> `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 
 ## 1. 当前结论
 
