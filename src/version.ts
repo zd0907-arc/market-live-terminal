@@ -1,5 +1,6 @@
-export const APP_VERSION = '4.3.2';
+export const APP_VERSION = '5.0.0';
 export const RELEASE_NOTES = [
+    'v5.0.0: 作为新主线起点，冻结“选股/数据治理/官方事件层已并入”的当前阶段；旧阶段锚点改由 stage-pre-selection-v4.2.32 与 stage-selection-in-progress-v4.3.2 保留',
     'v4.3.2: 单票官方事件层补齐无 token fallback，公告/问答/资讯三类都可走公共源；新增 stock_events capabilities/hydrate 与当前真相文档，候选票可按需准备事件上下文',
     'v4.3.1: 修复生产选股接口在无预生成结果时读请求卡死，关闭读接口自动重算；选股 health 改为轻量快照，便于先同步小型 selection DB 再逐步扩正式研究链路',
     'v4.3.0: 原子事实层进入正式发布候选，历史多维/复盘/选股研究主路径切到 atomic 优先，生产发布目标从旧历史兼容迁移升级为新底座正式切换',

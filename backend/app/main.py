@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AlphaData Local Server", 
     description="本地金融数据服务 - 为前端提供历史资金流向与博弈分析数据",
-    version="4.3.2"
+    version="5.0.0"
 )
 
 # CORS 配置
