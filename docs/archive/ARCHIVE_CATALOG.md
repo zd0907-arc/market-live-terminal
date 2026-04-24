@@ -5,6 +5,8 @@
 | 当前路径 | 标题 | TYPE | Archive-ID | 建议标准文件名 |
 |---|---|---|---|---|
 | `docs/archive/AI_HANDOFF_LOG_LEGACY_2026-03-09.md` | AI 双核协作交接控制台 (Handoff Log) | `LEG` | `ARC-LEG-20260309-ai-handoff-log-legacy-2026-03-09` | `ARC-LEG-20260309-ai-handoff-log-legacy-2026-03-09.md` |
+| `docs/archive/ARC-LEG-20260425-ai-handoff-log-pre-v5-summary.md` | AI_HANDOFF_LOG 旧阶段摘要（v5.0.0 前窗口） | `LEG` | `ARC-LEG-20260425-ai-handoff-log-pre-v5-summary` | `ARC-LEG-20260425-ai-handoff-log-pre-v5-summary.md` |
+| `docs/archive/ARC-LEG-20260425-pending-todo-pre-v5-summary.md` | 旧待办摘要（v5.0.0 收口前） | `LEG` | `ARC-LEG-20260425-pending-todo-pre-v5-summary` | `ARC-LEG-20260425-pending-todo-pre-v5-summary.md` |
 | `docs/archive/API_REFERENCE.md` | API 接口文档与端口配置 | `LEG` | `ARC-LEG-00000000-api-reference` | `ARC-LEG-00000000-api-reference.md` |
 | `docs/archive/ARCHITECTURE.md` | 系统设计与架构说明 | `ADR` | `ARC-ADR-00000000-architecture` | `ARC-ADR-00000000-architecture.md` |
 | `docs/archive/ARCHITECTURE_HISTORY.md` | 架构演进与决策记录 (Architecture Decision Records - ADR) | `ADR` | `ARC-ADR-00000000-architecture-history` | `ARC-ADR-00000000-architecture-history.md` |

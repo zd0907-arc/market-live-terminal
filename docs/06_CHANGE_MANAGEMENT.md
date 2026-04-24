@@ -43,8 +43,9 @@
 4. 如需发布，按 `04` 执行发布；生产冒烟由你手动执行，AI 负责给出清单与回填模板。
 5. 发版任务必须执行版本一致性核对（`package.json`、`src/version.ts`、`README.md`）。
 6. 回填 `02`（实现摘要+验收）与 `AI_HANDOFF_LOG`（短日志）。
-7. 如有阻塞，更新 `07`。
-8. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
+7. 如有阻塞，更新 `07`；若阻塞已解决或需求方向已变，必须把对应项从 `07` 移除或归档。
+8. 若 `AI_HANDOFF_LOG` 超出最近 `1~2` 个版本窗口，必须把旧窗口整理到 archive summary，再压缩主文件。
+9. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
 
 ## 4.1 两步快路径（默认推荐）
 - **Step 1：文档管理**（`$governance-doc-keeper` AFTER）
@@ -64,6 +65,8 @@
    - `npm run check:baseline`
    - 回填受影响核心文档
    - 更新 `AI_HANDOFF_LOG`
+   - 清理 `07` 中已解决/失效项
+   - 检查 `AI_HANDOFF_LOG` 是否需要归档旧窗口
    - 变更卡结果回填
 6. 合回 `main` 后：
    - 删除临时 `codex/*` 分支；
