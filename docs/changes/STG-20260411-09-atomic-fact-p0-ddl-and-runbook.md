@@ -252,7 +252,7 @@
 ## 6. DDL 文件
 本次已同步新增：
 
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/sql/atomic_fact_p0_schema.sql`
+- `backend/scripts/sql/atomic_fact_p0_schema.sql`
 
 它就是下一步落库脚本可直接执行的起点。
 
@@ -281,7 +281,7 @@
    - 是否加入 `session_phase`
 3. 这一步在下一轮讨论前，不直接进正式 P0 DDL
 4. 当前已新增审计脚本：
-   - `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/audit_l2_auction_window.py`
+   - `backend/scripts/audit_l2_auction_window.py`
 
 ### Phase 2：先回填成交原子层
 #### 2.1 `2025-01 ~ 2026-02`
@@ -340,8 +340,8 @@
    - 汇总 `atomic_order_daily`
 
 当前已存在文件：
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/init_atomic_fact_db.py`
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/build_atomic_trade_from_history.py`
+- `backend/scripts/init_atomic_fact_db.py`
+- `backend/scripts/build_atomic_trade_from_history.py`
 
 ### 8.2 为什么这么拆
 因为这 4 段的风险完全不同：

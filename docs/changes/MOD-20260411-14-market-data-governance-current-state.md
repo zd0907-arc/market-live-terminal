@@ -394,7 +394,7 @@
 Mac 统一查法：
 
 ```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json
+bash ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json
 ```
 
 返回只看 4 件事：

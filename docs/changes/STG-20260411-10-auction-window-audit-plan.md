@@ -60,7 +60,7 @@
 ---
 
 ## 4. 已新增的审计脚本
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/audit_l2_auction_window.py`
+- `backend/scripts/audit_l2_auction_window.py`
 
 脚本用途：
 - 输入日包目录或 symbol 目录；

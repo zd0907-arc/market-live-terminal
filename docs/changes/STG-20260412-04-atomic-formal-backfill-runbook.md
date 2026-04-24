@@ -410,13 +410,13 @@
 统一使用：
 
 ```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status_brief.sh <config文件名>
+bash ops/check_atomic_backfill_status_brief.sh <config文件名>
 ```
 
 例如：
 
 ```bash
-bash /Users/dong/Desktop/AIGC/market-live-terminal-data-governance/ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.preflight_mainboard_3d_20260401_20260403.json
+bash ops/check_atomic_backfill_status_brief.sh atomic_backfill_windows.preflight_mainboard_3d_20260401_20260403.json
 ```
 
 返回的人话重点只看：

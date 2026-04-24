@@ -366,7 +366,7 @@
 ### 8.1 正式配置与正式库
 正式配置文件：
 
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`
+- `backend/scripts/configs/atomic_backfill_windows.mainboard_full_reverse_202604_to_202501.json`
 
 正式原子库：
 

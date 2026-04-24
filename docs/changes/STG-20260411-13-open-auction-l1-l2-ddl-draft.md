@@ -203,7 +203,7 @@
 
 ## 9. DDL 草案
 本轮同步新增：
-- `/Users/dong/Desktop/AIGC/market-live-terminal-data-governance/backend/scripts/sql/open_auction_summary_schema_draft.sql`
+- `backend/scripts/sql/open_auction_summary_schema_draft.sql`
 
 这份 SQL 只是：
 - 草案
