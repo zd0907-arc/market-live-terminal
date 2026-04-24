@@ -25,9 +25,17 @@
 - 动态变更文档统一放 `docs/changes/`，命名见 `06`。
 - 当前新变更统一使用 `MOD/REQ/INV/CFG/STG` 类型化 ID；历史 `CHG-*` 仅保留为旧记录引用。
 - 交接日志固定为 `AI_HANDOFF_LOG.md`（短日志）。
-- `REMOTE_CONTROL_GUIDE.md` 仅索引，不承载流程正文。
 
-## 4. 归档规则（标准化）
+## 4. docs 根目录保留集
+- 只保留：
+  - 核心文档 `00~08`
+  - `AI_QUICK_START.md`
+  - `AI_HANDOFF_LOG.md`
+- 其余文档默认进入：
+  - `docs/changes/`（动态过程）
+  - `docs/archive/`（历史归档）
+
+## 5. 归档规则（标准化）
 - 归档目录：`docs/archive/`
 - 变更卡归档目录：`docs/archive/changes/`
 - 事件/事故归档目录：`docs/archive/incidents/`
@@ -35,7 +43,7 @@
   - `TYPE` 推荐：`INC`(事件), `RET`(复盘), `REL`(发布), `ADR`(架构), `OPS`(运维), `LEG`(历史导入)
 - 归档正文建议添加 `Archive-Meta` 信息块（见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
 
-## 5. 线性执行流程（必须按序）
+## 6. 线性执行流程（必须按序）
 1. 新建变更卡（`docs/changes/`）。
 2. 在 `02` 对应 CAP 卡登记拟变更点。
 3. 实施改动并验证。
@@ -43,7 +51,7 @@
 5. 回填 `02` + `AI_HANDOFF_LOG`；有阻塞更新 `07`。
 6. 变更卡归档到 `docs/archive/changes/` 并记录 Archive ID（可在用户确认“业务冒烟通过”后单独执行，且不触发再次部署）。
 
-## 6. Release Gate（含前序动作）
+## 7. Release Gate（含前序动作）
 - 前序动作 A：Task ID 与 CAP 回填完成。
 - 前序动作 B：若依赖 Windows，先通过 `04` 的连通性 gate。
 - 核查项：

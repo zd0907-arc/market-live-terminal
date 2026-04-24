@@ -2,6 +2,13 @@
 
 > 当前新日志的 `Task ID` 优先填写当前变更卡 ID（`MOD/REQ/INV/CFG/STG-*`）；历史 `CHG-*` 保留为旧阶段记录，不强行重写。
 
+## 2026-04-25 00:10 | Codex
+- Task ID: `MOD-20260424-03`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成一轮仓库瘦身与文档集收敛：`docs/REMOTE_CONTROL_GUIDE.md` 已删除，`docs/` 根目录保留集明确为 `00~08 + AI_QUICK_START + AI_HANDOFF_LOG`；同时删除一批无当前引用的历史脚本/样本产物（`.trae` 计划文档、`push_db_to_cloud.sh`、`etl_autorun.bat`、`test_env.py`、`market.db`、`metadata.json`、`mined_comments.txt`、3 个旧 sentiment helper 脚本），并清理本地嵌套旧副本目录。
+- 风险: 归档文档里仍会引用已删除历史文件，这是历史事实保留，不代表当前入口；另外顶层仍有少量活跃运维脚本，后续若继续做目录收敛，可再单独把它们迁入 `ops/`。
+- 链接: `docs/changes/MOD-20260424-03-repo-prune-and-docset-slimming.md`, `docs/08_DOCS_GOVERNANCE.md`, `README.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`
+
 ## 2026-04-24 23:40 | Codex
 - Task ID: `MOD-20260424-02`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`

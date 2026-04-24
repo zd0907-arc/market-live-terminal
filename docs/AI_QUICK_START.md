@@ -18,7 +18,6 @@
 - 项目文档：`/Users/dong/Desktop/AIGC/market-live-terminal/docs`
 
 ## 禁止当作当前主线开发目录
-- 历史旧副本：`/Users/dong/Desktop/AIGC/market-live-terminal/market-live-terminal`
 - 本地虚拟环境：`/Users/dong/Desktop/AIGC/market-live-terminal/.venv`
 - 本地运行产物：`/Users/dong/Desktop/AIGC/market-live-terminal/.run`
 

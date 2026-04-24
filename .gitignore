@@ -30,6 +30,8 @@ dist-ssr
 *.db-wal
 data/
 data
+metadata.json
+mined_comments.txt
 __pycache__/
 .trae/
 .pytest_cache/

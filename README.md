@@ -51,7 +51,6 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 人工待办（含 Windows 离线阻塞）：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/07_PENDING_TODO.md`
 - 文档治理与索引：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
 - 归档命名规范与映射：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_NAMING_STANDARD.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_CATALOG.md`
-- 远程控制索引页：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/REMOTE_CONTROL_GUIDE.md`（步骤内容已并入 `04`）
 
 ## 文档阅读顺序（推荐）
 1. 先看 `06_CHANGE_MANAGEMENT.md`（先建变更卡，再执行）。
@@ -77,7 +76,6 @@ npm run check:baseline
 ```
 
 ## 注意事项
-- 根目录下存在历史遗留目录 `market-live-terminal/`（旧副本），请勿在其中开发或发版。
 - `WRITE_API_TOKEN` 仅允许保留在服务端环境变量中；前端静态资源不得携带该值。
 - 当前仍使用 CDN Tailwind；后续将迁移到本地构建链路。
 - 后端测试与本地研究站请优先使用 `backend/requirements.txt` 对应环境，不要只装根目录精简依赖。
