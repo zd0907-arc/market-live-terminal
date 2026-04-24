@@ -40,9 +40,9 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 
 ## 关键文档
 - 架构：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
-- 业务域：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`
-- 数据/接口契约：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/03_DATA_CONTRACTS.md`
-- 运维与发版：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/04_OPS_AND_DEV.md`
+- 业务能力地图：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`
+- 数据/接口契约入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/03_DATA_CONTRACTS.md`
+- 运维与发版入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/04_OPS_AND_DEV.md`
 - LLM 与密钥安全：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/05_LLM_KEY_SECURITY.md`
 - 变更与阶段目标流程：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/06_CHANGE_MANAGEMENT.md`
 - AI 协作交接：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/00_AI_HANDOFF_PROTOCOL.md`
@@ -53,11 +53,16 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 归档命名规范与映射：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_NAMING_STANDARD.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_CATALOG.md`
 
 ## 文档阅读顺序（推荐）
-1. 先看 `06_CHANGE_MANAGEMENT.md`（先建变更卡，再执行）。
-2. 再看 `02_BUSINESS_DOMAIN.md`（业务规则与验收）。
-3. 接着看 `03_DATA_CONTRACTS.md`（接口字段契约）。
-4. 执行前看 `04_OPS_AND_DEV.md`（发布、冒烟、远程 gate）。
-5. 协作追踪看 `00_AI_HANDOFF_PROTOCOL.md` + `AI_HANDOFF_LOG.md` + `07_PENDING_TODO.md`。
+1. 先看 `docs/AI_QUICK_START.md`（当前主线、目录、阅读顺序）。
+2. 再看 `docs/02_BUSINESS_DOMAIN.md`（能力地图）。
+3. 再看 `docs/03_DATA_CONTRACTS.md`（契约入口）。
+4. 再看 `docs/04_OPS_AND_DEV.md`（运维入口）。
+5. 需要细节时再下钻：
+   - `docs/domain/*`
+   - `docs/contracts/*`
+   - `docs/ops/*`
+6. 当前任务过程再看 `docs/changes/*`。
+7. 协作追踪看 `00_AI_HANDOFF_PROTOCOL.md` + `AI_HANDOFF_LOG.md` + `07_PENDING_TODO.md`。
 
 ## 核心文档编号（固定）
 - `00` 协作协议，`01` 架构，`02` 需求总册，`03` 契约，`04` 运维发布，`05` 安全，`06` 变更流程，`07` 待办阻塞，`08` 文档治理。

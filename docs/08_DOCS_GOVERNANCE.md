@@ -43,6 +43,9 @@
   - `AI_QUICK_START.md`
   - `AI_HANDOFF_LOG.md`
 - 其余文档默认进入：
+  - `docs/domain/`（业务主题长记忆）
+  - `docs/contracts/`（契约细节长记忆）
+  - `docs/ops/`（运维细节长记忆）
   - `docs/changes/`（动态过程）
   - `docs/archive/`（历史归档）
 

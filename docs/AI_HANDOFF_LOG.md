@@ -12,6 +12,13 @@
 - 风险: 归档文档里仍会引用已删除历史文件，这是历史事实保留，不代表当前入口；另外顶层仍有少量活跃运维脚本，后续若继续做目录收敛，可再单独把它们迁入 `ops/`。
 - 链接: `docs/changes/MOD-20260424-03-repo-prune-and-docset-slimming.md`, `docs/08_DOCS_GOVERNANCE.md`, `README.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`
 
+## 2026-04-25 01:10 | Codex
+- Task ID: `MOD-20260425-02`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
+- 结论: 已完成核心长记忆文档第二阶段拆分：`04 / 03 / 02` 已分别压缩到 `54 / 49 / 40` 行，只保留入口与边界；细节下沉到 `docs/ops/*`、`docs/contracts/*`、`docs/domain/*`。`README / AI_QUICK_START / 08` 也已切到新阅读路径。
+- 风险: 当前只是文档结构重构，不代表每个子主题都已经被细化到最终版本；后续若能力边界变化，仍要先回写入口页，再更新子文档。
+- 链接: `docs/changes/MOD-20260425-02-split-core-long-memory-docs.md`, `docs/04_OPS_AND_DEV.md`, `docs/03_DATA_CONTRACTS.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/ops/`, `docs/contracts/`, `docs/domain/`
+
 ## 2026-04-25 00:35 | Codex
 - Task ID: `MOD-20260425-01`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`

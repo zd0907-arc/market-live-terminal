@@ -45,6 +45,16 @@ npm run check:baseline
 5. `snapshot` 只作为验证/应急工具，不作为当前正式主方案。
 6. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 
+## 当前文档阅读顺序
+1. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
+2. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
+3. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
+4. 需要细节时再进入：
+   - `docs/domain/*`
+   - `docs/contracts/*`
+   - `docs/ops/*`
+5. 当前需求过程统一进 `docs/changes/*`
+
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_station.sh`
