@@ -19,6 +19,13 @@
 - 风险: 当前只是文档结构重构，不代表每个子主题都已经被细化到最终版本；后续若能力边界变化，仍要先回写入口页，再更新子文档。
 - 链接: `docs/changes/MOD-20260425-02-split-core-long-memory-docs.md`, `docs/04_OPS_AND_DEV.md`, `docs/03_DATA_CONTRACTS.md`, `docs/02_BUSINESS_DOMAIN.md`, `docs/ops/`, `docs/contracts/`, `docs/domain/`
 
+## 2026-04-25 01:25 | Codex
+- Task ID: `MOD-20260425-03`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把“需求开启→分支/worktree 决策→开发→验证→合并→文档收尾→归档”固化成正式流程文档 `docs/ops/development-workflow.md`，并同步接入 `README / AI_QUICK_START / 04 / 06 / 08 / 00`。以后默认按这条流程收口，不再只加不减。
+- 风险: 当前流程已经成型，但能否长期保持，需要后续每次需求都严格执行；如果再次出现“做完不清理”，应先修流程执行，再谈补文档。
+- 链接: `docs/changes/MOD-20260425-03-development-workflow-standardization.md`, `docs/ops/development-workflow.md`, `docs/06_CHANGE_MANAGEMENT.md`, `docs/08_DOCS_GOVERNANCE.md`
+
 ## 2026-04-25 00:35 | Codex
 - Task ID: `MOD-20260425-01`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`

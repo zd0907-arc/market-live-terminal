@@ -59,6 +59,7 @@
 - 若接口变更，契约文档已更新
 - Handoff 短日志已登记 Task ID
 - 阻塞事项已登记到 `07_PENDING_TODO.md`
+- 当前需求已按 `docs/ops/development-workflow.md` 完成收尾动作
 
 ## 7. 禁止行为（红线）
 

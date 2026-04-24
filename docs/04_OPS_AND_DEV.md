@@ -22,6 +22,7 @@
 | Windows 数据主站 / crawler / 远控 | `docs/ops/windows-data-station.md` |
 | Cloud 发版 / 冒烟 / 回滚 | `docs/ops/cloud-release.md` |
 | 盘后 L2 / 原子层 / 日跑总控 | `docs/ops/postclose-l2-runbook.md` |
+| 标准开发流程 / 分支收口 / 文档收尾 | `docs/ops/development-workflow.md` |
 
 ## 4. 当前常用脚本
 | 用途 | 脚本 |
@@ -52,3 +53,4 @@
 - 变更流程：`docs/06_CHANGE_MANAGEMENT.md`
 - 文档治理：`docs/08_DOCS_GOVERNANCE.md`
 - AI 协作：`docs/00_AI_HANDOFF_PROTOCOL.md`
+- 开发流程标准：`docs/ops/development-workflow.md`

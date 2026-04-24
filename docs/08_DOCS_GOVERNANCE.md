@@ -70,6 +70,7 @@
   1. 回流新的长期事实到核心文档；
   2. 移除 `07` 中已解决/失效项；
   3. 当 `AI_HANDOFF_LOG` 超窗时归档旧窗口。
+- 具体顺序与 merge 后清理动作见：`docs/ops/development-workflow.md`
 
 ## 7. Release Gate（含前序动作）
 - 前序动作 A：Task ID 与 CAP 回填完成。

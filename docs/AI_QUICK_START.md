@@ -54,6 +54,7 @@ npm run check:baseline
    - `docs/contracts/*`
    - `docs/ops/*`
 5. 当前需求过程统一进 `docs/changes/*`
+6. 开始做需求前，先看：`docs/ops/development-workflow.md`
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`

@@ -63,6 +63,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
    - `docs/ops/*`
 6. 当前任务过程再看 `docs/changes/*`。
 7. 协作追踪看 `00_AI_HANDOFF_PROTOCOL.md` + `AI_HANDOFF_LOG.md` + `07_PENDING_TODO.md`。
+8. 真正开始开发前，再看 `docs/ops/development-workflow.md`。
 
 ## 核心文档编号（固定）
 - `00` 协作协议，`01` 架构，`02` 需求总册，`03` 契约，`04` 运维发布，`05` 安全，`06` 变更流程，`07` 待办阻塞，`08` 文档治理。
