@@ -5,6 +5,13 @@
 > - `docs/archive/ARC-LEG-20260425-ai-handoff-log-pre-v5-summary.md`
 > - `docs/archive/AI_HANDOFF_LOG_LEGACY_2026-03-09.md`
 
+## 2026-04-25 09:55 | Codex
+- Task ID: `MOD-20260425-05`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-REALTIME-FLOW`
+- 结论: 已复核并固化生产实时盯盘 / Mac 本地研究站 / 每日盘后跑数三条链路；Windows `ZhangDataLiveCrawler` 已清掉重复进程，`live_crawler_win.py` 增加交易日判断与单实例锁，周末不再做 full sweep / final sweep。
+- 风险: Mac 本地默认仍不是生产级连续 crawler，只是读取本地同步库并支持单票按需 hydrate；如要本地完全等同线上连续盯盘，需要另开明确需求。
+- 链接: `docs/changes/MOD-20260425-05-realtime-and-postclose-runtime-contract.md`, `docs/domain/realtime-monitor.md`, `docs/ops/windows-data-station.md`, `backend/scripts/live_crawler_win.py`
+
 ## 2026-04-25 00:10 | Codex
 - Task ID: `MOD-20260424-03`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`

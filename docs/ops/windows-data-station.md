@@ -10,8 +10,16 @@ Windows 是当前数据主站，负责：
 ## 2. 当前关键路径
 - 项目目录：`D:\market-live-terminal`
 - 实时 crawler 启动：`start_live_crawler.bat`
+- crawler 主脚本：`backend\scripts\live_crawler_win.py`
 - crawler 计划任务：`ZhangDataLiveCrawler`
 - 日包/跑数相关输出：由盘后总控与 Windows 跑数脚本维护
+
+## 2.1 实时 crawler 正式语义
+- Windows 是唯一生产实时外采节点。
+- crawler 从 Cloud 拉 `/api/watchlist` 和 `/api/monitor/active_symbols`。
+- crawler 向 Cloud 写 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`。
+- crawler 必须使用交易日历判断；周末/节假日不得做 periodic full sweep / final sweep。
+- crawler 内置单实例锁，计划任务重复触发时新实例应直接退出。
 
 ## 3. 跨机前检查
 先执行：
@@ -22,9 +30,10 @@ ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "echo ok"
 任一失败，不要继续跑大文件同步或远控命令。
 
 ## 4. 当前正式关注点
-1. `ZhangDataLiveCrawler` 的跨重启稳定性
-2. 盘后 L2 / atomic 的日跑稳定性
-3. 处理后结果向 Mac / Cloud 的同步质量
+1. `ZhangDataLiveCrawler` 只能有一个有效 Python 进程。排障时不要只看 schtasks Running，必须同时看进程和日志。
+2. 盘后 L2 / atomic 的日跑稳定性。
+3. 处理后结果向 Mac / Cloud 的同步质量。
+4. 实时 crawler 与每日盘后总控是两条不同链路，不能混用排障结论。
 
 ## 5. 当前相关脚本
 - `sync_to_windows.sh`

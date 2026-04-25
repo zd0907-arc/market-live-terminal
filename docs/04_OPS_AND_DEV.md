@@ -15,6 +15,7 @@
 4. `snapshot` 只作验证/应急，不是正式主方案。
 5. 所有跨机器动作，先过连通性 gate，再执行同步/发布。
 6. Windows -> Mac 正式同步只允许“局域网 HTTP relay / Cloud relay”，禁止再走 SSH/scp 直拉。
+7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者是 `ZhangDataLiveCrawler`，后者是 `ops/run_postclose_l2.sh`。
 
 ## 3. 先看哪个操作文档
 | 场景 | 文档 |
@@ -36,6 +37,11 @@
 | Windows 脚本同步 | `sync_to_windows.sh` |
 | 云端发布 | `deploy_to_cloud.sh` |
 | 基线检查 | `scripts/check_baseline.sh` |
+
+> 实时盯盘 Windows 任务：
+```bash
+ssh laqiyuan@192.168.3.108 'cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /FO LIST'
+```
 
 > 当前盘后正式日常指令：
 ```bash

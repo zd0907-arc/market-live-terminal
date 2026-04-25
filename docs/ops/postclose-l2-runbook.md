@@ -29,6 +29,13 @@ bash ops/run_postclose_l2.sh
   - 局域网失败自动回退云中转
   - 若某交易日已经完整成功，后续再次触发时优先复用成功结果，不重复全链路重跑
 
+## 2.3 状态检查
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/check_postclose_l2_status.sh
+```
+该脚本优先读取 `.run/postclose_l2/latest.json`，不要再只看旧的 `postclose_daily_run_*.log` 判断日跑是否失败。
+
 ## 3. 当前目标
 - 日跑稳定
 - 失败可追溯

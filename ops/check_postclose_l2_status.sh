@@ -4,6 +4,34 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+LATEST_JSON=".run/postclose_l2/latest.json"
+if [ -f "$LATEST_JSON" ]; then
+  python3 - "$LATEST_JSON" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+summary = data.get("execution_summary") or {}
+print(f"状态文件: {path}")
+print(f"交易日: {data.get('trade_date') or '无'}")
+print(f"最终状态: {summary.get('final_status') or 'UNKNOWN'}")
+print(f"原因: {summary.get('reason') or '无'}")
+print(f"生产就绪: {summary.get('is_production_ready')}")
+print(f"同步路径: {(data.get('sync_context') or {}).get('mode') or '无'}")
+lm = data.get("local_market_merge_report") or {}
+la = data.get("local_atomic_merge_report") or {}
+ls = data.get("local_selection_merge_report") or {}
+vr = data.get("verify_report") or {}
+print(f"Mac L2: daily={lm.get('rows_daily')} 5m={lm.get('rows_5m')}")
+print(f"Mac atomic: rows_daily={la.get('rows_daily')}")
+print(f"Mac selection: feature_rows={ls.get('feature_rows')} signal_rows={ls.get('signal_rows')}")
+print(f"Cloud verify: daily={vr.get('rows_daily')} 5m={vr.get('rows_5m')}")
+print(f"生成时间: {data.get('generated_at') or '无'}")
+PY
+  exit 0
+fi
+
 LOG_FILE="${1:-}"
 if [ -z "$LOG_FILE" ]; then
   LOG_FILE="$(ls -t .run/postclose_daily_run*.log 2>/dev/null | head -n 1 || true)"

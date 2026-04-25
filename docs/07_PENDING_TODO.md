@@ -15,7 +15,7 @@
 
 ## T-016 Windows 实时采集计划任务稳态化
 - 状态：`ACTIVE`
-- 当前事实：`ZhangDataLiveCrawler` 已收敛为单正式任务并恢复生产数据；仍缺“重启/注销后自动恢复”演练，以及逐笔源 fallback 的最终补强。
+- 当前事实：`ZhangDataLiveCrawler` 已清掉重复进程并重建任务；`live_crawler_win.py` 已增加交易日判断与单实例锁。当前验证到 5 分钟重复触发后仍只有一个 Python crawler 进程。
 - 下一步：
   1. 补一次 Windows 重启或注销后的自动恢复演练；
   2. 视需要增加 heartbeat / 健康日志；

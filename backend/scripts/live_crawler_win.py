@@ -15,10 +15,58 @@ for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
         del os.environ[k]
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 RUN_DIR = os.path.join(ROOT_DIR, '.run')
 os.makedirs(RUN_DIR, exist_ok=True)
 LOG_FILE = os.path.join(RUN_DIR, 'live_crawler_runtime.log')
 PID_FILE = os.path.join(RUN_DIR, 'live_crawler.pid')
+LOCK_FILE = os.path.join(RUN_DIR, 'live_crawler.lock')
+
+_LOCK_HANDLE = None
+
+
+def _append_boot_log(message):
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as fh:
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} - [WIN-CRAWLER] - {message}\n")
+    except Exception:
+        pass
+
+
+def _acquire_single_instance_lock():
+    """
+    防止计划任务 5 分钟触发或人工重复启动造成多个 crawler 同时写云端。
+    Windows 使用 msvcrt 文件锁；Mac/Linux 调试时使用 fcntl 文件锁。
+    """
+    global _LOCK_HANDLE
+    os.makedirs(RUN_DIR, exist_ok=True)
+    fh = open(LOCK_FILE, 'a+', encoding='utf-8')
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fh.seek(0)
+        fh.truncate()
+        fh.write(str(os.getpid()))
+        fh.flush()
+        _LOCK_HANDLE = fh
+        return True
+    except Exception:
+        _append_boot_log("INFO - another live crawler instance is already running; exit duplicate launcher")
+        try:
+            fh.close()
+        except Exception:
+            pass
+        return False
+
+
+if not _acquire_single_instance_lock():
+    sys.exit(0)
 
 
 def _write_pid_file():
@@ -131,8 +179,27 @@ def get_active_symbols():
         "all_symbols": [],
     }
 
+def is_trade_day(date_str=None):
+    """交易日判断：优先复用项目交易日历；失败时仅退化到工作日判断。"""
+    target = date_str or datetime.now().strftime("%Y-%m-%d")
+    try:
+        from backend.app.core.calendar import TradeCalendar
+        return bool(TradeCalendar.is_trade_day(target))
+    except Exception as e:
+        try:
+            dt = datetime.strptime(target, "%Y-%m-%d")
+            fallback = dt.weekday() < 5
+        except Exception:
+            fallback = False
+        logger.warning("Trade day calendar unavailable, fallback=%s date=%s err=%s", fallback, target, e)
+        return fallback
+
+
 def is_trading_time():
     now = datetime.now()
+    if not is_trade_day(now.strftime("%Y-%m-%d")):
+        return False
+
     current_time = now.time()
     
     hard_stop = datetime.strptime("15:05:00", "%H:%M:%S").time()
@@ -361,11 +428,12 @@ async def poll_ticks_loop():
     
     while True:
         now = datetime.now()
+        today_is_trade_day = is_trade_day(now.strftime("%Y-%m-%d"))
         now_ts = now.timestamp()
         current_time = now.strftime("%H:%M:%S")
         
         # --- Step 5: 终极收网：收盘后强制全量覆盖一次 (Fallback Sweep) ---
-        if "15:01:00" <= current_time <= "15:10:00":
+        if today_is_trade_day and "15:01:00" <= current_time <= "15:10:00":
             if (not has_done_final_sweep) and (now_ts - last_final_sweep_attempt_ts >= FINAL_SWEEP_RETRY_INTERVAL_SECONDS):
                 logger.info(">>> Executing FINAL SWEEP FOR ALL WATCHLIST STOCKS <<<")
                 stats = fetch_and_post_ticks(None, max_retries=2)
@@ -381,7 +449,7 @@ async def poll_ticks_loop():
             await asyncio.sleep(10)
             continue
             
-        if "09:00:00" <= current_time <= "09:15:00":
+        if today_is_trade_day and "09:00:00" <= current_time <= "09:15:00":
             has_done_final_sweep = False
             last_final_sweep_attempt_ts = 0.0
             last_full_sweep_ts = 0.0

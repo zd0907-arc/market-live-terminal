@@ -53,9 +53,11 @@
 当前主线数据流是**双下游单主站**：外网 -> Windows -> {Cloud 轻量盯盘, Mac 本地研究站}。
 
 ### 流水线 A：盘中实时流 (The Live Pipeline)
-1. **获取源头**：Windows `live_crawler_win.py` 每 3 秒从 AkShare 拉取一次盘口快照，每 3 分钟拉取一次最新交易逐笔。
-2. **射向云端**：Windows 把轻量实时数据通过 HTTP POST 发送到 Cloud (`/api/internal/ingest/*`，带 `INGEST_TOKEN`)。
-3. **入库展示**：Cloud 写入轻量 `data/market_data.db`，供线上盯盘页面和手机查看。
+1. **前端声明活跃**：线上 / 本地前端打开盯盘页后，通过 `/api/monitor/heartbeat` 上报当前股票和 focus/warm 状态；云端 `/api/monitor/active_symbols` 聚合活跃股票。
+2. **Windows 统一外采**：Windows 计划任务 `ZhangDataLiveCrawler` 启动 `backend/scripts/live_crawler_win.py`，读取云端 `/api/watchlist` 与 `/api/monitor/active_symbols`，再从腾讯行情 / AkShare 拉盘口快照和逐笔。
+3. **射向云端**：Windows 只通过 HTTP POST 写 Cloud：`/api/internal/ingest/snapshots`、`/api/internal/ingest/ticks`，必须携带 `INGEST_TOKEN`。
+4. **云端被动入库**：Cloud 写入轻量 `data/market_data.db` 的 `sentiment_snapshots`、`trade_ticks`、`history_30m` 等盯盘所需表。云端默认 `ENABLE_CLOUD_COLLECTOR=false`，不主动外采。
+5. **页面读取**：线上盯盘页读取 Cloud API；Mac 本地盯盘页默认读取 Mac 本地 DB，必要时单票接口可按需补拉当日 ticks，但不等同于生产后台 crawler。
 
 > **[架构澄清] 本地 Tick 存储与容量**：
 > 系统作为“精细化 Watchlist”（约 50 只核心股票）而非全市场雷达。每天产生的有效 Tick 约 20万-40万行，落入 SQLite 仅 20MB-30MB。存满一年不到 10GB。
@@ -74,9 +76,10 @@
    - 研究正式库同步到 Mac。
 
 ### 流水线 C：Mac 本地研究站消费
-1. **首次全量同步**：Mac 从 Windows 同步处理后正式库。
-2. **日常增量同步**：Mac 每日盘后通过总控脚本接收 Windows 的单日更新。
-3. **本地服务消费**：Mac 本地后端直接读取本机正式库，为复盘 / 选股 / 研究页面供数。
+1. **首次全量同步**：Mac 从 Windows 同步处理后正式库，当前外置数据根目录优先使用 `/Users/dong/Desktop/AIGC/market-data`。
+2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。Windows -> Mac 数据同步禁止 SSH/scp 直拉，只允许“局域网 HTTP relay / Cloud relay 中转”。
+3. **本地服务消费**：Mac 本地后端通过 `ops/start_local_research_station.sh` 读取本机正式库，为复盘 / 选股 / 研究页面供数。
+4. **本地实时语义**：Mac 本地默认不长期跑后台 crawler（`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`）；打开单票盯盘时，接口可触发按需补拉当日 ticks 并写入本地库。若要获得与线上完全一致的连续盘中体验，应以 Windows -> Cloud 生产实时链路为准。
 
 ### 流水线 D：兼容链路与过渡工具
 1. `snapshot` 类工具仍可用于验证、裁剪样本或应急排查。
