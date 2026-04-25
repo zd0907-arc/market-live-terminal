@@ -226,6 +226,20 @@ def _needs_postclose_forced_retry(market_context: dict) -> bool:
     return str(market_context.get("market_status") or "") == "post_close"
 
 
+def _should_hydrate_default_previous_trade_day(
+    query_date: str,
+    natural_today: str,
+    market_context: dict,
+    *,
+    requested_date_explicitly: bool,
+) -> bool:
+    if requested_date_explicitly:
+        return False
+    if query_date == natural_today:
+        return False
+    return str(market_context.get("default_display_scope") or "") == "previous_trade_day"
+
+
 async def _rehydrate_today_if_stale(
     symbol: str,
     query_date: str,
@@ -271,10 +285,12 @@ async def _rehydrate_today_if_stale(
     return False
 
 
-async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
+async def _hydrate_ticks_on_demand(symbol: str, date_str: str) -> bool:
     """
-    当用户查看“今天”的分时，但本地尚无该股票数据时，
-    按需从外部源抓当天 full-day ticks 并写入本地，供后续聚合使用。
+    按需从外部源抓最近可得的 full-day ticks 并写入指定 trade_date。
+    典型场景：
+    - 交易日当天查看今日分时但本地尚无数据；
+    - 周末/盘前默认回看上一交易日，但本地尚未同步该股票逐笔。
     """
     records = await fetch_live_ticks(symbol)
     if not records:
@@ -300,6 +316,10 @@ async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
 
     await asyncio.to_thread(aggregate_intraday_1m, symbol, date_str)
     return True
+
+
+async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
+    return await _hydrate_ticks_on_demand(symbol, date_str)
 
 
 def _build_view_mode(query_date: str, market_context: dict) -> tuple[str, str]:
@@ -382,6 +402,7 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
 
     today_str = str(market_context["default_display_date"])
     natural_today_str = str(market_context["natural_today"])
+    requested_date_explicitly = date is not None
 
     query_date = date if date else today_str
 
@@ -456,6 +477,21 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
                     fallback = calculate_realtime_aggregation(symbol, query_date)
                     if _has_dashboard_payload(fallback):
                         data = fallback
+        if data is None and _should_hydrate_default_previous_trade_day(
+            query_date,
+            natural_today_str,
+            market_context,
+            requested_date_explicitly=requested_date_explicitly,
+        ):
+            hydrated = await _hydrate_ticks_on_demand(symbol, query_date)
+            if hydrated:
+                data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+                if data is None:
+                    data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
+                if data is None:
+                    fallback = calculate_realtime_aggregation(symbol, query_date)
+                    if _has_dashboard_payload(fallback):
+                        data = fallback
         if data is None and query_date == natural_today_str:
             fallback = get_sentiment_fallback_dashboard(symbol, query_date)
             if fallback is not None:
@@ -503,6 +539,7 @@ async def get_intraday_fusion(symbol: str, date: str = Query(None), include_toda
         market_context = MarketClock.get_market_context()
 
     natural_today = str(market_context["natural_today"])
+    requested_date_explicitly = date is not None
     query_date = date if date else str(market_context["default_display_date"])
 
     finalized_rows = await asyncio.to_thread(
@@ -589,6 +626,37 @@ async def get_intraday_fusion(symbol: str, date: str = Query(None), include_toda
                 ]
                 source = "history_l1_fallback"
                 is_l2_finalized = False
+            elif _should_hydrate_default_previous_trade_day(
+                query_date,
+                natural_today,
+                market_context,
+                requested_date_explicitly=requested_date_explicitly,
+            ):
+                hydrated = await _hydrate_ticks_on_demand(symbol, query_date)
+                if hydrated:
+                    await asyncio.to_thread(refresh_realtime_preview, symbol, query_date)
+                    preview_rows = await asyncio.to_thread(
+                        query_realtime_5m_preview_rows,
+                        symbol,
+                        query_date,
+                        query_date,
+                        None,
+                    )
+                    if preview_rows:
+                        bars = [
+                            _map_preview_fusion_bar(
+                                row,
+                                source_override="history_l1_fallback",
+                                preview_level_override="historical_l1_fallback",
+                            )
+                            for row in preview_rows
+                        ]
+                        source = "history_l1_fallback"
+                        is_l2_finalized = False
+                    else:
+                        bars = []
+                else:
+                    bars = []
             else:
                 bars = []
 

@@ -162,6 +162,54 @@ def test_realtime_dashboard_uses_l2_history_when_1m_missing(monkeypatch):
     assert called["realtime"] == 0
 
 
+def test_realtime_dashboard_hydrates_default_previous_trade_day_when_local_history_missing(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-04-25",
+            "is_trade_day": False,
+            "market_status": "closed_day",
+            "market_status_label": "休盘日",
+            "default_display_date": "2026-04-24",
+            "default_display_scope": "previous_trade_day",
+            "default_display_scope_label": "默认展示上一交易日数据",
+            "should_use_realtime_path": False,
+        },
+    )
+
+    calls = {"history": 0, "hydrate": 0}
+
+    def fake_history(symbol, date_str):
+        calls["history"] += 1
+        if calls["history"] == 1:
+            return None
+        return {
+            "chart_data": [{"time": "09:31"}],
+            "cumulative_data": [{"time": "09:31"}],
+            "latest_ticks": [],
+            "source": "history_1m",
+        }
+
+    async def fake_hydrate(symbol, date_str):
+        calls["hydrate"] += 1
+        assert symbol == "sh603629"
+        assert date_str == "2026-04-24"
+        return True
+
+    monkeypatch.setattr("backend.app.services.analysis.get_history_1m_dashboard", fake_history)
+    monkeypatch.setattr("backend.app.services.analysis.get_history_l2_dashboard", lambda symbol, date_str: None)
+    monkeypatch.setattr("backend.app.services.analysis.calculate_realtime_aggregation", lambda symbol, date_str: None)
+    monkeypatch.setattr("backend.app.routers.market._hydrate_ticks_on_demand", fake_hydrate)
+
+    resp = asyncio.run(get_realtime_dashboard(symbol="sh603629", date=None))
+
+    assert resp.code == 200
+    assert resp.data["display_date"] == "2026-04-24"
+    assert calls["history"] == 2
+    assert calls["hydrate"] == 1
+
+
 def test_realtime_dashboard_uses_realtime_on_trade_day_today(monkeypatch):
     monkeypatch.setattr(
         "backend.app.routers.market.MOCK_DATA_DATE",
@@ -510,6 +558,74 @@ def test_intraday_fusion_falls_back_to_history_l1_when_finalized_missing(monkeyp
     assert bar["preview_level"] == "historical_l1_fallback"
     assert bar["l2_main_buy"] is None
     assert bar["total_volume"] == 18000.0
+
+
+def test_intraday_fusion_hydrates_default_previous_trade_day_when_preview_missing(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-04-25",
+            "is_trade_day": False,
+            "market_status": "closed_day",
+            "market_status_label": "休盘日",
+            "default_display_date": "2026-04-24",
+            "default_display_scope": "previous_trade_day",
+            "default_display_scope_label": "默认展示上一交易日数据",
+            "should_use_realtime_path": False,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.query_l2_history_5m_rows",
+        lambda symbol, start_date=None, end_date=None, limit_days=None: [],
+    )
+    monkeypatch.setattr("backend.app.services.analysis.refresh_realtime_preview", lambda symbol, date_str: {"rows_5m": 1})
+
+    query_calls = {"count": 0}
+    hydrate_calls = {"count": 0}
+
+    def fake_query_preview(symbol, start_date=None, end_date=None, limit_days=None):
+        query_calls["count"] += 1
+        if query_calls["count"] == 1:
+            return []
+        return [
+            {
+                "symbol": symbol,
+                "datetime": "2026-04-24 09:35:00",
+                "trade_date": "2026-04-24",
+                "open": 109.0,
+                "high": 110.0,
+                "low": 108.5,
+                "close": 109.4,
+                "total_amount": 200000.0,
+                "total_volume": 2000.0,
+                "l1_main_buy": 120000.0,
+                "l1_main_sell": 20000.0,
+                "l1_super_buy": 0.0,
+                "l1_super_sell": 0.0,
+                "source": "realtime_ticks",
+                "preview_level": "l1_only",
+                "updated_at": "2026-04-25 10:00:00",
+            }
+        ]
+
+    async def fake_hydrate(symbol, date_str):
+        hydrate_calls["count"] += 1
+        assert symbol == "sh603629"
+        assert date_str == "2026-04-24"
+        return True
+
+    monkeypatch.setattr("backend.app.routers.market.query_realtime_5m_preview_rows", fake_query_preview)
+    monkeypatch.setattr("backend.app.routers.market._hydrate_ticks_on_demand", fake_hydrate)
+
+    resp = asyncio.run(get_intraday_fusion(symbol="sh603629", date=None, include_today_preview=True))
+
+    assert resp.code == 200
+    assert resp.data["trade_date"] == "2026-04-24"
+    assert resp.data["source"] == "history_l1_fallback"
+    assert resp.data["fallback_used"] is True
+    assert hydrate_calls["count"] == 1
+    assert query_calls["count"] == 2
 
 
 def test_realtime_dashboard_rehydrates_stale_today_payload_during_trading(monkeypatch):

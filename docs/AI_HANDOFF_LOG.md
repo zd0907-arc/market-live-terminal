@@ -12,6 +12,13 @@
 - 风险: Mac 本地默认仍不是生产级连续 crawler，只是读取本地同步库并支持单票按需 hydrate；如要本地完全等同线上连续盯盘，需要另开明确需求。
 - 链接: `docs/changes/MOD-20260425-05-realtime-and-postclose-runtime-contract.md`, `docs/domain/realtime-monitor.md`, `docs/ops/windows-data-station.md`, `backend/scripts/live_crawler_win.py`
 
+## 2026-04-25 10:55 | Codex
+- Task ID: `MOD-20260425-06`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-WIN-PIPELINE`
+- 结论: 已修复 Mac 本地盯盘两处收口问题：周末默认上一交易日视图在本地缺票时会自动补拉最近交易日；同时确认并纠正本地后端必须通过 `ops/start_local_research_station.sh` 启动，否则会误读项目内旧库，造成“历史多维停在旧日期 / 分时页空白”。
+- 风险: 当前自动补拉只覆盖“默认上一交易日”场景，不覆盖用户手动回溯任意历史日期；若后续要支持更广泛历史补拉，需要单独设计上限与缓存策略。
+- 链接: `docs/changes/MOD-20260425-06-local-monitor-data-source-fix.md`, `docs/ops/mac-local-research.md`, `docs/04_OPS_AND_DEV.md`, `backend/app/routers/market.py`
+
 ## 2026-04-25 00:10 | Codex
 - Task ID: `MOD-20260424-03`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`

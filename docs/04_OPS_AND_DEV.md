@@ -49,6 +49,8 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_postclose_l2.sh
 ```
 
+> 本地研究站后端不要手工 `python -m backend.app.main` 直跑；必须走 `ops/start_local_research_station.sh`，否则会绕过外置库路径注入，读错本地数据库。
+
 ## 5. 强制 gate
 1. **跨机前**：先检查 Tailscale / SSH 连通。
 2. **改 repo 后**：先在临时分支完成，再合回 `main`。
