@@ -118,3 +118,10 @@
 - 链接: `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/HistoryView.tsx`, `backend/app/services/selection_research.py`, `docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`, `docs/07_PENDING_TODO.md`
 
 > 规则：每条日志必须包含 Task ID、CAP ID、结论、阻塞/风险、链接；每条不超过 8 行要点。
+
+## 2026-04-25 03:55 | Codex
+- Task ID: `MOD-20260425-04`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把盘后正式日跑固化为 `cd /Users/dong/Desktop/AIGC/market-live-terminal && bash ops/run_postclose_l2.sh`；主线脚本已补齐“局域网 HTTP / Cloud relay”双通道同步，禁用 Windows->Mac SSH/scp 直拉，并增加“已完整成功则复用结果”恢复语义。`2026-04-24` 已收口验证：Mac `history_daily_l2=7644`、`history_5m_l2=346154`、`atomic_trade_daily=3184`、`selection_feature_daily=3184`，Cloud verify 通过，dry-run 返回“无待跑交易日”。
+- 风险: Cloud merge wall time 仍需继续观察，但链路已从“易挂死”收敛为“可恢复 / 可复用”。
+- 链接: `docs/changes/MOD-20260425-04-postclose-l2-command-solidification.md`, `docs/ops/postclose-l2-runbook.md`, `docs/AI_QUICK_START.md`, `backend/scripts/run_postclose_l2_daily.py`

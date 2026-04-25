@@ -64,10 +64,16 @@ npm run check:baseline
 - 每日盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/check_postclose_l2_status.sh`
 - Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/sync_windows_research_snapshot.sh`
 
+## 每天盘后要跑的指令
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/run_postclose_l2.sh
+```
+
 ## 本地研究站最小启动顺序
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-# 首次：先把 Windows 处理后全量库同步到 Mac（同 WiFi 默认优先走 192.168.3.108）
+# 首次：先把 Windows 处理后全量库同步到 Mac
 bash ops/bootstrap_mac_full_processed_sync.sh
 
 # 启动本地研究站
@@ -81,7 +87,10 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
   - 后续每天执行 `./ops/run_postclose_l2.sh` 做增量日跑；
   - 查询状态用 `./ops/check_postclose_l2_status.sh`；
-  - 当前本地正式库已验证到 `2026-04-15`。
+  - Windows -> Mac 数据同步只允许两条路径：
+    - 局域网 HTTP 直拉
+    - Windows 上传云端 relay，Mac 再下载
+  - 禁止再走 Windows -> Mac 的 SSH/scp 直拉。
 
 ## 当前清理原则
 - 不要直接在正式 `data/market_data.db` 里删旧表；

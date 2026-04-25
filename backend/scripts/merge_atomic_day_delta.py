@@ -12,8 +12,31 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.app.core.config import candidate_atomic_db_paths
-from backend.scripts.export_atomic_day_delta import TABLE_SPECS, _normalize_trade_date
-from backend.scripts.run_atomic_backfill_windows import ensure_atomic_db
+
+TABLE_SPECS: List[Tuple[str, str]] = [
+    ("atomic_trade_5m", "trade_date"),
+    ("atomic_trade_daily", "trade_date"),
+    ("atomic_order_5m", "trade_date"),
+    ("atomic_order_daily", "trade_date"),
+    ("atomic_book_state_5m", "trade_date"),
+    ("atomic_book_state_daily", "trade_date"),
+    ("atomic_open_auction_l1_daily", "trade_date"),
+    ("atomic_open_auction_l2_daily", "trade_date"),
+    ("atomic_open_auction_phase_l1_daily", "trade_date"),
+    ("atomic_open_auction_phase_l2_daily", "trade_date"),
+    ("atomic_open_auction_manifest", "trade_date"),
+    ("atomic_limit_state_5m", "trade_date"),
+    ("atomic_limit_state_daily", "trade_date"),
+]
+
+
+def _normalize_trade_date(value: str) -> str:
+    text = str(value or "").strip().replace("/", "-")
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    if len(text) == 10:
+        return text
+    raise ValueError(f"非法 trade_date: {value}")
 
 
 def _resolve_target_db(explicit: str) -> Path:
@@ -38,6 +61,17 @@ def _table_columns(conn: sqlite3.Connection, table: str, schema: str = "main") -
     return [str(row[1]) for row in rows]
 
 
+def _ensure_table_from_delta(conn: sqlite3.Connection, table: str) -> None:
+    if _table_exists(conn, table):
+        return
+    row = conn.execute(
+        "SELECT sql FROM delta.sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    if row and row[0]:
+        conn.execute(str(row[0]))
+
+
 def merge_atomic_day_delta(trade_date: str, delta_db: str, target_db: str = "") -> Dict[str, object]:
     normalized_date = _normalize_trade_date(trade_date)
     delta_path = Path(delta_db)
@@ -46,13 +80,18 @@ def merge_atomic_day_delta(trade_date: str, delta_db: str, target_db: str = "") 
         raise FileNotFoundError(f"atomic day delta 不存在: {delta_db}")
     target_path = _resolve_target_db(target_db)
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    ensure_atomic_db(target_path)
+    if not target_path.exists():
+        sqlite3.connect(target_path).close()
 
     counts: Dict[str, int] = {}
     with sqlite3.connect(target_path) as conn:
         conn.execute(f"ATTACH DATABASE '{delta_literal}' AS delta")
         for table, date_col in TABLE_SPECS:
-            if not _table_exists(conn, table, "delta") or not _table_exists(conn, table):
+            if not _table_exists(conn, table, "delta"):
+                counts[table] = 0
+                continue
+            _ensure_table_from_delta(conn, table)
+            if not _table_exists(conn, table):
                 counts[table] = 0
                 continue
             columns = _table_columns(conn, table)

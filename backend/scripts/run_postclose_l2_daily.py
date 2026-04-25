@@ -21,6 +21,10 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
@@ -60,7 +64,13 @@ LOCAL_DATA_ROOT = Path(
 LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
 LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
-LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", shutil.which("python3") or sys.executable)
+LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", "").strip()
+LAN_WINDOWS_HOST = os.getenv("L2_WIN_LAN_HOST", "192.168.3.108").strip()
+CLOUD_PUBLIC_HTTP_HOST = os.getenv("L2_CLOUD_PUBLIC_HTTP_HOST", "111.229.144.202").strip()
+LAN_SYNC_PORT = int(os.getenv("L2_LAN_SYNC_PORT", "18765"))
+CLOUD_RELAY_PORT = int(os.getenv("L2_CLOUD_RELAY_PORT", "18766"))
+HTTP_SYNC_TIMEOUT = int(os.getenv("L2_HTTP_SYNC_TIMEOUT", "1800"))
+SYNC_ROOT_REL = ".run/postclose_sync"
 SOFT_WARNING_PATTERNS = (
     "无有效 bar：交易时段内无可用逐笔",
 )
@@ -70,6 +80,10 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/export_atomic_day_delta.py",
     "backend/scripts/export_selection_day_delta.py",
     "backend/scripts/run_selection_research.py",
+    "backend/scripts/postclose_http_relay.py",
+]
+CLOUD_REQUIRED_SCRIPTS = [
+    "backend/scripts/postclose_http_relay.py",
 ]
 
 
@@ -142,6 +156,8 @@ def _resolve_windows_host() -> str:
 
 
 WIN_HOST = _resolve_windows_host()
+if not CLOUD_PUBLIC_HTTP_HOST:
+    CLOUD_PUBLIC_HTTP_HOST = _extract_host_endpoint(CLOUD_HOST)
 
 
 def _decode_maybe_gbk(data: bytes) -> str:
@@ -153,6 +169,42 @@ def _decode_maybe_gbk(data: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="ignore")
+
+
+def _python_has_module(python_cmd: str, module: str) -> bool:
+    if not python_cmd:
+        return False
+    result = subprocess.run(
+        [python_cmd, "-c", f"import {module}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _resolve_local_python() -> str:
+    if LOCAL_PY_CMD:
+        return LOCAL_PY_CMD
+    candidates = [
+        str(ROOT_DIR / ".venv" / "bin" / "python"),
+        "/Users/dong/.browser-use-env/bin/python3",
+        shutil.which("python3") or "",
+        sys.executable,
+    ]
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and Path(text).exists() and _python_has_module(text, "pandas"):
+            return text
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and Path(text).exists():
+            return text
+    return shutil.which("python3") or sys.executable
+
+
+if not LOCAL_PY_CMD:
+    LOCAL_PY_CMD = _resolve_local_python()
 
 
 def _ssh(host: str, remote_command: str, *, check: bool = True) -> subprocess.CompletedProcess:
@@ -281,43 +333,85 @@ def _remote_file_stat(remote_path: str) -> Tuple[int, str]:
     size_text, _, real_path = text.partition("|")
     return int(size_text or 0), real_path or remote_path
 
-def _copy_windows_file_to_local(remote_path: str, local_path: Path) -> Dict[str, object]:
-    remote_size, resolved_remote = _remote_file_stat(remote_path)
+def _run_windows_powershell(script: str, *, check: bool = True) -> subprocess.CompletedProcess:
+    return _ssh(WIN_HOST, _powershell_encoded(script), check=check)
+
+
+def _run_cloud_bash(command: str, *, check: bool = True) -> subprocess.CompletedProcess:
+    return _ssh(CLOUD_HOST, command, check=check)
+
+
+def _sync_required_cloud_scripts() -> None:
+    for rel_path in CLOUD_REQUIRED_SCRIPTS:
+        local_path = ROOT_DIR / rel_path
+        remote_path = f"{CLOUD_PROJECT_ROOT_ABS}/{rel_path.replace(os.sep, '/')}"
+        remote_dir = str(Path(remote_path).parent)
+        _run_cloud_bash(f"mkdir -p {shlex.quote(remote_dir)}", check=False)
+        _run(["scp", str(local_path), f"{CLOUD_HOST}:{remote_path}"], check=True)
+
+
+def _http_healthcheck(base_url: str, token: str, *, retries: int = 10, sleep_seconds: float = 1.0) -> None:
+    url = f"{base_url.rstrip('/')}/__health__"
+    last_error: Optional[Exception] = None
+    for _ in range(retries):
+        req = urllib.request.Request(url, headers={"X-Relay-Token": token}, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if int(getattr(resp, "status", 200)) == 200:
+                    return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(sleep_seconds)
+    raise RuntimeError(f"HTTP relay 未就绪: {base_url}") from last_error
+
+
+def _http_download_to_local(url: str, local_path: Path, token: str, expected_size: int) -> Dict[str, object]:
     _ensure_local_parent(local_path)
     tmp_path = local_path.with_name(f"{local_path.name}.part")
     if tmp_path.exists():
         tmp_path.unlink()
-    _run(["scp", f"{WIN_HOST}:{_win_scp_path(resolved_remote)}", str(tmp_path)], check=True)
-    local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
-    if remote_size != local_size:
-        raise RuntimeError(
-            f"copy size mismatch: remote={remote_size} local={local_size} path={resolved_remote}"
-        )
-    if local_path.exists():
-        _backup_local_file(local_path)
-    tmp_path.replace(local_path)
-    return {
-        "remote": resolved_remote,
-        "local": str(local_path),
-        "bytes": local_size,
-    }
+    last_error: Optional[Exception] = None
+    for _ in range(3):
+        req = urllib.request.Request(url, headers={"X-Relay-Token": token}, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=HTTP_SYNC_TIMEOUT) as resp, open(tmp_path, "wb") as fh:
+                while True:
+                    chunk = resp.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+            local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
+            if expected_size >= 0 and local_size != expected_size:
+                raise RuntimeError(f"download size mismatch: expected={expected_size} actual={local_size}")
+            if local_path.exists():
+                _backup_local_file(local_path)
+            tmp_path.replace(local_path)
+            return {"local": str(local_path), "bytes": local_size, "url": url}
+        except Exception as exc:
+            last_error = exc
+            time.sleep(1)
+            if tmp_path.exists():
+                tmp_path.unlink()
+    raise RuntimeError(f"HTTP 下载失败: {url}") from last_error
 
 
-def _copy_windows_small_file_via_ssh(remote_path: str, local_path: Path) -> Dict[str, object]:
-    remote_size, resolved_remote = _remote_file_stat(remote_path)
-    _ensure_local_parent(local_path)
-    tmp_path = local_path.with_name(f"{local_path.name}.part")
-    if tmp_path.exists():
-        tmp_path.unlink()
-    py_path = str(resolved_remote).replace("\\", "\\\\")
-    remote_cmd = (
-        f'{WIN_PY_CMD} -c "import sys,gzip,shutil; '
-        f'f=open(r\'{py_path}\', \'rb\'); '
-        f'gz=gzip.GzipFile(fileobj=sys.stdout.buffer, mode=\'wb\', compresslevel=1); '
-        f'shutil.copyfileobj(f, gz, 1024*1024); '
-        f'gz.close(); '
-        f'f.close()"'
-    )
+def _windows_relative_under_project(remote_path: str) -> str:
+    remote = str(PureWindowsPath(str(remote_path))).replace("/", "\\")
+    project = str(PureWindowsPath(WIN_PROJECT_ROOT)).replace("/", "\\").rstrip("\\")
+    remote_lower = remote.lower()
+    project_lower = project.lower()
+    if remote_lower == project_lower:
+        return ""
+    prefix = project_lower + "\\"
+    if not remote_lower.startswith(prefix):
+        raise RuntimeError(f"文件不在 Windows 项目目录下，拒绝同步: {remote_path}")
+    return remote[len(project) + 1 :].replace("\\", "/")
+
+
+def _start_windows_http_relay(token: str) -> Dict[str, object]:
+    sync_root = f"{WIN_PROJECT_ROOT}\\.run\\postclose_sync\\lan"
+    script_path = f"{WIN_PROJECT_ROOT}\\backend\\scripts\\postclose_http_relay.py"
+    _ssh(WIN_HOST, f'cmd /c if not exist "{sync_root}" mkdir "{sync_root}"', check=False)
     proc = subprocess.Popen(
         [
             "ssh",
@@ -326,44 +420,154 @@ def _copy_windows_small_file_via_ssh(remote_path: str, local_path: Path) -> Dict
             "-o",
             "ServerAliveCountMax=6",
             WIN_HOST,
-            remote_cmd,
+            f'cmd /c "{WIN_PYTHON_EXE} {script_path} --root {WIN_PROJECT_ROOT} --host 0.0.0.0 --port {LAN_SYNC_PORT} --token {token}"',
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=False,
     )
-    stderr_text = ""
+    base_url = f"http://{LAN_WINDOWS_HOST}:{LAN_SYNC_PORT}"
     try:
-        assert proc.stdout is not None
-        with gzip.GzipFile(fileobj=proc.stdout, mode="rb") as gz_fh, open(tmp_path, "wb") as out_fh:
-            shutil.copyfileobj(gz_fh, out_fh, 1024 * 1024)
-        _, stderr = proc.communicate()
-        stderr_text = _decode_maybe_gbk(stderr)
-    except Exception:
-        proc.kill()
-        _, stderr = proc.communicate()
-        stderr_text = _decode_maybe_gbk(stderr)
-        raise
-    if proc.returncode != 0:
-        raise subprocess.CalledProcessError(
-            proc.returncode,
-            proc.args,
-            output="",
-            stderr=stderr_text,
-        )
-    local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
-    if remote_size != local_size:
-        raise RuntimeError(
-            f"copy size mismatch: remote={remote_size} local={local_size} path={resolved_remote}"
-        )
-    if local_path.exists():
-        _backup_local_file(local_path)
-    tmp_path.replace(local_path)
+        _http_healthcheck(base_url, token)
+    except Exception as exc:
+        proc.terminate()
+        _, stderr = proc.communicate(timeout=5)
+        raise RuntimeError(f"局域网 HTTP relay 未就绪: {base_url}; stderr={_decode_maybe_gbk(stderr)}") from exc
     return {
-        "remote": resolved_remote,
-        "local": str(local_path),
-        "bytes": local_size,
+        "mode": "LAN_HTTP",
+        "token": token,
+        "base_url": base_url,
+        "remote_root": WIN_PROJECT_ROOT,
+        "port": LAN_SYNC_PORT,
+        "process": proc,
     }
+
+
+def _stop_windows_http_relay() -> None:
+    _run_windows_powershell(
+        rf"""
+Get-CimInstance Win32_Process | Where-Object {{
+  $_.CommandLine -like "*postclose_http_relay.py*" -and $_.CommandLine -like "*--port {LAN_SYNC_PORT}*"
+}} | ForEach-Object {{ try {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }} catch {{}} }}
+""",
+        check=False,
+    )
+
+
+def _start_cloud_http_relay(session_id: str, token: str) -> Dict[str, object]:
+    _sync_required_cloud_scripts()
+    relay_root = f"{CLOUD_PROJECT_ROOT_ABS}/{SYNC_ROOT_REL}/{session_id}"
+    script_path = f"{CLOUD_PROJECT_ROOT_ABS}/backend/scripts/postclose_http_relay.py"
+    _run_cloud_bash(f"mkdir -p {shlex.quote(relay_root)}")
+    proc = subprocess.Popen(
+        [
+            "ssh",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=6",
+            CLOUD_HOST,
+            f"python3 {shlex.quote(script_path)} --root {shlex.quote(relay_root)} --host 0.0.0.0 --port {CLOUD_RELAY_PORT} --token {shlex.quote(token)}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False,
+    )
+    base_url = f"http://{CLOUD_PUBLIC_HTTP_HOST}:{CLOUD_RELAY_PORT}"
+    try:
+        _http_healthcheck(base_url, token)
+    except Exception as exc:
+        proc.terminate()
+        _, stderr = proc.communicate(timeout=5)
+        raise RuntimeError(f"云中转 HTTP relay 未就绪: {base_url}; stderr={_decode_maybe_gbk(stderr)}") from exc
+    return {
+        "mode": "CLOUD_RELAY",
+        "token": token,
+        "base_url": base_url,
+        "remote_root": relay_root,
+        "port": CLOUD_RELAY_PORT,
+        "session_id": session_id,
+        "process": proc,
+    }
+
+
+def _stop_cloud_http_relay(session_id: str) -> None:
+    relay_root = f"{CLOUD_PROJECT_ROOT_ABS}/{SYNC_ROOT_REL}/{session_id}"
+    _run_cloud_bash(f"rm -rf {shlex.quote(relay_root)}", check=False)
+
+
+def _resolve_mac_sync_transport(trade_date: str) -> Dict[str, object]:
+    token = uuid.uuid4().hex
+    if _tcp_reachable(LAN_WINDOWS_HOST, port=LAN_SYNC_PORT, timeout=1.0) or _tcp_reachable(LAN_WINDOWS_HOST, port=22, timeout=1.0):
+        try:
+            context = _start_windows_http_relay(token)
+            _progress(
+                f"[{trade_date}] Mac 同步路径判定：mode=LAN_HTTP reason=局域网 HTTP 直拉"
+            )
+            return context
+        except Exception as exc:
+            _progress(
+                f"[{trade_date}] Mac 同步路径判定：局域网不可用，回退云中转: {exc}"
+            )
+    context = _start_cloud_http_relay(session_id=trade_date, token=token)
+    _progress(
+        f"[{trade_date}] Mac 同步路径判定：mode=CLOUD_RELAY reason=局域网 HTTP 失败，已回退云中转"
+    )
+    return context
+
+
+def _cleanup_sync_transport(sync_context: Optional[Dict[str, object]]) -> None:
+    if not sync_context:
+        return
+    proc = sync_context.get("process")
+    if proc is not None:
+        try:
+            proc.terminate()
+            proc.communicate(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    mode = str(sync_context.get("mode") or "").upper()
+    if mode == "LAN_HTTP":
+        _stop_windows_http_relay()
+    elif mode == "CLOUD_RELAY":
+        _stop_cloud_http_relay(str(sync_context.get("session_id") or ""))
+
+
+def _upload_windows_file_to_cloud_relay(remote_path: str, remote_name: str, sync_context: Dict[str, object]) -> Dict[str, object]:
+    url = f"{str(sync_context['base_url']).rstrip('/')}/{urllib.parse.quote(remote_name)}"
+    win_remote_path = str(PureWindowsPath(str(remote_path))).replace("/", "\\")
+    script = rf"""
+$headers = @{{"X-Relay-Token"="{sync_context['token']}"}}
+$resp = Invoke-WebRequest -Uri "{url}" -Method Post -InFile "{win_remote_path}" -Headers $headers -UseBasicParsing
+$resp.Content
+"""
+    result = _run_windows_powershell(script)
+    return _parse_json_output(result.stdout)
+
+
+def _sync_windows_file_to_local(remote_path: str, local_path: Path, sync_context: Dict[str, object]) -> Dict[str, object]:
+    remote_size, resolved_remote = _remote_file_stat(remote_path)
+    if str(sync_context.get("mode")) == "LAN_HTTP":
+        rel_path = _windows_relative_under_project(resolved_remote)
+        url = f"{str(sync_context['base_url']).rstrip('/')}/{urllib.parse.quote(rel_path)}"
+    else:
+        remote_name = f"uploads/{PureWindowsPath(str(resolved_remote)).name}"
+        _upload_windows_file_to_cloud_relay(resolved_remote, remote_name, sync_context)
+        url = f"{str(sync_context['base_url']).rstrip('/')}/{urllib.parse.quote(remote_name)}"
+    result = _http_download_to_local(url, local_path, str(sync_context["token"]), remote_size)
+    result.update({"remote": resolved_remote})
+    return result
+
+
+def _copy_windows_file_to_local(remote_path: str, local_path: Path) -> Dict[str, object]:
+    raise RuntimeError("已禁用 Windows->Mac SSH/scp 直拉，请改走局域网 HTTP 或云中转")
+
+
+def _copy_windows_small_file_via_ssh(remote_path: str, local_path: Path) -> Dict[str, object]:
+    raise RuntimeError("已禁用 Windows->Mac SSH 直拉，请改走局域网 HTTP 或云中转")
 
 
 def _ensure_local_parent(path: Path) -> None:
@@ -525,7 +729,7 @@ def _copy_artifacts_to_local(trade_date: str, remote_artifacts: Sequence[str], l
     return local_paths
 
 
-def _export_windows_l2_day_delta(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+def _export_windows_l2_day_delta(trade_date: str, local_day_root: Path, sync_context: Dict[str, object]) -> Dict[str, object]:
     remote_delta_dir = f"{WIN_PROJECT_ROOT}\\.run\\postclose_l2\\{trade_date}\\processed"
     remote_delta = f"{remote_delta_dir}\\l2_day_delta_{trade_date}.db"
     _ssh(WIN_HOST, f'cmd /c if not exist "{remote_delta_dir}" mkdir "{remote_delta_dir}"', check=False)
@@ -538,7 +742,7 @@ def _export_windows_l2_day_delta(trade_date: str, local_day_root: Path) -> Dict[
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"l2_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
-    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
+    _sync_windows_file_to_local(remote_delta, local_delta, sync_context)
     _progress(f"[{trade_date}] 已回传 Windows L2 单日 delta 到本地")
     return {
         "l2_delta_export": export_report,
@@ -574,15 +778,34 @@ def _upload_single_file_to_cloud(trade_date: str, local_file: str, remote_name: 
 def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str, object]:
     _progress(f"[{trade_date}] 开始云端 merge 入正式库")
     artifacts_arg = ",".join(cloud_artifacts)
-    remote_cmd = (
-        f"cd {CLOUD_PROJECT_ROOT} && "
-        f"sudo python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
+    cloud_tmp_dir = f"{CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}"
+    report_file = f"{cloud_tmp_dir}/cloud_merge_report.json"
+    log_file = f"{cloud_tmp_dir}/cloud_merge.log"
+    pid_file = f"{cloud_tmp_dir}/cloud_merge.pid"
+    start_cmd = (
+        f"mkdir -p {shlex.quote(cloud_tmp_dir)} && "
+        f"rm -f {shlex.quote(report_file)} {shlex.quote(log_file)} {shlex.quote(pid_file)} && "
+        f"cd {shlex.quote(CLOUD_PROJECT_ROOT_ABS)} && "
+        f"nohup sudo -n python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
         f"--artifacts {shlex.quote(artifacts_arg)} "
         f'--source-root {shlex.quote("postclose_l2_daily")} '
-        f'--mode {shlex.quote("postclose_one_command")} --json'
+        f'--mode {shlex.quote("postclose_one_command")} --json '
+        f"> {shlex.quote(report_file)} 2> {shlex.quote(log_file)} < /dev/null & echo $! > {shlex.quote(pid_file)}"
     )
-    result = _ssh(CLOUD_HOST, remote_cmd)
-    merge_report = json.loads(result.stdout)
+    _run_cloud_bash(start_cmd)
+    merge_report: Optional[Dict[str, object]] = None
+    last_log = ""
+    for _ in range(360):
+        result = _run_cloud_bash(f"test -s {shlex.quote(report_file)} && cat {shlex.quote(report_file)}", check=False)
+        stdout = str(result.stdout or "").strip()
+        if result.returncode == 0 and stdout:
+            merge_report = _parse_json_output(stdout)
+            break
+        log_result = _run_cloud_bash(f"test -f {shlex.quote(log_file)} && tail -n 20 {shlex.quote(log_file)}", check=False)
+        last_log = str(log_result.stdout or "").strip()
+        time.sleep(5)
+    if merge_report is None:
+        raise RuntimeError(f"[{trade_date}] 云端 merge 超时或无报告输出: {last_log}")
     _progress(
         f"[{trade_date}] 云端 merge 完成：status={merge_report.get('status')} "
         f"rows_daily={merge_report.get('rows_daily')} rows_5m={merge_report.get('rows_5m')} "
@@ -671,7 +894,7 @@ def _write_windows_atomic_single_day_config(trade_date: str, local_day_root: Pat
     return remote_config
 
 
-def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path, sync_context: Dict[str, object]) -> Dict[str, object]:
     _progress(f"[{trade_date}] 开始更新 Windows 本地 atomic 主库")
     remote_config = _write_windows_atomic_single_day_config(trade_date, local_day_root)
     remote_cmd = (
@@ -694,7 +917,7 @@ def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path) -> Dict[
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"atomic_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
-    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
+    _sync_windows_file_to_local(remote_delta, local_delta, sync_context)
     merge_result = _run(
         [
             LOCAL_PY_CMD,
@@ -718,7 +941,7 @@ def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path) -> Dict[
     }
 
 
-def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path) -> Dict[str, object]:
+def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_context: Dict[str, object]) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     selection_db = _resolve_windows_selection_db()
     if not selection_db:
@@ -758,7 +981,7 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path) -> Di
     export_report = _parse_json_output(export_result.stdout)
     local_delta = local_day_root / "processed" / f"selection_day_delta_{trade_date}.db"
     local_delta.parent.mkdir(parents=True, exist_ok=True)
-    _copy_windows_small_file_via_ssh(remote_delta, local_delta)
+    _sync_windows_file_to_local(remote_delta, local_delta, sync_context)
     merge_result = _run(
         [
             LOCAL_PY_CMD,
@@ -784,16 +1007,20 @@ def _bootstrap_mac_full_sync() -> Dict[str, object]:
     selection_db = _resolve_windows_selection_db()
     if not selection_db:
         raise RuntimeError("Windows 未解析到 selection_research DB")
+    sync_context = _resolve_mac_sync_transport("bootstrap")
     mapping = [
         (WIN_MARKET_DB, LOCAL_MARKET_DB),
         (WIN_ATOMIC_DB, LOCAL_ATOMIC_DB),
         (selection_db, LOCAL_SELECTION_DB),
     ]
     copied: List[Dict[str, object]] = []
-    for remote_path, local_path in mapping:
-        _progress(f"[bootstrap] 同步全量库到 Mac: {remote_path} -> {local_path}")
-        copied.append(_copy_windows_file_to_local(remote_path, local_path))
-    return {"status": "done", "host": WIN_HOST, "copied": copied}
+    try:
+        for remote_path, local_path in mapping:
+            _progress(f"[bootstrap] 同步全量库到 Mac: {remote_path} -> {local_path}")
+            copied.append(_sync_windows_file_to_local(remote_path, local_path, sync_context))
+        return {"status": "done", "host": WIN_HOST, "copied": copied, "sync_mode": sync_context.get("mode")}
+    finally:
+        _cleanup_sync_transport(sync_context)
 
 
 def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
@@ -950,6 +1177,60 @@ def _write_local_report(local_day_root: Path, report: Dict[str, object]) -> None
     latest.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _query_local_scalar(db_path: Path, sql: str) -> int:
+    import sqlite3
+
+    if not db_path.exists():
+        return 0
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(sql).fetchone()
+        return int(row[0] or 0) if row else 0
+    finally:
+        conn.close()
+
+
+def _try_reuse_completed_day(trade_date: str, local_day_root: Path) -> Optional[Dict[str, object]]:
+    report_path = local_day_root / "report.json"
+    if not report_path.exists():
+        return None
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    summary = report.get("execution_summary") or {}
+    if str(summary.get("final_status") or "").upper() not in {"PASS", "PASS_WITH_WARNINGS"}:
+        return None
+    local_l2 = local_day_root / "processed" / f"l2_day_delta_{trade_date}.db"
+    local_atomic = local_day_root / "processed" / f"atomic_day_delta_{trade_date}.db"
+    local_selection = local_day_root / "processed" / f"selection_day_delta_{trade_date}.db"
+    if not (local_l2.exists() and local_atomic.exists() and local_selection.exists()):
+        return None
+
+    trade_date_iso = _compact_to_iso(trade_date)
+    rows_daily = _query_local_scalar(LOCAL_MARKET_DB, f"SELECT COUNT(*) FROM history_daily_l2 WHERE date='{trade_date_iso}'")
+    rows_5m = _query_local_scalar(LOCAL_MARKET_DB, f"SELECT COUNT(*) FROM history_5m_l2 WHERE source_date='{trade_date_iso}'")
+    atomic_rows = _query_local_scalar(LOCAL_ATOMIC_DB, f"SELECT COUNT(*) FROM atomic_trade_daily WHERE trade_date='{trade_date_iso}'")
+    selection_rows = _query_local_scalar(LOCAL_SELECTION_DB, f"SELECT COUNT(*) FROM selection_feature_daily WHERE trade_date='{trade_date_iso}'")
+    if min(rows_daily, rows_5m, atomic_rows, selection_rows) <= 0:
+        return None
+
+    verify_report = _verify_cloud_day(trade_date)
+    if int(verify_report.get("rows_daily") or 0) <= 0 or int(verify_report.get("rows_5m") or 0) <= 0:
+        return None
+
+    report["verify_report"] = verify_report
+    report["execution_summary"] = {
+        "final_status": "PASS",
+        "reason": "already_complete_reused",
+        "warning_count": 0,
+        "failure_summary": {},
+        "is_production_ready": True,
+    }
+    _write_local_report(local_day_root, report)
+    return report
+
+
 def run_day(
     trade_date: str,
     workers: int,
@@ -959,55 +1240,83 @@ def run_day(
 ) -> Dict[str, object]:
     local_day_root = ROOT_DIR / ".run" / "postclose_l2" / trade_date
     _progress(f"[{trade_date}] ===== 开始处理 =====")
+    reused = _try_reuse_completed_day(trade_date, local_day_root)
+    if reused is not None:
+        _progress(f"[{trade_date}] 已检测到完整成功结果，直接复用，不重复跑全链路")
+        return reused
     _sync_required_windows_scripts()
-    prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
-    worker_results = _run_workers(prepared, local_day_root=local_day_root)
-    windows_merge_report = _merge_on_windows(
-        trade_date=trade_date,
-        remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
-    )
-    l2_delta_report = _export_windows_l2_day_delta(trade_date=trade_date, local_day_root=local_day_root)
-    local_delta = str(l2_delta_report["local_delta_path"])
-    local_market_merge_report = _merge_on_local_market(trade_date=trade_date, local_artifacts=[local_delta])
-
+    sync_context = _resolve_mac_sync_transport(trade_date)
+    prepared: Dict[str, object]
+    worker_results: List[Dict[str, object]]
+    windows_merge_report: Dict[str, object]
+    l2_delta_report: Dict[str, object]
+    local_delta: str
+    local_market_merge_report: Dict[str, object]
     merge_report: Optional[Dict[str, object]] = None
     verify_report: Optional[Dict[str, object]] = None
     cloud_artifacts: List[str] = []
-    if not skip_cloud_merge:
-        cloud_artifacts = [
-            _upload_single_file_to_cloud(
-                trade_date=trade_date,
-                local_file=local_delta,
-                remote_name=Path(local_delta).name,
-            )
-        ]
-        merge_report = _merge_on_cloud(trade_date=trade_date, cloud_artifacts=cloud_artifacts)
-        verify_report = _verify_cloud_day(trade_date=trade_date)
-        _cleanup_remote_day(trade_date)
-
     atomic_sync_report: Optional[Dict[str, object]] = None
     selection_sync_report: Optional[Dict[str, object]] = None
-    if not skip_mac_sync:
-        atomic_sync_report = _run_windows_atomic_pipeline(trade_date=trade_date, local_day_root=local_day_root)
-        selection_sync_report = _run_windows_selection_pipeline(trade_date=trade_date, local_day_root=local_day_root)
+    try:
+        prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
+        worker_results = _run_workers(prepared, local_day_root=local_day_root)
+        windows_merge_report = _merge_on_windows(
+            trade_date=trade_date,
+            remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
+        )
+        l2_delta_report = _export_windows_l2_day_delta(
+            trade_date=trade_date,
+            local_day_root=local_day_root,
+            sync_context=sync_context,
+        )
+        local_delta = str(l2_delta_report["local_delta_path"])
+        local_market_merge_report = _merge_on_local_market(trade_date=trade_date, local_artifacts=[local_delta])
 
-    report = {
-        "trade_date": trade_date,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "prepared": prepared,
-        "worker_results": worker_results,
-        "windows_merge_report": windows_merge_report,
-        "l2_delta_report": l2_delta_report,
-        "local_artifacts": [local_delta],
-        "local_market_merge_report": local_market_merge_report,
-        "cloud_artifacts": cloud_artifacts,
-        "merge_report": merge_report,
-        "verify_report": verify_report,
-        "skip_cloud_merge": skip_cloud_merge,
-        "skip_mac_sync": skip_mac_sync,
-        "atomic_sync_report": atomic_sync_report,
-        "selection_sync_report": selection_sync_report,
-    }
+        if not skip_mac_sync:
+            atomic_sync_report = _run_windows_atomic_pipeline(
+                trade_date=trade_date,
+                local_day_root=local_day_root,
+                sync_context=sync_context,
+            )
+            selection_sync_report = _run_windows_selection_pipeline(
+                trade_date=trade_date,
+                local_day_root=local_day_root,
+                sync_context=sync_context,
+            )
+
+        if not skip_cloud_merge:
+            cloud_artifacts = [
+                _upload_single_file_to_cloud(
+                    trade_date=trade_date,
+                    local_file=local_delta,
+                    remote_name=Path(local_delta).name,
+                )
+            ]
+            merge_report = _merge_on_cloud(trade_date=trade_date, cloud_artifacts=cloud_artifacts)
+            verify_report = _verify_cloud_day(trade_date=trade_date)
+
+        report = {
+            "trade_date": trade_date,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "prepared": prepared,
+            "worker_results": worker_results,
+            "windows_merge_report": windows_merge_report,
+            "l2_delta_report": l2_delta_report,
+            "local_artifacts": [local_delta],
+            "local_market_merge_report": local_market_merge_report,
+            "cloud_artifacts": cloud_artifacts,
+            "merge_report": merge_report,
+            "verify_report": verify_report,
+            "skip_cloud_merge": skip_cloud_merge,
+            "skip_mac_sync": skip_mac_sync,
+            "atomic_sync_report": atomic_sync_report,
+            "selection_sync_report": selection_sync_report,
+            "sync_context": {k: v for k, v in sync_context.items() if k not in {"token", "process"}},
+        }
+    finally:
+        _cleanup_remote_day(trade_date)
+        _cleanup_sync_transport(sync_context)
+
     report["execution_summary"] = _classify_day_report(report)
     _write_local_report(local_day_root, report)
     summary = report["execution_summary"]
