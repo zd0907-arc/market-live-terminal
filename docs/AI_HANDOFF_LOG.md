@@ -5,6 +5,14 @@
 > - `docs/archive/ARC-LEG-20260425-ai-handoff-log-pre-v5-summary.md`
 > - `docs/archive/AI_HANDOFF_LOG_LEGACY_2026-03-09.md`
 
+## 2026-04-25 11:30 | Codex
+- Task ID: `REQ-20260425-01-selection-ui-density-rework`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-HISTORY-30M`, `CAP-STOCK-EVENTS`
+- 结论: 已在独立 worktree/分支完成选股研究工作台 UI 密度改造并升版本到 v5.0.8：顶部一行吸顶操作栏含版本号、策略仅保留启动确认/吸筹前置、股票横卡上移复用、左侧候选卡去标签化；右侧取消当前判断与复盘决策外框，覆盖长度合并到波段复盘标题栏；加入入场/出场交易计划标记、交易日禁点日期弹层、点外关闭、锚点累计净流入 L2/L1 紧贴K线展示，并默认从入场日开启；Top10 语义改为每日按策略分排序取前10；波段复盘顶栏重新压缩为单行，移除锚点说明框与冗余标签。
+- 风险: 真实出场策略仍可继续细化；锚点累计本轮迁移为选股页波段复盘内置能力，未改复盘页原入口；日期可选性依赖 TradeCalendar 与 selection_signal_daily 是否有评分数据。
+- 验证: `npm run check:version` 通过；`npm run build` 通过；`npm run check:baseline` 通过；3001 与 8000 已从当前 worktree 重启；API 已验证 2026-03-02/sz002733 返回入场 2026-03-03 与模拟出场 2026-03-31。
+- 链接: `docs/changes/REQ-20260425-01-selection-ui-density-rework.md`, `src/components/selection/SelectionResearchPage.tsx`, `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/HistoryMultiframeFusionView.tsx`
+
 ## 2026-04-25 09:55 | Codex
 - Task ID: `MOD-20260425-05`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-REALTIME-FLOW`

@@ -299,6 +299,21 @@ export interface SelectionHealthData {
   source_snapshot?: Record<string, any>;
 }
 
+export interface SelectionTradeDateItem {
+  date: string;
+  is_trade_day: boolean;
+  signal_count: number;
+  selectable: boolean;
+  disabled_reason?: string | null;
+}
+
+export interface SelectionTradeDatesData {
+  start_date?: string | null;
+  end_date?: string | null;
+  strategy?: string;
+  items: SelectionTradeDateItem[];
+}
+
 export interface SelectionCandidateItem {
   rank?: number;
   symbol: string;
@@ -465,6 +480,17 @@ export interface SelectionProfileData {
   breakout_reason_summary?: string;
   distribution_reason_summary?: string;
   distribution_risk_level?: string;
+  trade_plan?: {
+    signal_date?: string | null;
+    entry_date?: string | null;
+    entry_price?: number | null;
+    exit_signal_date?: string | null;
+    exit_price?: number | null;
+    exit_reason?: string | null;
+    exit_is_simulated?: boolean;
+    exit_distribution_score?: number | null;
+    return_pct?: number | null;
+  };
   explain_cards?: Array<{ title: string; summary: string }>;
   series: SelectionProfileSeriesItem[];
   event_timeline?: SelectionEventTimelineItem[];

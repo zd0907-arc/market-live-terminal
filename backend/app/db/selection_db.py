@@ -371,7 +371,7 @@ def fetch_latest_signal_date() -> Optional[str]:
         conn.close()
 
 
-def query_candidates(trade_date: str, strategy: str, limit: int = 50) -> List[sqlite3.Row]:
+def query_candidates(trade_date: str, strategy: str, limit: int = 50, signal_only: bool = False) -> List[sqlite3.Row]:
     ensure_selection_schema()
     score_col = {
         "stealth": "s.stealth_score",
@@ -383,6 +383,7 @@ def query_candidates(trade_date: str, strategy: str, limit: int = 50) -> List[sq
         "breakout": "s.confirm_signal",
         "distribution": "s.exit_signal",
     }.get(strategy, "s.confirm_signal")
+    signal_filter = f"AND {flag_col} = 1" if signal_only else ""
     conn = get_selection_connection()
     try:
         return conn.execute(
@@ -418,7 +419,7 @@ def query_candidates(trade_date: str, strategy: str, limit: int = 50) -> List[sq
              AND f.trade_date = s.trade_date
              AND f.feature_version = s.feature_version
             WHERE s.trade_date = ?
-              AND {flag_col} = 1
+              {signal_filter}
             ORDER BY signal DESC, score DESC, s.symbol ASC
             LIMIT ?
             """,

@@ -7,6 +7,7 @@ import {
   SelectionHealthData,
   SelectionProfileData,
   SelectionStrategy,
+  SelectionTradeDatesData,
   StockEventCoverageData,
   StockEventFeedData,
 } from '../types';
@@ -41,6 +42,23 @@ export const fetchSelectionCandidates = async (
     return await parseApiData<SelectionCandidatesResponse>(res);
   } catch (e) {
     console.error('Fetch selection candidates error:', e);
+    return null;
+  }
+};
+
+export const fetchSelectionTradeDates = async (
+  startDate?: string,
+  endDate?: string,
+  strategy: SelectionStrategy = 'breakout'
+): Promise<SelectionTradeDatesData | null> => {
+  try {
+    const params = new URLSearchParams({ strategy });
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/selection/trade-dates?${params.toString()}`);
+    return await parseApiData<SelectionTradeDatesData>(res);
+  } catch (e) {
+    console.error('Fetch selection trade dates error:', e);
     return null;
   }
 };

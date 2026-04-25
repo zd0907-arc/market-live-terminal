@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { CandlestickChart, CustomChart, LineChart, ScatterChart } from 'echarts/charts';
-import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components';
+import { DataZoomComponent, GraphicComponent, GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import { AlertCircle, CircleHelp, Database, Minus, Plus, RefreshCw } from 'lucide-react';
+import { AlertCircle, CircleHelp, Database, Minus, Plus, RefreshCw, Target, X } from 'lucide-react';
 
 import { HistoryMultiframeGranularity, HistoryMultiframeItem, SearchResult } from '../../types';
 import * as StockService from '../../services/stockService';
@@ -15,6 +15,7 @@ echarts.use([
   LineChart,
   ScatterChart,
   DataZoomComponent,
+  GraphicComponent,
   GridComponent,
   TooltipComponent,
   CanvasRenderer,
@@ -27,6 +28,19 @@ interface HistoryMultiframeFusionViewProps {
   onGranularityChange: (value: HistoryMultiframeGranularity) => void;
   startDate?: string;
   endDate?: string;
+  signalDate?: string;
+  signalLabel?: string;
+  defaultAnchorDate?: string | null;
+  tradeSummaryText?: string | null;
+  tradeSummaryTone?: 'positive' | 'negative' | 'neutral';
+  tradeMarkers?: Array<{
+    date?: string | null;
+    type: 'entry' | 'exit';
+    label: string;
+    note?: string | null;
+    simulated?: boolean;
+  }>;
+  headerRightSlot?: React.ReactNode;
   includeTodayPreview?: boolean;
   fetchRows?: (params: {
     symbol: string;
@@ -75,6 +89,27 @@ type CustomSeriesDatum = {
 type ZoomWindow = {
   start: number;
   end: number;
+};
+
+type TradeMarkerPoint = {
+  value: Array<number | string | null>;
+  symbol: string;
+  symbolRotate?: number;
+  symbolOffset?: [number, number];
+  itemStyle: { color: string; borderColor: string; borderWidth: number };
+  label: {
+    show: boolean;
+    formatter: string;
+    position: string;
+    color: string;
+    backgroundColor: string;
+    borderColor: string;
+    borderWidth: number;
+    borderRadius: number;
+    padding: number[];
+    fontSize: number;
+    fontWeight: number;
+  };
 };
 
 const LOOKBACK_DAYS: Record<HistoryMultiframeGranularity, number> = {
@@ -513,10 +548,10 @@ const InfoPopover: React.FC<{
     >
       <CircleHelp className="h-3.5 w-3.5" />
     </button>
-    <div
-      className={`pointer-events-none absolute top-full z-20 mt-2 hidden rounded-xl border border-slate-700 bg-slate-950/95 p-3 text-left text-[11px] leading-5 text-slate-300 shadow-2xl backdrop-blur group-hover:block ${widthClass} ${align === 'right' ? 'right-0' : 'left-0'}`}
-    >
-      {children}
+    <div className={`pointer-events-auto absolute top-full z-20 hidden pt-2 group-hover:block hover:block ${align === 'right' ? 'right-0' : 'left-0'}`}>
+      <div className={`rounded-xl border border-slate-700 bg-slate-950/95 p-3 text-left text-[11px] leading-5 text-slate-300 shadow-2xl backdrop-blur ${widthClass}`}>
+        {children}
+      </div>
     </div>
   </div>
 );
@@ -546,6 +581,13 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   onGranularityChange,
   startDate,
   endDate,
+  signalDate,
+  signalLabel,
+  defaultAnchorDate,
+  tradeSummaryText,
+  tradeSummaryTone = 'neutral',
+  tradeMarkers = [],
+  headerRightSlot,
   includeTodayPreview = true,
   fetchRows,
   onDataStatusChange,
@@ -557,12 +599,15 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   const [zoomWindow, setZoomWindow] = useState<ZoomWindow>({ start: 0, end: 100 });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [activeDataIndex, setActiveDataIndex] = useState<number | null>(null);
+  const [anchorModeEnabled, setAnchorModeEnabled] = useState(false);
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
 
   const chartRef = useRef<ReactEChartsCore | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const touchActiveRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastDefaultAnchorRef = useRef<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -625,10 +670,64 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     return defaultVisibleIndex;
   }, [activeDataIndex, defaultVisibleIndex, fusionRows.length]);
   const selectedRow = selectedDataIndex === null ? null : fusionRows[selectedDataIndex] ?? null;
+  useEffect(() => {
+    if (!defaultAnchorDate || !fusionRows.length) return;
+    const applyKey = `${activeStock?.symbol || ''}-${defaultAnchorDate}-${granularity}`;
+    if (lastDefaultAnchorRef.current === applyKey) return;
+    const target = fusionRows.find((row) => row.tradeDate >= defaultAnchorDate);
+    if (!target) return;
+    lastDefaultAnchorRef.current = applyKey;
+    setAnchorModeEnabled(true);
+    setAnchorKey(target.datetime);
+  }, [activeStock?.symbol, defaultAnchorDate, fusionRows, granularity]);
   const selectedPeriodChangePct = useMemo(() => {
     if (!selectedRow || selectedRow.open === null || selectedRow.close === null || selectedRow.open === 0) return null;
     return ((selectedRow.close - selectedRow.open) / selectedRow.open) * 100;
   }, [selectedRow]);
+  const signalMarkIndex = useMemo(() => {
+    if (!signalDate) return -1;
+    return fusionRows.findIndex((row) => row.tradeDate === signalDate);
+  }, [fusionRows, signalDate]);
+  const tradeMarkerData = useMemo<TradeMarkerPoint[]>(() => {
+    if (!tradeMarkers.length || !fusionRows.length) return [];
+    return tradeMarkers
+      .map((marker) => {
+        if (!marker.date) return null;
+        const matching = fusionRows
+          .map((row, index) => ({ row, index }))
+          .filter((item) => item.row.tradeDate === marker.date);
+        if (!matching.length) return null;
+        const target = marker.type === 'exit' ? matching[matching.length - 1] : matching[0];
+        const priceBase = marker.type === 'exit'
+          ? (target.row.high ?? target.row.close ?? target.row.open)
+          : (target.row.low ?? target.row.close ?? target.row.open);
+        if (priceBase === null || !Number.isFinite(priceBase)) return null;
+        const yValue = marker.type === 'exit' ? priceBase * 1.018 : priceBase * 0.982;
+        const color = marker.type === 'entry' ? '#38BDF8' : marker.simulated ? '#F59E0B' : '#F43F5E';
+        const bg = marker.type === 'entry' ? 'rgba(14, 116, 144, 0.92)' : marker.simulated ? 'rgba(146, 64, 14, 0.92)' : 'rgba(159, 18, 57, 0.92)';
+        return {
+          value: [target.index, yValue, marker.note || ''],
+          symbol: marker.type === 'entry' ? 'triangle' : 'pin',
+          symbolRotate: marker.type === 'entry' ? 180 : 0,
+          symbolOffset: marker.type === 'entry' ? [0, 8] : [0, -8],
+          itemStyle: { color, borderColor: '#0F172A', borderWidth: 1 },
+          label: {
+            show: true,
+            formatter: marker.label,
+            position: marker.type === 'entry' ? 'bottom' : 'top',
+            color: '#E0F2FE',
+            backgroundColor: bg,
+            borderColor: color,
+            borderWidth: 1,
+            borderRadius: 5,
+            padding: [3, 7],
+            fontSize: 11,
+            fontWeight: 700,
+          },
+        };
+      })
+      .filter((item): item is TradeMarkerPoint => !!item);
+  }, [fusionRows, tradeMarkers]);
 
   const hasFormalL2History = fusionRows.some(
     (row) => row.isFinalized && !row.isPlaceholder && [row.l2MainBuy, row.l2MainSell, row.l2SuperBuy, row.l2SuperSell].some((item) => item !== null),
@@ -661,19 +760,6 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     setActiveDataIndex(null);
   }, [fusionRows.length, granularity]);
 
-  const sourceLabel = useMemo(() => {
-    if (dataOrigin === 'cloud') {
-      if (hasFormalL2History && hasPreviewRows) return '云端正式L2 + 今日预览';
-      if (hasFormalL2History) return '云端正式L2';
-      if (hasPreviewRows) return '云端预览';
-    }
-    if (hasFormalL2History && hasPreviewRows) return '正式L2 + 今日L1';
-    if (hasFormalL2History) return '正式L2';
-    if (hasPreviewRows) return '今日L1预览';
-    if (fusionRows.length) return '占位 / 待补';
-    return '暂无正式L2';
-  }, [dataOrigin, fusionRows.length, hasFormalL2History, hasPreviewRows]);
-
   const issueTagLabel = issueCount > 0 ? `${issueCount}条缺失 / 异常` : '数据完整';
 
   const handleZoomStep = useCallback((direction: 'in' | 'out') => {
@@ -703,6 +789,16 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       setActiveDataIndex(nextIndex);
     }
   }, [fusionRows.length]);
+
+  const handleChartClick = useCallback((event: any) => {
+    if (!anchorModeEnabled) return;
+    const nextIndex = resolveDataIndexFromEvent(event, fusionRows.length);
+    if (nextIndex === null) return;
+    const row = fusionRows[nextIndex];
+    if (!row?.datetime) return;
+    setAnchorKey(row.datetime);
+    setActiveDataIndex(nextIndex);
+  }, [anchorModeEnabled, fusionRows]);
 
   const handlePointerLeave = useCallback(() => {
     setActiveDataIndex(null);
@@ -860,6 +956,51 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     const absoluteData = buildPanelData(fusionRows, 'absolute');
     const netData = buildPanelData(fusionRows, 'net');
     const ratioData = buildPanelData(fusionRows, 'ratio');
+    const visibleRows = fusionRows.slice(visibleIndexRange.startIndex, visibleIndexRange.endIndex + 1);
+    const visibleLows = visibleRows.map((row) => row.low ?? row.close ?? row.open).filter((value): value is number => value !== null && Number.isFinite(value));
+    const visibleHighs = visibleRows.map((row) => row.high ?? row.close ?? row.open).filter((value): value is number => value !== null && Number.isFinite(value));
+    const visibleMinPrice = visibleLows.length ? Math.min(...visibleLows) : null;
+    const visibleMaxPrice = visibleHighs.length ? Math.max(...visibleHighs) : null;
+    const pricePadding = visibleMinPrice !== null && visibleMaxPrice !== null
+      ? Math.max((visibleMaxPrice - visibleMinPrice) * 0.035, visibleMaxPrice * 0.004)
+      : 0;
+    const priceAxisMin = visibleMinPrice === null ? undefined : Math.max(0, visibleMinPrice - pricePadding);
+    const priceAxisMax = visibleMaxPrice === null ? undefined : visibleMaxPrice + pricePadding;
+    const anchorIndex = anchorModeEnabled && anchorKey !== null ? fusionRows.findIndex((row) => row.datetime >= anchorKey) : -1;
+    const hasAnchorSelection = anchorModeEnabled && anchorIndex >= 0;
+    const buildCumulative = (getter: (row: FusionRow) => number | null): Array<number | null> => {
+      let cumulative = 0;
+      return fusionRows.map((row, index) => {
+        if (!hasAnchorSelection || index < anchorIndex) return null;
+        const value = getter(row);
+        cumulative += value === null || !Number.isFinite(value) ? 0 : value;
+        return cumulative;
+      });
+    };
+    const splitPositive = (series: Array<number | null>) => series.map((value) => (value !== null && value >= 0 ? value : null));
+    const splitNegative = (series: Array<number | null>) => series.map((value) => (value !== null && value < 0 ? value : null));
+    const l2MainCumulative = buildCumulative((row) => toNet(row.l2MainBuy, row.l2MainSell));
+    const l2SuperCumulative = buildCumulative((row) => toNet(row.l2SuperBuy, row.l2SuperSell));
+    const l1MainCumulative = buildCumulative((row) => toNet(row.l1MainBuy, row.l1MainSell));
+    const l1SuperCumulative = buildCumulative((row) => toNet(row.l1SuperBuy, row.l1SuperSell));
+
+    const rowMetas = anchorModeEnabled
+      ? [
+          { key: 'price', title: '价格K线', top: 4, height: 28, color: 'rgba(251,191,36,0.88)' },
+          { key: 'l2Cum', title: 'L2锚点累计净流入（主力面积 / 超大紫线）', top: 35, height: 14, color: '#c4b5fd' },
+          { key: 'l1Cum', title: 'L1锚点累计净流入（主力面积 / 超大紫线）', top: 52, height: 14, color: '#86efac' },
+          { key: 'absolute', title: '资金绝对值', top: 69, height: 8, color: 'rgba(226,232,240,0.78)' },
+          { key: 'net', title: '净流入', top: 80, height: 8, color: 'rgba(226,232,240,0.78)' },
+          { key: 'ratio', title: '买卖力度', top: 91, height: 5.5, color: 'rgba(226,232,240,0.78)' },
+        ]
+      : [
+          { key: 'price', title: '价格K线', top: 4, height: 36, color: 'rgba(251,191,36,0.88)' },
+          { key: 'absolute', title: '资金绝对值', top: 43, height: 16, color: 'rgba(226,232,240,0.78)' },
+          { key: 'net', title: '净流入', top: 62, height: 16, color: 'rgba(226,232,240,0.78)' },
+          { key: 'ratio', title: '买卖力度', top: 81, height: 12.5, color: 'rgba(226,232,240,0.78)' },
+        ];
+    const gridIndexMap = Object.fromEntries(rowMetas.map((row, index) => [row.key, index]));
+    const xAxisIndexes = rowMetas.map((_, index) => index);
 
     const amountAxisBound = (value: { max?: number; min?: number }) => {
       const maxAbs = Math.max(Math.abs(value.max ?? 0), Math.abs(value.min ?? 0));
@@ -905,17 +1046,292 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       splitLine: { lineStyle: { color: 'rgba(30, 41, 59, 0.72)', type: 'dashed' } },
     });
 
+    const yAxisConfig: any[] = [
+      makeYAxis(gridIndexMap.price, (v: number) => v.toFixed(2), {
+        min: priceAxisMin === undefined ? undefined : () => priceAxisMin,
+        max: priceAxisMax === undefined ? undefined : () => priceAxisMax,
+      }),
+      makeYAxis(gridIndexMap.absolute, (v: number) => compactAmount(v), {
+        min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
+        max: (value: { max?: number; min?: number }) => amountAxisBound(value),
+      }),
+      makeYAxis(gridIndexMap.net, (v: number) => compactAmount(v), {
+        min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
+        max: (value: { max?: number; min?: number }) => amountAxisBound(value),
+      }),
+      makeYAxis(gridIndexMap.ratio, (v: number) => `${v.toFixed(0)}%`, {
+        min: (value: { max?: number; min?: number }) => -percentAxisBound(value),
+        max: (value: { max?: number; min?: number }) => percentAxisBound(value),
+      }),
+      {
+        type: 'value',
+        gridIndex: gridIndexMap.ratio,
+        min: 0,
+        max: 120,
+        show: false,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { show: false },
+        splitLine: { show: false },
+      },
+    ];
+    const yAxisIndexMap: Record<string, number> = {
+      price: 0,
+      absolute: 1,
+      net: 2,
+      ratio: 3,
+      ratioActivity: 4,
+    };
+    if (anchorModeEnabled) {
+      yAxisIndexMap.l2Cum = yAxisConfig.length;
+      yAxisConfig.push(makeYAxis(gridIndexMap.l2Cum, (v: number) => compactAmount(v), {
+        min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
+        max: (value: { max?: number; min?: number }) => amountAxisBound(value),
+      }));
+      yAxisIndexMap.l1Cum = yAxisConfig.length;
+      yAxisConfig.push(makeYAxis(gridIndexMap.l1Cum, (v: number) => compactAmount(v), {
+        min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
+        max: (value: { max?: number; min?: number }) => amountAxisBound(value),
+      }));
+    }
+
+    const series: any[] = [
+      {
+        name: '价格K线',
+        type: 'candlestick',
+        xAxisIndex: gridIndexMap.price,
+        yAxisIndex: yAxisIndexMap.price,
+        data: candleData,
+        itemStyle: {
+          color: COLORS.candleUp,
+          color0: COLORS.candleDown,
+          borderColor: COLORS.candleUp,
+          borderColor0: COLORS.candleDown,
+        },
+        barMaxWidth: 16,
+        markLine: signalMarkIndex >= 0 ? {
+          silent: true,
+          symbol: 'none',
+          lineStyle: { color: '#38BDF8', width: 1.5, type: 'dashed', opacity: 0.95 },
+          label: {
+            show: true,
+            position: 'insideEndTop',
+            formatter: signalLabel || '信号日',
+            color: '#BAE6FD',
+            backgroundColor: 'rgba(15, 23, 42, 0.88)',
+            borderColor: 'rgba(56, 189, 248, 0.45)',
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: [3, 6],
+            fontSize: 11,
+          },
+          data: [{ xAxis: signalMarkIndex }],
+        } : undefined,
+        z: 3,
+      },
+      {
+        name: '收盘价',
+        type: 'line',
+        xAxisIndex: gridIndexMap.price,
+        yAxisIndex: yAxisIndexMap.price,
+        data: closeLine,
+        showSymbol: false,
+        lineStyle: { color: COLORS.closeLine, width: 1.2, opacity: 0.9 },
+        itemStyle: { color: COLORS.closeLine },
+        z: 4,
+      },
+      {
+        name: '质量提示',
+        type: 'scatter',
+        xAxisIndex: gridIndexMap.price,
+        yAxisIndex: yAxisIndexMap.price,
+        data: qualityMarks,
+        symbolSize: 16,
+        itemStyle: { color: COLORS.quality },
+        label: {
+          show: true,
+          formatter: '!',
+          color: '#0F172A',
+          fontSize: 10,
+          fontWeight: 800,
+          offset: [0, -1],
+        },
+        emphasis: { scale: false },
+        z: 6,
+      },
+      {
+        name: '交易计划标记',
+        type: 'scatter',
+        xAxisIndex: gridIndexMap.price,
+        yAxisIndex: yAxisIndexMap.price,
+        data: tradeMarkerData,
+        symbolSize: 18,
+        emphasis: { scale: 1.15 },
+        tooltip: { show: false },
+        z: 12,
+      },
+      createFlowCustomSeries('资金绝对值双柱', 'absolute', gridIndexMap.absolute, yAxisIndexMap.absolute, absoluteData, fusionRows.length),
+      createFlowCustomSeries('净流入双柱', 'net', gridIndexMap.net, yAxisIndexMap.net, netData, fusionRows.length),
+      createFlowCustomSeries('买卖力度双柱', 'ratio', gridIndexMap.ratio, yAxisIndexMap.ratio, ratioData, fusionRows.length),
+      {
+        name: 'L2超大单活跃度',
+        type: 'line',
+        xAxisIndex: gridIndexMap.ratio,
+        yAxisIndex: yAxisIndexMap.ratioActivity,
+        data: superL2ActivityLine,
+        showSymbol: false,
+        smooth: 0.25,
+        connectNulls: false,
+        lineStyle: { color: COLORS.superL2Buy, width: 1.2, opacity: 0.95 },
+        itemStyle: { color: COLORS.superL2Buy },
+        z: 7,
+      },
+      {
+        name: 'L2主力活跃度',
+        type: 'line',
+        xAxisIndex: gridIndexMap.ratio,
+        yAxisIndex: yAxisIndexMap.ratioActivity,
+        data: mainL2ActivityLine,
+        showSymbol: false,
+        smooth: 0.25,
+        connectNulls: false,
+        lineStyle: { color: COLORS.mainL2Buy, width: 1.2, opacity: 0.95 },
+        itemStyle: { color: COLORS.mainL2Buy },
+        z: 7,
+      },
+      {
+        name: 'L1超大单活跃度',
+        type: 'line',
+        xAxisIndex: gridIndexMap.ratio,
+        yAxisIndex: yAxisIndexMap.ratioActivity,
+        data: superL1ActivityLine,
+        showSymbol: false,
+        smooth: 0.25,
+        connectNulls: false,
+        lineStyle: { color: COLORS.mainL2Sell, width: 1.2, opacity: 0.92 },
+        itemStyle: { color: COLORS.mainL2Sell },
+        z: 7,
+      },
+      {
+        name: 'L1主力活跃度',
+        type: 'line',
+        xAxisIndex: gridIndexMap.ratio,
+        yAxisIndex: yAxisIndexMap.ratioActivity,
+        data: mainL1ActivityLine,
+        showSymbol: false,
+        smooth: 0.25,
+        connectNulls: false,
+        lineStyle: { color: COLORS.mainL1Sell, width: 1.2, opacity: 0.92 },
+        itemStyle: { color: COLORS.mainL1Sell },
+        z: 7,
+      },
+    ];
+
+    if (anchorModeEnabled) {
+      const anchorMarkLine = hasAnchorSelection
+        ? {
+            silent: true,
+            symbol: ['none', 'none'],
+            lineStyle: { color: '#F59E0B', width: 1, type: 'dashed' },
+            label: { show: false },
+            data: [
+              { xAxis: anchorIndex },
+              { yAxis: 0, lineStyle: { color: COLORS.zeroLine, width: 1, type: 'solid', opacity: 0.9 } },
+            ],
+          }
+        : undefined;
+      series.push(
+        {
+          name: 'L2主力累计净-正',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l2Cum,
+          yAxisIndex: yAxisIndexMap.l2Cum,
+          data: splitPositive(l2MainCumulative),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: COLORS.mainL2Buy, width: 1.4 },
+          itemStyle: { color: COLORS.mainL2Buy },
+          areaStyle: { color: 'rgba(239,68,68,0.22)' },
+          markLine: anchorMarkLine,
+          z: 8,
+        },
+        {
+          name: 'L2主力累计净-负',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l2Cum,
+          yAxisIndex: yAxisIndexMap.l2Cum,
+          data: splitNegative(l2MainCumulative),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: COLORS.mainL2Sell, width: 1.4 },
+          itemStyle: { color: COLORS.mainL2Sell },
+          areaStyle: { color: 'rgba(34,197,94,0.20)' },
+          z: 8,
+        },
+        {
+          name: 'L2超大累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l2Cum,
+          yAxisIndex: yAxisIndexMap.l2Cum,
+          data: l2SuperCumulative,
+          showSymbol: false,
+          lineStyle: { color: COLORS.superL2Buy, width: 1.8 },
+          itemStyle: { color: COLORS.superL2Buy },
+          z: 9,
+        },
+        {
+          name: 'L1主力累计净-正',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l1Cum,
+          yAxisIndex: yAxisIndexMap.l1Cum,
+          data: splitPositive(l1MainCumulative),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: COLORS.mainL2Buy, width: 1.4 },
+          itemStyle: { color: COLORS.mainL2Buy },
+          areaStyle: { color: 'rgba(239,68,68,0.22)' },
+          markLine: anchorMarkLine,
+          z: 8,
+        },
+        {
+          name: 'L1主力累计净-负',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l1Cum,
+          yAxisIndex: yAxisIndexMap.l1Cum,
+          data: splitNegative(l1MainCumulative),
+          showSymbol: false,
+          connectNulls: false,
+          lineStyle: { color: COLORS.mainL2Sell, width: 1.4 },
+          itemStyle: { color: COLORS.mainL2Sell },
+          areaStyle: { color: 'rgba(34,197,94,0.20)' },
+          z: 8,
+        },
+        {
+          name: 'L1超大累计净',
+          type: 'line',
+          xAxisIndex: gridIndexMap.l1Cum,
+          yAxisIndex: yAxisIndexMap.l1Cum,
+          data: l1SuperCumulative,
+          showSymbol: false,
+          lineStyle: { color: COLORS.superL2Buy, width: 1.8 },
+          itemStyle: { color: COLORS.superL2Buy },
+          z: 9,
+        },
+      );
+    }
+
     return {
       animation: false,
       backgroundColor: 'transparent',
-      graphic: [
-        { type: 'text', left: '6.2%', top: '1.6%', silent: true, style: { text: '价格K线', fill: 'rgba(251,191,36,0.88)', fontSize: 11, fontWeight: 500 } },
-        { type: 'text', left: '6.2%', top: '40.6%', silent: true, style: { text: '资金绝对值', fill: 'rgba(226,232,240,0.78)', fontSize: 11, fontWeight: 500 } },
-        { type: 'text', left: '6.2%', top: '59.6%', silent: true, style: { text: '净流入', fill: 'rgba(226,232,240,0.78)', fontSize: 11, fontWeight: 500 } },
-        { type: 'text', left: '6.2%', top: '78.6%', silent: true, style: { text: '买卖力度', fill: 'rgba(226,232,240,0.78)', fontSize: 11, fontWeight: 500 } },
-      ],
+      graphic: rowMetas.map((row) => ({
+        type: 'text',
+        left: '6.2%',
+        top: `${Math.max(1, row.top - 2.4)}%`,
+        silent: true,
+        style: { text: row.title, fill: row.color, fontSize: 11, fontWeight: 500 },
+      })),
       axisPointer: {
-        link: [{ xAxisIndex: [0, 1, 2, 3] }],
+        link: [{ xAxisIndex: xAxisIndexes }],
       },
       tooltip: {
         trigger: 'axis',
@@ -927,95 +1343,31 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         padding: 0,
         formatter: () => '',
       },
-      grid: [
-        { left: '4.5%', right: '2.2%', top: '4%', height: '36%' },
-        { left: '4.5%', right: '2.2%', top: '43%', height: '16%' },
-        { left: '4.5%', right: '2.2%', top: '62%', height: '16%' },
-        { left: '4.5%', right: '2.2%', top: '81%', height: '12.5%' },
-      ],
-      xAxis: [
-        {
-          type: 'category',
-          data: category,
-          boundaryGap: true,
-          axisLine: { lineStyle: { color: COLORS.border } },
-          axisTick: { show: false },
-          axisLabel: {
-            show: true,
-            color: '#64748B',
-            fontSize: 10,
-            interval: 0,
-            formatter: axisLabelFormatter,
-            hideOverlap: true,
-            margin: 8,
-          },
-          min: 'dataMin',
-          max: 'dataMax',
-        },
-        {
-          type: 'category',
-          gridIndex: 1,
-          data: category,
-          boundaryGap: true,
-          axisLine: { lineStyle: { color: COLORS.border } },
-          axisTick: { show: false },
-          axisLabel: { show: false },
-          min: 'dataMin',
-          max: 'dataMax',
-        },
-        {
-          type: 'category',
-          gridIndex: 2,
-          data: category,
-          boundaryGap: true,
-          axisLine: { lineStyle: { color: COLORS.border } },
-          axisTick: { show: false },
-          axisLabel: { show: false },
-          min: 'dataMin',
-          max: 'dataMax',
-        },
-        {
-          type: 'category',
-          gridIndex: 3,
-          data: category,
-          boundaryGap: true,
-          axisLine: { lineStyle: { color: COLORS.border } },
-          axisTick: { show: false },
-          axisLabel: { show: false },
-          min: 'dataMin',
-          max: 'dataMax',
-        },
-      ],
-      yAxis: [
-        makeYAxis(0, (v: number) => v.toFixed(2)),
-        makeYAxis(1, (v: number) => compactAmount(v), {
-          min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
-          max: (value: { max?: number; min?: number }) => amountAxisBound(value),
-        }),
-        makeYAxis(2, (v: number) => compactAmount(v), {
-          min: (value: { max?: number; min?: number }) => -amountAxisBound(value),
-          max: (value: { max?: number; min?: number }) => amountAxisBound(value),
-        }),
-        makeYAxis(3, (v: number) => `${v.toFixed(0)}%`, {
-          min: (value: { max?: number; min?: number }) => -percentAxisBound(value),
-          max: (value: { max?: number; min?: number }) => percentAxisBound(value),
-        }),
-        {
-          type: 'value',
-          gridIndex: 3,
-          min: 0,
-          max: 120,
-          show: false,
-          axisLine: { show: false },
-          axisTick: { show: false },
-          axisLabel: { show: false },
-          splitLine: { show: false },
-        },
-      ],
+      grid: rowMetas.map((row) => ({ left: '4.5%', right: '2.2%', top: `${row.top}%`, height: `${row.height}%` })),
+      xAxis: rowMetas.map((row, index) => ({
+        type: 'category',
+        gridIndex: index,
+        data: category,
+        boundaryGap: true,
+        axisLine: { lineStyle: { color: COLORS.border } },
+        axisTick: { show: false },
+        axisLabel: index === 0 ? {
+          show: true,
+          color: '#64748B',
+          fontSize: 10,
+          interval: 0,
+          formatter: axisLabelFormatter,
+          hideOverlap: true,
+          margin: 8,
+        } : { show: false },
+        min: 'dataMin',
+        max: 'dataMax',
+      })),
+      yAxis: yAxisConfig,
       dataZoom: [
         {
           type: 'inside',
-          xAxisIndex: [0, 1, 2, 3],
+          xAxisIndex: xAxisIndexes,
           filterMode: 'filter',
           zoomOnMouseWheel: false,
           moveOnMouseWheel: false,
@@ -1026,7 +1378,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         },
         {
           type: 'slider',
-          xAxisIndex: [0, 1, 2, 3],
+          xAxisIndex: xAxisIndexes,
           bottom: 2,
           height: 14,
           showDetail: false,
@@ -1038,138 +1390,17 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           end: zoomWindow.end,
         },
       ],
-      series: [
-        {
-          name: '价格K线',
-          type: 'candlestick',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: candleData,
-          itemStyle: {
-            color: COLORS.candleUp,
-            color0: COLORS.candleDown,
-            borderColor: COLORS.candleUp,
-            borderColor0: COLORS.candleDown,
-          },
-          barMaxWidth: 16,
-          z: 3,
-        },
-        {
-          name: '收盘价',
-          type: 'line',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: closeLine,
-          showSymbol: false,
-          lineStyle: { color: COLORS.closeLine, width: 1.2, opacity: 0.9 },
-          itemStyle: { color: COLORS.closeLine },
-          z: 4,
-        },
-        {
-          name: '质量提示',
-          type: 'scatter',
-          xAxisIndex: 0,
-          yAxisIndex: 0,
-          data: qualityMarks,
-          symbolSize: 16,
-          itemStyle: { color: COLORS.quality },
-          label: {
-            show: true,
-            formatter: '!',
-            color: '#0F172A',
-            fontSize: 10,
-            fontWeight: 800,
-            offset: [0, -1],
-          },
-          emphasis: { scale: false },
-          z: 6,
-        },
-        createFlowCustomSeries('资金绝对值双柱', 'absolute', 1, 1, absoluteData, fusionRows.length),
-        createFlowCustomSeries('净流入双柱', 'net', 2, 2, netData, fusionRows.length),
-        createFlowCustomSeries('买卖力度双柱', 'ratio', 3, 3, ratioData, fusionRows.length),
-        {
-          name: 'L2超大单活跃度',
-          type: 'line',
-          xAxisIndex: 3,
-          yAxisIndex: 4,
-          data: superL2ActivityLine,
-          showSymbol: false,
-          smooth: 0.25,
-          connectNulls: false,
-          lineStyle: {
-            color: COLORS.superL2Buy,
-            width: 1.2,
-            opacity: 0.95,
-          },
-          itemStyle: { color: COLORS.superL2Buy },
-          z: 7,
-        },
-        {
-          name: 'L2主力活跃度',
-          type: 'line',
-          xAxisIndex: 3,
-          yAxisIndex: 4,
-          data: mainL2ActivityLine,
-          showSymbol: false,
-          smooth: 0.25,
-          connectNulls: false,
-          lineStyle: {
-            color: COLORS.mainL2Buy,
-            width: 1.2,
-            opacity: 0.95,
-          },
-          itemStyle: { color: COLORS.mainL2Buy },
-          z: 7,
-        },
-        {
-          name: 'L1超大单活跃度',
-          type: 'line',
-          xAxisIndex: 3,
-          yAxisIndex: 4,
-          data: superL1ActivityLine,
-          showSymbol: false,
-          smooth: 0.25,
-          connectNulls: false,
-          lineStyle: {
-            color: COLORS.mainL2Sell,
-            width: 1.2,
-            opacity: 0.92,
-          },
-          itemStyle: { color: COLORS.mainL2Sell },
-          z: 7,
-        },
-        {
-          name: 'L1主力活跃度',
-          type: 'line',
-          xAxisIndex: 3,
-          yAxisIndex: 4,
-          data: mainL1ActivityLine,
-          showSymbol: false,
-          smooth: 0.25,
-          connectNulls: false,
-          lineStyle: {
-            color: COLORS.mainL1Sell,
-            width: 1.2,
-            opacity: 0.92,
-          },
-          itemStyle: { color: COLORS.mainL1Sell },
-          z: 7,
-        },
-      ],
+      series,
     };
-  }, [fusionRows, granularity, isTouchDevice, visibleIndexRange, zoomWindow]);
-
-  const selectedStatusBadges = useMemo(() => {
-    if (!selectedRow) return [];
-    return [
-      selectedRow.isPreviewOnly ? '未结算' : null,
-      selectedRow.isPlaceholder ? '缺失占位' : null,
-      selectedRow.fallbackUsed ? 'fallback' : null,
-      selectedRow.isFinalized ? 'finalized' : 'preview',
-    ].filter(Boolean) as string[];
-  }, [selectedRow]);
+  }, [anchorKey, anchorModeEnabled, fusionRows, granularity, isTouchDevice, signalLabel, signalMarkIndex, tradeMarkerData, visibleIndexRange, zoomWindow]);
 
   if (!activeStock) return null;
+
+  const tradeSummaryClass = tradeSummaryTone === 'positive'
+    ? 'text-red-300'
+    : tradeSummaryTone === 'negative'
+      ? 'text-emerald-300'
+      : 'text-slate-300';
 
   return (
     <div className="space-y-4">
@@ -1184,10 +1415,9 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       )}
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
-        <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="mb-3 flex items-center justify-between gap-3 overflow-x-auto whitespace-nowrap">
+          <div className="flex shrink-0 items-center gap-2 text-xs">
             <h3 className="text-sm font-semibold tracking-wide text-white">波段复盘</h3>
-            <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[11px] text-cyan-200">{sourceLabel}</span>
             <InfoPopover>
                 <div className="space-y-2">
                 <div className="text-xs font-semibold text-slate-100">图例说明</div>
@@ -1232,7 +1462,30 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             </InfoPopover>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex shrink-0 items-center gap-2">
+            {headerRightSlot}
+            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+              <button
+                type="button"
+                onClick={() => setAnchorModeEnabled((prev) => !prev)}
+                className={`inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-[11px] font-medium transition-colors ${
+                  anchorModeEnabled ? 'bg-amber-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                }`}
+                title={anchorModeEnabled ? '点击K线设置锚点，计算锚点后累计净流入' : '开启后点击K线设置锚点'}
+              >
+                <Target className="h-3.5 w-3.5" />
+                锚点累计
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnchorKey(null)}
+                disabled={!anchorKey}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-700 disabled:hover:bg-transparent"
+                title="清除锚点"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
               {GRANULARITY_BUTTONS.map((item) => (
                 <button
@@ -1298,34 +1551,12 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
             className="w-full rounded-xl border border-slate-800/70 bg-slate-950/35 p-2"
           >
             {selectedRow && (
-              <div className="mb-2 grid gap-2 rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-[11px] text-slate-200 lg:grid-cols-[minmax(220px,1.05fr)_minmax(190px,0.95fr)_minmax(250px,1fr)_minmax(250px,1fr)]">
+              <div className="mb-2 grid gap-2 rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-[11px] text-slate-200 lg:grid-cols-[minmax(170px,0.7fr)_minmax(190px,0.95fr)_minmax(250px,1fr)_minmax(250px,1fr)]">
                 <div className="min-w-0 rounded-lg border border-slate-800/80 bg-slate-950/55 px-3 py-2.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-sm font-semibold text-white">{selectedRow.datetime}</span>
-                    <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-0.5 text-[10px] text-cyan-200">{selectedRow.source}</span>
-                    {selectedStatusBadges.map((badge) => (
-                      <span
-                        key={badge}
-                        className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                          badge === '未结算'
-                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                            : badge === '缺失占位'
-                              ? 'border-sky-500/30 bg-sky-500/10 text-sky-200'
-                              : 'border-slate-700 bg-slate-900/80 text-slate-300'
-                        }`}
-                      >
-                        {badge}
-                      </span>
-                    ))}
+                    {tradeSummaryText ? <span className={`text-xs font-semibold ${tradeSummaryClass}`}>{tradeSummaryText}</span> : null}
                   </div>
-                  <div className="mt-1 whitespace-nowrap text-[10px] text-slate-500">
-                    当前窗口 {visibleIndexRange.startIndex + 1}-{visibleIndexRange.endIndex + 1} / {fusionRows.length} 点，默认显示窗口最后一点
-                  </div>
-                  {selectedRow.qualityInfo && (
-                    <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] leading-5 text-amber-100">
-                      质量提示：{selectedRow.qualityInfo}
-                    </div>
-                  )}
                 </div>
 
                 <div className="rounded-lg border border-slate-800/80 bg-slate-950/55 px-3 py-2.5">
@@ -1403,6 +1634,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
               lazyUpdate
               onEvents={{
                 datazoom: handleDataZoom,
+                click: handleChartClick,
                 showTip: handleActivePointer,
                 updateAxisPointer: handleActivePointer,
                 globalout: handlePointerLeave,
