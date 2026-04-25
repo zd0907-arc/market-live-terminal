@@ -3,12 +3,13 @@ import math
 import os
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
 from backend.app.core.config import DB_FILE, USER_DB_FILE, candidate_atomic_db_paths
+from backend.app.core.calendar import TradeCalendar
 from backend.app.db.selection_db import (
     create_backtest_run,
     ensure_selection_schema,
@@ -898,6 +899,61 @@ def get_selection_health() -> Dict[str, object]:
     }
 
 
+def get_selection_trade_dates(start_date: Optional[str], end_date: Optional[str], strategy: str = "breakout") -> Dict[str, object]:
+    ensure_selection_schema()
+    with _main_connection() as conn:
+        min_date, max_date = _available_selection_history_bounds(conn)
+    latest_signal_date = fetch_latest_signal_date()
+    resolved_start = _coerce_date(start_date) or min_date or latest_signal_date
+    resolved_end = _coerce_date(end_date) or latest_signal_date or max_date
+    if not resolved_start or not resolved_end:
+        return {"start_date": resolved_start, "end_date": resolved_end, "items": []}
+    if resolved_start > resolved_end:
+        resolved_start, resolved_end = resolved_end, resolved_start
+
+    with get_selection_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT trade_date, COUNT(*) AS row_count
+            FROM selection_signal_daily
+            WHERE trade_date >= ?
+              AND trade_date <= ?
+            GROUP BY trade_date
+            """,
+            (resolved_start, resolved_end),
+        ).fetchall()
+    row_count_by_date = {str(row["trade_date"]): int(row["row_count"] or 0) for row in rows}
+
+    start_dt = datetime.strptime(resolved_start, "%Y-%m-%d")
+    end_dt = datetime.strptime(resolved_end, "%Y-%m-%d")
+    max_days = min((end_dt - start_dt).days, 540)
+    items = []
+    for offset in range(max_days + 1):
+        day = (start_dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+        is_trade_day = TradeCalendar.is_trade_day(day)
+        row_count = row_count_by_date.get(day, 0)
+        selectable = bool(is_trade_day and row_count > 0)
+        if not is_trade_day:
+            reason = "休市"
+        elif row_count <= 0:
+            reason = "无评分数据"
+        else:
+            reason = None
+        items.append({
+            "date": day,
+            "is_trade_day": is_trade_day,
+            "signal_count": row_count,
+            "selectable": selectable,
+            "disabled_reason": reason,
+        })
+    return {
+        "start_date": resolved_start,
+        "end_date": (start_dt + timedelta(days=max_days)).strftime("%Y-%m-%d"),
+        "strategy": strategy,
+        "items": items,
+    }
+
+
 def get_candidates(trade_date: Optional[str], strategy: str = "breakout", limit: int = 10) -> Dict[str, object]:
     target_date = _ensure_trade_date_ready(trade_date)
     fetch_limit = max(int(limit) * 12, 120)
@@ -908,8 +964,6 @@ def get_candidates(trade_date: Optional[str], strategy: str = "breakout", limit:
     items = []
     rank = 0
     for row in rows:
-        if int(row["signal"] or 0) != 1:
-            continue
         rank += 1
         reason_summary = _build_breakout_reason(dict(row))
         items.append(
@@ -1066,6 +1120,86 @@ def _query_recent_event_timeline(symbol: str, trade_date: str, limit: int = 12) 
     return sorted(timeline, key=lambda item: str(item.get("time") or ""), reverse=True)[:limit]
 
 
+def _query_trade_plan(symbol: str, signal_date: str) -> Dict[str, object]:
+    ensure_selection_schema()
+    with get_selection_connection() as conn:
+        entry = conn.execute(
+            """
+            SELECT trade_date, close
+            FROM selection_feature_daily
+            WHERE symbol = ? AND trade_date > ?
+            ORDER BY trade_date ASC
+            LIMIT 1
+            """,
+            (symbol, signal_date),
+        ).fetchone()
+        if not entry:
+            return {
+                "signal_date": signal_date,
+                "entry_date": None,
+                "entry_price": None,
+                "exit_signal_date": None,
+                "exit_price": None,
+                "exit_reason": "no_future_trade_date",
+                "exit_is_simulated": False,
+                "exit_distribution_score": None,
+                "return_pct": None,
+            }
+
+        entry_date = str(entry["trade_date"])
+        entry_price = _float_or_none(entry["close"])
+        exit_row = conn.execute(
+            """
+            SELECT s.trade_date, f.close, s.distribution_score
+            FROM selection_signal_daily AS s
+            LEFT JOIN selection_feature_daily AS f
+              ON f.symbol = s.symbol
+             AND f.trade_date = s.trade_date
+             AND f.feature_version = s.feature_version
+            WHERE s.symbol = ?
+              AND s.trade_date >= ?
+              AND s.exit_signal = 1
+            ORDER BY s.trade_date ASC
+            LIMIT 1
+            """,
+            (symbol, entry_date),
+        ).fetchone()
+        exit_is_simulated = False
+        exit_reason = "exit_signal"
+        if not exit_row:
+            future_rows = conn.execute(
+                """
+                SELECT trade_date, close
+                FROM selection_feature_daily
+                WHERE symbol = ? AND trade_date >= ?
+                ORDER BY trade_date ASC
+                LIMIT 21
+                """,
+                (symbol, entry_date),
+            ).fetchall()
+            if future_rows:
+                exit_row = future_rows[-1]
+                exit_is_simulated = True
+                exit_reason = "simulated_20_trade_days"
+
+        exit_date = str(exit_row["trade_date"]) if exit_row else None
+        exit_price = _float_or_none(exit_row["close"]) if exit_row else None
+        return_pct = None
+        if entry_price and exit_price:
+            return_pct = ((exit_price / entry_price) - 1.0) * 100.0
+        return {
+            "signal_date": signal_date,
+            "entry_date": entry_date,
+            "entry_price": entry_price,
+            "exit_signal_date": exit_date,
+            "exit_price": exit_price,
+            "exit_reason": exit_reason,
+            "exit_is_simulated": exit_is_simulated,
+            "exit_distribution_score": _float_or_none(exit_row["distribution_score"]) if exit_row and "distribution_score" in exit_row.keys() else None,
+            "return_pct": round(return_pct, 2) if return_pct is not None else None,
+        }
+
+
 def get_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, object]:
     normalized_symbol = str(symbol or "").strip().lower()
     requested_date = _coerce_date(trade_date)
@@ -1117,6 +1251,7 @@ def get_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, object]:
     ]
     payload["series"] = _query_recent_profile_series(normalized_symbol, effective_trade_date)
     payload["event_timeline"] = _query_recent_event_timeline(normalized_symbol, effective_trade_date)
+    payload["trade_plan"] = _query_trade_plan(normalized_symbol, effective_trade_date)
     payload["trade_date"] = effective_trade_date
     payload["requested_trade_date"] = target_date
     payload["profile_date_fallback_used"] = fallback_used

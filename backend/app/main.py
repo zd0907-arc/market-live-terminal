@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="ZhangData Local Server",
     description="ZhangData 本地研究站后端服务",
-    version="5.0.0"
+    version="5.0.8"
 )
 
 # CORS 配置

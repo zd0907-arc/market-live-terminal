@@ -8,6 +8,7 @@ from backend.app.services.selection_research import (
     get_candidates,
     get_profile,
     get_selection_health,
+    get_selection_trade_dates,
     list_backtest_runs,
     refresh_selection_research,
     run_selection_backtest,
@@ -33,6 +34,18 @@ def selection_candidates(
         return APIResponse(code=200, data=get_candidates(date, strategy=strategy, limit=limit))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股候选查询失败: {exc}", data=None)
+
+
+@router.get("/selection/trade-dates", response_model=APIResponse)
+def selection_trade_dates(
+    start_date: str = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期 YYYY-MM-DD"),
+    strategy: str = Query("breakout", description="stealth / breakout / distribution"),
+):
+    try:
+        return APIResponse(code=200, data=get_selection_trade_dates(start_date, end_date, strategy=strategy))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"选股交易日查询失败: {exc}", data=None)
 
 
 @router.get("/selection/profile/{symbol}", response_model=APIResponse)

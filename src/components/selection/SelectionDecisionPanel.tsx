@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, FileText, Newspaper, ShieldAlert, TrendingUp } from 'lucide-react';
+import { ExternalLink, FileText, Newspaper, ShieldAlert, TrendingUp } from 'lucide-react';
 
-import QuoteMetaRow from '../common/QuoteMetaRow';
-import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import HistoryView from '../dashboard/HistoryView';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
-import * as StockService from '../../services/stockService';
 import { fetchSelectionHistoryMultiframe, fetchStockEventCoverage, fetchStockEventFeed } from '../../services/selectionService';
 import { HistoryMultiframeGranularity, SearchResult, SelectionCandidateItem, SelectionProfileData, StockEventCoverageData, StockEventFeedItem } from '../../types';
 
@@ -21,11 +18,6 @@ const fmtAmt = (value?: number | null) => {
   return num.toFixed(0);
 };
 
-const fmtMarketCap = (value?: number | null) => {
-  if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) return '--';
-  return `${(Number(value) / 1e8).toFixed(2)}亿`;
-};
-
 const scoreTone = (score?: number | null) => {
   const value = Number(score || 0);
   if (value >= 75) return 'text-red-300';
@@ -34,13 +26,25 @@ const scoreTone = (score?: number | null) => {
 };
 
 const MetricCard: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+  <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
     <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${tone}`}>{value}</div>
+    <div className={`mt-0.5 text-sm font-semibold ${tone}`}>{value}</div>
   </div>
 );
 
 const formatDateInput = (value: Date) => value.toISOString().slice(0, 10);
+const parseDateInput = (value?: string | null) => {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+const diffDays = (start?: string | null, end?: string | null) => {
+  const startDate = parseDateInput(start);
+  const endDate = parseDateInput(end);
+  if (!startDate || !endDate) return null;
+  return Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 86400000));
+};
 const shiftDate = (dateText: string, days: number) => {
   const date = new Date(`${dateText}T00:00:00`);
   if (Number.isNaN(date.getTime())) return dateText;
@@ -52,6 +56,7 @@ interface Props {
   candidate: SelectionCandidateItem | null;
   profile: SelectionProfileData | null;
   displayName?: string;
+  backendStatus: boolean;
 }
 
 type EventGroupKey = 'official' | 'company' | 'media';
@@ -76,15 +81,11 @@ const classifyEventGroup = (item: StockEventFeedItem): EventGroupKey => {
 
 const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
 
-const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName }) => {
-  const [quote, setQuote] = useState<any | null>(null);
-  const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
-  const [backendStatus, setBackendStatus] = useState(false);
-  const [isWatchlisted, setIsWatchlisted] = useState(false);
+const COVERAGE_DAY_OPTIONS = [30, 60, 90, 120, 180] as const;
+
+const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus }) => {
   const [granularity, setGranularity] = useState<HistoryMultiframeGranularity>('1d');
-  const [windowMode, setWindowMode] = useState<'40d' | '90d' | 'to_now' | 'custom'>('90d');
-  const [windowStart, setWindowStart] = useState('');
-  const [windowEnd, setWindowEnd] = useState('');
+  const [coverageDays, setCoverageDays] = useState<number>(90);
   const [chartStatus, setChartStatus] = useState({
     hasData: false,
     hasFormalL2History: false,
@@ -106,43 +107,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       name: (displayName || candidate.name || symbol).trim(),
     };
   }, [candidate, displayName]);
-
-  useEffect(() => {
-    if (!candidate) {
-      setQuote(null);
-      setTurnoverRate(null);
-      setIsWatchlisted(false);
-      return;
-    }
-    const symbol = candidate.symbol.toLowerCase();
-    let cancelled = false;
-    StockService.fetchQuote(symbol).then((res) => {
-      if (!cancelled) setQuote(res);
-    }).catch(() => {
-      if (!cancelled) setQuote(null);
-    });
-    StockService.fetchSentimentData(symbol).then((data) => {
-      if (!cancelled) {
-        const value = Number(data?.turnover_rate);
-        setTurnoverRate(Number.isFinite(value) ? value : null);
-      }
-    }).catch(() => {
-      if (!cancelled) setTurnoverRate(null);
-    });
-    StockService.getWatchlist().then((items) => {
-      if (!cancelled) setIsWatchlisted(Boolean(items.find((item) => item.symbol === symbol)));
-    }).catch(() => {
-      if (!cancelled) setIsWatchlisted(false);
-    });
-    StockService.checkBackendHealth().then((ok) => {
-      if (!cancelled) setBackendStatus(ok);
-    }).catch(() => {
-      if (!cancelled) setBackendStatus(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [candidate]);
 
   useEffect(() => {
     if (!candidate) {
@@ -171,51 +135,49 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
   useEffect(() => {
     if (!candidate?.trade_date) return;
-    const signalDate = candidate.trade_date;
-    const today = formatDateInput(new Date());
     setGranularity('1d');
-    setWindowMode('90d');
-    setWindowStart(shiftDate(signalDate, -20));
-    setWindowEnd(shiftDate(signalDate, 90) > today ? today : shiftDate(signalDate, 90));
+    setCoverageDays(90);
   }, [candidate?.symbol, candidate?.trade_date]);
 
-  const handleToggleWatchlist = async () => {
-    if (!candidate) return;
-    const symbol = candidate.symbol.toLowerCase();
-    const resolvedName = (displayName || candidate.name || symbol).trim();
-    if (isWatchlisted) {
-      await StockService.removeFromWatchlist(symbol);
-      setIsWatchlisted(false);
-      return;
+  const effectiveEndDate = formatDateInput(new Date());
+  const effectiveStartDate = useMemo(() => shiftDate(effectiveEndDate, -coverageDays), [coverageDays, effectiveEndDate]);
+  const tradePlanMarkers = useMemo(() => {
+    const plan = profile?.trade_plan;
+    const markers: Array<{ date?: string | null; type: 'entry' | 'exit'; label: string; note?: string | null; simulated?: boolean }> = [];
+    if (plan?.entry_date) {
+      markers.push({
+        date: plan.entry_date,
+        type: 'entry',
+        label: '入场',
+        note: plan.entry_price ? `入场价 ${fmtNum(plan.entry_price)}` : null,
+      });
     }
-    await StockService.addToWatchlist(symbol, resolvedName);
-    setIsWatchlisted(true);
-  };
-
-  const applyWindowPreset = (mode: '40d' | '90d' | 'to_now') => {
-    if (!candidate?.trade_date) return;
-    const signalDate = candidate.trade_date;
-    const today = formatDateInput(new Date());
-    const nextStart = shiftDate(signalDate, -20);
-    const nextEnd = mode === '40d'
-      ? shiftDate(signalDate, 40)
-      : mode === '90d'
-        ? shiftDate(signalDate, 90)
-        : today;
-    setWindowMode(mode);
-    setWindowStart(nextStart);
-    setWindowEnd(nextEnd > today ? today : nextEnd);
-  };
-
-  const effectiveStartDate = useMemo(() => {
-    if (!windowStart || !windowEnd) return undefined;
-    if (granularity === '1d') return windowStart;
-    const maxLookback = granularity === '1h' ? 60 : 30;
-    const clippedStart = shiftDate(windowEnd, -maxLookback);
-    return clippedStart > windowStart ? clippedStart : windowStart;
-  }, [granularity, windowEnd, windowStart]);
-  const effectiveEndDate = windowEnd || undefined;
-  const intradayWindowClipped = granularity !== '1d' && !!windowStart && !!effectiveStartDate && effectiveStartDate !== windowStart;
+    if (plan?.exit_signal_date) {
+      markers.push({
+        date: plan.exit_signal_date,
+        type: 'exit',
+        label: plan.exit_is_simulated ? '模拟出场' : '出场提示',
+        note: [
+          plan.exit_price ? `出场价 ${fmtNum(plan.exit_price)}` : null,
+          plan.return_pct != null ? `收益 ${fmtPct(plan.return_pct)}` : null,
+        ].filter(Boolean).join(' / '),
+        simulated: plan.exit_is_simulated,
+      });
+    }
+    return markers;
+  }, [profile?.trade_plan]);
+  const tradeSummary = useMemo(() => {
+    const plan = profile?.trade_plan;
+    if (!plan?.entry_date) return { text: null as string | null, tone: 'neutral' as const };
+    const end = plan.exit_signal_date || effectiveEndDate;
+    const holdingDays = diffDays(plan.entry_date, end);
+    const returnPct = plan.return_pct;
+    const daysText = holdingDays === null ? null : `持有${holdingDays}天`;
+    const returnText = returnPct == null ? null : `${returnPct > 0 ? '+' : ''}${fmtPct(returnPct)}`;
+    const text = [daysText, returnText].filter(Boolean).join(' / ');
+    const tone = returnPct == null ? 'neutral' : returnPct >= 0 ? 'positive' : 'negative';
+    return { text: text || null, tone };
+  }, [effectiveEndDate, profile?.trade_plan]);
   const groupedEventFeed = useMemo(() => {
     const groups: Record<EventGroupKey, StockEventFeedItem[]> = {
       official: [],
@@ -230,131 +192,16 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
   }
 
-  const heroPrice = Number(quote?.price ?? profile.close ?? 0);
-  const previousClose = Number(quote?.lastClose ?? profile.prev_close ?? profile.close ?? 0);
-  const open = Number(quote?.open ?? profile.close ?? 0);
-  const high = Number(quote?.high ?? profile.close ?? 0);
-  const low = Number(quote?.low ?? profile.close ?? 0);
-  const heroName = (quote?.name || displayName || profile.name || candidate.name || candidate.symbol).trim();
-
   return (
-    <div className="space-y-4">
-      <StockQuoteHeroCard
-        name={heroName}
-        symbol={candidate.symbol}
-        price={heroPrice}
-        previousClose={previousClose}
-        open={open}
-        high={high}
-        low={low}
-        volume={quote?.volume}
-        amount={quote?.amount}
-        turnoverRate={turnoverRate}
-        latestLabel={`最新 ${candidate.trade_date}`}
-        marketCapLabel={fmtMarketCap(profile.market_cap)}
-        metaRow={(
-          <QuoteMetaRow
-            isWatchlisted={isWatchlisted}
-            onToggleWatchlist={handleToggleWatchlist}
-            backendStatus={backendStatus}
-          />
-        )}
-      />
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          当前综合判断
+    <div className="space-y-3">
+      {profile.profile_date_fallback_used && profile.requested_trade_date && profile.requested_trade_date !== profile.trade_date ? (
+        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+          你当前查看的日期是 {profile.requested_trade_date}，但选股画像最新只算到 {profile.trade_date}，右侧判断先按最近可用画像日展示。
         </div>
-        {profile.profile_date_fallback_used && profile.requested_trade_date && profile.requested_trade_date !== profile.trade_date ? (
-          <div className="mt-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-            你当前查看的日期是 {profile.requested_trade_date}，但选股画像最新只算到 {profile.trade_date}，右侧判断先按最近可用画像日展示；下方图表仍按你选的时间窗看真实历史。
-          </div>
-        ) : null}
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="当前阶段" value={profile.current_judgement || '--'} tone="text-cyan-300" />
-          <MetricCard label="启动确认分" value={fmtNum(profile.breakout_score)} tone={scoreTone(profile.breakout_score)} />
-          <MetricCard label="吸筹前置分" value={fmtNum(profile.stealth_score)} tone={scoreTone(profile.stealth_score)} />
-          <MetricCard label="出货风险级别" value={profile.distribution_risk_level || '--'} tone={profile.distribution_risk_level === '高' ? 'text-red-300' : profile.distribution_risk_level === '中' ? 'text-amber-300' : 'text-emerald-300'} />
-        </div>
-      </section>
+      ) : null}
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Clock3 className="h-4 w-4 text-amber-400" />
-              复盘决策视图
-            </div>
-            <div className="inline-flex gap-2">
-              {[
-                { value: '5m', label: '5分' },
-                { value: '30m', label: '30分' },
-                { value: '1h', label: '1小时' },
-                { value: '1d', label: '日线' },
-              ].map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setGranularity(item.value as HistoryMultiframeGranularity)}
-                  className={`rounded-lg px-2.5 py-1 text-xs ${granularity === item.value ? 'bg-slate-200 text-slate-900' : 'border border-slate-700 text-slate-300'}`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr]">
-            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-              <div className="text-[11px] text-slate-500">观察窗口</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {[
-                  { key: '40d', label: '信号后40天' },
-                  { key: '90d', label: '信号后90天' },
-                  { key: 'to_now', label: '看到现在' },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => applyWindowPreset(item.key as '40d' | '90d' | 'to_now')}
-                    className={`rounded-lg px-2.5 py-1 text-xs ${windowMode === item.key ? 'bg-sky-200 text-slate-900' : 'border border-slate-700 text-slate-300'}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs text-slate-400">
-                开始日期
-                <input
-                  type="date"
-                  value={windowStart}
-                  onChange={(e) => {
-                    setWindowMode('custom');
-                    setWindowStart(e.target.value);
-                  }}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                />
-              </label>
-              <label className="text-xs text-slate-400">
-                结束日期
-                <input
-                  type="date"
-                  value={windowEnd}
-                  onChange={(e) => {
-                    setWindowMode('custom');
-                    setWindowEnd(e.target.value);
-                  }}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/30 p-2">
+      <section>
+        <div>
           <HistoryMultiframeFusionView
             activeStock={activeStock}
             backendStatus={backendStatus}
@@ -362,6 +209,26 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             onGranularityChange={setGranularity}
             startDate={effectiveStartDate}
             endDate={effectiveEndDate}
+            signalDate={candidate.trade_date}
+            signalLabel="信号日"
+            defaultAnchorDate={profile.trade_plan?.entry_date || candidate.trade_date || null}
+            tradeMarkers={tradePlanMarkers}
+            tradeSummaryText={tradeSummary.text}
+            tradeSummaryTone={tradeSummary.tone}
+            headerRightSlot={(
+              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+                {COVERAGE_DAY_OPTIONS.map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setCoverageDays(days)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${coverageDays === days ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+                  >
+                    {days}天
+                  </button>
+                ))}
+              </div>
+            )}
             fetchRows={({ symbol, granularity: nextGranularity, days, startDate, endDate, includeTodayPreview }) =>
               fetchSelectionHistoryMultiframe(symbol, {
                 granularity: nextGranularity,
@@ -376,27 +243,8 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         </div>
 
         <div className="mt-3 space-y-2">
-          <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              当前默认按“信号日前后窗口”看，不再直接把一年多历史全堆上去。日线优先用于看波段结构；分钟级若窗口过长，会自动收敛到更近的局部窗口。
-            </div>
-          </div>
-          {intradayWindowClipped ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-400">
-              当前是分钟级图，为保证可读性，已自动聚焦到结束日前最近一段窗口；若想看更长周期，请切回日线。
-            </div>
-          ) : null}
-          {chartStatus.dataOrigin === 'cloud' ? (
-            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-              当前右侧数据已自动走云端只读回退，所以即使你本地没补齐，这只票也能先直接看生产端的历史多维结果。
-            </div>
-          ) : null}
           {granularity === '1d' && !chartStatus.hasData ? (
             <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-2">
-              <div className="mb-2 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs text-slate-400">
-                这只票当前还没有正式 L2 日线底座，先给你补一个日级资金流 fallback 视图，至少能看价格、净流入和日级资金变化。
-              </div>
               <HistoryView
                 activeStock={activeStock}
                 backendStatus={backendStatus}
@@ -408,16 +256,16 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1.2fr]">
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1.2fr]">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <TrendingUp className="h-4 w-4 text-sky-400" />
             为什么选中它
           </div>
-          <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+          <div className="mt-2 text-sm leading-6 text-slate-200">
             {profile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
             <MetricCard label="5日净流入" value={fmtAmt(profile.net_inflow_5d)} />
             <MetricCard label="10日正流入占比" value={fmtPct((profile.positive_inflow_ratio_10d || 0) * 100, 1)} />
             <MetricCard label="距前20高点" value={fmtPct(profile.breakout_vs_prev20_high_pct)} />
@@ -425,15 +273,15 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <ShieldAlert className="h-4 w-4 text-amber-400" />
             出货风险判断
           </div>
-          <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+          <div className="mt-2 text-sm leading-6 text-slate-200">
             {profile.distribution_reason_summary || '当前未见明显出货压力'}
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
             <MetricCard label="出货风险分" value={fmtNum(profile.distribution_score)} tone={scoreTone(profile.distribution_score)} />
             <MetricCard label="20日涨幅" value={fmtPct(profile.return_20d_pct)} />
             <MetricCard label="情绪热比" value={fmtNum(profile.sentiment_heat_ratio)} />
@@ -441,15 +289,15 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <Newspaper className="h-4 w-4 text-violet-400" />
             事件时间线
           </div>
-          <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1">
+          <div className="mt-3 max-h-[320px] space-y-2 overflow-auto pr-1">
             {(profile.event_timeline || []).length > 0 ? (
               (profile.event_timeline || []).map((item, idx) => (
-                <div key={`${item.kind}-${item.time}-${idx}`} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                <div key={`${item.kind}-${item.time}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                     <span>{item.kind === 'daily_score' ? '情绪日评分' : `${item.source || '事件源'} / ${item.event_type || '事件'}`}</span>
                     <span>{item.time || '--'}</span>
@@ -469,14 +317,13 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <Newspaper className="h-4 w-4 text-fuchsia-400" />
               事件依据 / 信息来源
             </div>
-            <div className="mt-1 text-xs text-slate-500">AI 提到财报、公告、交流或新闻时，你可以直接从这里点开原文核对。</div>
           </div>
           <div className="text-xs text-slate-500">
             {eventCoverage?.coverage_status === 'covered'
@@ -485,7 +332,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-3 flex flex-wrap gap-2">
           {(eventCoverage?.modules || [
             { module: 'report', label: '财报', covered: false, count: 0 },
             { module: 'announcement', label: '公告', covered: false, count: 0 },
@@ -493,36 +340,35 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             { module: 'news', label: '财经资讯', covered: false, count: 0 },
             { module: 'regulatory', label: '监管', covered: false, count: 0 },
           ]).map((item) => (
-            <div key={item.module} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[11px] text-slate-500">{item.label}</div>
-                <div className={`text-[11px] ${item.covered ? 'text-emerald-300' : 'text-slate-500'}`}>{item.covered ? '已覆盖' : '暂无'}</div>
+            <div key={item.module} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-slate-500">{item.label}</span>
+                <span className="font-semibold text-slate-100">{item.count || 0}</span>
+                <span className={item.covered ? 'text-emerald-300' : 'text-slate-500'}>{item.covered ? '已覆盖' : '暂无'}</span>
+                <span className="text-slate-600">{compactTime(item.latest_event_time)}</span>
               </div>
-              <div className="mt-1 text-lg font-semibold text-slate-100">{item.count || 0}</div>
-              <div className="mt-1 text-[11px] text-slate-500">{compactTime(item.latest_event_time)}</div>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <div className="mt-3 grid gap-3 xl:grid-cols-3">
           {(Object.keys(EVENT_GROUP_META) as EventGroupKey[]).map((groupKey) => {
             const group = EVENT_GROUP_META[groupKey];
             const items = groupedEventFeed[groupKey];
             return (
-              <div key={groupKey} className="rounded-2xl border border-slate-800 bg-slate-950/30 p-3">
+              <div key={groupKey} className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold text-white">{group.label}</div>
-                    <div className="mt-1 text-[11px] text-slate-500">{group.desc}</div>
                   </div>
                   <div className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400">{items.length}</div>
                 </div>
-                <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
+                <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1">
                   {loadingEvents ? (
                     <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">正在加载事件依据...</div>
                   ) : items.length > 0 ? (
                     items.map((item) => (
-                      <div key={item.event_id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                      <div key={item.event_id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
                         <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                           <span>{item.source_label || item.source_type_label || item.source || '事件源'}</span>
                           <span>{compactTime(item.published_at)}</span>
