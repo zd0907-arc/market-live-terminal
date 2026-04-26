@@ -18,6 +18,7 @@ import {
   fetchSelectionProfile,
   fetchSelectionTradeDates,
   fetchSelectionV2Evaluation,
+  fetchStableCallbackEvaluation,
   refreshSelectionResearch,
   runSelectionBacktest,
 } from '../../services/selectionService';
@@ -27,8 +28,11 @@ import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
 import { APP_VERSION } from '../../version';
 
-const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'v2'>; label: string }> = [
-  { value: 'v2', label: '趋势波段策略' },
+const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
+
+const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>; label: string }> = [
+  { value: 'stable_capital_callback', label: '资金流回调稳健' },
+  { value: 'v2', label: '旧策略对照' },
 ];
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
@@ -216,7 +220,7 @@ const TradeDatePicker: React.FC<{
 
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
-  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'v2'>>('v2');
+  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>>(STABLE_CALLBACK_STRATEGY);
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
@@ -235,8 +239,8 @@ const SelectionResearchPage: React.FC = () => {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [runningBacktest, setRunningBacktest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [backtestStartDate, setBacktestStartDate] = useState('2025-10-01');
-  const [backtestEndDate, setBacktestEndDate] = useState('2026-02-27');
+  const [backtestStartDate, setBacktestStartDate] = useState('2026-03-02');
+  const [backtestEndDate, setBacktestEndDate] = useState('2026-04-24');
   const [error, setError] = useState('');
 
   const hydrateCandidateNames = async (items: SelectionCandidateItem[]) => {
@@ -404,8 +408,12 @@ const SelectionResearchPage: React.FC = () => {
     setRunningBacktest(true);
     setError('');
     try {
-      if (activeStrategy === 'v2') {
-        const payload = await fetchSelectionV2Evaluation({
+      if (activeStrategy === STABLE_CALLBACK_STRATEGY || activeStrategy === 'v2') {
+        const payload = activeStrategy === STABLE_CALLBACK_STRATEGY ? await fetchStableCallbackEvaluation({
+          start_date: backtestStartDate,
+          end_date: backtestEndDate,
+          top_n: 10,
+        }) : await fetchSelectionV2Evaluation({
           start_date: backtestStartDate,
           end_date: backtestEndDate,
           top_n: 10,
@@ -459,6 +467,13 @@ const SelectionResearchPage: React.FC = () => {
           next[item.date] = item;
         });
         setTradeDateMetaByDate(next);
+        if (activeStrategy === STABLE_CALLBACK_STRATEGY) {
+          const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
+          if (latestSelectable && (!tradeDate || next[tradeDate]?.selectable === false || !next[tradeDate])) {
+            setTradeDate(latestSelectable);
+            setPendingTradeDate(latestSelectable);
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setTradeDateMetaByDate({});
@@ -485,7 +500,7 @@ const SelectionResearchPage: React.FC = () => {
           </span>
           <select
             value={activeStrategy}
-            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'v2'>)}
+            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>)}
             className="h-9 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
             aria-label="选择策略"
           >
@@ -577,7 +592,22 @@ const SelectionResearchPage: React.FC = () => {
                         <span className="shrink-0 text-[11px] text-slate-500">{item.symbol}</span>
                       </div>
                     </div>
-                    {activeStrategy === 'v2' ? (
+                    {activeStrategy === STABLE_CALLBACK_STRATEGY ? (
+                      <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
+                        <div>
+                          <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
+                          <div className="text-slate-500">排序</div>
+                        </div>
+                        <div>
+                          <div className={`text-sm font-semibold ${(item.risk_count || 0) >= 2 ? 'text-red-300' : (item.risk_count || 0) === 1 ? 'text-amber-200' : 'text-emerald-200'}`}>{item.risk_count ?? 0}</div>
+                          <div className="text-slate-500">风险</div>
+                        </div>
+                        <div>
+                          <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
+                          <div className="text-slate-500">状态</div>
+                        </div>
+                      </div>
+                    ) : activeStrategy === 'v2' ? (
                       <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
                         <div>
                           <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
@@ -608,9 +638,14 @@ const SelectionResearchPage: React.FC = () => {
                         </div>
                       </div>
                     )}
-                  </div>
-                </button>
-              ))}
+	                  </div>
+                    {activeStrategy === STABLE_CALLBACK_STRATEGY ? (
+                      <div className="mt-1 truncate text-xs text-slate-500">
+                        {item.reason_summary || item.pullback_reason || '回调承接确认'}
+                      </div>
+                    ) : null}
+	                </button>
+	              ))}
               {!loadingCandidates && displayCandidates.length === 0 && (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
                   暂无候选，请先刷新数据或切换日期。
@@ -663,17 +698,17 @@ const SelectionResearchPage: React.FC = () => {
               <div className="text-xs text-slate-500">看固定持有收益，也看窗口内最高机会。</div>
             </div>
 
-            {activeStrategy === 'v2' ? (
-              <div>
-                {v2Evaluation ? (
-                  <div className="space-y-3">
-                    <div className="grid gap-2 md:grid-cols-5">
-                      <Metric label="交易数" value={String(v2Evaluation.summary?.trade_count ?? 0)} />
-                      <Metric label="胜率" value={fmtPct(v2Evaluation.summary?.win_rate)} />
-                      <Metric label="平均收益" value={fmtPct(v2Evaluation.summary?.avg_return_pct)} />
-                      <Metric label="中位收益" value={fmtPct(v2Evaluation.summary?.median_return_pct)} />
-                      <Metric label="平均持有" value={`${fmtNum(v2Evaluation.summary?.avg_holding_days, 1)}天`} />
-                    </div>
+	            {activeStrategy === STABLE_CALLBACK_STRATEGY || activeStrategy === 'v2' ? (
+	              <div>
+	                {v2Evaluation ? (
+	                  <div className="space-y-3">
+	                    <div className="grid gap-2 md:grid-cols-5">
+	                      <Metric label="交易数" value={String(v2Evaluation.summary?.trade_count ?? 0)} />
+	                      <Metric label="胜率" value={fmtPct(v2Evaluation.summary?.win_rate)} />
+	                      <Metric label="平均净收益" value={fmtPct(v2Evaluation.summary?.avg_return_pct)} />
+	                      <Metric label="中位净收益" value={fmtPct(v2Evaluation.summary?.median_return_pct)} />
+	                      <Metric label="最大亏损" value={fmtPct(v2Evaluation.summary?.max_loss_pct ?? v2Evaluation.summary?.min_return_pct)} tone="text-red-200" />
+	                    </div>
                     <div className="max-h-80 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
                       <table className="min-w-full text-xs">
                         <thead className="text-left text-slate-500">
@@ -683,8 +718,9 @@ const SelectionResearchPage: React.FC = () => {
                             <th className="pb-2 pr-3">信号</th>
                             <th className="pb-2 pr-3">入场</th>
                             <th className="pb-2 pr-3">出场</th>
-                            <th className="pb-2 pr-3">阶段</th>
-                            <th className="pb-2 pr-3">收益</th>
+	                            <th className="pb-2 pr-3">阶段</th>
+	                            <th className="pb-2 pr-3">风险</th>
+	                            <th className="pb-2 pr-3">收益</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -694,9 +730,10 @@ const SelectionResearchPage: React.FC = () => {
                               <td className="py-1.5 pr-3">#{trade.rank ?? '--'}</td>
                               <td className="py-1.5 pr-3">{trade.signal_date}</td>
                               <td className="py-1.5 pr-3">{trade.entry_date}</td>
-                              <td className="py-1.5 pr-3">{trade.exit_signal_date || trade.exit_date}</td>
-                              <td className="py-1.5 pr-3">{trade.lifecycle_phase_label || '--'}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(trade.net_return_pct ?? trade.return_pct)}</td>
+	                              <td className="py-1.5 pr-3">{trade.exit_signal_date || trade.exit_date}</td>
+	                              <td className="py-1.5 pr-3">{trade.lifecycle_phase_label || '--'}</td>
+	                              <td className="py-1.5 pr-3">{trade.risk_count ?? '--'}</td>
+	                              <td className="py-1.5 pr-3">{fmtPct(trade.net_return_pct ?? trade.return_pct)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -704,7 +741,7 @@ const SelectionResearchPage: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="py-10 text-center text-sm text-slate-500">运行 V2 策略评估后展示每天 Top10 候选的入场、出场和收益。</div>
+	                  <div className="py-10 text-center text-sm text-slate-500">运行策略评估后展示每日 Top10 候选的入场、出场和收益。</div>
                 )}
               </div>
             ) : (

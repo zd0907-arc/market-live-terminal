@@ -161,6 +161,22 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const tradePlanMarkers = useMemo(() => {
     const plan = profile?.trade_plan;
     const markers: Array<{ date?: string | null; type: 'entry' | 'exit'; label: string; note?: string | null; simulated?: boolean }> = [];
+    if (profile?.discovery_date) {
+      markers.push({
+        date: profile.discovery_date,
+        type: 'entry',
+        label: '观察',
+        note: '纳入观察',
+      });
+    }
+    if (profile?.pullback_confirm_date || profile?.entry_signal_date) {
+      markers.push({
+        date: profile.pullback_confirm_date || profile.entry_signal_date,
+        type: 'entry',
+        label: '确认',
+        note: '回调承接确认',
+      });
+    }
     if (plan?.entry_date) {
       markers.push({
         date: plan.entry_date,
@@ -182,7 +198,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       });
     }
     return markers;
-  }, [profile?.trade_plan]);
+  }, [profile?.discovery_date, profile?.entry_signal_date, profile?.pullback_confirm_date, profile?.trade_plan]);
   const tradeSummary = useMemo(() => {
     const plan = profile?.trade_plan;
     if (!plan?.entry_date) return { text: null as string | null, tone: 'neutral' as const };
@@ -211,6 +227,13 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
   const candidateTypeText = (profile.candidate_types || candidate.candidate_types || []).join(' / ');
   const tradePlan = profile.trade_plan;
+  const isStableCallback = profile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
+  const strategyExplanation = (profile.research?.strategy_explanation as string[] | undefined) || [
+    '这不是追涨停策略，而是先发现资金异动。',
+    '启动后等待回调承接确认，确认日收盘识别，次日开盘买入。',
+    '买入后主要看累计超大单是否从峰值明显撤退。',
+    '多个风险信号同时出现时过滤。',
+  ];
 
   return (
     <div className="space-y-3">
@@ -276,6 +299,29 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         </div>
       </section>
 
+      {isStableCallback ? (
+        <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-emerald-100">资金流回调稳健</div>
+              <div className="mt-1 text-xs leading-5 text-emerald-50/80">
+                {strategyExplanation.join('；')}
+              </div>
+            </div>
+            <div className="grid min-w-[260px] grid-cols-2 gap-2 text-xs">
+              <MetricCard label="买入状态" value={profile.entry_allowed === false ? '风险过滤' : '可买入'} tone={profile.entry_allowed === false ? 'text-amber-200' : 'text-emerald-100'} />
+              <MetricCard label="风险标签" value={`${profile.risk_count ?? candidate.risk_count ?? 0} 个`} tone={(profile.risk_count ?? candidate.risk_count ?? 0) >= 2 ? 'text-red-200' : 'text-emerald-100'} />
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
+            <MetricCard label="纳入观察" value={profile.discovery_date || '--'} />
+            <MetricCard label="回调确认" value={profile.pullback_confirm_date || profile.entry_signal_date || '--'} />
+            <MetricCard label="次日买入" value={profile.trade_plan?.entry_date || profile.entry_date || '--'} />
+            <MetricCard label="卖出信号/卖出" value={[profile.trade_plan?.exit_signal_date || profile.exit_signal_date, profile.trade_plan?.exit_price ? profile.trade_plan?.exit_date || profile.exit_date : profile.exit_date].filter(Boolean).join(' / ') || '--'} />
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr]">
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
@@ -299,10 +345,10 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">入场结论</div>
             <div className={`mt-1 text-sm font-semibold ${profile.entry_allowed === false ? 'text-amber-300' : 'text-emerald-300'}`}>
-              {profile.entry_allowed === false ? '已拦截' : '允许进场'}
+              {profile.entry_allowed === false ? '已拦截' : isStableCallback ? '可买入' : '允许进场'}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              {(profile.entry_block_reasons || []).length > 0 ? profile.entry_block_reasons?.join('；') : '当前未触发入场拦截'}
+              {(profile.entry_block_reasons || []).length > 0 ? profile.entry_block_reasons?.join('；') : isStableCallback ? '确认日收盘识别，计划次日开盘买入' : '当前未触发入场拦截'}
             </div>
           </div>
         </div>
@@ -315,7 +361,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             为什么选中它
           </div>
           <div className="mt-2 text-sm leading-6 text-slate-200">
-            {profile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
+            {isStableCallback
+              ? [profile.setup_reason, profile.launch_reason, profile.pullback_reason].filter(Boolean).join('；')
+              : profile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <MetricCard label="5日净流入" value={fmtAmt(profile.net_inflow_5d)} />
@@ -331,7 +379,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             出货风险判断
           </div>
           <div className="mt-2 text-sm leading-6 text-slate-200">
-            {profile.distribution_reason_summary || '当前未见明显出货压力'}
+            {isStableCallback
+              ? ((profile.risk_labels || candidate.risk_labels || []).length > 0 ? (profile.risk_labels || candidate.risk_labels || []).join('；') : '组合风险标签未达到过滤阈值。')
+              : profile.distribution_reason_summary || '当前未见明显出货压力'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             <MetricCard label="出货风险分" value={fmtNum(profile.distribution_score)} tone={scoreTone(profile.distribution_score)} />

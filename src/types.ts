@@ -285,7 +285,7 @@ export interface SentimentData {
 }
 
 
-export type SelectionStrategy = 'stealth' | 'breakout' | 'distribution' | 'v2';
+export type SelectionStrategy = 'stable_capital_callback' | 'stealth' | 'breakout' | 'distribution' | 'v2';
 
 export interface SelectionHealthData {
   status: string;
@@ -356,6 +356,22 @@ export interface SelectionCandidateItem {
   replay_entry_date?: string | null;
   replay_exit_signal_date?: string | null;
   replay_exit_reason?: string | null;
+  strategy_display_name?: string;
+  strategy_internal_id?: string;
+  entry_signal_date?: string | null;
+  entry_date?: string | null;
+  discovery_date?: string | null;
+  launch_start_date?: string | null;
+  launch_end_date?: string | null;
+  pullback_confirm_date?: string | null;
+  exit_signal_date?: string | null;
+  exit_date?: string | null;
+  risk_count?: number;
+  risk_labels?: string[];
+  setup_reason?: string;
+  launch_reason?: string;
+  pullback_reason?: string;
+  exit_plan_summary?: string;
 }
 
 export interface SelectionCandidatesResponse {
@@ -500,6 +516,7 @@ export interface SelectionProfileData {
     entry_date?: string | null;
     entry_price?: number | null;
     exit_signal_date?: string | null;
+    exit_date?: string | null;
     exit_price?: number | null;
     exit_reason?: string | null;
     exit_is_simulated?: boolean;
@@ -514,6 +531,22 @@ export interface SelectionProfileData {
   intent_profile?: Record<string, any>;
   candidate_types?: string[];
   research?: Record<string, any>;
+  strategy_display_name?: string;
+  strategy_internal_id?: string;
+  entry_signal_date?: string | null;
+  entry_date?: string | null;
+  discovery_date?: string | null;
+  launch_start_date?: string | null;
+  launch_end_date?: string | null;
+  pullback_confirm_date?: string | null;
+  exit_signal_date?: string | null;
+  exit_date?: string | null;
+  risk_count?: number;
+  risk_labels?: string[];
+  setup_reason?: string;
+  launch_reason?: string;
+  pullback_reason?: string;
+  exit_plan_summary?: string;
 }
 
 export interface SelectionBacktestRunItem {
