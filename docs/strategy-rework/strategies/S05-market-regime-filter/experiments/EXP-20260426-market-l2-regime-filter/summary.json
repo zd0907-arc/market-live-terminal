@@ -1,0 +1,55 @@
+{
+  "experiment": "EXP-20260426-market-l2-regime-filter",
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-04-24"
+  },
+  "market_trade_day_count": 37,
+  "market_stock_count_median": 3188,
+  "market_regime_stats": {
+    "main_net_outflow_days": 32,
+    "main_outflow_2d_days": 27,
+    "main_outflow_3d_days": 23,
+    "super_net_outflow_days": 25,
+    "super_outflow_2d_days": 15,
+    "main_below_q20_days": 7
+  },
+  "m04b_trade_count_full": 65,
+  "m04b_trade_count_mature": 41,
+  "baseline_mature": {
+    "trade_count": 41,
+    "win_rate_pct": 78.05,
+    "avg_net_return_pct": 8.44,
+    "median_net_return_pct": 5.72,
+    "max_net_return_pct": 62.3,
+    "min_net_return_pct": -12.13
+  },
+  "best_scan": {
+    "rule": "main_outflow_2d",
+    "anchor": "discovery_date",
+    "base_mature_trade_count": 41,
+    "kept_mature_trade_count": 10,
+    "skipped_mature_trade_count": 31,
+    "skipped_trade_ratio": 0.7561,
+    "base_win_rate_pct": 78.05,
+    "kept_win_rate_pct": 60.0,
+    "skipped_win_rate_pct": 83.87,
+    "base_avg_net_return_pct": 8.44,
+    "kept_avg_net_return_pct": 13.62,
+    "skipped_avg_net_return_pct": 6.77,
+    "base_median_net_return_pct": 5.72,
+    "kept_median_net_return_pct": 5.72,
+    "skipped_median_net_return_pct": 5.75,
+    "base_min_net_return_pct": -12.13,
+    "kept_min_net_return_pct": -4.7,
+    "skipped_min_net_return_pct": -12.13,
+    "avg_return_delta_pct": 5.18,
+    "median_return_delta_pct": 0.0,
+    "win_rate_delta_pct": -18.05
+  },
+  "recommendation": {
+    "adopt_into_S05_now": false,
+    "use_as_S01_default_switch_now": false,
+    "reason": "样本内最优规则有改善但交易数少，且需要跨月份/滚动验证；可作为候选风控开关继续观察。"
+  }
+}

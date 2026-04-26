@@ -1,0 +1,48 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-04-24",
+    "lookback": "2026-01-01"
+  },
+  "stock_count": 3198,
+  "top30": {
+    "count": 30,
+    "discovered_count": 6,
+    "m04b_trade_hit_count": 1,
+    "missed_count": 29,
+    "anchor_chain_passed_count": 5,
+    "missed_reason_counts": {
+      "发现层成交额硬门槛": 13,
+      "起点前已涨过/过热": 6,
+      "被挂单诱多过滤": 3,
+      "低位资金结构不达标": 2,
+      "有发现但无回调确认": 2,
+      "启动确认缺失": 1,
+      "资金背离不足": 1,
+      "链路可过但未进每日Top10": 1
+    }
+  },
+  "bottom30": {
+    "count": 30,
+    "discovered_count": 12,
+    "m04b_mis_entry_count": 3,
+    "not_traded_count": 27,
+    "hit_reason_counts": {
+      "确认日出货分偏高": 3,
+      "买入后累计超大单从峰值明显回撤": 2,
+      "启动期撤买/新增买相对历史偏高但未过1.5": 2,
+      "硬止损退出": 2,
+      "启动3日涨幅偏弱": 1,
+      "退出由资金撤退触发": 1
+    }
+  },
+  "outputs": [
+    "market_top30_runup.csv",
+    "market_bottom30_drawdown.csv",
+    "top30_strategy_diagnosis.csv",
+    "bottom30_strategy_diagnosis.csv",
+    "missed_top30_reason_summary.csv",
+    "hit_bottom30_reason_summary.csv",
+    "summary.json"
+  ]
+}

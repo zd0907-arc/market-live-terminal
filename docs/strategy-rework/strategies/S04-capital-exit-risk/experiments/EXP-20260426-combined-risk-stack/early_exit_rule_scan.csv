@@ -1,0 +1,5 @@
+rule_name,total_trades,early_exit_count,early_exit_original_avg_return_pct,early_exit_original_median_return_pct,early_exit_new_avg_return_pct,early_exit_new_median_return_pct,early_exit_delta_sum_pct,early_exit_big_winner_gt_15_count,final_trade_count,final_win_rate_pct,final_avg_return_pct,final_median_return_pct,final_max_return_pct,final_min_return_pct,final_sum_return_pct,final_big_winner_gt_15_count,final_big_loss_le_-8_count
+D2_3_super_peak_dd20_and_loss,41,3,0.7,2.22,-2.67,-2.88,-10.11,0,41,73.17,8.2,5.72,62.3,-12.13,336.08,11,3
+D2_3_super_or_main_neg_and_loss_gt2,41,8,0.87,2.71,-4.09,-4.01,-39.65,1,41,65.85,7.48,3.23,62.3,-12.13,306.54,10,2
+D2_3_cum_super_main_neg_and_loss,41,14,3.45,3.23,-1.38,-0.27,-67.56,2,41,73.17,6.8,3.16,62.3,-12.13,278.63,9,2
+D1_3_cum_super_neg_and_loss,41,18,2.91,3.23,-1.87,-2.02,-85.92,2,41,60.98,6.35,1.18,62.3,-8.81,260.27,9,1

@@ -1,0 +1,16 @@
+feature,group_a_median,group_b_median,a_minus_b_median,group_a_mean,group_b_mean
+confirm_distribution_score,50.4,35.66,14.74,42.466667,36.049444
+launch3_ob_active_buy_strength_avg,7.223115,2.907665,4.31545,5.968285,3.567978
+setup_score,88.075,92.01,-3.935,86.571667,90.693889
+launch3_return_pct,4.79,7.03,-2.24,4.923333,7.48
+pullback_day_ob_oib_cvd_gap,-0.11194,0.0553,-0.16724,0.015578,0.225302
+launch_cancel_buy_to_add_buy_vs_hist,1.12,1.0011,0.1189,0.979517,0.924633
+pullback_day_ob_support_spread_avg,-0.058585,0.024525,-0.08311,0.052923,0.194637
+launch3_ob_oib_cvd_gap,-0.08681,-0.00959,-0.07722,0.050133,-0.023862
+pullback_day_ob_cvd_ratio,0.05716,-0.01557,0.07273,0.03735,-0.030662
+pullback_support_spread_avg,-0.04877,0.022955,-0.071725,0.058402,0.072278
+pullback_main_net_ratio,0.095175,0.03364,0.061535,0.083995,0.034312
+launch3_main_net_ratio,0.0714,0.02498,0.04642,0.064853,0.035877
+launch3_ob_support_spread_avg,-0.04078,-0.004555,-0.036225,0.025818,-0.008641
+pullback_super_net_ratio,0.05293,0.0324,0.02053,0.042207,0.023837
+launch3_super_net_ratio,0.023385,0.029175,-0.00579,0.034597,0.022866

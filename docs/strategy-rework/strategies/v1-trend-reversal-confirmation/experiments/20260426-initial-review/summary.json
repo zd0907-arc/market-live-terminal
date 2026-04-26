@@ -1,0 +1,612 @@
+{
+  "base": {
+    "count": 82,
+    "win_rate": 52.44,
+    "avg_return": 2.11,
+    "median_return": 0.97
+  },
+  "top_feature_corr": [
+    {
+      "feature": "hold_return_pct",
+      "corr_return": 0.9599,
+      "win_mean": 10.155581,
+      "loss_mean": -5.578462,
+      "win_loss_diff": 15.734043,
+      "big_mean": 19.927368,
+      "bad_mean": -7.872273,
+      "big_bad_diff": 27.799641
+    },
+    {
+      "feature": "hold_super_price_divergence",
+      "corr_return": -0.8744,
+      "win_mean": -0.097585,
+      "loss_mean": 0.026851,
+      "win_loss_diff": -0.124436,
+      "big_mean": -0.192208,
+      "bad_mean": 0.043596,
+      "big_bad_diff": -0.235804
+    },
+    {
+      "feature": "hold_main_price_divergence",
+      "corr_return": -0.7992,
+      "win_mean": -0.103574,
+      "loss_mean": 0.002645,
+      "win_loss_diff": -0.106219,
+      "big_mean": -0.195396,
+      "bad_mean": 0.012197,
+      "big_bad_diff": -0.207594
+    },
+    {
+      "feature": "hold_positive_l2_bar_ratio_avg",
+      "corr_return": 0.5889,
+      "win_mean": 0.484667,
+      "loss_mean": 0.37539,
+      "win_loss_diff": 0.109278,
+      "big_mean": 0.508805,
+      "bad_mean": 0.356518,
+      "big_bad_diff": 0.152287
+    },
+    {
+      "feature": "hold_active_buy_strength_avg",
+      "corr_return": 0.5876,
+      "win_mean": -0.228053,
+      "loss_mean": -5.875097,
+      "win_loss_diff": 5.647044,
+      "big_mean": 0.981768,
+      "bad_mean": -6.901,
+      "big_bad_diff": 7.882768
+    },
+    {
+      "feature": "hold_order_event_count_sum",
+      "corr_return": 0.583,
+      "win_mean": 1657773.27907,
+      "loss_mean": 680739.769231,
+      "win_loss_diff": 977033.509839,
+      "big_mean": 2543963.263158,
+      "bad_mean": 870857.954545,
+      "big_bad_diff": 1673105.308612
+    },
+    {
+      "feature": "hold_amount_sum",
+      "corr_return": 0.5759,
+      "win_mean": 20293160526.564423,
+      "loss_mean": 7493245576.794615,
+      "win_loss_diff": 12799914949.769808,
+      "big_mean": 32841279984.206844,
+      "bad_mean": 9449295311.524546,
+      "big_bad_diff": 23391984672.682297
+    },
+    {
+      "feature": "hold_days",
+      "corr_return": 0.5542,
+      "win_mean": 10.162791,
+      "loss_mean": 4.948718,
+      "win_loss_diff": 5.214073,
+      "big_mean": 12.421053,
+      "bad_mean": 4.818182,
+      "big_bad_diff": 7.602871
+    },
+    {
+      "feature": "holding_days",
+      "corr_return": 0.5542,
+      "win_mean": 10.162791,
+      "loss_mean": 4.948718,
+      "win_loss_diff": 5.214073,
+      "big_mean": 12.421053,
+      "bad_mean": 4.818182,
+      "big_bad_diff": 7.602871
+    },
+    {
+      "feature": "hold_cum_super_ratio_max_drawdown",
+      "corr_return": -0.5415,
+      "win_mean": -0.052837,
+      "loss_mean": -0.028717,
+      "win_loss_diff": -0.02412,
+      "big_mean": -0.070204,
+      "bad_mean": -0.02741,
+      "big_bad_diff": -0.042794
+    },
+    {
+      "feature": "hold_super_positive_day_ratio",
+      "corr_return": 0.537,
+      "win_mean": 0.482577,
+      "loss_mean": 0.282123,
+      "win_loss_diff": 0.200454,
+      "big_mean": 0.549547,
+      "bad_mean": 0.2711,
+      "big_bad_diff": 0.278447
+    },
+    {
+      "feature": "hold_negative_super_day_ratio",
+      "corr_return": -0.537,
+      "win_mean": 0.517423,
+      "loss_mean": 0.717877,
+      "win_loss_diff": -0.200454,
+      "big_mean": 0.450453,
+      "bad_mean": 0.7289,
+      "big_bad_diff": -0.278447
+    },
+    {
+      "feature": "hold_cum_main_ratio_max_drawdown",
+      "corr_return": -0.5071,
+      "win_mean": -0.070773,
+      "loss_mean": -0.054568,
+      "win_loss_diff": -0.016206,
+      "big_mean": -0.093454,
+      "bad_mean": -0.056634,
+      "big_bad_diff": -0.03682
+    },
+    {
+      "feature": "hold_super_net_ratio",
+      "corr_return": 0.4981,
+      "win_mean": 0.003971,
+      "loss_mean": -0.028933,
+      "win_loss_diff": 0.032904,
+      "big_mean": 0.007066,
+      "bad_mean": -0.035127,
+      "big_bad_diff": 0.042193
+    },
+    {
+      "feature": "hold_cum_super_ratio_last",
+      "corr_return": 0.4981,
+      "win_mean": 0.003971,
+      "loss_mean": -0.028933,
+      "win_loss_diff": 0.032904,
+      "big_mean": 0.007066,
+      "bad_mean": -0.035127,
+      "big_bad_diff": 0.042193
+    },
+    {
+      "feature": "hold_cum_main_ratio_last",
+      "corr_return": 0.4669,
+      "win_mean": -0.002018,
+      "loss_mean": -0.05314,
+      "win_loss_diff": 0.051121,
+      "big_mean": 0.003877,
+      "bad_mean": -0.066525,
+      "big_bad_diff": 0.070403
+    },
+    {
+      "feature": "hold_main_net_ratio",
+      "corr_return": 0.4669,
+      "win_mean": -0.002018,
+      "loss_mean": -0.05314,
+      "win_loss_diff": 0.051121,
+      "big_mean": 0.003877,
+      "bad_mean": -0.066525,
+      "big_bad_diff": 0.070403
+    },
+    {
+      "feature": "hold_negative_main_day_ratio",
+      "corr_return": -0.4617,
+      "win_mean": 0.479516,
+      "loss_mean": 0.738003,
+      "win_loss_diff": -0.258486,
+      "big_mean": 0.452342,
+      "bad_mean": 0.756395,
+      "big_bad_diff": -0.304053
+    },
+    {
+      "feature": "hold_main_positive_day_ratio",
+      "corr_return": 0.4617,
+      "win_mean": 0.520484,
+      "loss_mean": 0.261997,
+      "win_loss_diff": 0.258486,
+      "big_mean": 0.547658,
+      "bad_mean": 0.243605,
+      "big_bad_diff": 0.304053
+    },
+    {
+      "feature": "hold_support_spread_avg",
+      "corr_return": 0.4096,
+      "win_mean": 0.011821,
+      "loss_mean": -0.027205,
+      "win_loss_diff": 0.039026,
+      "big_mean": 0.051324,
+      "bad_mean": -0.006215,
+      "big_bad_diff": 0.05754
+    },
+    {
+      "feature": "launch3_main_net_ratio",
+      "corr_return": -0.371,
+      "win_mean": 0.045803,
+      "loss_mean": 0.081264,
+      "win_loss_diff": -0.035461,
+      "big_mean": 0.036052,
+      "bad_mean": 0.103494,
+      "big_bad_diff": -0.067443
+    },
+    {
+      "feature": "hold_cum_super_ratio_min",
+      "corr_return": 0.3658,
+      "win_mean": -0.02109,
+      "loss_mean": -0.040443,
+      "win_loss_diff": 0.019353,
+      "big_mean": -0.021408,
+      "bad_mean": -0.05088,
+      "big_bad_diff": 0.029472
+    },
+    {
+      "feature": "hold_cum_main_ratio_min",
+      "corr_return": 0.3203,
+      "win_mean": -0.032727,
+      "loss_mean": -0.0619,
+      "win_loss_diff": 0.029173,
+      "big_mean": -0.025866,
+      "bad_mean": -0.076031,
+      "big_bad_diff": 0.050165
+    },
+    {
+      "feature": "hold_amount_anomaly_avg",
+      "corr_return": 0.2748,
+      "win_mean": 1.169784,
+      "loss_mean": 1.111587,
+      "win_loss_diff": 0.058197,
+      "big_mean": 1.374826,
+      "bad_mean": 1.212382,
+      "big_bad_diff": 0.162444
+    },
+    {
+      "feature": "hold_oib_ratio",
+      "corr_return": 0.2699,
+      "win_mean": 0.001802,
+      "loss_mean": -0.020508,
+      "win_loss_diff": 0.02231,
+      "big_mean": 0.029745,
+      "bad_mean": 0.006421,
+      "big_bad_diff": 0.023324
+    },
+    {
+      "feature": "hold_max_daily_main_outflow_ratio",
+      "corr_return": 0.2573,
+      "win_mean": -0.113871,
+      "loss_mean": -0.13158,
+      "win_loss_diff": 0.017709,
+      "big_mean": -0.102942,
+      "bad_mean": -0.139629,
+      "big_bad_diff": 0.036687
+    },
+    {
+      "feature": "pull_to_entry_max_daily_super_outflow_ratio",
+      "corr_return": 0.2529,
+      "win_mean": 0.055023,
+      "loss_mean": 0.039507,
+      "win_loss_diff": 0.015515,
+      "big_mean": 0.103755,
+      "bad_mean": 0.056364,
+      "big_bad_diff": 0.047391
+    },
+    {
+      "feature": "pull_to_entry_super_net_ratio",
+      "corr_return": 0.2529,
+      "win_mean": 0.055023,
+      "loss_mean": 0.039507,
+      "win_loss_diff": 0.015515,
+      "big_mean": 0.103755,
+      "bad_mean": 0.056364,
+      "big_bad_diff": 0.047391
+    },
+    {
+      "feature": "pull_to_entry_super_price_divergence",
+      "corr_return": 0.2529,
+      "win_mean": 0.055023,
+      "loss_mean": 0.039507,
+      "win_loss_diff": 0.015515,
+      "big_mean": 0.103755,
+      "bad_mean": 0.056364,
+      "big_bad_diff": 0.047391
+    },
+    {
+      "feature": "discover_to_entry_active_buy_strength_avg",
+      "corr_return": -0.2495,
+      "win_mean": 0.954693,
+      "loss_mean": 3.757687,
+      "win_loss_diff": -2.802994,
+      "big_mean": 1.073668,
+      "bad_mean": 5.2643,
+      "big_bad_diff": -4.190632
+    }
+  ],
+  "top_filter_rules": [
+    {
+      "rule": "hold_return_pct >= 0.155",
+      "count": 41,
+      "win_rate": 95.12,
+      "avg_return": 11.91,
+      "median_return": 8.02,
+      "max_return": 59.71,
+      "min_return": -2.41,
+      "score": 18.0116
+    },
+    {
+      "rule": "hold_super_price_divergence <= -0.00706",
+      "count": 41,
+      "win_rate": 85.37,
+      "avg_return": 10.43,
+      "median_return": 8.02,
+      "max_return": 59.71,
+      "min_return": -11.28,
+      "score": 16.935599999999997
+    },
+    {
+      "rule": "hold_main_price_divergence <= -0.03802",
+      "count": 41,
+      "win_rate": 75.61,
+      "avg_return": 9.26,
+      "median_return": 8.02,
+      "max_return": 59.71,
+      "min_return": -14.24,
+      "score": 15.9208
+    },
+    {
+      "rule": "holding_days >= 6.5",
+      "count": 41,
+      "win_rate": 85.37,
+      "avg_return": 10.32,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.36,
+      "score": 14.8936
+    },
+    {
+      "rule": "hold_days >= 6.5",
+      "count": 41,
+      "win_rate": 85.37,
+      "avg_return": 10.32,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.36,
+      "score": 14.8936
+    },
+    {
+      "rule": "hold_return_pct >= -3.7845",
+      "count": 53,
+      "win_rate": 81.13,
+      "avg_return": 8.77,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -8.81,
+      "score": 14.2444
+    },
+    {
+      "rule": "hold_positive_l2_bar_ratio_avg >= 0.44355",
+      "count": 41,
+      "win_rate": 75.61,
+      "avg_return": 9.69,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 13.9868
+    },
+    {
+      "rule": "hold_main_net_ratio >= -0.019655",
+      "count": 41,
+      "win_rate": 78.05,
+      "avg_return": 8.52,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 13.948
+    },
+    {
+      "rule": "hold_cum_main_ratio_last >= -0.019655",
+      "count": 41,
+      "win_rate": 78.05,
+      "avg_return": 8.52,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 13.948
+    },
+    {
+      "rule": "hold_super_net_ratio >= -0.009195",
+      "count": 41,
+      "win_rate": 78.05,
+      "avg_return": 8.17,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 13.878
+    },
+    {
+      "rule": "hold_cum_super_ratio_last >= -0.009195",
+      "count": 41,
+      "win_rate": 78.05,
+      "avg_return": 8.17,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 13.878
+    },
+    {
+      "rule": "hold_active_buy_strength_avg >= -2.4507",
+      "count": 41,
+      "win_rate": 75.61,
+      "avg_return": 9.1,
+      "median_return": 6.0,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 13.8688
+    },
+    {
+      "rule": "hold_main_positive_day_ratio >= 0.4202",
+      "count": 41,
+      "win_rate": 75.61,
+      "avg_return": 7.34,
+      "median_return": 6.0,
+      "max_return": 45.49,
+      "min_return": -11.9,
+      "score": 13.5168
+    },
+    {
+      "rule": "hold_negative_main_day_ratio <= 0.5798",
+      "count": 41,
+      "win_rate": 75.61,
+      "avg_return": 7.34,
+      "median_return": 6.0,
+      "max_return": 45.49,
+      "min_return": -11.9,
+      "score": 13.5168
+    },
+    {
+      "rule": "hold_super_price_divergence <= 0.012304",
+      "count": 53,
+      "win_rate": 79.25,
+      "avg_return": 8.43,
+      "median_return": 3.96,
+      "max_return": 59.71,
+      "min_return": -11.28,
+      "score": 11.986
+    },
+    {
+      "rule": "hold_sell_pressure_avg <= 1.39255",
+      "count": 41,
+      "win_rate": 65.85,
+      "avg_return": 6.45,
+      "median_return": 3.96,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 10.518
+    },
+    {
+      "rule": "hold_add_sell_ratio <= 1.37285",
+      "count": 41,
+      "win_rate": 65.85,
+      "avg_return": 6.12,
+      "median_return": 3.96,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 10.452
+    },
+    {
+      "rule": "hold_super_net_ratio >= -0.0178205",
+      "count": 53,
+      "win_rate": 73.58,
+      "avg_return": 6.52,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 10.4004
+    },
+    {
+      "rule": "hold_cum_super_ratio_last >= -0.0178205",
+      "count": 53,
+      "win_rate": 73.58,
+      "avg_return": 6.52,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 10.4004
+    },
+    {
+      "rule": "launch3_main_net_ratio <= 0.05008",
+      "count": 41,
+      "win_rate": 70.73,
+      "avg_return": 7.07,
+      "median_return": 3.22,
+      "max_return": 45.49,
+      "min_return": -11.36,
+      "score": 10.2924
+    },
+    {
+      "rule": "hold_amount_sum >= 7.81321e+09",
+      "count": 41,
+      "win_rate": 70.73,
+      "avg_return": 6.76,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -18.38,
+      "score": 10.220400000000001
+    },
+    {
+      "rule": "launch_to_entry_main_net_ratio <= 0.032545",
+      "count": 41,
+      "win_rate": 70.73,
+      "avg_return": 6.08,
+      "median_return": 3.16,
+      "max_return": 45.49,
+      "min_return": -11.36,
+      "score": 10.034400000000002
+    },
+    {
+      "rule": "hold_super_positive_day_ratio >= 0.4",
+      "count": 50,
+      "win_rate": 68.0,
+      "avg_return": 6.78,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 10.006
+    },
+    {
+      "rule": "hold_negative_super_day_ratio <= 0.6",
+      "count": 50,
+      "win_rate": 68.0,
+      "avg_return": 6.78,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 10.006
+    },
+    {
+      "rule": "hold_main_positive_day_ratio >= 0.356645",
+      "count": 53,
+      "win_rate": 67.92,
+      "avg_return": 6.48,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 9.939599999999999
+    },
+    {
+      "rule": "hold_negative_main_day_ratio <= 0.643355",
+      "count": 53,
+      "win_rate": 67.92,
+      "avg_return": 6.48,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 9.939599999999999
+    },
+    {
+      "rule": "hold_main_price_divergence <= -0.00197",
+      "count": 54,
+      "win_rate": 68.52,
+      "avg_return": 6.14,
+      "median_return": 3.12,
+      "max_return": 59.71,
+      "min_return": -18.38,
+      "score": 9.8296
+    },
+    {
+      "rule": "hold_active_buy_strength_avg >= -3.18824",
+      "count": 53,
+      "win_rate": 66.04,
+      "avg_return": 6.41,
+      "median_return": 3.22,
+      "max_return": 59.71,
+      "min_return": -14.52,
+      "score": 9.785200000000001
+    },
+    {
+      "rule": "hold_super_positive_day_ratio >= 0.343905",
+      "count": 53,
+      "win_rate": 66.04,
+      "avg_return": 6.43,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 9.779200000000001
+    },
+    {
+      "rule": "hold_negative_super_day_ratio <= 0.656095",
+      "count": 53,
+      "win_rate": 66.04,
+      "avg_return": 6.43,
+      "median_return": 3.21,
+      "max_return": 59.71,
+      "min_return": -11.9,
+      "score": 9.779200000000001
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+feature,loss_count,win_count,loss_mean,loss_median,win_mean,win_median,loss_minus_win_median
+launch3_add_sell_amount_vs_hist,13,49,1.094862,0.8184,1.100655,1.053,-0.2346
+confirm_add_sell_ratio,13,49,1.07176,1.066168,1.039117,0.875964,0.190204
+confirm_add_sell_amount_vs_hist,13,49,1.137277,1.005,0.857518,0.8488,0.1562
+launch3_add_sell_ratio,13,49,1.028407,0.960774,1.058166,0.900053,0.060721
+launch3_sell_pressure_ratio,13,49,0.737302,0.56943,0.762925,0.520724,0.048706
+launch3_add_sell_ratio_vs_hist,13,49,0.808077,0.9245,0.974004,0.9687,-0.0442
+confirm_sell_pressure_ratio,13,49,0.73937,0.582844,0.731761,0.553989,0.028855
+confirm_support_pressure_spread,13,49,0.042602,0.057882,0.215754,0.033202,0.02468
+confirm_add_sell_ratio_vs_hist,13,49,0.879592,0.9848,0.969743,0.9655,0.0193
+launch3_support_pressure_spread,13,49,0.010237,-0.010127,-6.4e-05,-0.003502,-0.006625

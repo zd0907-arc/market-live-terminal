@@ -32,7 +32,12 @@ const MetricCard: React.FC<{ label: string; value: string; tone?: string }> = ({
   </div>
 );
 
-const formatDateInput = (value: Date) => value.toISOString().slice(0, 10);
+const formatDateInput = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 const parseDateInput = (value?: string | null) => {
   if (!value) return null;
   const [year, month, day] = value.split('-').map(Number);
@@ -52,11 +57,18 @@ const shiftDate = (dateText: string, days: number) => {
   return formatDateInput(date);
 };
 
+const maxDateText = (...values: Array<string | null | undefined>) => {
+  const valid = values.map((item) => String(item || '').slice(0, 10)).filter(Boolean);
+  if (!valid.length) return '';
+  return valid.sort()[valid.length - 1];
+};
+
 interface Props {
   candidate: SelectionCandidateItem | null;
   profile: SelectionProfileData | null;
   displayName?: string;
   backendStatus: boolean;
+  latestTradeDate?: string;
 }
 
 type EventGroupKey = 'official' | 'company' | 'media';
@@ -83,7 +95,7 @@ const compactTime = (value?: string | null) => (value ? String(value).slice(0, 1
 
 const COVERAGE_DAY_OPTIONS = [30, 60, 90, 120, 180] as const;
 
-const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus }) => {
+const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus, latestTradeDate }) => {
   const [granularity, setGranularity] = useState<HistoryMultiframeGranularity>('1d');
   const [coverageDays, setCoverageDays] = useState<number>(90);
   const [chartStatus, setChartStatus] = useState({
@@ -139,7 +151,12 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     setCoverageDays(90);
   }, [candidate?.symbol, candidate?.trade_date]);
 
-  const effectiveEndDate = formatDateInput(new Date());
+  const effectiveEndDate = maxDateText(
+    latestTradeDate,
+    profile?.latest_available_trade_date,
+    profile?.trade_date,
+    candidate?.trade_date,
+  ) || formatDateInput(new Date());
   const effectiveStartDate = useMemo(() => shiftDate(effectiveEndDate, -coverageDays), [coverageDays, effectiveEndDate]);
   const tradePlanMarkers = useMemo(() => {
     const plan = profile?.trade_plan;
@@ -191,6 +208,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   if (!candidate || !profile || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
   }
+
+  const candidateTypeText = (profile.candidate_types || candidate.candidate_types || []).join(' / ');
+  const tradePlan = profile.trade_plan;
 
   return (
     <div className="space-y-3">
@@ -253,6 +273,38 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
               />
             </div>
           ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+        <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr]">
+          <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
+            <div className="text-[11px] text-slate-500">信号链路</div>
+            <div className="mt-1 text-sm text-slate-100">
+              信号日 {candidate.trade_date || '--'}
+              {tradePlan?.entry_date ? ` → 入场 ${tradePlan.entry_date}` : ''}
+              {tradePlan?.exit_signal_date ? ` → 出场提示 ${tradePlan.exit_signal_date}` : ''}
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              {tradePlan?.exit_reason || profile.current_judgement || '当前无交易计划说明'}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
+            <div className="text-[11px] text-slate-500">候选类型</div>
+            <div className="mt-1 text-sm font-semibold text-slate-100">{candidateTypeText || '--'}</div>
+            <div className="mt-1 text-xs text-slate-400">
+              {profile.intent_profile?.intent_label ? `意图：${profile.intent_profile.intent_label}` : '当前无意图标签'}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
+            <div className="text-[11px] text-slate-500">入场结论</div>
+            <div className={`mt-1 text-sm font-semibold ${profile.entry_allowed === false ? 'text-amber-300' : 'text-emerald-300'}`}>
+              {profile.entry_allowed === false ? '已拦截' : '允许进场'}
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              {(profile.entry_block_reasons || []).length > 0 ? profile.entry_block_reasons?.join('；') : '当前未触发入场拦截'}
+            </div>
+          </div>
         </div>
       </section>
 

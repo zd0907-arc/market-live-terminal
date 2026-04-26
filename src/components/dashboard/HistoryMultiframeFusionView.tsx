@@ -755,10 +755,15 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       setActiveDataIndex(null);
       return;
     }
+    if (startDate || endDate) {
+      setZoomWindow({ start: 0, end: 100 });
+      setActiveDataIndex(null);
+      return;
+    }
     const defaultVisibleBars = DEFAULT_VISIBLE_POINTS;
     setZoomWindow(buildZoomWindowFromVisibleBars(fusionRows.length, defaultVisibleBars));
     setActiveDataIndex(null);
-  }, [fusionRows.length, granularity]);
+  }, [fusionRows.length, granularity, startDate, endDate]);
 
   const issueTagLabel = issueCount > 0 ? `${issueCount}条缺失 / 异常` : '数据完整';
 

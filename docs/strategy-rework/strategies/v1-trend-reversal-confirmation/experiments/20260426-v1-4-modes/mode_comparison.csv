@@ -1,0 +1,4 @@
+mode,passed_candidate_count,filtered_candidate_count,full_trade_count,full_win_rate,full_avg_return_pct,full_avg_gross_return_pct,full_median_return_pct,full_max_return_pct,full_min_return_pct,full_avg_holding_days,full_total_return_pct_signal_sum,mature_trade_count,mature_win_rate,mature_avg_return_pct,mature_avg_gross_return_pct,mature_median_return_pct,mature_max_return_pct,mature_min_return_pct,mature_avg_holding_days,mature_total_return_pct_signal_sum
+v1.3,324,46,75,58.67,4.6,5.12,3.2,62.3,-13.07,8.09,344.82,48,72.92,7.21,7.75,5.33,62.3,-12.13,10.33,346.03
+v1.4-quality,65,305,39,58.97,6.76,7.29,8.21,31.05,-13.07,8.92,263.59,22,77.27,11.18,11.74,10.1,31.05,-5.61,12.36,246.0
+v1.4-balanced,314,56,65,60.0,5.08,5.61,3.2,62.3,-13.07,8.34,330.23,41,78.05,8.44,8.99,5.72,62.3,-12.13,10.88,346.19

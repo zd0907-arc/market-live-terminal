@@ -1,0 +1,42 @@
+{
+  "top30": {
+    "count": 30,
+    "candidate_hit": 6,
+    "v1_3_trade_hit": 1,
+    "v1_4_balanced_trade_hit": 1,
+    "v1_4_quality_trade_hit": 1,
+    "anchor_candidate_ok": 6,
+    "top_miss_reasons": {
+      "成交额<2.5亿;setup_score<50": 8,
+      "锚点附近链路可通过": 5,
+      "setup_score<50;前20日涨幅>12": 4,
+      "setup_score<50;前20日涨幅>12;前5日涨幅>8;资金价格背离不足": 3,
+      "成交额<2.5亿;setup_score<50;资金价格背离不足": 2,
+      "成交额<2.5亿": 2,
+      "setup_score<50": 2,
+      "成交额<2.5亿;setup_score<50;前20日涨幅>12": 1,
+      "候选通过但未找到启动3日": 1,
+      "setup_score<50;资金价格背离不足": 1
+    }
+  },
+  "bottom30": {
+    "count": 30,
+    "candidate_hit": 12,
+    "v1_3_trade_hit": 3,
+    "v1_4_balanced_trade_hit": 3,
+    "v1_4_quality_trade_hit": 2,
+    "anchor_candidate_ok": 0,
+    "top_miss_reasons": {
+      "setup_score<50;前20日涨幅>12;前5日涨幅>8;资金价格背离不足": 11,
+      "成交额<2.5亿;setup_score<50;前5日涨幅>8": 4,
+      "setup_score<50": 3,
+      "成交额<2.5亿": 2,
+      "成交额<2.5亿;setup_score<50;前20日涨幅>12;资金价格背离不足": 2,
+      "成交额<2.5亿;setup_score<50": 2,
+      "成交额<2.5亿;setup_score<50;资金价格背离不足": 2,
+      "setup_score<50;前20日涨幅>12;资金价格背离不足": 1,
+      "setup_score<50;前5日涨幅>8": 1,
+      "setup_score<50;资金价格背离不足": 1
+    }
+  }
+}

@@ -285,7 +285,7 @@ export interface SentimentData {
 }
 
 
-export type SelectionStrategy = 'stealth' | 'breakout' | 'distribution';
+export type SelectionStrategy = 'stealth' | 'breakout' | 'distribution' | 'v2';
 
 export interface SelectionHealthData {
   status: string;
@@ -343,11 +343,25 @@ export interface SelectionCandidateItem {
   market_cap?: number | null;
   feature_version?: string;
   strategy_version?: string;
+  intent_profile?: Record<string, any>;
+  entry_allowed?: boolean;
+  entry_block_reasons?: string[];
+  candidate_types?: string[];
+  selection_rank_score?: number | null;
+  selection_rank_mode?: string;
+  lifecycle_phase?: string;
+  lifecycle_phase_label?: string;
+  action_label?: string;
+  replay_return_pct?: number | null;
+  replay_entry_date?: string | null;
+  replay_exit_signal_date?: string | null;
+  replay_exit_reason?: string | null;
 }
 
 export interface SelectionCandidatesResponse {
   trade_date: string;
   strategy: SelectionStrategy;
+  rank_mode?: string;
   items: SelectionCandidateItem[];
 }
 
@@ -426,6 +440,7 @@ export interface StockEventCoverageData {
 export interface SelectionProfileData {
   symbol: string;
   trade_date: string;
+  latest_available_trade_date?: string | null;
   requested_trade_date?: string;
   profile_date_fallback_used?: boolean;
   name?: string | null;
@@ -494,6 +509,11 @@ export interface SelectionProfileData {
   explain_cards?: Array<{ title: string; summary: string }>;
   series: SelectionProfileSeriesItem[];
   event_timeline?: SelectionEventTimelineItem[];
+  entry_allowed?: boolean;
+  entry_block_reasons?: string[];
+  intent_profile?: Record<string, any>;
+  candidate_types?: string[];
+  research?: Record<string, any>;
 }
 
 export interface SelectionBacktestRunItem {

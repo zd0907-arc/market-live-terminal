@@ -1,0 +1,5 @@
+variant,trade_count,win_rate,avg_return_pct,avg_gross_return_pct,median_return_pct,max_return_pct,min_return_pct,avg_holding_days,total_return_pct_signal_sum,discovery_count,confirmed_count,confirmation_rate
+baseline_confirmed,126,34.13,0.27,0.78,-6.37,97.17,-20.72,7.75,34.43,220,127,57.73
+balanced_strict,58,27.59,-0.16,0.34,-8.82,97.17,-20.72,7.83,-9.56,220,58,26.36
+repair_only_strict,17,41.18,3.13,3.65,-8.71,43.64,-14.74,8.82,53.19,220,17,7.73
+trend_continuation_strict,29,20.69,-4.7,-4.22,-10.9,30.67,-15.22,7.59,-136.29,220,29,13.18

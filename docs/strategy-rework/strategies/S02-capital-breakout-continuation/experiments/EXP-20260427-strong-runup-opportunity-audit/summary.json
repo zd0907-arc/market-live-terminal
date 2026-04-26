@@ -1,0 +1,105 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-04-24"
+  },
+  "stock_count": 3198,
+  "cohorts": [
+    {
+      "cohort": "top50",
+      "count": 50,
+      "avg_runup_pct": 117.42,
+      "min_runup_pct": 87.81,
+      "max_runup_pct": 237.5,
+      "candidate_count": 9,
+      "base_trade_count": 2,
+      "stable_trade_count": 2,
+      "owner_counts": {
+        "资金流回调稳健策略": 33,
+        "趋势中继策略": 12,
+        "组合风险模块复核": 3,
+        "消息事件重估策略": 2
+      },
+      "reason_counts": {
+        "成交额硬门槛错过": 22,
+        "启动前已涨过": 8,
+        "低位资金结构不达标": 5,
+        "有发现但无回调买点": 4,
+        "被撤买单风险过滤": 3,
+        "当前策略已抓到": 2,
+        "启动识别缺失": 2,
+        "资金流特征不足": 2,
+        "链路可过但未进Top10": 2
+      }
+    },
+    {
+      "cohort": "runup_ge_50",
+      "count": 222,
+      "avg_runup_pct": 76.57,
+      "min_runup_pct": 50.03,
+      "max_runup_pct": 237.5,
+      "candidate_count": 32,
+      "base_trade_count": 6,
+      "stable_trade_count": 6,
+      "owner_counts": {
+        "资金流回调稳健策略": 154,
+        "趋势中继策略": 47,
+        "消息事件重估策略": 11,
+        "组合风险模块复核": 10
+      },
+      "reason_counts": {
+        "成交额硬门槛错过": 99,
+        "低位资金结构不达标": 27,
+        "启动前已涨过": 26,
+        "链路可过但未进Top10": 18,
+        "有发现但无回调买点": 16,
+        "资金流特征不足": 11,
+        "被撤买单风险过滤": 10,
+        "当前策略已抓到": 6,
+        "无标准回调承接": 5,
+        "启动识别缺失": 4
+      }
+    },
+    {
+      "cohort": "runup_ge_30",
+      "count": 674,
+      "avg_runup_pct": 50.72,
+      "min_runup_pct": 30.02,
+      "max_runup_pct": 237.5,
+      "candidate_count": 84,
+      "base_trade_count": 18,
+      "stable_trade_count": 15,
+      "owner_counts": {
+        "资金流回调稳健策略": 509,
+        "趋势中继策略": 112,
+        "消息事件重估策略": 30,
+        "组合风险模块复核": 22,
+        "人工复盘": 1
+      },
+      "reason_counts": {
+        "成交额硬门槛错过": 349,
+        "低位资金结构不达标": 71,
+        "链路可过但未进Top10": 50,
+        "启动前已涨过": 48,
+        "有发现但无回调买点": 44,
+        "资金流特征不足": 30,
+        "启动识别缺失": 21,
+        "无标准回调承接": 20,
+        "被撤买单风险过滤": 19,
+        "当前策略已抓到": 15,
+        "被组合风险过滤": 3,
+        "有发现但排序/交易链路未命中": 3,
+        "其他": 1
+      }
+    }
+  ],
+  "outputs": [
+    "all_runup_opportunities.csv",
+    "top50_runup_diagnosis.csv",
+    "runup_ge_50_diagnosis.csv",
+    "runup_ge_30_diagnosis.csv",
+    "top50_reason_summary.csv",
+    "runup_ge_50_reason_summary.csv",
+    "runup_ge_30_reason_summary.csv"
+  ]
+}

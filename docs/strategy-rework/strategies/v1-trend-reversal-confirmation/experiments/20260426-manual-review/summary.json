@@ -1,0 +1,12 @@
+{
+  "rows": 48,
+  "unique_symbols": 32,
+  "win_rate": 72.92,
+  "avg": 7.21,
+  "median": 5.33,
+  "min": -12.13,
+  "max": 62.3,
+  "v14_balanced_kept": 41,
+  "v14_quality_kept": 22,
+  "name_source": "sina hq quote api, fetched during export"
+}

@@ -17,6 +17,7 @@ import {
   fetchSelectionHealth,
   fetchSelectionProfile,
   fetchSelectionTradeDates,
+  fetchSelectionV2Evaluation,
   refreshSelectionResearch,
   runSelectionBacktest,
 } from '../../services/selectionService';
@@ -26,9 +27,8 @@ import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
 import { APP_VERSION } from '../../version';
 
-const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'breakout' | 'stealth'>; label: string }> = [
-  { value: 'breakout', label: '启动确认 Top10' },
-  { value: 'stealth', label: '吸筹前置 Top10' },
+const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'v2'>; label: string }> = [
+  { value: 'v2', label: '趋势波段策略' },
 ];
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
@@ -52,12 +52,6 @@ const isDateWithin = (value: string, minDate?: string, maxDate?: string) => {
 const fmtMarketCap = (value?: number | null) => {
   if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) return '--';
   return `${(Number(value) / 1e8).toFixed(2)}亿`;
-};
-
-const scoreTone = (score: number) => {
-  if (score >= 75) return 'text-red-300';
-  if (score >= 65) return 'text-amber-300';
-  return 'text-slate-300';
 };
 
 const SectionCard: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
@@ -222,7 +216,7 @@ const TradeDatePicker: React.FC<{
 
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
-  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'breakout' | 'stealth'>>('breakout');
+  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'v2'>>('v2');
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
@@ -234,6 +228,7 @@ const SelectionResearchPage: React.FC = () => {
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [backtestRuns, setBacktestRuns] = useState<SelectionBacktestRunItem[]>([]);
   const [backtestDetail, setBacktestDetail] = useState<SelectionBacktestDetail | null>(null);
+  const [v2Evaluation, setV2Evaluation] = useState<any | null>(null);
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
   const [tradeDateMetaByDate, setTradeDateMetaByDate] = useState<Record<string, SelectionTradeDateItem>>({});
   const [loadingCandidates, setLoadingCandidates] = useState(false);
@@ -272,6 +267,9 @@ const SelectionResearchPage: React.FC = () => {
   const loadCandidates = async (dateArg = tradeDate) => {
     setLoadingCandidates(true);
     setError('');
+    setCandidates([]);
+    setSelected(null);
+    setProfile(null);
     try {
       const data = await fetchSelectionCandidates(dateArg || undefined, activeStrategy, 10);
       const items = data?.items || [];
@@ -325,7 +323,7 @@ const SelectionResearchPage: React.FC = () => {
     }
     let cancelled = false;
     setLoadingProfile(true);
-    fetchSelectionProfile(selected.symbol, tradeDate || undefined)
+    fetchSelectionProfile(selected.symbol, tradeDate || undefined, activeStrategy)
       .then((data) => {
         if (!cancelled) setProfile(data);
       })
@@ -335,7 +333,7 @@ const SelectionResearchPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selected, tradeDate]);
+  }, [selected, tradeDate, activeStrategy]);
 
   useEffect(() => {
     if (!selected) {
@@ -406,6 +404,17 @@ const SelectionResearchPage: React.FC = () => {
     setRunningBacktest(true);
     setError('');
     try {
+      if (activeStrategy === 'v2') {
+        const payload = await fetchSelectionV2Evaluation({
+          start_date: backtestStartDate,
+          end_date: backtestEndDate,
+          top_n: 10,
+        });
+        setV2Evaluation(payload);
+        setBacktestDetail(null);
+        return;
+      }
+      setV2Evaluation(null);
       const detail = await runSelectionBacktest({
         strategy_name: activeStrategy,
         start_date: backtestStartDate,
@@ -422,10 +431,12 @@ const SelectionResearchPage: React.FC = () => {
     }
   };
 
-  const displayCandidates = useMemo(
-    () => candidates.map((item) => ({ ...item, displayName: nameOverrides[item.symbol.toLowerCase()] || item.name || item.symbol })),
-    [candidates, nameOverrides]
-  );
+  const displayCandidates = useMemo(() => {
+    return candidates.map((item) => ({
+      ...item,
+      displayName: nameOverrides[item.symbol.toLowerCase()] || item.name || item.symbol,
+    }));
+  }, [candidates, nameOverrides]);
 
   const selectedDisplayName = selected ? (nameOverrides[selected.symbol.toLowerCase()] || profile?.name || selected.name || selected.symbol) : '';
   const heroPrice = Number(quote?.price ?? profile?.close ?? selected?.close ?? 0);
@@ -474,7 +485,7 @@ const SelectionResearchPage: React.FC = () => {
           </span>
           <select
             value={activeStrategy}
-            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'breakout' | 'stealth'>)}
+            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'v2'>)}
             className="h-9 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
             aria-label="选择策略"
           >
@@ -544,10 +555,8 @@ const SelectionResearchPage: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 text-lg font-bold text-white">
                   <TrendingUp className="h-5 w-5 text-amber-400" />
-                  当日 Top10 候选
-                </div>
-                <div className="mt-1 text-xs text-slate-500">
-                  当前日期：{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}
+                  当日策略候选
+                  <span className="text-xs font-medium text-slate-500">{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}</span>
                 </div>
               </div>
               {loadingCandidates ? <span className="text-xs text-slate-500">加载中...</span> : null}
@@ -568,28 +577,44 @@ const SelectionResearchPage: React.FC = () => {
                         <span className="shrink-0 text-[11px] text-slate-500">{item.symbol}</span>
                       </div>
                     </div>
-                    <div className="grid min-w-[128px] shrink-0 grid-cols-3 gap-1 text-right text-[10px]">
-                      <div>
-                        <div className={`text-sm font-semibold ${scoreTone(item.breakout_score)}`}>{fmtNum(item.breakout_score)}</div>
-                        <div className="text-slate-500">确认</div>
+                    {activeStrategy === 'v2' ? (
+                      <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
+                        <div>
+                          <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
+                          <div className="text-slate-500">排序</div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-violet-200">{item.lifecycle_phase_label || '--'}</div>
+                          <div className="text-slate-500">阶段</div>
+                        </div>
+                        <div>
+                          <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
+                          <div className="text-slate-500">动作</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-semibold text-violet-200">{fmtNum(item.stealth_score)}</div>
-                        <div className="text-slate-500">吸筹</div>
+                    ) : (
+                      <div className="grid min-w-[128px] shrink-0 grid-cols-3 gap-1 text-right text-[10px]">
+                        <div>
+                          <div className="text-sm font-semibold text-red-300">{fmtNum(item.breakout_score)}</div>
+                          <div className="text-slate-500">确认</div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-violet-200">{fmtNum(item.stealth_score)}</div>
+                          <div className="text-slate-500">吸筹</div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-amber-200">{fmtNum(item.distribution_score)}</div>
+                          <div className="text-slate-500">出货</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-semibold text-amber-200">{fmtNum(item.distribution_score)}</div>
-                        <div className="text-slate-500">出货</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">
-                    {item.reason_summary || '当前未生成解释'}
+                    )}
                   </div>
                 </button>
               ))}
               {!loadingCandidates && displayCandidates.length === 0 && (
-                <div className="px-4 py-10 text-center text-sm text-slate-500">暂无候选，请先刷新数据或切换日期。</div>
+                <div className="px-4 py-10 text-center text-sm text-slate-500">
+                  暂无候选，请先刷新数据或切换日期。
+                </div>
               )}
             </div>
           </div>
@@ -603,6 +628,7 @@ const SelectionResearchPage: React.FC = () => {
                 profile={profile}
                 displayName={selectedDisplayName}
                 backendStatus={backendStatus}
+                latestTradeDate={health?.latest_signal_date || undefined}
               />
             )}
           </div>
@@ -637,6 +663,51 @@ const SelectionResearchPage: React.FC = () => {
               <div className="text-xs text-slate-500">看固定持有收益，也看窗口内最高机会。</div>
             </div>
 
+            {activeStrategy === 'v2' ? (
+              <div>
+                {v2Evaluation ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-2 md:grid-cols-5">
+                      <Metric label="交易数" value={String(v2Evaluation.summary?.trade_count ?? 0)} />
+                      <Metric label="胜率" value={fmtPct(v2Evaluation.summary?.win_rate)} />
+                      <Metric label="平均收益" value={fmtPct(v2Evaluation.summary?.avg_return_pct)} />
+                      <Metric label="中位收益" value={fmtPct(v2Evaluation.summary?.median_return_pct)} />
+                      <Metric label="平均持有" value={`${fmtNum(v2Evaluation.summary?.avg_holding_days, 1)}天`} />
+                    </div>
+                    <div className="max-h-80 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
+                      <table className="min-w-full text-xs">
+                        <thead className="text-left text-slate-500">
+                          <tr>
+                            <th className="pb-2 pr-3">股票</th>
+                            <th className="pb-2 pr-3">排名</th>
+                            <th className="pb-2 pr-3">信号</th>
+                            <th className="pb-2 pr-3">入场</th>
+                            <th className="pb-2 pr-3">出场</th>
+                            <th className="pb-2 pr-3">阶段</th>
+                            <th className="pb-2 pr-3">收益</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(v2Evaluation.trades || []).slice(0, 80).map((trade: any, index: number) => (
+                            <tr key={`${trade.symbol}-${trade.signal_date}-${index}`} className="border-t border-slate-800/70">
+                              <td className="py-1.5 pr-3">{trade.symbol}</td>
+                              <td className="py-1.5 pr-3">#{trade.rank ?? '--'}</td>
+                              <td className="py-1.5 pr-3">{trade.signal_date}</td>
+                              <td className="py-1.5 pr-3">{trade.entry_date}</td>
+                              <td className="py-1.5 pr-3">{trade.exit_signal_date || trade.exit_date}</td>
+                              <td className="py-1.5 pr-3">{trade.lifecycle_phase_label || '--'}</td>
+                              <td className="py-1.5 pr-3">{fmtPct(trade.net_return_pct ?? trade.return_pct)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-sm text-slate-500">运行 V2 策略评估后展示每天 Top10 候选的入场、出场和收益。</div>
+                )}
+              </div>
+            ) : (
             <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
               <div className="space-y-2">
                 {backtestRuns.map((run) => (
@@ -721,6 +792,7 @@ const SelectionResearchPage: React.FC = () => {
                 )}
               </div>
             </div>
+            )}
           </div>
         </details>
       </div>

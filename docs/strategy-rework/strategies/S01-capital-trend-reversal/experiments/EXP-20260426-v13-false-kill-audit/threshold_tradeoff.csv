@@ -1,0 +1,7 @@
+bucket,trade_count,win_rate_pct,avg_return_pct,median_return_pct,max_return_pct,min_return_pct,sum_return_pct,big_winner_gt_15_count,big_loss_le_-8_count
+no_filter_mature,74,58.11,3.23,2.61,62.3,-18.38,238.7,14,20
+threshold_1_5_kept,48,72.92,7.21,5.33,62.3,-12.13,346.03,12,6
+threshold_2_0_kept,50,72.0,6.81,5.31,62.3,-12.13,340.67,12,7
+threshold_1_5_filtered,26,30.77,-4.13,-8.33,59.71,-18.38,-107.33,2,14
+threshold_2_0_filtered,24,29.17,-4.25,-9.34,59.71,-18.38,-101.97,2,13
+filtered_by_1_5_only_band,2,50.0,-2.68,-2.68,2.99,-8.35,-5.36,0,1
