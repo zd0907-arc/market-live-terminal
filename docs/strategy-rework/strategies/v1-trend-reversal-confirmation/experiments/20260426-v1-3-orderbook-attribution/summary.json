@@ -1,0 +1,173 @@
+{
+  "source": "docs/strategy-rework/strategies/v1-trend-reversal-confirmation/experiments/20260426-v1-2-exit-grid/best_trades.csv",
+  "counts": {
+    "middle": 37,
+    "big_win_ge_10": 23,
+    "big_loss_le_-8": 22
+  },
+  "loss_le_-8_count": 22,
+  "win_ge_10_count": 23,
+  "top_diff_by_median": [
+    {
+      "feature": "launch3_ob_cancel_buy_to_add_buy_vs_hist",
+      "loss_mean": 11.989032,
+      "loss_median": 2.2369,
+      "win_mean": 2.499365,
+      "win_median": 1.08,
+      "loss_minus_win_median": 1.1569
+    },
+    {
+      "feature": "pullback_day_ob_buy_support_avg",
+      "loss_mean": 1.434148,
+      "loss_median": 1.468315,
+      "win_mean": 1.011862,
+      "win_median": 0.54652,
+      "loss_minus_win_median": 0.921795
+    },
+    {
+      "feature": "launch3_ob_buy_support_avg",
+      "loss_mean": 1.31609,
+      "loss_median": 1.37903,
+      "win_mean": 0.863657,
+      "win_median": 0.51722,
+      "loss_minus_win_median": 0.86181
+    },
+    {
+      "feature": "pullback_day_ob_cancel_buy_to_add_buy",
+      "loss_mean": 0.111389,
+      "loss_median": 0.0032,
+      "win_mean": 0.319815,
+      "win_median": 0.44787,
+      "loss_minus_win_median": -0.44467
+    },
+    {
+      "feature": "launch3_ob_cancel_buy_to_add_buy",
+      "loss_mean": 0.132231,
+      "loss_median": 0.008645,
+      "win_mean": 0.276059,
+      "win_median": 0.38571,
+      "loss_minus_win_median": -0.377065
+    },
+    {
+      "feature": "pullback_day_ob_cancel_buy_to_add_buy_vs_hist",
+      "loss_mean": 2.372009,
+      "loss_median": 0.91935,
+      "win_mean": 1.624574,
+      "win_median": 1.1528,
+      "loss_minus_win_median": -0.23345
+    },
+    {
+      "feature": "pullback_day_ob_oib_cvd_gap",
+      "loss_mean": 0.295605,
+      "loss_median": 0.14471,
+      "win_mean": 0.219276,
+      "win_median": 0.04304,
+      "loss_minus_win_median": 0.10167
+    },
+    {
+      "feature": "launch3_ob_oib_cvd_gap",
+      "loss_mean": 0.154214,
+      "loss_median": -0.08681,
+      "win_mean": 0.005062,
+      "win_median": -0.00959,
+      "loss_minus_win_median": -0.07722
+    },
+    {
+      "feature": "pullback_day_ob_support_spread_avg",
+      "loss_mean": 0.283373,
+      "loss_median": 0.081855,
+      "win_mean": 0.200104,
+      "win_median": 0.01585,
+      "loss_minus_win_median": 0.066005
+    },
+    {
+      "feature": "pullback_day_ob_oib_ratio",
+      "loss_mean": 0.283373,
+      "loss_median": 0.081855,
+      "win_mean": 0.200104,
+      "win_median": 0.01585,
+      "loss_minus_win_median": 0.066005
+    },
+    {
+      "feature": "pullback_day_ob_cvd_ratio",
+      "loss_mean": -0.01223,
+      "loss_median": 0.03021,
+      "win_mean": -0.01917,
+      "win_median": -0.01557,
+      "loss_minus_win_median": 0.04578
+    },
+    {
+      "feature": "pullback_day_ob_add_sell_vs_hist",
+      "loss_mean": 0.911614,
+      "loss_median": 1.0006,
+      "win_mean": 0.937513,
+      "win_median": 0.9655,
+      "loss_minus_win_median": 0.0351
+    }
+  ],
+  "simple_rule_scan": [
+    {
+      "rule": "pullback_oib_cvd_gap>=0.03_and_cvd<=0.01",
+      "hit_all": 38,
+      "hit_loss": 10,
+      "hit_loss_rate_in_losses": 45.45,
+      "hit_win": 12,
+      "hit_win_rate_in_winners": 52.17,
+      "hit_avg_return": 4.6495
+    },
+    {
+      "rule": "pullback_support_spread<0",
+      "hit_all": 37,
+      "hit_loss": 9,
+      "hit_loss_rate_in_losses": 40.91,
+      "hit_win": 9,
+      "hit_win_rate_in_winners": 39.13,
+      "hit_avg_return": 1.7524
+    },
+    {
+      "rule": "pullback_cancel_buy_to_add_buy>=0.85",
+      "hit_all": 0,
+      "hit_loss": 0,
+      "hit_loss_rate_in_losses": 0.0,
+      "hit_win": 0,
+      "hit_win_rate_in_winners": 0.0,
+      "hit_avg_return": 0.0
+    },
+    {
+      "rule": "pullback_cancel_buy_to_add_buy>=1.0",
+      "hit_all": 0,
+      "hit_loss": 0,
+      "hit_loss_rate_in_losses": 0.0,
+      "hit_win": 0,
+      "hit_win_rate_in_winners": 0.0,
+      "hit_avg_return": 0.0
+    },
+    {
+      "rule": "pullback_add_sell_vs_hist>=1.35",
+      "hit_all": 0,
+      "hit_loss": 0,
+      "hit_loss_rate_in_losses": 0.0,
+      "hit_win": 0,
+      "hit_win_rate_in_winners": 0.0,
+      "hit_avg_return": 0.0
+    },
+    {
+      "rule": "launch_add_sell_vs_hist>=1.35_and_support<0",
+      "hit_all": 0,
+      "hit_loss": 0,
+      "hit_loss_rate_in_losses": 0.0,
+      "hit_win": 0,
+      "hit_win_rate_in_winners": 0.0,
+      "hit_avg_return": 0.0
+    },
+    {
+      "rule": "launch_cancel_buy_to_add_buy>=0.85",
+      "hit_all": 0,
+      "hit_loss": 0,
+      "hit_loss_rate_in_losses": 0.0,
+      "hit_win": 0,
+      "hit_win_rate_in_winners": 0.0,
+      "hit_avg_return": 0.0
+    }
+  ]
+}

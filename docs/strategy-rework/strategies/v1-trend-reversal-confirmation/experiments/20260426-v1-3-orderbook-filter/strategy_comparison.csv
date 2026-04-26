@@ -1,0 +1,4 @@
+strategy,trade_count,win_rate,avg_return_pct,median_return_pct,max_return_pct,min_return_pct,avg_holding_days,avg_gross_return_pct,total_return_pct_signal_sum
+v1,82,52.44,2.11,0.97,59.71,-18.38,7.68,,
+v1.2,82,59.76,3.21,2.75,62.3,-18.38,8.39,,
+v1.3,58,72.41,6.3,5.31,62.3,-13.07,9.69,6.83,365.4

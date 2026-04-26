@@ -12,6 +12,8 @@ import {
   StockEventFeedData,
 } from '../types';
 
+export const DEFAULT_SELECTION_STRATEGY: SelectionStrategy = 'stable_capital_callback';
+
 const parseApiData = async <T>(res: Response): Promise<T | null> => {
   const json = await res.json().catch(() => null);
   if (!res.ok || !json || json.code !== 200) {
@@ -32,7 +34,7 @@ export const fetchSelectionHealth = async (): Promise<SelectionHealthData | null
 
 export const fetchSelectionCandidates = async (
   date?: string,
-  strategy: SelectionStrategy = 'breakout',
+  strategy: SelectionStrategy = DEFAULT_SELECTION_STRATEGY,
   limit = 50
 ): Promise<SelectionCandidatesResponse | null> => {
   try {
@@ -49,7 +51,7 @@ export const fetchSelectionCandidates = async (
 export const fetchSelectionTradeDates = async (
   startDate?: string,
   endDate?: string,
-  strategy: SelectionStrategy = 'breakout'
+  strategy: SelectionStrategy = DEFAULT_SELECTION_STRATEGY
 ): Promise<SelectionTradeDatesData | null> => {
   try {
     const params = new URLSearchParams({ strategy });
@@ -63,10 +65,11 @@ export const fetchSelectionTradeDates = async (
   }
 };
 
-export const fetchSelectionProfile = async (symbol: string, date?: string): Promise<SelectionProfileData | null> => {
+export const fetchSelectionProfile = async (symbol: string, date?: string, strategy: SelectionStrategy = DEFAULT_SELECTION_STRATEGY): Promise<SelectionProfileData | null> => {
   try {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
+    if (strategy) params.set('strategy', strategy);
     const query = params.toString();
     const res = await fetch(`${API_BASE_URL}/selection/profile/${symbol}${query ? `?${query}` : ''}`);
     return await parseApiData<SelectionProfileData>(res);
@@ -115,6 +118,44 @@ export const runSelectionBacktest = async (payload: {
     return await parseApiData<SelectionBacktestDetail>(res);
   } catch (e) {
     console.error('Run selection backtest error:', e);
+    return null;
+  }
+};
+
+export const fetchSelectionV2Evaluation = async (payload: {
+  start_date: string;
+  end_date: string;
+  top_n?: number;
+}): Promise<any | null> => {
+  try {
+    const params = new URLSearchParams({
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      top_n: String(payload.top_n || 10),
+    });
+    const res = await fetch(`${API_BASE_URL}/selection/v2/evaluate?${params.toString()}`);
+    return await parseApiData<any>(res);
+  } catch (e) {
+    console.error('Fetch selection v2 evaluation error:', e);
+    return null;
+  }
+};
+
+export const fetchStableCallbackEvaluation = async (payload: {
+  start_date: string;
+  end_date: string;
+  top_n?: number;
+}): Promise<any | null> => {
+  try {
+    const params = new URLSearchParams({
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      top_n: String(payload.top_n || 10),
+    });
+    const res = await fetch(`${API_BASE_URL}/selection/stable-callback/evaluate?${params.toString()}`);
+    return await parseApiData<any>(res);
+  } catch (e) {
+    console.error('Fetch stable callback evaluation error:', e);
     return null;
   }
 };

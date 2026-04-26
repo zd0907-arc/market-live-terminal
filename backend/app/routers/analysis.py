@@ -324,6 +324,52 @@ def _map_preview_daily_row(row: Dict[str, object]) -> Dict[str, object]:
     }
 
 
+def _map_local_history_multiframe_row(row: tuple) -> Dict[str, object]:
+    trade_date = str(row[1])
+    main_buy = _nullable_float(row[3]) or 0.0
+    main_sell = _nullable_float(row[4]) or 0.0
+    total_amount = main_buy + main_sell
+    return {
+        "datetime": f"{trade_date} 15:00:00",
+        "trade_date": trade_date,
+        "granularity": "1d",
+        "open": None,
+        "high": None,
+        "low": None,
+        "close": _nullable_float(row[5]),
+        "total_amount": total_amount if total_amount > 0 else None,
+        "l1_main_buy": main_buy if main_buy > 0 else 0.0,
+        "l1_main_sell": main_sell if main_sell > 0 else 0.0,
+        "l1_super_buy": None,
+        "l1_super_sell": None,
+        "l2_main_buy": None,
+        "l2_main_sell": None,
+        "l2_super_buy": None,
+        "l2_super_sell": None,
+        "source": "local_history",
+        "is_finalized": True,
+        "preview_level": None,
+        "fallback_used": True,
+        "quality_info": "旧本地自算兜底（日线）",
+        "is_placeholder": False,
+    }
+
+
+def _merge_multiframe_rows(
+    primary_rows: List[Dict[str, object]],
+    fallback_rows: List[Dict[str, object]],
+) -> List[Dict[str, object]]:
+    merged: Dict[str, Dict[str, object]] = {}
+    for row in fallback_rows:
+        merged[str(row["datetime"])] = dict(row)
+    for row in primary_rows:
+        key = str(row["datetime"])
+        if bool(row.get("is_placeholder")) and key in merged and not bool(merged[key].get("is_placeholder")):
+            continue
+        merged[key] = dict(row)
+    return [merged[key] for key in sorted(merged.keys())]
+
+
 def _today_is_in_requested_window(today_str: str, start_date: Optional[str], end_date: Optional[str]) -> bool:
     if start_date and today_str < start_date:
         return False
@@ -351,6 +397,12 @@ def _build_multiframe_rows(
             end_date=end_date,
             limit_days=None if (start_date or end_date) else days,
         )
+        legacy_daily_rows = [
+            _map_local_history_multiframe_row(row)
+            for row in get_local_history_data(symbol, None)
+            if (not start_date or str(row[1]) >= str(start_date))
+            and (not end_date or str(row[1]) <= str(end_date))
+        ]
         has_finalized_today = any(str(row.get("date")) == today_str for row in finalized_daily_rows)
         finalized_daily_rows = _inject_missing_daily_placeholders(
             symbol=symbol,
@@ -359,7 +411,10 @@ def _build_multiframe_rows(
             end_date=end_date,
             skip_trade_date=today_str if (include_today_preview and not has_finalized_today) else None,
         )
-        rows = [_map_finalized_daily_row(row) for row in finalized_daily_rows]
+        rows = _merge_multiframe_rows(
+            primary_rows=[_map_finalized_daily_row(row) for row in finalized_daily_rows],
+            fallback_rows=legacy_daily_rows,
+        )
     else:
         finalized_5m_rows = query_l2_history_5m_rows(
             symbol,

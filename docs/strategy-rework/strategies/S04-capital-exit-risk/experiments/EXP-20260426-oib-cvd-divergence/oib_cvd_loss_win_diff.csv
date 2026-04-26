@@ -1,0 +1,9 @@
+sample_version,group,count,win_rate_pct,avg_net_return_pct,median_net_return_pct,avg_next_day_return_pct,launch_divergence_rate_pct,confirm_divergence_rate_pct,any_divergence_rate_pct,median_launch_oib_cvd_diff,median_confirm_oib_cvd_diff
+v1.3-threshold-1.5,loss_all,13,0.0,-6.6,-5.61,-3.58,30.77,38.46,53.85,-143820623.0,56842468.74
+v1.3-threshold-1.5,loss_bottom10,10,0.0,-7.93,-8.88,-4.2,40.0,40.0,60.0,-181035456.68,-32537864.4
+v1.3-threshold-1.5,win_all,35,100.0,12.34,10.1,1.07,14.29,40.0,45.71,-28875983.81,57113741.25
+v1.3-threshold-1.5,win_top10,10,100.0,26.6,22.82,3.47,10.0,40.0,40.0,-147995996.07,46277853.18
+v1.4-balanced,loss_all,9,0.0,-6.27,-4.7,-3.41,44.44,55.56,77.78,-58478197.06,82939788.54
+v1.4-balanced,loss_bottom10,9,0.0,-6.27,-4.7,-3.41,44.44,55.56,77.78,-58478197.06,82939788.54
+v1.4-balanced,win_all,32,100.0,12.58,10.1,0.98,15.62,43.75,50.0,-28875983.81,57113741.25
+v1.4-balanced,win_top10,10,100.0,26.29,22.58,3.1,10.0,50.0,50.0,-102609586.0,46277853.18

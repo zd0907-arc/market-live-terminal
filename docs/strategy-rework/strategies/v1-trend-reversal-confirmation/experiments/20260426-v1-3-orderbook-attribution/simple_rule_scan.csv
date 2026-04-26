@@ -1,0 +1,8 @@
+rule,hit_all,hit_loss,hit_loss_rate_in_losses,hit_win,hit_win_rate_in_winners,hit_avg_return
+pullback_oib_cvd_gap>=0.03_and_cvd<=0.01,38,10,45.45,12,52.17,4.6495
+pullback_support_spread<0,37,9,40.91,9,39.13,1.7524
+pullback_cancel_buy_to_add_buy>=0.85,0,0,0.0,0,0.0,0.0
+pullback_cancel_buy_to_add_buy>=1.0,0,0,0.0,0,0.0,0.0
+pullback_add_sell_vs_hist>=1.35,0,0,0.0,0,0.0,0.0
+launch_add_sell_vs_hist>=1.35_and_support<0,0,0,0.0,0,0.0,0.0
+launch_cancel_buy_to_add_buy>=0.85,0,0,0.0,0,0.0,0.0

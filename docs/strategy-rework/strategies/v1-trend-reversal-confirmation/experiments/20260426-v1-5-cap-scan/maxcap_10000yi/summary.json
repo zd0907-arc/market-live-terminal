@@ -1,0 +1,51 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-04-24",
+    "replay_end": "2026-04-24",
+    "top_n": 10
+  },
+  "rules": {
+    "base": "v1.4-balanced",
+    "st_filter": "current name contains ST/*ST",
+    "float_mcap": "5000000000~1000000000000, computed as discovery close * current float shares",
+    "cooldown_days": 5,
+    "early_exit": "holding_days<=3 and cum_super<0 and cum_main<0 and close_return<0"
+  },
+  "raw_candidate_count": 370,
+  "signal_candidate_count": 111,
+  "accepted_candidate_count": 42,
+  "filtered_candidate_count": 69,
+  "filter_reason_counts": {
+    "v1_3_ladder_pull_filter": 30,
+    "cooldown_or_open_position": 20,
+    "weak_launch_with_bad_pullback_and_distribution": 10,
+    "float_mcap_too_large": 4,
+    "st_stock": 3,
+    "entry_blocked_limit_up": 1,
+    "no_trade": 1
+  },
+  "full_summary": {
+    "trade_count": 42,
+    "win_rate": 47.62,
+    "avg_return_pct": 3.1,
+    "avg_gross_return_pct": 3.62,
+    "median_return_pct": -0.75,
+    "max_return_pct": 62.3,
+    "min_return_pct": -11.28,
+    "avg_holding_days": 5.81,
+    "total_return_pct_signal_sum": 130.36
+  },
+  "mature_summary": {
+    "trade_count": 26,
+    "win_rate": 69.23,
+    "avg_return_pct": 6.5,
+    "avg_gross_return_pct": 7.03,
+    "median_return_pct": 2.69,
+    "max_return_pct": 62.3,
+    "min_return_pct": -8.97,
+    "avg_holding_days": 7.77,
+    "total_return_pct_signal_sum": 168.97
+  },
+  "timing_seconds": 214.73
+}

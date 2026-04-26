@@ -1,0 +1,72 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-03-31",
+    "replay_end": "2026-04-24",
+    "top_n": 10
+  },
+  "params": {
+    "min_amount": 300000000.0,
+    "amount_anomaly_launch": 1.5,
+    "amount_anomaly_event": 1.8,
+    "breakout_threshold_pct": 1.0,
+    "l2_main_net_ratio_launch": 0.02,
+    "l2_super_net_ratio_launch": 0.01,
+    "active_buy_strength_launch": 2.0,
+    "positive_l2_bar_ratio_min": 0.55,
+    "accumulation_main_net_5d": 0.0,
+    "support_pressure_spread_min": 0.0,
+    "shakeout_drop_pct": -5.0,
+    "shakeout_repair_coverage": 0.8,
+    "second_wave_amount_anomaly": 1.2,
+    "high_return_20d_pct": 25.0,
+    "accumulation_score_min": 55.0,
+    "attack_score_min": 65.0,
+    "repair_score_min": 60.0,
+    "distribution_score_warn": 70.0,
+    "panic_distribution_score_exit": 80.0,
+    "entry_attack_cvd_floor": -0.08,
+    "entry_return_20d_cap": 80.0,
+    "distribution_main_net_ratio": -0.01,
+    "distribution_support_spread": -0.02,
+    "distribution_confirm_days": 2,
+    "limit_up_pct": 9.5,
+    "limit_down_pct": -9.5,
+    "buy_slippage_bp": 15.0,
+    "sell_slippage_bp": 15.0,
+    "round_trip_fee_bp": 20.0,
+    "max_open_positions": 3,
+    "max_new_positions_per_day": 1,
+    "stop_loss_pct": -8.0,
+    "max_holding_days": 40
+  },
+  "strategy_notes": {
+    "direct_entry": "目标日T综合潜伏分+异动分入选，T+1开盘买入。",
+    "confirmed_entry": "目标日T只进入观察池，未来最多12个交易日等待回踩修复/二波延续确认，确认日+1开盘买入。"
+  },
+  "direct_entry": {
+    "trade_count": 219,
+    "win_rate": 28.31,
+    "avg_return_pct": -0.21,
+    "avg_gross_return_pct": 0.3,
+    "median_return_pct": -7.68,
+    "max_return_pct": 112.85,
+    "min_return_pct": -21.22,
+    "avg_holding_days": 7.28,
+    "total_return_pct_signal_sum": -44.99
+  },
+  "confirmed_entry": {
+    "trade_count": 126,
+    "win_rate": 32.54,
+    "avg_return_pct": 1.54,
+    "avg_gross_return_pct": 2.04,
+    "median_return_pct": -7.4,
+    "max_return_pct": 97.17,
+    "min_return_pct": -17.18,
+    "avg_holding_days": 8.05,
+    "total_return_pct_signal_sum": 193.43,
+    "discovery_count": 220,
+    "confirmed_count": 127,
+    "confirmation_rate": 57.73
+  }
+}

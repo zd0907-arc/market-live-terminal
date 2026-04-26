@@ -1,0 +1,66 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-03-31",
+    "replay_end": "2026-04-24",
+    "top_n": 10
+  },
+  "variants": {
+    "baseline_confirmed": {
+      "trade_count": 126,
+      "win_rate": 30.16,
+      "avg_return_pct": 1.25,
+      "avg_gross_return_pct": 1.75,
+      "median_return_pct": -7.17,
+      "max_return_pct": 97.17,
+      "min_return_pct": -16.43,
+      "avg_holding_days": 7.39,
+      "total_return_pct_signal_sum": 157.09,
+      "discovery_count": 220,
+      "confirmed_count": 127,
+      "confirmation_rate": 57.73
+    },
+    "balanced_strict": {
+      "trade_count": 58,
+      "win_rate": 24.14,
+      "avg_return_pct": 0.26,
+      "avg_gross_return_pct": 0.76,
+      "median_return_pct": -8.56,
+      "max_return_pct": 97.17,
+      "min_return_pct": -15.22,
+      "avg_holding_days": 7.81,
+      "total_return_pct_signal_sum": 15.03,
+      "discovery_count": 220,
+      "confirmed_count": 58,
+      "confirmation_rate": 26.36
+    },
+    "repair_only_strict": {
+      "trade_count": 17,
+      "win_rate": 35.29,
+      "avg_return_pct": 1.45,
+      "avg_gross_return_pct": 1.96,
+      "median_return_pct": -9.41,
+      "max_return_pct": 43.64,
+      "min_return_pct": -13.3,
+      "avg_holding_days": 8.06,
+      "total_return_pct_signal_sum": 24.65,
+      "discovery_count": 220,
+      "confirmed_count": 17,
+      "confirmation_rate": 7.73
+    },
+    "trend_continuation_strict": {
+      "trade_count": 29,
+      "win_rate": 13.79,
+      "avg_return_pct": -4.43,
+      "avg_gross_return_pct": -3.95,
+      "median_return_pct": -9.67,
+      "max_return_pct": 37.46,
+      "min_return_pct": -15.22,
+      "avg_holding_days": 7.76,
+      "total_return_pct_signal_sum": -128.6,
+      "discovery_count": 220,
+      "confirmed_count": 29,
+      "confirmation_rate": 13.18
+    }
+  }
+}

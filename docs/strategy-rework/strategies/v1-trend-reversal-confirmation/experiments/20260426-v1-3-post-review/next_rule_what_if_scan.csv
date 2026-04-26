@@ -1,0 +1,7 @@
+rule,filtered_count,filtered_loss_le_-8,filtered_win_ge_10,filtered_avg_return,kept_count,kept_win_rate,kept_avg_return,kept_median_return,kept_min_return,kept_sum_return
+launch_ret_lt_6,26,6,4,3.85,22,77.27,11.18,10.1,-5.61,246.0
+confirm_dist_gte_50,13,4,2,4.34,35,82.86,8.27,5.75,-12.13,289.57
+launch_ret_lt_6_and_confirm_dist_gte_50,11,4,2,4.51,37,81.08,8.01,5.75,-12.13,296.46
+launch_ret_lt_6_and_pullback_support_lt_0,16,4,2,1.81,32,75.0,9.91,9.16,-12.13,317.09
+pullback_support_lt_0_and_confirm_dist_gte_45,8,3,2,2.08,40,77.5,8.23,5.72,-12.13,329.38
+launch_ret_lt_6_and_pullback_support_lt_0_and_confirm_dist_gte_45,7,3,1,-0.02,41,78.05,8.44,5.72,-12.13,346.19

@@ -1,0 +1,9 @@
+rule_name,total_trades,filtered_count,filtered_return_avg_pct,filtered_return_median_pct,filtered_sum_return_pct,filtered_big_winner_gt_15_count,filtered_loss_count,filtered_big_loss_le_-8_count,kept_trade_count,kept_win_rate_pct,kept_avg_return_pct,kept_median_return_pct,kept_max_return_pct,kept_min_return_pct,kept_sum_return_pct,kept_big_winner_gt_15_count,kept_big_loss_le_-8_count
+risk_count_R1_R5>=2,41,6,-5.04,-4.7,-30.26,0,5,2,35,88.57,10.76,8.21,62.3,-12.13,376.45,11,1
+risk_count_R1_R6>=2,41,10,1.26,0.62,12.59,1,5,2,31,87.1,10.76,7.44,62.3,-12.13,333.6,10,1
+R4_and_price_weak_nextday,41,4,-5.25,-4.7,-20.98,0,4,1,37,86.49,9.92,7.44,62.3,-12.13,367.17,11,2
+R2_and_any_R3_R4_R5,41,3,-6.83,-4.7,-20.48,0,3,1,38,84.21,9.65,6.6,62.3,-12.13,366.67,11,2
+risk_count_R1_R5>=3,41,1,-11.08,-11.08,-11.08,0,1,1,40,80.0,8.93,5.73,62.3,-12.13,357.27,11,2
+risk_count_R1_R6>=3,41,1,-11.08,-11.08,-11.08,0,1,1,40,80.0,8.93,5.73,62.3,-12.13,357.27,11,2
+R6_plus_any_core,41,5,6.35,12.07,31.77,1,1,1,36,77.78,8.73,5.72,62.3,-12.13,314.42,10,2
+R3_and_R5,41,0,0.0,0.0,0.0,0,0,0,41,78.05,8.44,5.72,62.3,-12.13,346.19,11,3

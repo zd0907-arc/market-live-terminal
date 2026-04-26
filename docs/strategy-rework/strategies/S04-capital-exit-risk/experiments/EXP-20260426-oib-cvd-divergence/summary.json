@@ -1,0 +1,306 @@
+{
+  "experiment": "EXP-20260426-oib-cvd-divergence",
+  "range": {
+    "raw_start": "2026-01-01",
+    "replay_end": "2026-04-24"
+  },
+  "inputs": {
+    "v13_trades": "docs/strategy-rework/strategies/v1-trend-reversal-confirmation/experiments/20260426-v1-3-robustness-scan/all_threshold_trades.csv",
+    "v14_trades": "docs/strategy-rework/strategies/v1-trend-reversal-confirmation/experiments/20260426-v1-4-modes/all_mode_trades.csv"
+  },
+  "sample_summary": [
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "trade_count": 48,
+      "loss_count": 13,
+      "win_count": 35,
+      "any_divergence_count": 23,
+      "launch_divergence_count": 9,
+      "confirm_divergence_count": 19
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "trade_count": 41,
+      "loss_count": 9,
+      "win_count": 32,
+      "any_divergence_count": 23,
+      "launch_divergence_count": 9,
+      "confirm_divergence_count": 19
+    }
+  ],
+  "correlations": [
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.0635,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.08,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_cvd_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.0042,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_cvd_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0111,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_cvd_diff",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.1012,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_cvd_diff",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0457,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_to_abs_cvd_ratio",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.1003,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "launch_oib_to_abs_cvd_ratio",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0551,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.165,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.1072,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_cvd_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.3276,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_cvd_sum",
+      "target": "net_return_pct",
+      "spearman_corr": -0.126,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_cvd_diff",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.2672,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_cvd_diff",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0508,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_to_abs_cvd_ratio",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.1675,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.3-threshold-1.5",
+      "feature": "confirm_oib_to_abs_cvd_ratio",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0548,
+      "n": 48
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.1522,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_sum",
+      "target": "net_return_pct",
+      "spearman_corr": -0.0117,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_cvd_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.0298,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_cvd_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0477,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_cvd_diff",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.2154,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_cvd_diff",
+      "target": "net_return_pct",
+      "spearman_corr": -0.0276,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_to_abs_cvd_ratio",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.2394,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "launch_oib_to_abs_cvd_ratio",
+      "target": "net_return_pct",
+      "spearman_corr": -0.0785,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.1656,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.001,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_cvd_sum",
+      "target": "next_day_return_pct",
+      "spearman_corr": -0.3892,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_cvd_sum",
+      "target": "net_return_pct",
+      "spearman_corr": 0.0184,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_cvd_diff",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.2911,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_cvd_diff",
+      "target": "net_return_pct",
+      "spearman_corr": -0.1003,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_to_abs_cvd_ratio",
+      "target": "next_day_return_pct",
+      "spearman_corr": 0.1141,
+      "n": 41
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "feature": "confirm_oib_to_abs_cvd_ratio",
+      "target": "net_return_pct",
+      "spearman_corr": -0.0341,
+      "n": 41
+    }
+  ],
+  "top_candidate_rules_v1_4_balanced": [
+    {
+      "sample_version": "v1.4-balanced",
+      "rule_name": "launch_divergence",
+      "total_trades": 41,
+      "filtered_count": 9,
+      "filtered_loss_count": 4,
+      "filtered_win_count": 5,
+      "filtered_bottom10_loss_count": 4,
+      "filtered_top10_winner_count": 1,
+      "loss_capture_rate_pct": 44.44,
+      "win_kill_rate_pct": 15.62,
+      "top10_kill_rate_pct": 10.0,
+      "kept_count": 32,
+      "kept_win_rate_pct": 84.38,
+      "kept_avg_net_return_pct": 9.8,
+      "kept_median_net_return_pct": 5.72,
+      "kept_max_loss_pct": -11.03
+    },
+    {
+      "sample_version": "v1.4-balanced",
+      "rule_name": "both_launch_and_confirm_divergence",
+      "total_trades": 41,
+      "filtered_count": 5,
+      "filtered_loss_count": 2,
+      "filtered_win_count": 3,
+      "filtered_bottom10_loss_count": 2,
+      "filtered_top10_winner_count": 1,
+      "loss_capture_rate_pct": 22.22,
+      "win_kill_rate_pct": 9.38,
+      "top10_kill_rate_pct": 10.0,
+      "kept_count": 36,
+      "kept_win_rate_pct": 80.56,
+      "kept_avg_net_return_pct": 8.74,
+      "kept_median_net_return_pct": 5.72,
+      "kept_max_loss_pct": -12.13
+    }
+  ],
+  "output_files": [
+    "README.md",
+    "summary.json",
+    "oib_cvd_loss_win_diff.csv",
+    "divergence_rule_scan.csv",
+    "oib_cvd_trade_enriched.csv"
+  ],
+  "conclusion": "OIB/CVD 背离在亏损票中有一定解释力，尤其可作为 S04 的风险标签；但在 v1.4-balanced 样本里，简单规则会同时过滤部分盈利票，且对 Top10 大赢家仍有误杀风险。建议先纳入 S04 观察型风险因子/案例解释，不纳入 S01 硬过滤；若后续扩大样本，可测试与弱启动、出货分、撤梯子共同触发。",
+  "timing_seconds": {
+    "total": 3.72
+  }
+}

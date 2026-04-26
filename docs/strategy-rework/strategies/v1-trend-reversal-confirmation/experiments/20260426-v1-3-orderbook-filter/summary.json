@@ -1,0 +1,28 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-03-31",
+    "replay_end": "2026-04-24",
+    "top_n": 10
+  },
+  "entry": "v1 入场候选 + v1 回调确认",
+  "exit": "v1.2 最优：-8% 止损 + 累计超大单峰值回撤 20% 且连续下降 3 天",
+  "orderbook_filter": {
+    "rule": "launch_cancel_buy_to_add_buy_vs_hist > 2",
+    "meaning": "启动期 撤买单/新增买单 相对该股历史均值放大超过 2 倍，视为撤梯子诱多风险",
+    "raw_candidate_count": 220,
+    "filtered_candidate_count": 28,
+    "passed_candidate_count": 192
+  },
+  "summary": {
+    "trade_count": 58,
+    "win_rate": 72.41,
+    "avg_return_pct": 6.3,
+    "avg_gross_return_pct": 6.83,
+    "median_return_pct": 5.31,
+    "max_return_pct": 62.3,
+    "min_return_pct": -13.07,
+    "avg_holding_days": 9.69,
+    "total_return_pct_signal_sum": 365.4
+  }
+}

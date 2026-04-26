@@ -1,0 +1,227 @@
+{
+  "source": "docs/strategy-rework/strategies/v1-trend-reversal-confirmation/experiments/20260426-v1-3-robustness-scan/all_threshold_trades.csv",
+  "base_no_filter_mature": {
+    "trade_count": 74,
+    "win_rate_pct": 58.11,
+    "avg_return_pct": 3.23,
+    "median_return_pct": 2.61,
+    "max_return_pct": 62.3,
+    "min_return_pct": -18.38,
+    "sum_return_pct": 238.7
+  },
+  "threshold_1_5_kept": {
+    "trade_count": 48,
+    "win_rate_pct": 72.92,
+    "avg_return_pct": 7.21,
+    "median_return_pct": 5.33,
+    "max_return_pct": 62.3,
+    "min_return_pct": -12.13,
+    "sum_return_pct": 346.03
+  },
+  "threshold_1_5_filtered": {
+    "trade_count": 26,
+    "win_rate_pct": 30.77,
+    "avg_return_pct": -4.13,
+    "median_return_pct": -8.33,
+    "max_return_pct": 59.71,
+    "min_return_pct": -18.38,
+    "sum_return_pct": -107.33
+  },
+  "threshold_2_0_kept": {
+    "trade_count": 50,
+    "win_rate_pct": 72.0,
+    "avg_return_pct": 6.81,
+    "median_return_pct": 5.31,
+    "max_return_pct": 62.3,
+    "min_return_pct": -12.13,
+    "sum_return_pct": 340.67
+  },
+  "false_killed_big_winners_gt_15_count": 2,
+  "false_killed_big_winners_gt_15": [
+    {
+      "symbol": "sz002361",
+      "stock_name": "神剑股份",
+      "entry_date": "2026-03-30",
+      "exit_date": "2026-04-24",
+      "net_return_pct": 59.71,
+      "launch_cancel_buy_to_add_buy_vs_hist": 23.2459
+    },
+    {
+      "symbol": "sz000703",
+      "stock_name": "恒逸石化",
+      "entry_date": "2026-03-30",
+      "exit_date": "2026-04-23",
+      "net_return_pct": 17.8,
+      "launch_cancel_buy_to_add_buy_vs_hist": 14.3943
+    }
+  ],
+  "profiles": {
+    "filtered_1_5_all": {
+      "launch_cancel_buy_to_add_buy_vs_hist": {
+        "avg": 15.336,
+        "median": 14.0334
+      },
+      "launch3_return_pct": {
+        "avg": 10.0335,
+        "median": 9.945
+      },
+      "launch3_super_net_ratio": {
+        "avg": 0.1004,
+        "median": 0.0973
+      },
+      "launch3_main_net_ratio": {
+        "avg": 0.1062,
+        "median": 0.0822
+      },
+      "pullback_super_net_ratio": {
+        "avg": 0.0571,
+        "median": 0.0248
+      },
+      "pullback_main_net_ratio": {
+        "avg": 0.0702,
+        "median": 0.0438
+      },
+      "pullback_support_spread_avg": {
+        "avg": 0.2124,
+        "median": 0.0004
+      },
+      "confirm_distribution_score": {
+        "avg": 30.5254,
+        "median": 23.785
+      },
+      "final_cum_super_ratio": {
+        "avg": -0.0135,
+        "median": -0.0112
+      },
+      "final_super_peak_drawdown_pct": {
+        "avg": 89.3781,
+        "median": 39.745
+      },
+      "max_runup_pct": {
+        "avg": 8.4208,
+        "median": 3.23
+      },
+      "max_drawdown_pct": {
+        "avg": -9.4496,
+        "median": -10.42
+      }
+    },
+    "filtered_1_5_big_winners_gt_15": {
+      "launch_cancel_buy_to_add_buy_vs_hist": {
+        "avg": 18.8201,
+        "median": 18.8201
+      },
+      "launch3_return_pct": {
+        "avg": 9.91,
+        "median": 9.91
+      },
+      "launch3_super_net_ratio": {
+        "avg": 0.0946,
+        "median": 0.0946
+      },
+      "launch3_main_net_ratio": {
+        "avg": 0.0999,
+        "median": 0.0999
+      },
+      "pullback_super_net_ratio": {
+        "avg": 0.1461,
+        "median": 0.1461
+      },
+      "pullback_main_net_ratio": {
+        "avg": 0.1614,
+        "median": 0.1614
+      },
+      "pullback_support_spread_avg": {
+        "avg": 0.5949,
+        "median": 0.5949
+      },
+      "confirm_distribution_score": {
+        "avg": 34.88,
+        "median": 34.88
+      },
+      "final_cum_super_ratio": {
+        "avg": 0.0227,
+        "median": 0.0227
+      },
+      "final_super_peak_drawdown_pct": {
+        "avg": 28.895,
+        "median": 28.895
+      },
+      "max_runup_pct": {
+        "avg": 56.88,
+        "median": 56.88
+      },
+      "max_drawdown_pct": {
+        "avg": -3.245,
+        "median": -3.245
+      }
+    },
+    "filtered_1_5_losers_le_0": {
+      "launch_cancel_buy_to_add_buy_vs_hist": {
+        "avg": 17.9522,
+        "median": 15.8255
+      },
+      "launch3_return_pct": {
+        "avg": 9.9594,
+        "median": 9.045
+      },
+      "launch3_super_net_ratio": {
+        "avg": 0.1044,
+        "median": 0.0989
+      },
+      "launch3_main_net_ratio": {
+        "avg": 0.1149,
+        "median": 0.0958
+      },
+      "pullback_super_net_ratio": {
+        "avg": 0.0579,
+        "median": 0.0187
+      },
+      "pullback_main_net_ratio": {
+        "avg": 0.0693,
+        "median": 0.0283
+      },
+      "pullback_support_spread_avg": {
+        "avg": 0.2349,
+        "median": 0.058
+      },
+      "confirm_distribution_score": {
+        "avg": 28.2933,
+        "median": 23.785
+      },
+      "final_cum_super_ratio": {
+        "avg": -0.0245,
+        "median": -0.0183
+      },
+      "final_super_peak_drawdown_pct": {
+        "avg": 96.0256,
+        "median": 0.0
+      },
+      "max_runup_pct": {
+        "avg": 2.9044,
+        "median": 0.84
+      },
+      "max_drawdown_pct": {
+        "avg": -11.7506,
+        "median": -12.73
+      }
+    }
+  },
+  "threshold_1_5_vs_2_0": {
+    "additional_trades_kept_by_2_0": [
+      {
+        "symbol": "sh603881",
+        "stock_name": "数据港",
+        "net_return_pct": 2.99,
+        "launch_cancel_buy_to_add_buy_vs_hist": 1.9586
+      },
+      {
+        "symbol": "sz002149",
+        "stock_name": "西部材料",
+        "net_return_pct": -8.35,
+        "launch_cancel_buy_to_add_buy_vs_hist": 1.5016
+      }
+    ],
+    "recommendation": "keep_threshold_1_5"
+  }
+}

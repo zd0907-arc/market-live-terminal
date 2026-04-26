@@ -14,6 +14,19 @@ from backend.app.services.selection_research import (
     run_selection_backtest,
 )
 from backend.app.services.selection_history_proxy import get_selection_multiframe_rows
+from backend.app.services.selection_strategy_v2 import (
+    evaluate_strategy_range_v2,
+    get_candidates_v2_api,
+    get_profile_v2_api,
+    get_selection_v2_trade_dates,
+)
+from backend.app.services.selection_stable_callback import (
+    STRATEGY_INTERNAL_ID as STABLE_CALLBACK_STRATEGY_ID,
+    evaluate_stable_callback_range,
+    get_stable_callback_candidates,
+    get_stable_callback_profile,
+    get_stable_callback_trade_dates,
+)
 
 router = APIRouter()
 ensure_selection_schema()
@@ -27,10 +40,16 @@ def selection_health():
 @router.get("/selection/candidates", response_model=APIResponse)
 def selection_candidates(
     date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新可用日"),
-    strategy: str = Query("breakout", description="stealth / breakout / distribution"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / stealth / breakout / distribution"),
     limit: int = Query(10, ge=1, le=500),
+    replay_validation: bool = Query(False, description="仅 v2 实验验证使用：按 Layer3 回放结果排序"),
 ):
     try:
+        normalized_strategy = str(strategy).lower()
+        if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
+            return APIResponse(code=200, data=get_stable_callback_candidates(date, limit=limit))
+        if normalized_strategy == "v2":
+            return APIResponse(code=200, data=get_candidates_v2_api(date, limit=limit, replay_validation=replay_validation))
         return APIResponse(code=200, data=get_candidates(date, strategy=strategy, limit=limit))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股候选查询失败: {exc}", data=None)
@@ -40,17 +59,31 @@ def selection_candidates(
 def selection_trade_dates(
     start_date: str = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期 YYYY-MM-DD"),
-    strategy: str = Query("breakout", description="stealth / breakout / distribution"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / stealth / breakout / distribution"),
 ):
     try:
+        normalized_strategy = str(strategy).lower()
+        if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
+            return APIResponse(code=200, data=get_stable_callback_trade_dates(start_date, end_date))
+        if normalized_strategy == "v2":
+            return APIResponse(code=200, data=get_selection_v2_trade_dates(start_date, end_date))
         return APIResponse(code=200, data=get_selection_trade_dates(start_date, end_date, strategy=strategy))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股交易日查询失败: {exc}", data=None)
 
 
 @router.get("/selection/profile/{symbol}", response_model=APIResponse)
-def selection_profile(symbol: str, date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新可用日")):
+def selection_profile(
+    symbol: str,
+    date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新可用日"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / breakout / stealth / distribution"),
+):
     try:
+        normalized_strategy = str(strategy).lower()
+        if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
+            return APIResponse(code=200, data=get_stable_callback_profile(symbol, date))
+        if normalized_strategy == "v2":
+            return APIResponse(code=200, data=get_profile_v2_api(symbol, date))
         return APIResponse(code=200, data=get_profile(symbol, date))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股画像查询失败: {exc}", data=None)
@@ -96,6 +129,30 @@ def selection_backtest_detail(run_id: int):
         return APIResponse(code=200, data=payload)
     except Exception as exc:
         return APIResponse(code=500, message=f"选股回测详情查询失败: {exc}", data=None)
+
+
+@router.get("/selection/v2/evaluate", response_model=APIResponse)
+def selection_v2_evaluate(
+    start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    top_n: int = Query(10, ge=1, le=50),
+):
+    try:
+        return APIResponse(code=200, data=evaluate_strategy_range_v2(start_date=start_date, end_date=end_date, top_n=top_n))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"V2 策略评估失败: {exc}", data=None)
+
+
+@router.get("/selection/stable-callback/evaluate", response_model=APIResponse)
+def selection_stable_callback_evaluate(
+    start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    top_n: int = Query(10, ge=1, le=50),
+):
+    try:
+        return APIResponse(code=200, data=evaluate_stable_callback_range(start_date=start_date, end_date=end_date, top_n=top_n))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"资金流回调稳健策略评估失败: {exc}", data=None)
 
 
 @router.post("/selection/backtests/run", response_model=APIResponse, dependencies=[Depends(require_write_access)])

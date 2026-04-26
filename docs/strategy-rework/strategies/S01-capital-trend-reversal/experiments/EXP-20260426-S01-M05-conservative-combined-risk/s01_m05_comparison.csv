@@ -1,0 +1,4 @@
+strategy_method,full_trade_count,full_win_rate_pct,full_avg_net_return_pct,full_median_net_return_pct,full_max_net_return_pct,full_min_net_return_pct,full_sum_net_return_pct,full_big_winner_gt_15_count,full_big_loss_le_-8_count,mature_trade_count,mature_win_rate_pct,mature_avg_net_return_pct,mature_median_net_return_pct,mature_max_net_return_pct,mature_min_net_return_pct,mature_sum_net_return_pct,mature_big_winner_gt_15_count,mature_big_loss_le_-8_count
+S01-M04B,65,60.0,5.08,3.2,62.3,-13.07,330.23,11,8,41,78.05,8.44,5.72,62.3,-12.13,346.19,11,3
+S01-M05,57,66.67,6.75,5.29,62.3,-12.13,384.84,11,4,35,88.57,10.76,8.21,62.3,-12.13,376.45,11,1
+S04-filtered-out,8,12.5,-6.83,-7.87,1.8,-13.07,-54.61,0,4,6,16.67,-5.04,-4.7,1.8,-11.08,-30.26,0,2
