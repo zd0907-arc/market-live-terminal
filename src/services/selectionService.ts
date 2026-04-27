@@ -6,6 +6,9 @@ import {
   SelectionCandidatesResponse,
   SelectionHealthData,
   SelectionProfileData,
+  SelectionQuickEventJudgeData,
+  SelectionResearchContextData,
+  SelectionResearchContextPrepareData,
   SelectionStrategy,
   SelectionTradeDatesData,
   StockEventCoverageData,
@@ -75,6 +78,91 @@ export const fetchSelectionProfile = async (symbol: string, date?: string, strat
     return await parseApiData<SelectionProfileData>(res);
   } catch (e) {
     console.error('Fetch selection profile error:', e);
+    return null;
+  }
+};
+
+export const fetchSelectionResearchContext = async (
+  symbol: string,
+  date?: string,
+  strategy: SelectionStrategy = DEFAULT_SELECTION_STRATEGY,
+  options: {
+    eventLimit?: number;
+    eventDays?: number;
+    seriesDays?: number;
+  } = {}
+): Promise<SelectionResearchContextData | null> => {
+  try {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (strategy) params.set('strategy', strategy);
+    if (options.eventLimit) params.set('event_limit', String(options.eventLimit));
+    if (options.eventDays) params.set('event_days', String(options.eventDays));
+    if (options.seriesDays) params.set('series_days', String(options.seriesDays));
+    const query = params.toString();
+    const res = await fetch(`${API_BASE_URL}/selection/research-context/${symbol}${query ? `?${query}` : ''}`);
+    return await parseApiData<SelectionResearchContextData>(res);
+  } catch (e) {
+    console.error('Fetch selection research context error:', e);
+    return null;
+  }
+};
+
+export const prepareSelectionResearchContext = async (
+  symbol: string,
+  date?: string,
+  strategy: SelectionStrategy = DEFAULT_SELECTION_STRATEGY,
+  options: {
+    useLlm?: boolean;
+    announcementDays?: number;
+    qaDays?: number;
+    newsDays?: number;
+    eventLimit?: number;
+    seriesDays?: number;
+  } = {}
+): Promise<SelectionResearchContextPrepareData | null> => {
+  try {
+    const params = new URLSearchParams({
+      strategy,
+      use_llm: options.useLlm === false ? 'false' : 'true',
+      announcement_days: String(options.announcementDays || 365),
+      qa_days: String(options.qaDays || 180),
+      news_days: String(options.newsDays || 45),
+      event_limit: String(options.eventLimit || 50),
+      series_days: String(options.seriesDays || 60),
+    });
+    if (date) params.set('date', date);
+    const res = await fetch(`${API_BASE_URL}/selection/research-context/${symbol}/prepare?${params.toString()}`, {
+      method: 'POST',
+      headers: getWriteHeaders(),
+    });
+    return await parseApiData<SelectionResearchContextPrepareData>(res);
+  } catch (e) {
+    console.error('Prepare selection research context error:', e);
+    return null;
+  }
+};
+
+export const quickJudgeSelectionEvent = async (payload: {
+  messageText: string;
+  symbol?: string;
+  date?: string;
+  strategy?: SelectionStrategy;
+}): Promise<SelectionQuickEventJudgeData | null> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/selection/quick-event-judge`, {
+      method: 'POST',
+      headers: getWriteHeaders(true),
+      body: JSON.stringify({
+        message_text: payload.messageText,
+        symbol: payload.symbol,
+        date: payload.date,
+        strategy: payload.strategy,
+      }),
+    });
+    return await parseApiData<SelectionQuickEventJudgeData>(res);
+  } catch (e) {
+    console.error('Quick judge selection event error:', e);
     return null;
   }
 };

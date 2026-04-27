@@ -220,6 +220,91 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_symbol_aliases_alias ON stock_symbol_aliases (alias)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_stock_symbol_aliases_symbol ON stock_symbol_aliases (symbol)")
 
+    # 候选票公司研究卡：供页面/Codex 共用研究上下文读取，后续支持 LLM 生成与人工修正
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_research_cards (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 symbol TEXT NOT NULL,
+                 as_of_date TEXT NOT NULL,
+                 company_name TEXT,
+                 business_profile TEXT,
+                 main_business TEXT,
+                 profit_drivers TEXT,
+                 new_business_logic TEXT,
+                 theme_tags TEXT,
+                 valuation_logic TEXT,
+                 financial_interpretation TEXT,
+                 key_metrics TEXT,
+                 evidence_event_ids TEXT,
+                 risk_points TEXT,
+                 confidence REAL DEFAULT 0,
+                 source_coverage TEXT,
+                 raw_payload TEXT,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 UNIQUE(symbol, as_of_date)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_research_cards_symbol_date ON stock_research_cards (symbol, as_of_date DESC)")
+    try:
+        c.execute("ALTER TABLE stock_research_cards ADD COLUMN financial_interpretation TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_company_profiles (
+                 symbol TEXT PRIMARY KEY,
+                 company_name TEXT,
+                 short_name TEXT,
+                 industry TEXT,
+                 main_business TEXT,
+                 business_scope TEXT,
+                 company_profile TEXT,
+                 listing_date TEXT,
+                 website TEXT,
+                 market TEXT,
+                 source TEXT,
+                 fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 raw_payload TEXT
+                 )''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_financial_snapshots (
+                 symbol TEXT NOT NULL,
+                 as_of_date TEXT NOT NULL,
+                 latest_period TEXT,
+                 eps REAL,
+                 roe REAL,
+                 gross_margin REAL,
+                 net_margin REAL,
+                 revenue_growth REAL,
+                 net_profit_growth REAL,
+                 deducted_net_profit REAL,
+                 debt_ratio REAL,
+                 operating_cashflow_to_revenue REAL,
+                 summary_text TEXT,
+                 source TEXT,
+                 fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 raw_payload TEXT,
+                 PRIMARY KEY(symbol, as_of_date)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_financial_snapshots_symbol_date ON stock_financial_snapshots (symbol, as_of_date DESC)")
+
+    c.execute('''CREATE TABLE IF NOT EXISTS stock_event_interpretations (
+                 symbol TEXT NOT NULL,
+                 as_of_date TEXT NOT NULL,
+                 latest_event_id TEXT,
+                 event_strength TEXT,
+                 persistence TEXT,
+                 fund_consistency TEXT,
+                 action_rhythm TEXT,
+                 direction TEXT,
+                 reasoning TEXT,
+                 key_evidence TEXT,
+                 risk_points TEXT,
+                 raw_payload TEXT,
+                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 PRIMARY KEY(symbol, as_of_date)
+                 )''')
+    c.execute("CREATE INDEX IF NOT EXISTS idx_stock_event_interpretations_symbol_date ON stock_event_interpretations (symbol, as_of_date DESC)")
+
     c.execute('''CREATE TABLE IF NOT EXISTS stock_event_ingest_runs (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  source TEXT NOT NULL,

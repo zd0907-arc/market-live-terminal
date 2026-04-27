@@ -445,6 +445,8 @@ export interface StockEventCoverageData {
   symbol: string;
   coverage_status: string;
   alias_count?: number;
+  table_total_count?: number;
+  symbol_total_count?: number;
   modules: StockEventCoverageModuleItem[];
   by_source_type?: Array<{
     source_type: string;
@@ -458,6 +460,106 @@ export interface StockEventCoverageData {
     count: number;
     latest_event_time?: string | null;
   }>;
+}
+
+export interface SelectionCompanyResearchCard {
+  symbol: string;
+  as_of_date: string;
+  company_name?: string | null;
+  business_profile?: string | null;
+  main_business?: string | null;
+  profit_drivers?: string[];
+  new_business_logic?: string | null;
+  theme_tags?: string[];
+  valuation_logic?: string | null;
+  financial_interpretation?: string | null;
+  key_metrics?: Array<Record<string, any>>;
+  evidence_event_ids?: string[];
+  risk_points?: string[];
+  confidence?: number;
+  source_coverage?: Record<string, any>;
+  source?: string;
+  is_generated_fallback?: boolean;
+}
+
+export interface SelectionEventInterpretation {
+  company_snapshot?: string | null;
+  latest_key_event?: StockEventFeedItem | null;
+  event_strength?: string;
+  persistence?: string;
+  fund_consistency?: string;
+  action_rhythm?: string;
+  key_evidence?: StockEventFeedItem[];
+  risk_points?: string[];
+  method?: string;
+}
+
+export interface SelectionDecisionBrief {
+  symbol?: string;
+  as_of_date?: string;
+  company_overview?: string | null;
+  decision_explanation?: string | null;
+  source?: string;
+  raw_payload?: Record<string, any>;
+}
+
+export interface SelectionResearchContextData {
+  symbol: string;
+  name?: string | null;
+  trade_date: string;
+  requested_trade_date?: string | null;
+  strategy: string;
+  as_of_cutoff?: string;
+  selection_profile: SelectionProfileData;
+  price_l2_series?: {
+    items: SelectionProfileSeriesItem[];
+    count: number;
+    coverage_status?: string;
+    sources?: string[];
+    date_window?: Record<string, any>;
+  };
+  trade_plan?: SelectionProfileData['trade_plan'];
+  stock_event_coverage?: StockEventCoverageData;
+  stock_event_feed?: StockEventFeedData;
+  sentiment_snapshot?: Record<string, any>;
+  company_profile?: Record<string, any>;
+  financial_snapshot?: Record<string, any>;
+  company_research_card?: SelectionCompanyResearchCard;
+  event_interpretation?: SelectionEventInterpretation;
+  decision_brief?: SelectionDecisionBrief;
+  source_audit?: {
+    collection_status?: string;
+    audit_flags?: Array<{ level: string; code: string; message: string }>;
+    recent_items?: StockEventFeedItem[];
+    group_counts?: Record<string, number>;
+  };
+}
+
+export interface SelectionResearchContextPrepareData {
+  symbol: string;
+  trade_date: string;
+  strategy: string;
+  prepared_at?: string;
+  status?: string;
+  stages?: Array<{ step: string; status: string; message?: string; [key: string]: any }>;
+  hydrate_result?: Record<string, any>;
+  llm_result?: Record<string, any>;
+  context: SelectionResearchContextData;
+}
+
+export interface SelectionQuickEventJudgeData {
+  message_text: string;
+  related_symbols: string[];
+  primary_symbol: string;
+  trade_date?: string;
+  event_type: string;
+  direction: string;
+  event_strength: string;
+  persistence: string;
+  fund_consistency: string;
+  action_rhythm: string;
+  follow_up_conditions: string[];
+  context?: SelectionResearchContextData;
 }
 
 export interface SelectionProfileData {
