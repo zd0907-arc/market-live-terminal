@@ -169,22 +169,26 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       seen.add(key);
       markers.push(marker);
     };
+    const observeDate = profile?.observe_date || profile?.discovery_date || candidate?.observe_date;
+    const launchStartDate = profile?.launch_start_date;
     pushMarker({
-      date: profile?.observe_date || profile?.discovery_date || candidate?.observe_date,
+      date: observeDate,
       type: 'entry',
-      label: '观察',
-      note: '纳入观察池',
+      label: observeDate && launchStartDate && observeDate === launchStartDate ? '观察/启动' : '观察',
+      note: observeDate && launchStartDate && observeDate === launchStartDate ? '纳入观察池，趋势启动观察' : '纳入观察池',
     });
-    pushMarker({
-      date: profile?.launch_start_date,
-      type: 'entry',
-      label: '启动',
-      note: profile?.launch_end_date ? `启动窗口 ${profile.launch_start_date} ~ ${profile.launch_end_date}` : '启动观察',
-    });
+    if (launchStartDate && launchStartDate !== observeDate) {
+      pushMarker({
+        date: launchStartDate,
+        type: 'entry',
+        label: '启动',
+        note: profile?.launch_end_date ? `启动窗口 ${profile.launch_start_date} ~ ${profile.launch_end_date}` : '启动观察',
+      });
+    }
     pushMarker({
       date: profile?.pullback_confirm_date || profile?.entry_signal_date || candidate?.entry_signal_date || plan?.signal_date,
       type: 'entry',
-      label: '确认',
+      label: '买入确认',
       note: '确认日收盘识别，次日执行',
     });
     pushMarker({
@@ -338,7 +342,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
           <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
             <MetricCard label="纳入观察" value={profile.observe_date || profile.discovery_date || candidate.observe_date || '--'} />
-            <MetricCard label={isTrendContinuation ? '回踩确认' : '回调确认'} value={profile.pullback_confirm_date || profile.entry_signal_date || candidate.entry_signal_date || '--'} />
+            <MetricCard label="买入确认" value={profile.pullback_confirm_date || profile.entry_signal_date || candidate.entry_signal_date || '--'} />
             <MetricCard label="次日买入" value={profile.trade_plan?.entry_date || profile.entry_date || '--'} />
             <MetricCard label="卖出信号/卖出" value={[profile.trade_plan?.exit_signal_date || profile.exit_signal_date, profile.trade_plan?.exit_date || profile.exit_date].filter(Boolean).join(' / ') || '--'} />
           </div>

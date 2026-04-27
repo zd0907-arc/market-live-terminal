@@ -237,6 +237,7 @@ def get_trend_continuation_candidates(trade_date: Optional[str], limit: int = 20
 def _find_row(symbol: str, trade_date: Optional[str]) -> tuple[Optional[pd.Series], str]:
     normalized = str(symbol).lower()
     trades = _load_trades()
+    buys = _load_buy_signals()
     obs = _load_observation()
     if not trades.empty:
         subset = trades[trades["symbol"].astype(str).str.lower() == normalized].copy()
@@ -244,10 +245,17 @@ def _find_row(symbol: str, trade_date: Optional[str]) -> tuple[Optional[pd.Serie
             exact = subset[(subset["entry_signal_date"] == trade_date) | (subset["observe_date"] == trade_date)]
             if not exact.empty:
                 return exact.iloc[0], "buy_signal"
-            obs_subset = obs[obs["symbol"].astype(str).str.lower() == normalized].copy()
-            obs_exact = obs_subset[obs_subset["signal_date"] == trade_date]
-            if not obs_exact.empty:
-                return obs_exact.iloc[0], "observe"
+            earlier = subset[subset["entry_signal_date"] <= trade_date].sort_values("entry_signal_date")
+            if not earlier.empty:
+                return earlier.iloc[-1], "buy_signal"
+        if not subset.empty:
+            return subset.sort_values("entry_signal_date").iloc[-1], "buy_signal"
+    if not buys.empty:
+        subset = buys[buys["symbol"].astype(str).str.lower() == normalized].copy()
+        if trade_date:
+            exact = subset[(subset["entry_signal_date"] == trade_date) | (subset["observe_date"] == trade_date)]
+            if not exact.empty:
+                return exact.iloc[0], "buy_signal"
             earlier = subset[subset["entry_signal_date"] <= trade_date].sort_values("entry_signal_date")
             if not earlier.empty:
                 return earlier.iloc[-1], "buy_signal"
@@ -318,6 +326,8 @@ def get_trend_continuation_profile(symbol: str, trade_date: Optional[str]) -> Di
         "entry_signal_date": candidate.get("entry_signal_date"),
         "entry_date": candidate.get("entry_date"),
         "observe_date": candidate.get("observe_date"),
+        "launch_start_date": candidate.get("observe_date"),
+        "launch_end_date": candidate.get("entry_signal_date") or candidate.get("observe_date"),
         "exit_signal_date": candidate.get("exit_signal_date"),
         "exit_date": candidate.get("exit_date"),
         "risk_count": 0,
