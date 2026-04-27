@@ -374,6 +374,11 @@ export interface SelectionCandidateItem {
   launch_reason?: string;
   pullback_reason?: string;
   exit_plan_summary?: string;
+  trend_score?: number | null;
+  fund_score?: number | null;
+  repair_score?: number | null;
+  confirm_active_buy_strength?: number | null;
+  confirm_main_net_ratio?: number | null;
 }
 
 export interface SelectionCandidatesResponse {

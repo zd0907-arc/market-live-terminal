@@ -18,6 +18,12 @@ const fmtAmt = (value?: number | null) => {
   return num.toFixed(0);
 };
 
+const fmtSignedPct = (value?: number | null, digits = 2) => {
+  if (value == null || Number.isNaN(Number(value))) return '--';
+  const num = Number(value);
+  return `${num > 0 ? '+' : ''}${num.toFixed(digits)}%`;
+};
+
 const scoreTone = (score?: number | null) => {
   const value = Number(score || 0);
   if (value >= 75) return 'text-red-300';
@@ -94,6 +100,32 @@ const classifyEventGroup = (item: StockEventFeedItem): EventGroupKey => {
 const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
 
 const COVERAGE_DAY_OPTIONS = [30, 60, 90, 120, 180] as const;
+
+type StrategyInsight = React.ComponentProps<typeof HistoryMultiframeFusionView>['strategyInsight'];
+
+const levelText = (metric: string, value?: number | null) => {
+  if (value == null || Number.isNaN(Number(value))) return '暂无';
+  const num = Number(value);
+  if (metric === 'active_buy_strength') {
+    if (num > 5) return '很强';
+    if (num > 2) return '强';
+    if (num > 0) return '达标';
+    return '不达标';
+  }
+  if (metric === 'net_ratio_pct') {
+    if (num > 6) return '很强';
+    if (num > 3) return '强';
+    if (num >= 0) return '达标';
+    return '不达标';
+  }
+  if (metric === 'score') {
+    if (num >= 75) return '很强';
+    if (num >= 60) return '较强';
+    if (num >= 45) return '可观察';
+    return '偏弱';
+  }
+  return '';
+};
 
 const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus, latestTradeDate }) => {
   const [granularity, setGranularity] = useState<HistoryMultiframeGranularity>('1d');
@@ -261,6 +293,129 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     '多个风险信号同时出现时过滤。',
   ];
   const anchorDate = candidate.trade_date || profile.observe_date || profile.discovery_date || profile.entry_signal_date || profile.trade_plan?.signal_date || null;
+  const strategyInsight = useMemo<StrategyInsight>(() => {
+    const intent = profile.intent_profile || {};
+    const entrySignalDate = profile.pullback_confirm_date || profile.entry_signal_date || candidate.entry_signal_date || profile.trade_plan?.signal_date;
+    const observeDate = profile.observe_date || profile.discovery_date || candidate.observe_date;
+    const entryDate = profile.trade_plan?.entry_date || profile.entry_date || candidate.entry_date;
+    const exitSignalDate = profile.trade_plan?.exit_signal_date || profile.exit_signal_date || candidate.exit_signal_date;
+    const exitDate = profile.trade_plan?.exit_date || profile.exit_date || candidate.exit_date;
+
+    if (isTrendContinuation) {
+      const activeStrength = Number(intent.confirm_active_buy_strength ?? candidate.confirm_active_buy_strength);
+      const mainNetRatioPct = Number(intent.confirm_main_net_ratio ?? candidate.confirm_main_net_ratio) * 100;
+      const trendScore = Number(intent.trend_score ?? candidate.breakout_score);
+      const fundScore = Number(intent.fund_score ?? candidate.stealth_score);
+      const repairScore = Number(intent.repair_score ?? candidate.distribution_score);
+      const isBuy = profile.entry_allowed !== false;
+      return {
+        title: isBuy ? '买入确认' : '观察中',
+        subtitle: isBuy
+          ? `${observeDate || '--'}观察/启动 → ${entrySignalDate || '--'}买入确认`
+          : `${observeDate || candidate.trade_date || '--'}进入观察池，等待回踩确认`,
+        tone: isBuy ? 'positive' : 'watch',
+        sections: [
+          {
+            title: '信号链路',
+            rows: [
+              { label: '观察/启动', value: observeDate || '--', desc: '趋势中继先进入观察池，不直接买；后续等待回踩和承接确认。' },
+              { label: '买入确认', value: entrySignalDate || '--', desc: '确认日收盘识别，满足买点后计划下一个可交易日执行。' },
+              { label: '计划买入', value: entryDate || '待次日', desc: '回测里用次日开盘价；最新信号如果未来数据不足，暂不强行补价格。' },
+              { label: '卖出信号/卖出', value: [exitSignalDate, exitDate].filter(Boolean).join(' / ') || '待跟踪', desc: '买入后主要盯累计超大单是否真实撤退。' },
+            ],
+          },
+          {
+            title: '买入确认依据',
+            rows: [
+              {
+                label: '主动买入强度',
+                value: Number.isFinite(activeStrength) ? `${activeStrength.toFixed(2)}｜${levelText('active_buy_strength', activeStrength)}` : '--',
+                desc: '算法：确认日主动买入净额 / 当日成交额 ×100。含义：当天是否有真实主动资金往上买。阈值：>0 达标，>2 强，>5 很强；<=0 不确认买点。',
+              },
+              {
+                label: '主力净流入比例',
+                value: Number.isFinite(mainNetRatioPct) ? `${mainNetRatioPct.toFixed(2)}%｜${levelText('net_ratio_pct', mainNetRatioPct)}` : '--',
+                desc: '算法：确认日 L2 主力净流入 / 当日成交额。含义：主力资金是否真实留入。阈值：>=0 达标，>3% 强，>6% 很强。',
+              },
+              {
+                label: '趋势分',
+                value: Number.isFinite(trendScore) ? `${trendScore.toFixed(2)}｜${levelText('score', trendScore)}` : '--',
+                desc: '综合近20日涨幅、相对高点位置、趋势延续状态。不是越高越追涨，主要用于判断是否已经进入趋势中继区间。',
+              },
+              {
+                label: '资金留场分',
+                value: Number.isFinite(fundScore) ? `${fundScore.toFixed(2)}｜${levelText('score', fundScore)}` : '--',
+                desc: '综合前期超大单/主力净流入和正流入天数。含义：趋势起来后资金有没有明显跑掉。',
+              },
+              {
+                label: '修复/承接分',
+                value: Number.isFinite(repairScore) ? `${repairScore.toFixed(2)}｜${levelText('score', repairScore)}` : '--',
+                desc: '观察回踩后是否重新承接。分数越高，说明回踩后价格和资金修复越好。',
+              },
+            ],
+          },
+          {
+            title: '退出逻辑',
+            rows: [
+              { label: '核心规则', value: '累计超大单', desc: '累计超大单增速下降不是风险；累计值真实下降、并从峰值明显回撤，才是风险。' },
+              { label: '当前说明', value: profile.exit_plan_summary || '待跟踪', desc: '卖出信号通常是收盘后识别，下一交易日执行。' },
+            ],
+          },
+        ],
+      };
+    }
+
+    if (isStableCallback) {
+      const setupScore = Number(intent.setup_score ?? profile.stealth_score);
+      const launchReturn = Number(intent.launch3_return_pct ?? profile.breakout_score);
+      const supportSpread = Number(intent.pullback_support_spread_avg);
+      const riskCount = Number(profile.risk_count ?? candidate.risk_count ?? 0);
+      const isBuy = profile.entry_allowed !== false;
+      return {
+        title: isBuy ? '可买入' : '风险拦截',
+        subtitle: `${profile.discovery_date || '--'}观察 → ${entrySignalDate || '--'}回调承接确认`,
+        tone: isBuy ? 'positive' : 'watch',
+        sections: [
+          {
+            title: '信号链路',
+            rows: [
+              { label: '纳入观察', value: profile.discovery_date || '--', desc: '先发现资金异动和启动迹象，不追当天暴涨。' },
+              { label: '买入确认', value: entrySignalDate || '--', desc: '启动后出现回调承接，确认日收盘识别，计划次日买入。' },
+              { label: '计划买入', value: entryDate || '--', desc: '回测里用次日开盘价。' },
+              { label: '卖出信号/卖出', value: [exitSignalDate, exitDate].filter(Boolean).join(' / ') || '待跟踪', desc: '买入后盯累计超大单和组合风险。' },
+            ],
+          },
+          {
+            title: '买入确认依据',
+            rows: [
+              {
+                label: '前置资金分',
+                value: Number.isFinite(setupScore) ? `${setupScore.toFixed(2)}｜${levelText('score', setupScore)}` : '--',
+                desc: '综合启动前资金异动、资金持续性和价格结构。含义：前面是否有资金提前进入。',
+              },
+              {
+                label: '启动3日涨幅',
+                value: Number.isFinite(launchReturn) ? fmtSignedPct(launchReturn) : '--',
+                desc: '算法：启动窗口内股价涨幅。含义：是否真的完成启动，而不是弱反弹。',
+              },
+              {
+                label: '回调承接强度',
+                value: Number.isFinite(supportSpread) ? supportSpread.toFixed(4) : '--',
+                desc: '算法：回调期盘口支撑与上方压力的相对差。大于0代表支撑强于卖压；越高说明回调承接越好。',
+              },
+              {
+                label: '组合风险数',
+                value: `${riskCount} 个`,
+                desc: '组合风险包含撤买单异常、盘口/成交背离、弱启动弱承接等。单个风险不一定拦截，多个风险同时出现才更危险。',
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    return null;
+  }, [candidate, isStableCallback, isTrendContinuation, profile]);
 
   return (
     <div className="space-y-3">
@@ -285,6 +440,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             tradeMarkers={tradePlanMarkers}
             tradeSummaryText={tradeSummary.text}
             tradeSummaryTone={tradeSummary.tone}
+            strategyInsight={strategyInsight}
             headerRightSlot={(
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
                 {COVERAGE_DAY_OPTIONS.map((days) => (
