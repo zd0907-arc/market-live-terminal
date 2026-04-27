@@ -411,6 +411,7 @@ def _windows_relative_under_project(remote_path: str) -> str:
 def _start_windows_http_relay(token: str) -> Dict[str, object]:
     sync_root = f"{WIN_PROJECT_ROOT}\\.run\\postclose_sync\\lan"
     script_path = f"{WIN_PROJECT_ROOT}\\backend\\scripts\\postclose_http_relay.py"
+    _stop_windows_http_relay()
     _ssh(WIN_HOST, f'cmd /c if not exist "{sync_root}" mkdir "{sync_root}"', check=False)
     proc = subprocess.Popen(
         [
@@ -458,6 +459,7 @@ def _start_cloud_http_relay(session_id: str, token: str) -> Dict[str, object]:
     _sync_required_cloud_scripts()
     relay_root = f"{CLOUD_PROJECT_ROOT_ABS}/{SYNC_ROOT_REL}/{session_id}"
     script_path = f"{CLOUD_PROJECT_ROOT_ABS}/backend/scripts/postclose_http_relay.py"
+    _stop_cloud_http_relay("")
     _run_cloud_bash(f"mkdir -p {shlex.quote(relay_root)}")
     proc = subprocess.Popen(
         [
@@ -492,8 +494,20 @@ def _start_cloud_http_relay(session_id: str, token: str) -> Dict[str, object]:
 
 
 def _stop_cloud_http_relay(session_id: str) -> None:
-    relay_root = f"{CLOUD_PROJECT_ROOT_ABS}/{SYNC_ROOT_REL}/{session_id}"
-    _run_cloud_bash(f"rm -rf {shlex.quote(relay_root)}", check=False)
+    if session_id:
+        relay_root = f"{CLOUD_PROJECT_ROOT_ABS}/{SYNC_ROOT_REL}/{session_id}"
+        _run_cloud_bash(f"rm -rf {shlex.quote(relay_root)}", check=False)
+    # ssh 断开不一定会带走远端 python；先按端口清残留，避免下一次新 token
+    # 健康检查打到旧 relay 时返回 401 / Address already in use。
+    stop_cmd = f"""
+pids=$(pgrep -f '[p]ostclose_http_relay.py.*--port {CLOUD_RELAY_PORT}' || true)
+if [ -n "$pids" ]; then
+  kill $pids >/dev/null 2>&1 || true
+  sleep 1
+  kill -9 $pids >/dev/null 2>&1 || true
+fi
+"""
+    _run_cloud_bash(stop_cmd, check=False)
 
 
 def _resolve_mac_sync_transport(trade_date: str) -> Dict[str, object]:

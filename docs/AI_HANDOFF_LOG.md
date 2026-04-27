@@ -1,5 +1,13 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-04-27 21:10 | Codex
+- Task ID: `REL-20260427-selection-strategy-research-v5.0.9`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
+- 结论: 已将选股策略研究阶段收口为 `v5.0.9`：每日复盘决策、资金流回调稳健、趋势中继高质量回踩已接入；消息事件重估补齐为“候选票事件解释卡 + 消息触发快速研判卡”两条入口。
+- 风险: 消息事件理解层尚未开发；资金撤退/风险规避与市场环境过滤仍是后续模块，不作为当前主线发布内容。
+- 链接: `docs/strategy-rework/project-status-20260427.md`, `docs/strategy-rework/strategies/S03-news-event-revaluation/README.md`, `docs/strategy-rework/current-inventory.md`
+
+
 > 当前新日志的 `Task ID` 优先填写当前变更卡 ID（`MOD/REQ/INV/CFG/STG-*`）；历史 `CHG-*` 保留为旧阶段记录，不强行重写。
 > 当前文件只保留最近 `1~2` 个版本窗口的短日志；更早阶段摘要见：
 > - `docs/archive/ARC-LEG-20260425-ai-handoff-log-pre-v5-summary.md`

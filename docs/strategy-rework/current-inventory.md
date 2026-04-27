@@ -2,12 +2,13 @@
 
 ## 结论
 
-当前有效资料只看三类：
+当前有效资料只看四类：
 
 ```text
 LONG_MEMORY.md / project-status-20260427.md
 strategies/S01-capital-trend-reversal/
 strategies/S02-capital-breakout-continuation/
+strategies/S03-news-event-revaluation/
 ```
 
 旧 `v0-*`、`v1-*` 策略目录已归档，不再作为当前入口。
@@ -74,6 +75,23 @@ docs/strategy-rework/strategies/S02-capital-breakout-continuation/
 ```text
 docs/changes/REQ-20260427-01-selection-stable-callback-strategy-ui.md
 docs/changes/REQ-20260427-02-selection-trend-continuation-strategy-ui.md
+```
+
+### 消息事件重估
+
+位置：
+
+```text
+docs/strategy-rework/strategies/S03-news-event-revaluation/
+```
+
+当前结论：需求已收口，尚未开发；下一轮新需求专门研究“消息面如何接入选股”。
+
+两条最快入口：
+
+```text
+候选票事件解释卡
+消息触发快速研判卡
 ```
 
 ## 已归档
