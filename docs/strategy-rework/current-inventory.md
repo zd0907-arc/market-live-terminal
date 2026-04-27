@@ -91,4 +91,4 @@ docs/changes/REQ-20260427-02-selection-trend-continuation-strategy-ui.md
 2. 资金流回调稳健还没有完整观察池展示。
 3. 每日复盘页还缺今日摘要、明日操作清单、观察池跨日跟踪。
 4. 持仓后的卖出监控还没做成独立工作台。
-5. 消息事件重估策略还没启动。
+5. 消息事件重估策略需求已重新收口到 `strategies/S03-news-event-revaluation/README.md`，尚未开发；核心包含“候选票事件解释卡”和“消息触发快速研判卡”。
