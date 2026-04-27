@@ -360,6 +360,7 @@ export interface SelectionCandidateItem {
   strategy_internal_id?: string;
   entry_signal_date?: string | null;
   entry_date?: string | null;
+  observe_date?: string | null;
   discovery_date?: string | null;
   launch_start_date?: string | null;
   launch_end_date?: string | null;
