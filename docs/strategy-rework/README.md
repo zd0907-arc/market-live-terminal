@@ -14,7 +14,8 @@ project-status-20260427.md
 
 ```text
 资金流回调稳健策略已接入系统。
-趋势中继策略进入“观察池 + 二次买点确认”研究阶段。
+趋势中继高质量回踩已接入系统。
+页面默认入口已升级为“每日复盘决策”。
 ```
 
 
@@ -62,6 +63,8 @@ archive-index.md                    # 旧资料归档索引
 | `_shared/sample-definition.md` | 共用样本定义 |
 | `data-map-current.md` | 当前字段和业务含义 |
 | `handoff-for-next-ai.md` | 给其他 AI 的交接背景 |
+| `project-status-20260427.md` | 当前完成情况评估 |
+| `review-page-user-story.md` | 复盘页面用户 Story 与优化空间 |
 
 ## 目录结构
 
@@ -86,19 +89,20 @@ docs/strategy-rework/
 
 ## 当前主线
 
-当前已验证最充分的是：
+当前页面入口是：
+
+```text
+每日复盘决策
+```
+
+当前已接入两条策略：
 
 ```text
 资金流回调稳健策略
+趋势中继高质量回踩策略
 ```
 
-旧路径：
-
-```text
-strategies/v1-trend-reversal-confirmation/
-```
-
-对应关系见：`strategy-taxonomy.md`。
+旧 `v0-*`、`v1-*` 目录已归档到 `_archive/obsolete-strategy-dirs/`。
 
 ## 工作流
 

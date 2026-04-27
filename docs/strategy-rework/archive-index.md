@@ -81,3 +81,10 @@ docs/strategy-rework/experiment-decision-log.md
 _archive/early-experiments/
 _archive/obsolete-root-docs/
 ```
+
+## 2026-04-27 新增归档
+
+| 路径 | 原因 |
+|---|---|
+| `_archive/obsolete-strategy-dirs/v0-lifecycle-baseline/` | 旧生命周期 baseline，已被多策略每日复盘框架替代 |
+| `_archive/obsolete-strategy-dirs/v1-trend-reversal-confirmation/` | 旧策略命名目录，当前由 `S01-capital-trend-reversal` 承接有效内容 |

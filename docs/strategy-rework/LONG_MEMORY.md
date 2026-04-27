@@ -2,11 +2,19 @@
 
 ## 一句话结论
 
-当前已经形成两条线：
+当前选股策略已经从“单策略调试”推进到“每日复盘决策”：
 
 ```text
-资金流回调稳健策略：已接入系统，适合模拟盘/小规模观察。
-趋势中继策略：覆盖强势股能力强，但交易买点还没解决，继续研究。
+资金流回调稳健：已接入，当前高胜率主策略。
+趋势中继高质量回踩：已接入，样本少但方向好，作为观察/小规模验证策略。
+每日复盘决策页：已接入，按日期合并多策略结果，作为日常入口。
+```
+
+最新状态：
+
+```text
+docs/strategy-rework/project-status-20260427.md
+docs/strategy-rework/review-page-user-story.md
 ```
 
 ## 用户目标
@@ -32,15 +40,20 @@
 
 ## 系统现状
 
-另一个开发会话已把“资金流回调稳健”接入选股页，并合并到 `main`。
-
 当前产品状态：
 
 ```text
-前端策略下拉框已有：资金流回调稳健
-后端策略内部 ID：stable_capital_callback
-需求文档：docs/changes/REQ-20260427-01-selection-stable-callback-strategy-ui.md
-产品说明：docs/strategy-rework/product-integration-stable-callback-strategy.md
+默认入口：每日复盘决策
+已接入策略：资金流回调稳健、趋势中继高质量回踩
+左侧列表：明日可操作 / 观察中 / 已拦截风险提示
+右侧复盘：K线 + L1/L2资金 + 锚点累计 + 策略节点 + 解释浮窗
+```
+
+需求文档：
+
+```text
+docs/changes/REQ-20260427-01-selection-stable-callback-strategy-ui.md
+docs/changes/REQ-20260427-02-selection-trend-continuation-strategy-ui.md
 ```
 
 ## 当前可用主策略：资金流回调稳健策略
@@ -134,12 +147,14 @@ docs/strategy-rework/strategies/S02-capital-breakout-continuation/experiments/EX
 
 ## 趋势中继策略当前结论
 
-第一版原型已完成。
+当前已从“原型不能投产”推进到“高质量回踩候选版已接入页面观察”。
 
 结论：
 
 ```text
-方向有价值，但第一版不能投产。
+趋势中继入池后直接买已否决；
+当前只采用“观察池 + 高质量回踩 + 真承接确认”。
+样本少，适合页面观察和继续滚动验证。
 ```
 
 成熟交易口径：
@@ -382,8 +397,8 @@ docs/strategy-rework/strategies/S02-capital-breakout-continuation/experiments/EX
 判断：
 
 ```text
-方向非常好，但样本只有 7 笔。
-只能作为趋势中继候选版，继续滚动验证，暂不投产。
+方向非常好，但样本只有 7 笔成熟闭环。
+当前已接入页面，作为观察/小规模验证策略，不把 7 笔结果当充分稳定结论。
 ```
 
 路径：
@@ -393,25 +408,26 @@ docs/strategy-rework/strategies/S02-capital-breakout-continuation/experiments/EX
 ```
 
 
-## 趋势中继策略产品接入
+## 产品接入状态
 
-用户确认：交易数少没问题，重点是高胜率、高收益；观察池也要展示。
-
-已接入系统下拉框：
+当前页面默认是“每日复盘决策”，不是单策略调试。
 
 ```text
-趋势中继高质量回踩
+每日复盘决策：按日期合并多个策略。
+资金流回调稳健：可切换单策略调试/回测。
+趋势中继高质量回踩：可切换单策略调试/回测。
 ```
 
 页面展示逻辑：
 
 ```text
-观察中：进入趋势中继观察池，等待买点。
-可买入：触发严格高质量回踩和真承接确认。
+明日可操作：确认可买入的票。
+观察中：进入观察池但未触发买点。
+已拦截/风险提示：策略识别到风险或不允许买入。
 ```
 
-需求文档：
+后续页面优化见：
 
 ```text
-docs/changes/REQ-20260427-02-selection-trend-continuation-strategy-ui.md
+docs/strategy-rework/review-page-user-story.md
 ```
