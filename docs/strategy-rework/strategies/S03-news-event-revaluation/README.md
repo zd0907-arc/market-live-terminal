@@ -248,3 +248,10 @@ source_unavailable = true/false
 4. 输入或选择一条事件后，能生成消息触发快速研判卡。
 5. 历史日期只使用当时可见事件。
 6. 输出必须包含：事件类型、强度、持续性、资金一致性、风险点、操作节奏建议。
+
+
+## 当前需求文档
+
+```text
+docs/changes/REQ-20260427-03-selection-news-event-research-context.md
+```
