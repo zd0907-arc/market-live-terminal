@@ -285,7 +285,7 @@ export interface SentimentData {
 }
 
 
-export type SelectionStrategy = 'stable_capital_callback' | 'stealth' | 'breakout' | 'distribution' | 'v2';
+export type SelectionStrategy = 'stable_capital_callback' | 'trend_continuation_callback' | 'stealth' | 'breakout' | 'distribution' | 'v2';
 
 export interface SelectionHealthData {
   status: string;
@@ -364,6 +364,7 @@ export interface SelectionCandidateItem {
   launch_start_date?: string | null;
   launch_end_date?: string | null;
   pullback_confirm_date?: string | null;
+  observe_date?: string | null;
   exit_signal_date?: string | null;
   exit_date?: string | null;
   risk_count?: number;

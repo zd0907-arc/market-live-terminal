@@ -1,0 +1,4 @@
+threshold,strong_count,candidate_hit_count,trade_hit_count,stable_trade_hit_count,combined_trade_hit_count,new_trade_hit_vs_stable
+30,674,89,84,15,99,84
+50,222,49,48,6,54,48
+top50,50,12,12,2,14,12

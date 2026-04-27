@@ -1,0 +1,47 @@
+{
+  "summary": {
+    "mode": "strict",
+    "confirm_count": 124,
+    "mature_trade_count": 89,
+    "trade_count": 89,
+    "win_rate": 32.58,
+    "avg_return_pct": 0.21,
+    "avg_gross_return_pct": 0.72,
+    "median_return_pct": -7.25,
+    "max_return_pct": 97.77,
+    "min_return_pct": -15.22,
+    "avg_holding_days": 7.13,
+    "total_return_pct_signal_sum": 18.95,
+    "buy_point_type_counts": {
+      "回踩均线承接": 75,
+      "强分歧后修复": 12,
+      "缩量震荡后放量阳线": 2
+    }
+  },
+  "coverage": [
+    {
+      "sample": "涨幅>=30%",
+      "strong_count": 674,
+      "trade_hit_count": 57,
+      "stable_trade_hit_count": 15,
+      "combined_trade_hit_count": 72,
+      "new_trade_hit_vs_stable": 57
+    },
+    {
+      "sample": "涨幅>=50%",
+      "strong_count": 222,
+      "trade_hit_count": 27,
+      "stable_trade_hit_count": 6,
+      "combined_trade_hit_count": 33,
+      "new_trade_hit_vs_stable": 27
+    },
+    {
+      "sample": "Top50",
+      "strong_count": 50,
+      "trade_hit_count": 8,
+      "stable_trade_hit_count": 2,
+      "combined_trade_hit_count": 10,
+      "new_trade_hit_vs_stable": 8
+    }
+  ]
+}

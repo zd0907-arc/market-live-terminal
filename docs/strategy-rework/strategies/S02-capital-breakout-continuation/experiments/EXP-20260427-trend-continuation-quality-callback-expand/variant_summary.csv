@@ -1,0 +1,3 @@
+variant,trade_count,win_rate,avg_return_pct,median_return_pct,max_return_pct,min_return_pct,runup_ge30_hit,runup_ge50_hit,top50_hit,runup_ge30_combined,runup_ge50_combined,top50_combined
+Top10,12,75.00,10.12,6.67,52.44,-9.95,9,5,0,24,11,2
+Top20,21,61.90,4.97,2.57,52.44,-14.84,14,8,0,29,14,2

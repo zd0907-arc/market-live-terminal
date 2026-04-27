@@ -1,0 +1,96 @@
+{
+  "refined_rule": "rank<=15 and repair_score>=45 and pre20_return_pct<=30",
+  "summary": {
+    "trade_count": 8,
+    "win_rate": 87.5,
+    "avg_return_pct": 13.78,
+    "avg_gross_return_pct": 14.35,
+    "median_return_pct": 10.46,
+    "max_return_pct": 52.44,
+    "min_return_pct": -8.32,
+    "avg_holding_days": 9.0,
+    "total_return_pct_signal_sum": 110.23
+  },
+  "symbols": [
+    {
+      "symbol": "sz000767",
+      "observe_date": "2026-03-05",
+      "entry_signal_date": "2026-03-11",
+      "rank": 13,
+      "score": 62.97,
+      "repair_score": 59.81,
+      "pre20_return_pct": 19.54,
+      "net_return_pct": 8.01
+    },
+    {
+      "symbol": "sz002730",
+      "observe_date": "2026-03-10",
+      "entry_signal_date": "2026-03-13",
+      "rank": 2,
+      "score": 78.58,
+      "repair_score": 62.88,
+      "pre20_return_pct": 20.79,
+      "net_return_pct": 19.36
+    },
+    {
+      "symbol": "sz000967",
+      "observe_date": "2026-03-11",
+      "entry_signal_date": "2026-03-16",
+      "rank": 9,
+      "score": 70.1,
+      "repair_score": 81.45,
+      "pre20_return_pct": 21.05,
+      "net_return_pct": 52.44
+    },
+    {
+      "symbol": "sz002633",
+      "observe_date": "2026-03-11",
+      "entry_signal_date": "2026-03-16",
+      "rank": 15,
+      "score": 67.93,
+      "repair_score": 67.08,
+      "pre20_return_pct": 19.59,
+      "net_return_pct": -8.32
+    },
+    {
+      "symbol": "sz002594",
+      "observe_date": "2026-03-16",
+      "entry_signal_date": "2026-03-19",
+      "rank": 9,
+      "score": 66.29,
+      "repair_score": 60.37,
+      "pre20_return_pct": 10.67,
+      "net_return_pct": 1.46
+    },
+    {
+      "symbol": "sz000048",
+      "observe_date": "2026-03-18",
+      "entry_signal_date": "2026-03-27",
+      "rank": 11,
+      "score": 59.98,
+      "repair_score": 66.79,
+      "pre20_return_pct": 10.95,
+      "net_return_pct": 12.91
+    },
+    {
+      "symbol": "sz002733",
+      "observe_date": "2026-03-24",
+      "entry_signal_date": "2026-03-27",
+      "rank": 4,
+      "score": 69.49,
+      "repair_score": 53.79,
+      "pre20_return_pct": 29.74,
+      "net_return_pct": 20.44
+    },
+    {
+      "symbol": "sz000617",
+      "observe_date": "2026-03-24",
+      "entry_signal_date": "2026-03-31",
+      "rank": 13,
+      "score": 62.05,
+      "repair_score": 54.36,
+      "pre20_return_pct": 14.22,
+      "net_return_pct": 3.93
+    }
+  ]
+}

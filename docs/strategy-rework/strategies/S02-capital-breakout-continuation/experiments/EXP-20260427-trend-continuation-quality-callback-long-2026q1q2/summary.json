@@ -1,0 +1,48 @@
+{
+  "period_summary": [
+    {
+      "period": "全周期",
+      "start": "2026-01-15",
+      "end": "2026-04-24",
+      "trade_count": 33,
+      "win_rate": 48.48,
+      "avg_return_pct": 4.27,
+      "avg_gross_return_pct": 4.79,
+      "median_return_pct": -0.91,
+      "max_return_pct": 52.44,
+      "min_return_pct": -13.53,
+      "avg_holding_days": 10.09,
+      "total_return_pct_signal_sum": 140.82
+    },
+    {
+      "period": "2026年1-2月成交L2-only",
+      "start": "2026-01-01",
+      "end": "2026-02-28",
+      "trade_count": 23,
+      "win_rate": 39.13,
+      "avg_return_pct": 1.91,
+      "avg_gross_return_pct": 2.42,
+      "median_return_pct": -3.6,
+      "max_return_pct": 46.33,
+      "min_return_pct": -13.02,
+      "avg_holding_days": 11.3,
+      "total_return_pct_signal_sum": 43.99
+    },
+    {
+      "period": "2026年3-4月完整L2挂单",
+      "start": "2026-03-01",
+      "end": "2026-04-24",
+      "trade_count": 10,
+      "win_rate": 70.0,
+      "avg_return_pct": 9.68,
+      "avg_gross_return_pct": 10.24,
+      "median_return_pct": 8.05,
+      "max_return_pct": 52.44,
+      "min_return_pct": -13.53,
+      "avg_holding_days": 7.3,
+      "total_return_pct_signal_sum": 96.83
+    }
+  ],
+  "total_confirm_count": 39,
+  "total_mature_count": 33
+}

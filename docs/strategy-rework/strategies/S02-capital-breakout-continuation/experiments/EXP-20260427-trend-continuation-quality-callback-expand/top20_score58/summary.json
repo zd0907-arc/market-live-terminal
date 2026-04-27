@@ -1,0 +1,45 @@
+{
+  "config": {
+    "name": "top20_score58",
+    "top_n": 20,
+    "min_score": 58.0,
+    "window": 8
+  },
+  "summary": {
+    "trade_count": 21,
+    "win_rate": 61.9,
+    "avg_return_pct": 4.97,
+    "avg_gross_return_pct": 5.5,
+    "median_return_pct": 2.57,
+    "max_return_pct": 52.44,
+    "min_return_pct": -14.84,
+    "avg_holding_days": 8.43,
+    "total_return_pct_signal_sum": 104.37
+  },
+  "coverage": [
+    {
+      "sample": "涨幅>=30%",
+      "strong_count": 674,
+      "trade_hit_count": 14,
+      "stable_trade_hit_count": 15,
+      "combined_trade_hit_count": 29,
+      "new_trade_hit_vs_stable": 14
+    },
+    {
+      "sample": "涨幅>=50%",
+      "strong_count": 222,
+      "trade_hit_count": 8,
+      "stable_trade_hit_count": 6,
+      "combined_trade_hit_count": 14,
+      "new_trade_hit_vs_stable": 8
+    },
+    {
+      "sample": "Top50",
+      "strong_count": 50,
+      "trade_hit_count": 0,
+      "stable_trade_hit_count": 2,
+      "combined_trade_hit_count": 2,
+      "new_trade_hit_vs_stable": 0
+    }
+  ]
+}

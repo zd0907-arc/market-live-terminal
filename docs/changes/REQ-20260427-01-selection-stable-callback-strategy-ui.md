@@ -1,9 +1,9 @@
 # REQ-20260427-01-selection-stable-callback-strategy-ui
 
 - 标题：选股页接入“资金流回调稳健策略”
-- 状态：DRAFT
-- 分支：`codex/selection-strategy-rework`
-- Worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-selection-strategy-rework`
+- 状态：DONE（已合并 main）
+- 开发结果：前端下拉框已出现“资金流回调稳健”；后端已接入 `stable_capital_callback`
+- 合并状态：已合并到 `main`
 
 ## 结论
 
@@ -185,3 +185,14 @@ docs/strategy-rework/product-integration-stable-callback-strategy.md
 - 长记忆文档已更新。
 - 实验采纳/不采纳记录可追溯。
 - 页面显示名称和文档名称一致。
+
+
+## 实施结果
+
+```text
+前端策略下拉框已接入：资金流回调稳健
+后端策略 ID：stable_capital_callback
+当前状态：已合并 main
+```
+
+后续研究不在这个需求里继续扩展；趋势中继策略另走研究文档。

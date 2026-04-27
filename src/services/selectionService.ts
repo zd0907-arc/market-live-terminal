@@ -160,6 +160,25 @@ export const fetchStableCallbackEvaluation = async (payload: {
   }
 };
 
+export const fetchTrendContinuationEvaluation = async (payload: {
+  start_date: string;
+  end_date: string;
+  top_n?: number;
+}): Promise<any | null> => {
+  try {
+    const params = new URLSearchParams({
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      top_n: String(payload.top_n || 20),
+    });
+    const res = await fetch(`${API_BASE_URL}/selection/trend-continuation/evaluate?${params.toString()}`);
+    return await parseApiData<any>(res);
+  } catch (e) {
+    console.error('Fetch trend continuation evaluation error:', e);
+    return null;
+  }
+};
+
 export const refreshSelectionResearch = async (startDate?: string, endDate?: string): Promise<any | null> => {
   try {
     const params = new URLSearchParams();

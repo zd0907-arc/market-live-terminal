@@ -19,6 +19,7 @@ import {
   fetchSelectionTradeDates,
   fetchSelectionV2Evaluation,
   fetchStableCallbackEvaluation,
+  fetchTrendContinuationEvaluation,
   refreshSelectionResearch,
   runSelectionBacktest,
 } from '../../services/selectionService';
@@ -29,9 +30,12 @@ import SelectionDecisionPanel from './SelectionDecisionPanel';
 import { APP_VERSION } from '../../version';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
+const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
+const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
 
-const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>; label: string }> = [
+const STRATEGY_OPTIONS: Array<{ value: Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>; label: string }> = [
   { value: 'stable_capital_callback', label: '资金流回调稳健' },
+  { value: 'trend_continuation_callback', label: '趋势中继高质量回踩' },
   { value: 'v2', label: '旧策略对照' },
 ];
 
@@ -220,7 +224,7 @@ const TradeDatePicker: React.FC<{
 
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
-  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>>(STABLE_CALLBACK_STRATEGY);
+  const [activeStrategy, setActiveStrategy] = useState<Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>>(STABLE_CALLBACK_STRATEGY);
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
@@ -275,7 +279,7 @@ const SelectionResearchPage: React.FC = () => {
     setSelected(null);
     setProfile(null);
     try {
-      const data = await fetchSelectionCandidates(dateArg || undefined, activeStrategy, 10);
+      const data = await fetchSelectionCandidates(dateArg || undefined, activeStrategy, activeStrategy === TREND_CONTINUATION_STRATEGY ? 20 : 10);
       const items = data?.items || [];
       setCandidates(items);
       await hydrateCandidateNames(items);
@@ -408,11 +412,15 @@ const SelectionResearchPage: React.FC = () => {
     setRunningBacktest(true);
     setError('');
     try {
-      if (activeStrategy === STABLE_CALLBACK_STRATEGY || activeStrategy === 'v2') {
+      if (PRODUCT_STRATEGIES.includes(activeStrategy) || activeStrategy === 'v2') {
         const payload = activeStrategy === STABLE_CALLBACK_STRATEGY ? await fetchStableCallbackEvaluation({
           start_date: backtestStartDate,
           end_date: backtestEndDate,
           top_n: 10,
+        }) : activeStrategy === TREND_CONTINUATION_STRATEGY ? await fetchTrendContinuationEvaluation({
+          start_date: backtestStartDate,
+          end_date: backtestEndDate,
+          top_n: 20,
         }) : await fetchSelectionV2Evaluation({
           start_date: backtestStartDate,
           end_date: backtestEndDate,
@@ -467,7 +475,7 @@ const SelectionResearchPage: React.FC = () => {
           next[item.date] = item;
         });
         setTradeDateMetaByDate(next);
-        if (activeStrategy === STABLE_CALLBACK_STRATEGY) {
+        if (PRODUCT_STRATEGIES.includes(activeStrategy)) {
           const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
           if (latestSelectable && (!tradeDate || next[tradeDate]?.selectable === false || !next[tradeDate])) {
             setTradeDate(latestSelectable);
@@ -500,7 +508,7 @@ const SelectionResearchPage: React.FC = () => {
           </span>
           <select
             value={activeStrategy}
-            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'stable_capital_callback' | 'v2'>)}
+            onChange={(e) => setActiveStrategy(e.target.value as Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>)}
             className="h-9 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
             aria-label="选择策略"
           >
@@ -592,7 +600,7 @@ const SelectionResearchPage: React.FC = () => {
                         <span className="shrink-0 text-[11px] text-slate-500">{item.symbol}</span>
                       </div>
                     </div>
-                    {activeStrategy === STABLE_CALLBACK_STRATEGY ? (
+                    {PRODUCT_STRATEGIES.includes(activeStrategy) ? (
                       <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
                         <div>
                           <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
@@ -639,7 +647,7 @@ const SelectionResearchPage: React.FC = () => {
                       </div>
                     )}
 	                  </div>
-                    {activeStrategy === STABLE_CALLBACK_STRATEGY ? (
+                    {PRODUCT_STRATEGIES.includes(activeStrategy) ? (
                       <div className="mt-1 truncate text-xs text-slate-500">
                         {item.reason_summary || item.pullback_reason || '回调承接确认'}
                       </div>
@@ -698,7 +706,7 @@ const SelectionResearchPage: React.FC = () => {
               <div className="text-xs text-slate-500">看固定持有收益，也看窗口内最高机会。</div>
             </div>
 
-	            {activeStrategy === STABLE_CALLBACK_STRATEGY || activeStrategy === 'v2' ? (
+	            {PRODUCT_STRATEGIES.includes(activeStrategy) || activeStrategy === 'v2' ? (
 	              <div>
 	                {v2Evaluation ? (
 	                  <div className="space-y-3">

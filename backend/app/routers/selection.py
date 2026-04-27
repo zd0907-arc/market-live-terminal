@@ -27,6 +27,13 @@ from backend.app.services.selection_stable_callback import (
     get_stable_callback_profile,
     get_stable_callback_trade_dates,
 )
+from backend.app.services.selection_trend_continuation import (
+    STRATEGY_INTERNAL_ID as TREND_CONTINUATION_STRATEGY_ID,
+    evaluate_trend_continuation_range,
+    get_trend_continuation_candidates,
+    get_trend_continuation_profile,
+    get_trend_continuation_trade_dates,
+)
 
 router = APIRouter()
 ensure_selection_schema()
@@ -40,7 +47,7 @@ def selection_health():
 @router.get("/selection/candidates", response_model=APIResponse)
 def selection_candidates(
     date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新可用日"),
-    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / stealth / breakout / distribution"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / trend_continuation_callback / v2 / stealth / breakout / distribution"),
     limit: int = Query(10, ge=1, le=500),
     replay_validation: bool = Query(False, description="仅 v2 实验验证使用：按 Layer3 回放结果排序"),
 ):
@@ -48,6 +55,8 @@ def selection_candidates(
         normalized_strategy = str(strategy).lower()
         if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
             return APIResponse(code=200, data=get_stable_callback_candidates(date, limit=limit))
+        if normalized_strategy == TREND_CONTINUATION_STRATEGY_ID:
+            return APIResponse(code=200, data=get_trend_continuation_candidates(date, limit=limit))
         if normalized_strategy == "v2":
             return APIResponse(code=200, data=get_candidates_v2_api(date, limit=limit, replay_validation=replay_validation))
         return APIResponse(code=200, data=get_candidates(date, strategy=strategy, limit=limit))
@@ -59,12 +68,14 @@ def selection_candidates(
 def selection_trade_dates(
     start_date: str = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期 YYYY-MM-DD"),
-    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / stealth / breakout / distribution"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / trend_continuation_callback / v2 / stealth / breakout / distribution"),
 ):
     try:
         normalized_strategy = str(strategy).lower()
         if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
             return APIResponse(code=200, data=get_stable_callback_trade_dates(start_date, end_date))
+        if normalized_strategy == TREND_CONTINUATION_STRATEGY_ID:
+            return APIResponse(code=200, data=get_trend_continuation_trade_dates(start_date, end_date))
         if normalized_strategy == "v2":
             return APIResponse(code=200, data=get_selection_v2_trade_dates(start_date, end_date))
         return APIResponse(code=200, data=get_selection_trade_dates(start_date, end_date, strategy=strategy))
@@ -76,12 +87,14 @@ def selection_trade_dates(
 def selection_profile(
     symbol: str,
     date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新可用日"),
-    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / v2 / breakout / stealth / distribution"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / trend_continuation_callback / v2 / breakout / stealth / distribution"),
 ):
     try:
         normalized_strategy = str(strategy).lower()
         if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
             return APIResponse(code=200, data=get_stable_callback_profile(symbol, date))
+        if normalized_strategy == TREND_CONTINUATION_STRATEGY_ID:
+            return APIResponse(code=200, data=get_trend_continuation_profile(symbol, date))
         if normalized_strategy == "v2":
             return APIResponse(code=200, data=get_profile_v2_api(symbol, date))
         return APIResponse(code=200, data=get_profile(symbol, date))
@@ -153,6 +166,19 @@ def selection_stable_callback_evaluate(
         return APIResponse(code=200, data=evaluate_stable_callback_range(start_date=start_date, end_date=end_date, top_n=top_n))
     except Exception as exc:
         return APIResponse(code=500, message=f"资金流回调稳健策略评估失败: {exc}", data=None)
+
+
+@router.get("/selection/trend-continuation/evaluate", response_model=APIResponse)
+def selection_trend_continuation_evaluate(
+    start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
+    top_n: int = Query(20, ge=1, le=50),
+):
+    try:
+        top_n_value = int(top_n) if isinstance(top_n, (int, str)) else 20
+        return APIResponse(code=200, data=evaluate_trend_continuation_range(start_date=start_date, end_date=end_date, top_n=top_n_value))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"趋势中继高质量回踩策略评估失败: {exc}", data=None)
 
 
 @router.post("/selection/backtests/run", response_model=APIResponse, dependencies=[Depends(require_write_access)])

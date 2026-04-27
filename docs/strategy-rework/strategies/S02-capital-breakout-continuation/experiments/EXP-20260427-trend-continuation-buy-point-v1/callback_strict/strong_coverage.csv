@@ -1,0 +1,4 @@
+sample,strong_count,trade_hit_count,stable_trade_hit_count,combined_trade_hit_count,new_trade_hit_vs_stable
+涨幅>=30%,674,47,15,62,47
+涨幅>=50%,222,24,6,30,24
+Top50,50,8,2,10,8

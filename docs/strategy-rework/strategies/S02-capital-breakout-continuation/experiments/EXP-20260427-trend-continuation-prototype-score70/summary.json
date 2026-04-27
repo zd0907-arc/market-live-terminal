@@ -1,0 +1,61 @@
+{
+  "range": {
+    "start": "2026-03-02",
+    "end": "2026-04-24",
+    "replay_end": "2026-04-24",
+    "top_n": 10,
+    "min_score": 70.0
+  },
+  "candidate_count": 153,
+  "trade_summary": {
+    "trade_count": 147,
+    "win_rate": 44.22,
+    "avg_return_pct": 0.39,
+    "avg_gross_return_pct": 0.9,
+    "median_return_pct": -2.35,
+    "max_return_pct": 45.49,
+    "min_return_pct": -16.51,
+    "avg_holding_days": 6.14,
+    "total_return_pct_signal_sum": 57.91
+  },
+  "mature_summary": {
+    "trade_count": 119,
+    "win_rate": 41.18,
+    "avg_return_pct": -1.15,
+    "avg_gross_return_pct": -0.65,
+    "median_return_pct": -6.54,
+    "max_return_pct": 36.14,
+    "min_return_pct": -16.51,
+    "avg_holding_days": 6.71,
+    "total_return_pct_signal_sum": -136.73
+  },
+  "coverage": [
+    {
+      "threshold": 30,
+      "strong_count": 674,
+      "candidate_hit_count": 89,
+      "trade_hit_count": 84,
+      "stable_trade_hit_count": 15,
+      "combined_trade_hit_count": 99,
+      "new_trade_hit_vs_stable": 84
+    },
+    {
+      "threshold": 50,
+      "strong_count": 222,
+      "candidate_hit_count": 49,
+      "trade_hit_count": 48,
+      "stable_trade_hit_count": 6,
+      "combined_trade_hit_count": 54,
+      "new_trade_hit_vs_stable": 48
+    },
+    {
+      "threshold": "top50",
+      "strong_count": 50,
+      "candidate_hit_count": 12,
+      "trade_hit_count": 12,
+      "stable_trade_hit_count": 2,
+      "combined_trade_hit_count": 14,
+      "new_trade_hit_vs_stable": 12
+    }
+  ]
+}

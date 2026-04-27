@@ -1,0 +1,21 @@
+# 趋势中继当前候选版
+
+{
+  "summary": {
+    "trade_count": 7,
+    "win_rate": 100.0,
+    "avg_return_pct": 20.19,
+    "avg_gross_return_pct": 20.8,
+    "median_return_pct": 19.36,
+    "max_return_pct": 52.44,
+    "min_return_pct": 3.93,
+    "avg_holding_days": 9.0,
+    "total_return_pct_signal_sum": 141.34
+  },
+  "confirm_count": 13,
+  "mature_count": 7,
+  "exit_reason_counts": {
+    "large_super_outflow_profit_guard": 5,
+    "cum_super_peak_dd_20pct_3d": 2
+  }
+}

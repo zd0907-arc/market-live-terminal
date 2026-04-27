@@ -2,51 +2,78 @@
 
 ## 结论
 
-当前资料已经比较多，但分成了两类：
+当前资料按三层管理：
 
 ```text
-1. 已沉淀为策略主线的资料：主要在 strategies/v1-trend-reversal-confirmation
-2. 早期探索/临时实验：主要在 docs/strategy-rework/experiments
+长记忆/总入口
+-> 策略族
+-> 实验目录
 ```
 
-后续不清理旧文件，只建立索引和新规范。
+当前不要再新增散乱文档；新实验必须落到对应策略族下面。
 
-## 当前关键目录
+## 总入口文档
 
-| 路径 | 当前含义 | 后续处理 |
-|---|---|---|
-| `_shared/` | 数据源、样本定义等跨策略资料 | 继续共用 |
-| `cases/` | 利通电子等个股案例 | 继续保留 |
-| `experiments/` | 早期未归入策略族的实验 | 只读归档，后续少新增 |
-| `strategies/v0-lifecycle-baseline/` | 旧生命周期策略 | 作为对照基线 |
-| `strategies/v1-trend-reversal-confirmation/` | 当前资金流趋势反转主线 | 映射为 `S01-capital-trend-reversal` |
-| `strategies/S01-*` ~ `S05-*` | 新策略族结构 | 后续新实验放这里 |
-
-## 当前 S01 已有有效资产
-
-旧路径：
-
-```text
-strategies/v1-trend-reversal-confirmation/
-```
-
-有价值文件：
-
-| 文件 | 价值 |
+| 文档 | 作用 |
 |---|---|
-| `README.md` | 当前策略链路说明 |
-| `factor-design.md` | 因子设计 |
-| `research-hypotheses.md` | 研究假设 |
-| `version-history.md` | v1 到 v1.5 的迭代记录 |
-| `experiments/20260426-v1-3-robustness-scan/` | v1.3 全市场稳健性扫描 |
-| `experiments/20260426-v1-4-modes/` | v1.4 quality/balanced 对比 |
-| `experiments/20260426-v1-5-business-guards/` | ST/市值/冷却等业务防线试验 |
-| `experiments/20260426-market-extreme-review/` | 市场最强/最弱 30 反推 |
+| `README.md` | 策略研究文件夹入口 |
+| `LONG_MEMORY.md` | 长记忆，记录当前大方向和已确认结论 |
+| `project-status-20260427.md` | 当前系统和研究状态 |
+| `current-strategy-conclusion.md` | 当前策略结论 |
+| `experiment-decision-log.md` | 实验采纳/不采纳登记 |
+| `strategy-taxonomy.md` | 策略族和命名规则 |
 
-## 当前最重要的未解决问题
+## 当前可用策略资料
 
-1. S01 发现层偏保守，成交额 `2.5亿` 绝对门槛可能错过早期牛股。
-2. S01 更适合抓“资金流趋势反转”，不能包圆所有强势票。
-3. 已经涨过一段后继续走二波的票，应拆到 `S02`。
-4. 消息/公司重估类行情，应拆到 `S03`，不能强塞进纯资金流策略。
-5. 出货/诱多/风险退出能力应沉淀成 `S04`，供 S01/S02 复用。
+### 资金流回调稳健策略
+
+位置：
+
+```text
+docs/strategy-rework/strategies/S01-capital-trend-reversal/
+```
+
+核心实验：
+
+| 实验 | 结论 |
+|---|---|
+| `EXP-20260426-S01-M05-conservative-combined-risk` | 当前稳健策略，已接入系统 |
+| `EXP-20260427-liquidity-gate-variants` | 简单放宽成交额门槛不适合直接替换 |
+| `EXP-20260427-liquidity-gate-variants-top20` | Top20 扩容提高覆盖但降低质量 |
+
+产品接入：
+
+```text
+docs/changes/REQ-20260427-01-selection-stable-callback-strategy-ui.md
+docs/strategy-rework/product-integration-stable-callback-strategy.md
+```
+
+### 趋势中继策略
+
+位置：
+
+```text
+docs/strategy-rework/strategies/S02-capital-breakout-continuation/
+```
+
+核心实验：
+
+| 实验 | 结论 |
+|---|---|
+| `EXP-20260427-strong-runup-opportunity-audit` | 强势股反推，说明需要趋势中继策略 |
+| `EXP-20260427-trend-continuation-prototype` | 观察池覆盖有效，但直接买入失败 |
+| `EXP-20260427-trend-continuation-prototype-score70` | 单纯提高分数阈值无效 |
+| `EXP-20260427-trend-continuation-prototype-score75-top5` | 进一步收紧仍无效 |
+
+下一步方案：
+
+```text
+docs/strategy-rework/strategies/S02-capital-breakout-continuation/next-buy-point-plan.md
+```
+
+## 当前未解决问题
+
+1. 趋势中继策略需要二次买点确认，不能入池后直接买。
+2. 多策略合并后，要继续验证对 Top30/Top50/涨幅>=30%/涨幅>=50% 的覆盖率。
+3. 消息事件重估策略还没启动。
+4. ST、市值、冷却期等业务防线要以后拆开单独验证。
