@@ -210,6 +210,8 @@ export interface HistoryMultiframeItem {
   high: number | null;
   low: number | null;
   close: number | null;
+  prev_close?: number | null;
+  change_pct?: number | null;
   total_amount: number | null;
   l1_main_buy: number | null;
   l1_main_sell: number | null;
@@ -508,6 +510,29 @@ export interface SelectionDecisionBrief {
   raw_payload?: Record<string, any>;
 }
 
+export interface SelectionResearchEvidenceItem {
+  evidence_key?: string;
+  source_event_id?: string | null;
+  source?: string | null;
+  source_type?: string | null;
+  published_at?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  claim_tags?: string[];
+  raw_url?: string | null;
+  pdf_url?: string | null;
+  importance?: number;
+}
+
+export interface SelectionResearchEvidenceData {
+  symbol?: string;
+  strategy?: string;
+  signal_date?: string;
+  as_of_date?: string;
+  generated_at?: string | null;
+  items?: SelectionResearchEvidenceItem[];
+}
+
 export interface SelectionResearchContextData {
   symbol: string;
   name?: string | null;
@@ -532,6 +557,7 @@ export interface SelectionResearchContextData {
   company_research_card?: SelectionCompanyResearchCard;
   event_interpretation?: SelectionEventInterpretation;
   decision_brief?: SelectionDecisionBrief;
+  research_evidence?: SelectionResearchEvidenceData;
   source_audit?: {
     collection_status?: string;
     audit_flags?: Array<{ level: string; code: string; message: string }>;

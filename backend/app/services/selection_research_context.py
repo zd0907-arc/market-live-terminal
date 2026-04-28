@@ -159,6 +159,32 @@ CREATE TABLE IF NOT EXISTS stock_selection_decision_explanations (
 )
 """
 
+RESEARCH_EVIDENCE_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS stock_selection_research_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    signal_date TEXT NOT NULL,
+    as_of_date TEXT NOT NULL,
+    evidence_key TEXT NOT NULL,
+    source_event_id TEXT,
+    source TEXT,
+    source_type TEXT,
+    published_at TEXT,
+    title TEXT,
+    summary TEXT,
+    claim_tags TEXT,
+    raw_url TEXT,
+    pdf_url TEXT,
+    importance INTEGER DEFAULT 0,
+    raw_payload TEXT,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, strategy, signal_date, as_of_date, evidence_key)
+)
+"""
+
 DECISION_BRIEF_PROMPT_VERSION = "decision_brief_v2"
 
 
@@ -171,6 +197,7 @@ def ensure_research_card_schema() -> None:
         conn.execute(DECISION_BRIEF_SCHEMA_SQL)
         conn.execute(COMPANY_OVERVIEW_BRIEF_SCHEMA_SQL)
         conn.execute(DECISION_EXPLANATION_SCHEMA_SQL)
+        conn.execute(RESEARCH_EVIDENCE_SCHEMA_SQL)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_research_cards_symbol_date "
             "ON stock_research_cards(symbol, as_of_date DESC)"
@@ -194,6 +221,10 @@ def ensure_research_card_schema() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_selection_decision_explanations_symbol_strategy_date "
             "ON stock_selection_decision_explanations(symbol, strategy, as_of_date DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stock_selection_research_evidence_lookup "
+            "ON stock_selection_research_evidence(symbol, strategy, signal_date, as_of_date, importance DESC)"
         )
         conn.commit()
 
@@ -1694,6 +1725,261 @@ def _build_fallback_decision_brief(
     }
 
 
+LOW_VALUE_EVIDENCE_KEYWORDS = (
+    "法律意见书",
+    "独立董事述职",
+    "独董述职",
+    "独立性自查",
+    "名单",
+    "公示",
+    "制度",
+    "章程",
+    "股东会决议",
+    "董事会决议",
+    "监事会决议",
+    "审计报告",
+    "专项审核说明",
+    "担保的进展公告",
+    "对外提供担保",
+)
+
+HIGH_VALUE_EVIDENCE_RULES: Sequence[Tuple[str, Sequence[str], int]] = (
+    ("财报改善", ("业绩预告", "业绩快报", "年度报告", "季度报告", "年报", "季报", "净利润", "扣非", "营收", "增长"), 95),
+    ("经营数据", ("经营简报", "单票", "收入", "业务量", "价格", "销量", "订单", "合同", "中标"), 88),
+    ("买点催化", ("涨停分析", "预增", "回购", "股权激励", "合作", "华为", "算力", "AI", "机器人", "涨价"), 82),
+    ("公司业务", ("投资者关系", "董秘", "问答", "主营", "业务", "布局", "客户", "产能", "新业务"), 76),
+    ("风险证伪", ("问询", "监管", "处罚", "冻结", "减持", "亏损", "资产减值", "诉讼", "风险"), 90),
+)
+
+
+def _evidence_tags_and_score(item: Dict[str, Any]) -> Tuple[List[str], int]:
+    text = f"{item.get('title') or ''}\n{item.get('content') or ''}"
+    if any(keyword in text for keyword in LOW_VALUE_EVIDENCE_KEYWORDS):
+        return ([], 0)
+    tags: List[str] = []
+    score = _int(item.get("importance"), 0)
+    for tag, keywords, weight in HIGH_VALUE_EVIDENCE_RULES:
+        if any(keyword in text for keyword in keywords):
+            tags.append(tag)
+            score = max(score, weight)
+    source_type = str(item.get("source_type") or "")
+    if source_type == "report":
+        tags.append("财报改善")
+        score = max(score, 90)
+    elif source_type == "qa":
+        tags.append("公司业务")
+        score = max(score, 72)
+    elif source_type == "news":
+        score = max(score, 65)
+    return (sorted(set(tags)), score)
+
+
+def _summarize_evidence_item(item: Dict[str, Any], tags: Sequence[str]) -> str:
+    title = str(item.get("title") or "").strip()
+    content = str(item.get("content") or "").strip()
+    body = content if content and content != title else title
+    body = re.sub(r"\s+", " ", body).strip()
+    metrics = METRIC_PATTERN.findall(body)
+    if metrics:
+        return f"{'、'.join(tags) if tags else '事件'}证据：{title}；关键数字：{'、'.join(metrics[:4])}。"
+    if len(body) > 90:
+        body = body[:90].rstrip() + "..."
+    return body or title or "本地事件证据。"
+
+
+def _strategy_l2_evidence(profile: Dict[str, Any], price_l2_series: Dict[str, Any], cutoff_date: str) -> Dict[str, Any]:
+    intent = profile.get("intent_profile") or {}
+    latest = (price_l2_series.get("items") or [])[-1] if price_l2_series.get("items") else {}
+    summary = (
+        f"策略证据：{profile.get('breakout_reason_summary') or profile.get('pullback_reason') or profile.get('current_judgement') or '候选信号'}。"
+        f"趋势分 {intent.get('trend_score', '--')}，资金留场分 {intent.get('fund_score', '--')}，"
+        f"确认日 L2 主力净流入 {_fmt_amount_cn(latest.get('l2_main_net'))}。"
+    )
+    return {
+        "evidence_key": "strategy_l2",
+        "source_event_id": None,
+        "source": "selection_profile/history_daily_l2",
+        "source_type": "strategy_l2",
+        "published_at": f"{cutoff_date} 15:00:00",
+        "title": "策略与L2资金确认",
+        "summary": summary,
+        "claim_tags": ["资金确认", "买点催化"],
+        "raw_url": None,
+        "pdf_url": None,
+        "importance": 100,
+        "raw_payload": {"intent_profile": intent, "latest_l2": latest},
+    }
+
+
+def _financial_evidence(financial_snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not financial_snapshot.get("available"):
+        return None
+    period = str(financial_snapshot.get("latest_period") or financial_snapshot.get("as_of_date") or "")
+    return {
+        "evidence_key": f"financial_snapshot:{period}",
+        "source_event_id": None,
+        "source": financial_snapshot.get("source") or "stock_financial_snapshots",
+        "source_type": "financial_snapshot",
+        "published_at": f"{period or financial_snapshot.get('as_of_date') or ''} 00:00:00",
+        "title": f"财务快照：{period or '--'}",
+        "summary": str(financial_snapshot.get("summary_text") or "最近财务快照。"),
+        "claim_tags": ["财报改善", "估值支撑"],
+        "raw_url": None,
+        "pdf_url": None,
+        "importance": 96,
+        "raw_payload": financial_snapshot,
+    }
+
+
+def build_research_evidence_package(
+    symbol: str,
+    cutoff_date: str,
+    strategy: str,
+    profile: Dict[str, Any],
+    feed: Dict[str, Any],
+    financial_snapshot: Dict[str, Any],
+    price_l2_series: Dict[str, Any],
+    *,
+    limit: int = 10,
+) -> Dict[str, Any]:
+    normalized = normalize_stock_event_symbol(symbol)
+    normalized_strategy = str(strategy or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+    signal_date = _decision_signal_date(profile, cutoff_date)
+    rows: List[Dict[str, Any]] = []
+    strategy_ev = _strategy_l2_evidence(profile, price_l2_series, cutoff_date)
+    rows.append(strategy_ev)
+    fin_ev = _financial_evidence(financial_snapshot)
+    if fin_ev:
+        rows.append(fin_ev)
+
+    seen_keys = {str(item["evidence_key"]) for item in rows}
+    for item in feed.get("items") or []:
+        tags, score = _evidence_tags_and_score(item)
+        if score <= 0 and not tags:
+            continue
+        event_id = str(item.get("event_id") or item.get("source_event_id") or item.get("title") or "")
+        key = f"event:{event_id}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        rows.append(
+            {
+                "evidence_key": key,
+                "source_event_id": event_id,
+                "source": item.get("source_label") or item.get("source"),
+                "source_type": item.get("source_type_label") or item.get("source_type"),
+                "published_at": item.get("published_at"),
+                "title": item.get("title"),
+                "summary": _summarize_evidence_item(item, tags),
+                "claim_tags": tags or ["事件背景"],
+                "raw_url": item.get("raw_url"),
+                "pdf_url": item.get("pdf_url"),
+                "importance": score,
+                "raw_payload": item,
+            }
+        )
+
+    rows = sorted(rows, key=lambda x: (_int(x.get("importance")), str(x.get("published_at") or "")), reverse=True)[: max(1, int(limit))]
+    now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        conn.execute(
+            """
+            DELETE FROM stock_selection_research_evidence
+            WHERE symbol=? AND strategy=? AND signal_date=? AND as_of_date=?
+            """,
+            (normalized, normalized_strategy, signal_date, cutoff_date),
+        )
+        conn.executemany(
+            """
+            INSERT INTO stock_selection_research_evidence (
+                symbol, strategy, signal_date, as_of_date, evidence_key, source_event_id,
+                source, source_type, published_at, title, summary, claim_tags,
+                raw_url, pdf_url, importance, raw_payload, generated_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            [
+                (
+                    normalized,
+                    normalized_strategy,
+                    signal_date,
+                    cutoff_date,
+                    item.get("evidence_key"),
+                    item.get("source_event_id"),
+                    item.get("source"),
+                    item.get("source_type"),
+                    item.get("published_at"),
+                    item.get("title"),
+                    item.get("summary"),
+                    _json_dumps(item.get("claim_tags") or []),
+                    item.get("raw_url"),
+                    item.get("pdf_url"),
+                    _int(item.get("importance")),
+                    _json_dumps(item.get("raw_payload") or {}),
+                    now_text,
+                )
+                for item in rows
+            ],
+        )
+        conn.commit()
+    return {
+        "symbol": normalized,
+        "strategy": normalized_strategy,
+        "signal_date": signal_date,
+        "as_of_date": cutoff_date,
+        "generated_at": now_text,
+        "items": rows,
+    }
+
+
+def load_research_evidence_package(symbol: str, cutoff_date: str, strategy: str, profile: Dict[str, Any], *, limit: int = 10) -> Dict[str, Any]:
+    ensure_research_card_schema()
+    normalized = normalize_stock_event_symbol(symbol)
+    normalized_strategy = str(strategy or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+    signal_date = _decision_signal_date(profile, cutoff_date)
+    with _set_row_factory(get_db_connection()) as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM stock_selection_research_evidence
+            WHERE lower(symbol)=lower(?)
+              AND strategy=?
+              AND signal_date=?
+              AND as_of_date <= ?
+            ORDER BY as_of_date DESC, importance DESC, published_at DESC
+            LIMIT ?
+            """,
+            (normalized, normalized_strategy, signal_date, cutoff_date, int(limit)),
+        ).fetchall()
+    items = []
+    generated_at = None
+    for row in rows:
+        payload = _as_row_dict(row) or {}
+        generated_at = generated_at or payload.get("generated_at")
+        items.append(
+            {
+                "evidence_key": payload.get("evidence_key"),
+                "source_event_id": payload.get("source_event_id"),
+                "source": payload.get("source"),
+                "source_type": payload.get("source_type"),
+                "published_at": payload.get("published_at"),
+                "title": payload.get("title"),
+                "summary": payload.get("summary"),
+                "claim_tags": _safe_json_loads(payload.get("claim_tags"), []),
+                "raw_url": payload.get("raw_url"),
+                "pdf_url": payload.get("pdf_url"),
+                "importance": _int(payload.get("importance")),
+            }
+        )
+    return {
+        "symbol": normalized,
+        "strategy": normalized_strategy,
+        "signal_date": signal_date,
+        "as_of_date": cutoff_date,
+        "generated_at": generated_at,
+        "items": items,
+    }
+
+
 def _generate_llm_decision_brief(
     symbol: str,
     cutoff_date: str,
@@ -1847,6 +2133,17 @@ def get_selection_research_context(
         financial_snapshot,
     )
     event_interpretation = _build_event_interpretation(profile, stock_event_feed, company_card, price_l2_series)
+    research_evidence = load_research_evidence_package(normalized, cutoff_date, strategy, profile)
+    if not research_evidence.get("items"):
+        research_evidence = build_research_evidence_package(
+            normalized,
+            cutoff_date,
+            strategy,
+            profile,
+            stock_event_feed,
+            financial_snapshot,
+            price_l2_series,
+        )
     decision_brief = _load_persisted_decision_brief(normalized, cutoff_date, strategy, profile) or _build_fallback_decision_brief(
         normalized,
         cutoff_date,
@@ -1875,6 +2172,7 @@ def get_selection_research_context(
         "company_research_card": company_card,
         "event_interpretation": event_interpretation,
         "decision_brief": decision_brief,
+        "research_evidence": research_evidence,
         "source_audit": source_audit,
     }
 
@@ -1940,6 +2238,15 @@ def prepare_selection_research_context(
         event_limit=event_limit,
         event_days=max(int(announcement_days), int(qa_days), int(news_days)),
         series_days=series_days,
+    )
+    context["research_evidence"] = build_research_evidence_package(
+        normalized,
+        context["trade_date"],
+        strategy,
+        context.get("selection_profile") or {},
+        context.get("stock_event_feed") or {},
+        context.get("financial_snapshot") or {},
+        context.get("price_l2_series") or {},
     )
 
     llm_result: Dict[str, Any] = {"status": "skipped", "reason": "use_llm=false"}

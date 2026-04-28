@@ -1,7 +1,7 @@
-# ZhangData 金融实时终端（v5.0.17）
+# ZhangData 金融实时终端（v5.0.18）
 
 ## 项目定位
-- 当前主线版本：`v5.0.17`
+- 当前主线版本：`v5.0.18`
 - 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`

@@ -12,6 +12,7 @@ import {
   SelectionEventInterpretation,
   SelectionProfileData,
   SelectionResearchContextData,
+  SelectionResearchEvidenceItem,
   SelectionStrategy,
   StockEventCoverageData,
   StockEventFeedItem,
@@ -86,26 +87,6 @@ interface Props {
   backendStatus: boolean;
   latestTradeDate?: string;
 }
-
-type EventGroupKey = 'official' | 'company' | 'media';
-
-const EVENT_GROUP_META: Record<EventGroupKey, { label: string; desc: string }> = {
-  official: { label: '官方披露', desc: '财报 / 公告 / 监管 / 再融资' },
-  company: { label: '公司交流', desc: '互动问答 / 业绩说明会 / 投资者关系' },
-  media: { label: '媒体资讯', desc: '快讯 / 长文 / 解读 / 调研速递' },
-};
-
-const classifyEventGroup = (item: StockEventFeedItem): EventGroupKey => {
-  const title = String(item.title || '');
-  if (
-    item.source_type === 'qa' ||
-    /投资者关系|说明会|互动|问答|调研|接待/i.test(title)
-  ) {
-    return 'company';
-  }
-  if (item.source_type === 'news') return 'media';
-  return 'official';
-};
 
 const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
 
@@ -346,15 +327,22 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     const tone = returnPct == null ? 'neutral' : returnPct >= 0 ? 'positive' : 'negative';
     return { text: text || null, tone };
   }, [effectiveEndDate, profile?.trade_plan]);
-  const groupedEventFeed = useMemo(() => {
-    const groups: Record<EventGroupKey, StockEventFeedItem[]> = {
-      official: [],
-      company: [],
-      media: [],
-    };
-    eventFeed.forEach((item) => groups[classifyEventGroup(item)].push(item));
-    return groups;
-  }, [eventFeed]);
+  const researchEvidenceItems = useMemo<SelectionResearchEvidenceItem[]>(() => {
+    const persisted = researchContext?.research_evidence?.items || [];
+    if (persisted.length > 0) return persisted;
+    return eventFeed.slice(0, 6).map((item) => ({
+      evidence_key: item.event_id,
+      source: item.source_label || item.source,
+      source_type: item.source_type_label || item.source_type,
+      published_at: item.published_at,
+      title: item.title,
+      summary: item.content && item.content !== item.title ? item.content : item.title,
+      claim_tags: ['事件背景'],
+      raw_url: item.raw_url,
+      pdf_url: item.pdf_url,
+      importance: item.importance,
+    }));
+  }, [eventFeed, researchContext?.research_evidence?.items]);
 
   if (!candidate || !profile || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
@@ -713,97 +701,47 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Newspaper className="h-4 w-4 text-fuchsia-400" />
-              事件依据 / 信息来源
-            </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Newspaper className="h-4 w-4 text-fuchsia-400" />
+            研究依据
           </div>
           <div className="text-xs text-slate-500">
-            {eventCoverage?.coverage_status === 'covered'
-              ? `最近覆盖：${eventCoverage?.modules?.filter((item) => item.covered).length || 0} / ${eventCoverage?.modules?.length || 0} 类`
-              : '当前无事件覆盖摘要'}
+            生成时间：{researchContext?.research_evidence?.generated_at || '生成中'}
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(eventCoverage?.modules || [
-            { module: 'report', label: '财报', covered: false, count: 0 },
-            { module: 'announcement', label: '公告', covered: false, count: 0 },
-            { module: 'qa', label: '互动问答', covered: false, count: 0 },
-            { module: 'news', label: '财经资讯', covered: false, count: 0 },
-            { module: 'regulatory', label: '监管', covered: false, count: 0 },
-          ]).map((item) => (
-            <div key={item.module} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className="text-slate-500">{item.label}</span>
-                <span className="font-semibold text-slate-100">{item.count || 0}</span>
-                <span className={item.covered ? 'text-emerald-300' : 'text-slate-500'}>{item.covered ? '已覆盖' : '暂无'}</span>
-                <span className="text-slate-600">{compactTime(item.latest_event_time)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 grid gap-3 xl:grid-cols-3">
-          {(Object.keys(EVENT_GROUP_META) as EventGroupKey[]).map((groupKey) => {
-            const group = EVENT_GROUP_META[groupKey];
-            const items = groupedEventFeed[groupKey];
-            return (
-              <div key={groupKey} className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-white">{group.label}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400">{items.length}</div>
+        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+          {researchEvidenceItems.length > 0 ? (
+            researchEvidenceItems.slice(0, 10).map((item) => (
+              <div key={item.evidence_key || `${item.title}-${item.published_at}`} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>{item.source_type || item.source || '本地依据'} · {item.source || '本地'}</span>
+                  <span>{compactTime(item.published_at)}</span>
                 </div>
-                <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1">
-                  {loadingEvents ? (
-                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">正在加载事件依据...</div>
-                  ) : items.length > 0 ? (
-                    items.map((item) => (
-                      <div key={item.event_id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                          <span>{item.source_label || item.source_type_label || item.source || '事件源'}</span>
-                          <span>{compactTime(item.published_at)}</span>
-                        </div>
-                        <div className="mt-1 text-sm font-medium text-slate-100">{item.title || '--'}</div>
-                        {item.content && item.content !== item.title ? (
-                          <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.content}</div>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.raw_url ? (
-                            <a
-                              href={item.raw_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              查看原文
-                            </a>
-                          ) : null}
-                          {item.pdf_url ? (
-                            <a
-                              href={item.pdf_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 hover:border-cyan-500"
-                            >
-                              <FileText className="h-3 w-3" />
-                              查看PDF
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">当前分组暂无可展示事件。</div>
-                  )}
+                <div className="mt-1 text-sm font-semibold text-slate-100">{item.title || '--'}</div>
+                <div className="mt-1 line-clamp-3 text-xs leading-5 text-slate-300">{item.summary || '暂无摘要'}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {(item.claim_tags || []).slice(0, 4).map((tag) => (
+                    <span key={`${item.evidence_key}-${tag}`} className="rounded-full border border-fuchsia-500/25 bg-fuchsia-500/10 px-2 py-0.5 text-[11px] text-fuchsia-100">{tag}</span>
+                  ))}
+                  {item.raw_url ? (
+                    <a href={item.raw_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-500">
+                      <ExternalLink className="h-3 w-3" />
+                      原文
+                    </a>
+                  ) : null}
+                  {item.pdf_url ? (
+                    <a href={item.pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-cyan-700/60 px-2 py-0.5 text-[11px] text-cyan-200 hover:border-cyan-500">
+                      <FileText className="h-3 w-3" />
+                      PDF
+                    </a>
+                  ) : null}
                 </div>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">暂无研究依据，点击刷新研究摘要。</div>
+          )}
         </div>
       </section>
     </div>
