@@ -28,7 +28,8 @@ SignalRow = Tuple[
 
 def get_selection_connection() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(SELECTION_DB_FILE), exist_ok=True)
-    conn = sqlite3.connect(SELECTION_DB_FILE)
+    conn = sqlite3.connect(SELECTION_DB_FILE, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000;")
     conn.row_factory = sqlite3.Row
     return conn
 

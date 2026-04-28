@@ -7,11 +7,13 @@ from backend.app.db.realtime_preview_db import ensure_realtime_preview_schema
 logger = logging.getLogger(__name__)
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000;")
     return conn
 
 def get_user_db_connection():
-    conn = sqlite3.connect(USER_DB_FILE)
+    conn = sqlite3.connect(USER_DB_FILE, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000;")
     return conn
 
 def ensure_wal_mode():

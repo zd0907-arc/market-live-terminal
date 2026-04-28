@@ -9,6 +9,7 @@ import {
   SelectionProfileData,
   SelectionStrategy,
   SelectionTradeDateItem,
+  SelectionTradeDatesData,
 } from '../../types';
 import {
   fetchSelectionBacktestDetail,
@@ -256,6 +257,14 @@ const SelectionResearchPage: React.FC = () => {
   const [backtestStartDate, setBacktestStartDate] = useState('2026-03-02');
   const [backtestEndDate, setBacktestEndDate] = useState('2026-04-24');
   const [error, setError] = useState('');
+  const selectedRef = useRef<SelectionCandidateItem | null>(null);
+  const lastLoadedKeyRef = useRef('');
+  const dateInitializedRef = useRef(false);
+  const prewarmNextLoadRef = useRef(false);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const hydrateCandidateNames = async (items: SelectionCandidateItem[]) => {
     const targets = items.filter((item) => !item.name || item.name === item.symbol);
@@ -297,43 +306,50 @@ const SelectionResearchPage: React.FC = () => {
   const loadHealth = async () => {
     const data = await fetchSelectionHealth();
     setHealth(data);
-    if (data?.latest_signal_date && !tradeDate) {
-      setTradeDate(data.latest_signal_date);
-      setPendingTradeDate(data.latest_signal_date);
+    if (data?.latest_signal_date) {
+      setPendingTradeDate((prev) => prev || data.latest_signal_date || '');
     }
   };
 
-  const loadCandidates = async (dateArg = tradeDate) => {
+  const loadCandidates = async (dateArg = tradeDate, force = false, prewarm = false) => {
+    const targetDate = dateArg || tradeDate;
+    if (!targetDate) return;
+    const loadKey = `${activeStrategy}:${targetDate}`;
+    if (!force && lastLoadedKeyRef.current === loadKey) return;
+    lastLoadedKeyRef.current = loadKey;
+    const shouldPrewarm = prewarm || prewarmNextLoadRef.current;
+    prewarmNextLoadRef.current = false;
     setLoadingCandidates(true);
     setError('');
-    setCandidates([]);
-    setSelected(null);
-    setProfile(null);
     try {
       let items: SelectionCandidateItem[] = [];
-      let nextDate = dateArg;
+      let nextDate = targetDate;
       if (activeStrategy === 'daily_review') {
         const [stableData, trendData] = await Promise.all([
-          fetchSelectionCandidates(dateArg || undefined, STABLE_CALLBACK_STRATEGY, 10),
-          fetchSelectionCandidates(dateArg || undefined, TREND_CONTINUATION_STRATEGY, 20),
+          fetchSelectionCandidates(targetDate, STABLE_CALLBACK_STRATEGY, 10),
+          fetchSelectionCandidates(targetDate, TREND_CONTINUATION_STRATEGY, 20),
         ]);
         items = [
           ...(stableData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || STABLE_CALLBACK_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[STABLE_CALLBACK_STRATEGY] })),
           ...(trendData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || TREND_CONTINUATION_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[TREND_CONTINUATION_STRATEGY] })),
         ];
-        nextDate = dateArg || stableData?.trade_date || trendData?.trade_date || '';
+        nextDate = targetDate || stableData?.trade_date || trendData?.trade_date || '';
       } else {
-        const data = await fetchSelectionCandidates(dateArg || undefined, activeStrategy, activeStrategy === TREND_CONTINUATION_STRATEGY ? 20 : 10);
+        const data = await fetchSelectionCandidates(targetDate, activeStrategy, activeStrategy === TREND_CONTINUATION_STRATEGY ? 20 : 10);
         items = data?.items || [];
-        nextDate = data?.trade_date || dateArg;
+        nextDate = targetDate || data?.trade_date || '';
       }
       setCandidates(items);
       await hydrateCandidateNames(items);
-      if (nextDate) setTradeDate(nextDate);
-      triggerResearchPrewarm(items, nextDate || dateArg);
-      const keepSelected = items.find((item) => item.symbol === selected?.symbol && item.strategy_internal_id === selected?.strategy_internal_id) || items[0] || null;
+      if (shouldPrewarm) {
+        triggerResearchPrewarm(items, nextDate || targetDate);
+      }
+      const prevSelected = selectedRef.current;
+      const keepSelected = items.find((item) => item.symbol === prevSelected?.symbol && item.strategy_internal_id === prevSelected?.strategy_internal_id) || items[0] || null;
       setSelected(keepSelected);
+      if (!keepSelected) setProfile(null);
     } catch (e) {
+      lastLoadedKeyRef.current = '';
       setError('候选加载失败');
     } finally {
       setLoadingCandidates(false);
@@ -364,15 +380,17 @@ const SelectionResearchPage: React.FC = () => {
   const handleApplyTradeDate = async () => {
     if (!pendingTradeDate) return;
     if (pendingTradeDate === tradeDate) {
-      await loadCandidates(pendingTradeDate);
+      await loadCandidates(pendingTradeDate, true, true);
       return;
     }
+    prewarmNextLoadRef.current = true;
     setTradeDate(pendingTradeDate);
   };
 
   useEffect(() => {
     if (!selected) {
       setProfile(null);
+      setLoadingProfile(false);
       return;
     }
     let cancelled = false;
@@ -448,7 +466,7 @@ const SelectionResearchPage: React.FC = () => {
     try {
       await refreshSelectionResearch(undefined, tradeDate || undefined);
       await loadHealth();
-      await loadCandidates(tradeDate);
+      await loadCandidates(tradeDate, true, true);
       await loadBacktests();
     } catch (e) {
       setError('刷新失败，请检查写权限或后端日志');
@@ -527,6 +545,9 @@ const SelectionResearchPage: React.FC = () => {
   const high = Number(quote?.high ?? profile?.close ?? selected?.close ?? 0);
   const low = Number(quote?.low ?? profile?.close ?? selected?.close ?? 0);
   const heroName = (quote?.name || selectedDisplayName || profile?.name || selected?.name || selected?.symbol || '').trim();
+  const profileMatchesSelected = Boolean(
+    selected && profile && String(profile.symbol || '').toLowerCase() === String(selected.symbol || '').toLowerCase(),
+  );
   const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
   const datePickerMax = String(health?.latest_signal_date || health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || '');
 
@@ -561,7 +582,12 @@ const SelectionResearchPage: React.FC = () => {
         setTradeDateMetaByDate(next);
         if (activeStrategy === 'daily_review' || PRODUCT_STRATEGIES.includes(activeStrategy)) {
           const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
-          if (latestSelectable && (!tradeDate || next[tradeDate]?.selectable === false || !next[tradeDate])) {
+          const currentApplied = tradeDate;
+          const shouldInitialize = !dateInitializedRef.current;
+          const currentInvalid = Boolean(currentApplied && (next[currentApplied]?.selectable === false || !next[currentApplied]));
+          if (latestSelectable && (shouldInitialize || currentInvalid)) {
+            dateInitializedRef.current = true;
+            lastLoadedKeyRef.current = '';
             setTradeDate(latestSelectable);
             setPendingTradeDate(latestSelectable);
           }
@@ -769,7 +795,7 @@ const SelectionResearchPage: React.FC = () => {
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-2">
-            {loadingProfile ? (
+            {loadingProfile && !profileMatchesSelected ? (
               <div className="py-16 text-center text-sm text-slate-500">右侧复盘视图加载中...</div>
             ) : (
               <SelectionDecisionPanel

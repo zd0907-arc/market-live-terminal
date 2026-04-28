@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 
-import HistoryView from '../dashboard/HistoryView';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
 import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
 import {
@@ -327,6 +326,20 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     const tone = returnPct == null ? 'neutral' : returnPct >= 0 ? 'positive' : 'negative';
     return { text: text || null, tone };
   }, [effectiveEndDate, profile?.trade_plan]);
+  const fetchHistoryRows = useCallback(({ symbol, granularity: nextGranularity, days, startDate, endDate, includeTodayPreview }: {
+    symbol: string;
+    granularity: HistoryMultiframeGranularity;
+    days: number;
+    startDate?: string;
+    endDate?: string;
+    includeTodayPreview?: boolean;
+  }) => fetchSelectionHistoryMultiframe(symbol, {
+    granularity: nextGranularity,
+    days,
+    startDate,
+    endDate,
+    includeTodayPreview,
+  }), []);
   const researchEvidenceItems = useMemo<SelectionResearchEvidenceItem[]>(() => {
     const persisted = researchContext?.research_evidence?.items || [];
     if (persisted.length > 0) return persisted;
@@ -520,6 +533,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             tradeSummaryText={tradeSummary.text}
             tradeSummaryTone={tradeSummary.tone}
             strategyInsight={strategyInsight}
+            includeTodayPreview={false}
             headerRightSlot={(
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
                 {COVERAGE_DAY_OPTIONS.map((days) => (
@@ -534,31 +548,16 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
                 ))}
               </div>
             )}
-            fetchRows={({ symbol, granularity: nextGranularity, days, startDate, endDate, includeTodayPreview }) =>
-              fetchSelectionHistoryMultiframe(symbol, {
-                granularity: nextGranularity,
-                days,
-                startDate,
-                endDate,
-                includeTodayPreview,
-              })
-            }
+            fetchRows={fetchHistoryRows}
             onDataStatusChange={setChartStatus}
           />
         </div>
 
-        <div className="mt-3 space-y-2">
-          {granularity === '1d' && !chartStatus.hasData ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-2">
-              <HistoryView
-                activeStock={activeStock}
-                backendStatus={backendStatus}
-                forceViewMode="daily"
-                initialHistorySource="local"
-              />
-            </div>
-          ) : null}
-        </div>
+        {granularity === '1d' && !chartStatus.hasData && chartStatus.rowCount === 0 ? (
+          <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/20 px-3 py-2 text-xs text-slate-500">
+            暂无本地历史图表数据。
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-3 xl:grid-cols-2">
