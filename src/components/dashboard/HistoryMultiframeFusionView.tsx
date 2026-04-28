@@ -71,6 +71,8 @@ type FusionRow = {
   high: number | null;
   low: number | null;
   close: number | null;
+  prevClose: number | null;
+  changePct: number | null;
   totalAmount: number | null;
   source: string;
   isFinalized: boolean;
@@ -249,6 +251,8 @@ const buildRows = (
       high: toFiniteNumber(row.high),
       low: toFiniteNumber(row.low),
       close: toFiniteNumber(row.close),
+      prevClose: toFiniteNumber(row.prev_close),
+      changePct: toFiniteNumber(row.change_pct),
       totalAmount: toFiniteNumber(row.total_amount),
       source,
       isFinalized,
@@ -691,9 +695,22 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     setAnchorKey(target.datetime);
   }, [activeStock?.symbol, defaultAnchorDate, fusionRows, granularity]);
   const selectedPeriodChangePct = useMemo(() => {
-    if (!selectedRow || selectedRow.open === null || selectedRow.close === null || selectedRow.open === 0) return null;
+    if (!selectedRow || selectedRow.close === null) return null;
+    const selectedIndex = selectedDataIndex ?? -1;
+    if (granularity === '1d') {
+      if (selectedRow.changePct !== null) return selectedRow.changePct;
+      const prevClose = selectedRow.prevClose ?? (selectedIndex > 0 ? fusionRows[selectedIndex - 1]?.close ?? null : null);
+      if (prevClose === null || prevClose === 0) return null;
+      return ((selectedRow.close - prevClose) / prevClose) * 100;
+    }
+    if (selectedRow.open === null || selectedRow.open === 0) return null;
     return ((selectedRow.close - selectedRow.open) / selectedRow.open) * 100;
-  }, [selectedRow]);
+  }, [fusionRows, granularity, selectedDataIndex, selectedRow]);
+  const selectedChangeLabel = useMemo(() => {
+    if (!selectedRow) return '涨跌';
+    if (granularity === '1d') return '日涨跌';
+    return '区间涨跌';
+  }, [fusionRows, granularity, selectedDataIndex, selectedRow]);
   const signalMarkIndex = useMemo(() => {
     if (!signalDate) return -1;
     return fusionRows.findIndex((row) => row.tradeDate === signalDate);
@@ -1643,7 +1660,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
                         <span className="whitespace-nowrap text-right font-mono text-slate-100">{compactAmount(selectedRow.totalAmount)}</span>
                       </div>
                       <div className="flex min-w-0 items-center justify-between gap-2">
-                        <span className="whitespace-nowrap text-slate-500">涨跌</span>
+                        <span className="whitespace-nowrap text-slate-500">{selectedChangeLabel}</span>
                         <span
                           className={`whitespace-nowrap text-right font-mono ${
                             (selectedPeriodChangePct ?? 0) > 0

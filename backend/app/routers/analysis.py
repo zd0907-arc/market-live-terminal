@@ -119,6 +119,8 @@ def _build_5m_placeholder_row(symbol: str, trade_date: str, bucket_dt: str) -> D
         "high": None,
         "low": None,
         "close": None,
+        "prev_close": None,
+        "change_pct": None,
         "total_amount": None,
         "l1_main_buy": None,
         "l1_main_sell": None,
@@ -141,6 +143,8 @@ def _build_daily_placeholder_row(symbol: str, trade_date: str) -> Dict[str, obje
         "high": None,
         "low": None,
         "close": None,
+        "prev_close": None,
+        "change_pct": None,
         "total_amount": None,
         "l1_main_buy": None,
         "l1_main_sell": None,
@@ -209,6 +213,8 @@ def _map_finalized_intraday_row(row: Dict[str, object], granularity: str) -> Dic
         "high": _nullable_float(row.get("high")),
         "low": _nullable_float(row.get("low")),
         "close": _nullable_float(row.get("close")),
+        "prev_close": _nullable_float(row.get("prev_close")),
+        "change_pct": _nullable_float(row.get("change_pct")),
         "total_amount": _nullable_float(row.get("total_amount")),
         "total_volume": _nullable_float(row.get("total_volume")),
         "l1_main_buy": _nullable_float(row.get("l1_main_buy")),
@@ -244,6 +250,8 @@ def _map_finalized_daily_row(row: Dict[str, object]) -> Dict[str, object]:
         "high": _nullable_float(row.get("high")),
         "low": _nullable_float(row.get("low")),
         "close": _nullable_float(row.get("close")),
+        "prev_close": _nullable_float(row.get("prev_close")),
+        "change_pct": _nullable_float(row.get("change_pct")),
         "total_amount": _nullable_float(row.get("total_amount")),
         "l1_main_buy": _nullable_float(row.get("l1_main_buy")),
         "l1_main_sell": _nullable_float(row.get("l1_main_sell")),
@@ -271,6 +279,8 @@ def _map_preview_intraday_row(row: Dict[str, object], granularity: str) -> Dict[
         "high": float(row["high"]),
         "low": float(row["low"]),
         "close": float(row["close"]),
+        "prev_close": _nullable_float(row.get("prev_close")),
+        "change_pct": _nullable_float(row.get("change_pct")),
         "total_amount": float(row["total_amount"]),
         "total_volume": _nullable_float(row.get("total_volume")),
         "l1_main_buy": float(row["l1_main_buy"]),
@@ -306,6 +316,8 @@ def _map_preview_daily_row(row: Dict[str, object]) -> Dict[str, object]:
         "high": float(row["high"]),
         "low": float(row["low"]),
         "close": float(row["close"]),
+        "prev_close": _nullable_float(row.get("prev_close")),
+        "change_pct": _nullable_float(row.get("change_pct")),
         "total_amount": float(row["total_amount"]),
         "l1_main_buy": float(row["l1_main_buy"]),
         "l1_main_sell": float(row["l1_main_sell"]),
@@ -337,6 +349,8 @@ def _map_local_history_multiframe_row(row: tuple) -> Dict[str, object]:
         "high": None,
         "low": None,
         "close": _nullable_float(row[5]),
+        "prev_close": None,
+        "change_pct": _nullable_float(row[6]),
         "total_amount": total_amount if total_amount > 0 else None,
         "l1_main_buy": main_buy if main_buy > 0 else 0.0,
         "l1_main_sell": main_sell if main_sell > 0 else 0.0,
@@ -376,6 +390,41 @@ def _today_is_in_requested_window(today_str: str, start_date: Optional[str], end
     if end_date and today_str > end_date:
         return False
     return True
+
+
+def _annotate_multiframe_change_pct(
+    rows: List[Dict[str, object]],
+    granularity: str,
+) -> List[Dict[str, object]]:
+    annotated: List[Dict[str, object]] = []
+    previous_trade_close: Optional[float] = None
+    current_trade_date: Optional[str] = None
+    current_trade_last_close: Optional[float] = None
+
+    for row in rows:
+        item = dict(row)
+        trade_date = str(item.get("trade_date") or item.get("date") or "")
+        is_first_of_trade_date = trade_date != current_trade_date
+        if is_first_of_trade_date:
+            if current_trade_date is not None and current_trade_last_close is not None:
+                previous_trade_close = current_trade_last_close
+            current_trade_date = trade_date
+            current_trade_last_close = None
+
+        close = _nullable_float(item.get("close"))
+        prev_close = _nullable_float(item.get("prev_close")) or previous_trade_close
+        baseline = prev_close if granularity == "1d" else _nullable_float(item.get("open"))
+        item["prev_close"] = prev_close
+
+        if close is not None and baseline is not None and baseline > 0:
+            item["change_pct"] = (close - baseline) / baseline * 100
+        elif _nullable_float(item.get("change_pct")) is None:
+            item["change_pct"] = None
+
+        if close is not None:
+            current_trade_last_close = close
+        annotated.append(item)
+    return annotated
 
 
 def _build_multiframe_rows(
@@ -453,6 +502,7 @@ def _build_multiframe_rows(
                             rows.append(mapped)
 
     rows.sort(key=lambda item: str(item["datetime"]))
+    rows = _annotate_multiframe_change_pct(rows, normalized_granularity)
     return rows
 
 def _merge_realtime_trend_rows(symbol: str, data: list, today_str: str):
