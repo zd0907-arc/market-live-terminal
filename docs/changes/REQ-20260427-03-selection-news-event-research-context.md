@@ -3,7 +3,7 @@
 ## 1. 基本信息
 
 - 标题：选股模块接入消息事件重估与公司研究上下文
-- 状态：DRAFT
+- 状态：RELEASED
 - 负责人：AI / Dong
 - 关联 CAP：`CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
 - 关联策略：`docs/strategy-rework/strategies/S03-news-event-revaluation/README.md`
@@ -405,3 +405,72 @@ python backend/scripts/dump_selection_research_context.py \
 3. 公司研究卡可能需要人工修正机制，否则 LLM 容易误读业务。
 4. 历史研究必须严格防未来函数。
 5. 页面和 Codex 如果走不同数据接口，后续会出现解释不一致，所以必须优先做统一上下文包。
+
+## 11. 结果回填（2026-04-28 / v5.0.19）
+
+### 11.1 已发布能力
+
+1. **统一研究上下文包**
+   - 新增 `GET /api/selection/research-context/{symbol}`。
+   - 新增 `POST /api/selection/research-context/{symbol}/prepare`。
+   - 新增 `POST /api/selection/research-context/prewarm`。
+   - 新增 `backend/scripts/dump_selection_research_context.py`，Codex 可直接从本地查询页面同口径上下文。
+
+2. **公司概况 / 决策解释持久化**
+   - 新增公司概况、财务快照、公司研究卡、事件解释、决策解释、研究依据等持久化表。
+   - 页面展示改为两段人话：`公司概况`、`决策解释`，并显示生成时间。
+   - 有旧内容时重新生成不再用加载态覆盖旧内容，生成完成后再替换。
+
+3. **事件依据 / 信息来源落地**
+   - 研究依据包会持久化策略/L2、财务快照、公告、问答、新闻等高价值证据。
+   - 已过滤低价值制度类/独董类/泛会议类材料。
+   - 页面 `研究依据` 可直接显示来源、发布时间、摘要、标签和原文链接。
+
+4. **查询触发预热机制**
+   - 点击 `查询候选` 时触发候选票研究预热：买入候选 + 前 5 个观察候选，最多 12 只。
+   - 切换候选只读缓存，不再每次切票都重新生成 LLM 摘要。
+   - 初次无缓存时允许短暂等待；已有缓存时保持旧内容可读。
+
+5. **选股页稳定性修复**
+   - 日期选择只改待查询日期，不再边选边自动刷新。
+   - 首次进入自动落到最近有候选的日期，避免落到无候选空日期。
+   - 查询时不清空候选和右侧旧内容，减少页面跳动。
+   - 选股页波段复盘禁用当日 preview 写入 fallback，避免反复触发 `history_analysis` 和 SQLite 写锁。
+
+6. **波段复盘日涨跌口径修复**
+   - `/api/selection/history/multiframe` 返回 `prev_close / change_pct`。
+   - 前端日线显示 `日涨跌`，按昨收计算；分钟线显示 `区间涨跌`。
+
+### 11.2 已验证样例
+
+- 日期：`2026-04-24`
+- 策略：`trend_continuation_callback`
+- 股票：`sz002468 申通快递`
+
+验证结果：
+
+```text
+页面可看到 2026-04-24 候选列表；
+申通快递为明日可操作候选；
+右侧展示公司概况、决策解释、研究依据；
+研究依据含策略/L2、财务快照、财报新闻和原文链接；
+刷新/查询后已有内容保持可读，更新完成后替换。
+```
+
+### 11.3 发布提交
+
+```text
+39138a0 docs: define news event research context requirement
+ d6d740b feat: generate selection research decision briefs
+ e24a56b fix: prewarm selection research summaries on query
+ 8366f92 feat: persist selection research evidence
+ 614073a fix: stabilize selection research page loading
+ 58f8d39 fix: calculate multiframe daily change pct
+```
+
+### 11.4 当前边界
+
+- 公司概况和决策解释仍依赖本地 LLM 接口；无 LLM 时会退化为规则解释。
+- 新闻公共源以标题级为主，不等于完整正文研报。
+- 历史时点按 `published_at <= as_of_cutoff` 截断，但公司基础资料本身仍可能来自当前可查资料，后续如要严格回放需要做版本化公司档案。
+

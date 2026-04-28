@@ -1,5 +1,14 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-04-28 16:55 | Codex
+- Task ID: `REQ-20260427-03-selection-news-event-research-context`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
+- 结论: 已发布 v5.0.19 到 main：候选票研究上下文包、公司概况/决策解释持久化、研究依据包、查询触发预热、选股页加载稳定和波段复盘日涨跌口径均已收口。
+- 风险: 公共新闻仍偏标题级；严格历史公司档案版本化未做；LLM 不可用时摘要会退化为规则解释。
+- 验证: `npm run build`、`npm run check:version` 通过；浏览器验证 `localhost:5173/selection-research` 可看到 2026-04-24 申通快递的公司概况、决策解释和研究依据。
+- 链接: `docs/changes/REQ-20260427-03-selection-news-event-research-context.md`, `docs/domain/selection-research.md`, `docs/contracts/review-selection.md`
+
+
 ## 2026-04-27 21:10 | Codex
 - Task ID: `REL-20260427-selection-strategy-research-v5.0.9`
 - CAP: `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
