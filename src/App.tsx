@@ -13,6 +13,7 @@ const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/Hi
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
+const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
@@ -78,6 +79,15 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
         <SelectionResearchPage />
+      </Suspense>
+    );
+  }
+
+  const isMarketHeatRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/market-heat');
+  if (isMarketHeatRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">市场热点温度计加载中...</div>}>
+        <MarketHeatPage />
       </Suspense>
     );
   }
@@ -389,6 +399,7 @@ const App: React.FC = () => {
   );
   const reviewHref = activeStock?.symbol ? `/review?symbol=${activeStock.symbol.toLowerCase()}` : '/review';
   const selectionHref = '/selection-research';
+  const marketHeatHref = '/market-heat';
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-20 overflow-x-hidden">
@@ -417,7 +428,18 @@ const App: React.FC = () => {
         onClearSearch={() => setQuery('')}
         onSelectSearchResult={(res) => handleSelectStock(res)}
         onSelectHistory={(res) => handleSelectStock(res)}
-        rightSlot={<ThresholdConfig onConfigUpdate={handleConfigUpdate} />}
+        rightSlot={
+          <div className="flex items-center gap-2">
+            <a
+              href={marketHeatHref}
+              className="hidden rounded-lg border border-amber-700/50 bg-amber-900/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
+              title="打开市场热点温度计"
+            >
+              市场热点
+            </a>
+            <ThresholdConfig onConfigUpdate={handleConfigUpdate} />
+          </div>
+        }
       />
 
       {/* Header */}
@@ -456,6 +478,13 @@ const App: React.FC = () => {
               >
                 <TrendingUp className="h-4 w-4" />
                 去选股研究工作台
+              </a>
+              <a
+                href={marketHeatHref}
+                className="ml-2 inline-flex items-center gap-2 rounded-lg border border-amber-600/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
+              >
+                <BarChart3 className="h-4 w-4" />
+                看市场热点
               </a>
             </div>
           </div>

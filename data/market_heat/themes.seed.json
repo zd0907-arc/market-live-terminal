@@ -1,0 +1,165 @@
+{
+  "version": "2026-04-29-seed-v1",
+  "themes": [
+    {
+      "id": "ai_compute_hardware",
+      "name": "AI算力硬件",
+      "type": "custom_theme",
+      "description": "国产算力、服务器、光模块、PCB与算力基础设施",
+      "symbols": [
+        {"symbol": "sz000066", "name": "中国长城"},
+        {"symbol": "sh601138", "name": "工业富联"},
+        {"symbol": "sh603019", "name": "中科曙光"},
+        {"symbol": "sh688256", "name": "寒武纪-U"},
+        {"symbol": "sz000977", "name": "浪潮信息"},
+        {"symbol": "sz300308", "name": "中际旭创"},
+        {"symbol": "sz300502", "name": "新易盛"},
+        {"symbol": "sz300394", "name": "天孚通信"},
+        {"symbol": "sz002463", "name": "沪电股份"},
+        {"symbol": "sz300476", "name": "胜宏科技"},
+        {"symbol": "sz002938", "name": "鹏鼎控股"},
+        {"symbol": "sz002916", "name": "深南电路"}
+      ]
+    },
+    {
+      "id": "liquid_cooling_thermal",
+      "name": "液冷/温控",
+      "type": "custom_theme",
+      "description": "数据中心温控、液冷、工业热管理",
+      "symbols": [
+        {"symbol": "sz000811", "name": "冰轮环境"},
+        {"symbol": "sz002837", "name": "英维克"},
+        {"symbol": "sz301018", "name": "申菱环境"},
+        {"symbol": "sz300499", "name": "高澜股份"},
+        {"symbol": "sz002430", "name": "杭氧股份"},
+        {"symbol": "sh603318", "name": "水发燃气"},
+        {"symbol": "sh605090", "name": "九丰能源"}
+      ]
+    },
+    {
+      "id": "innovation_drug_cxo",
+      "name": "创新药/CXO",
+      "type": "custom_theme",
+      "description": "创新药、CXO、BD出海与医药估值修复",
+      "symbols": [
+        {"symbol": "sh603259", "name": "药明康德"},
+        {"symbol": "sz300759", "name": "康龙化成"},
+        {"symbol": "sz002821", "name": "凯莱英"},
+        {"symbol": "sz300347", "name": "泰格医药"},
+        {"symbol": "sh600276", "name": "恒瑞医药"},
+        {"symbol": "sh688235", "name": "百济神州-U"},
+        {"symbol": "sh688331", "name": "荣昌生物"},
+        {"symbol": "sh688506", "name": "百利天恒-U"}
+      ]
+    },
+    {
+      "id": "shipbuilding_offshore",
+      "name": "船舶海工",
+      "type": "custom_theme",
+      "description": "造船周期、海工装备、船舶配套",
+      "symbols": [
+        {"symbol": "sh600150", "name": "中国船舶"},
+        {"symbol": "sh600685", "name": "中船防务"},
+        {"symbol": "sh600482", "name": "中国动力"},
+        {"symbol": "sh601890", "name": "亚星锚链"},
+        {"symbol": "sh600320", "name": "振华重工"},
+        {"symbol": "sh600583", "name": "海油工程"},
+        {"symbol": "sh601872", "name": "招商轮船"},
+        {"symbol": "sh600026", "name": "中远海能"}
+      ]
+    },
+    {
+      "id": "humanoid_robotics",
+      "name": "人形机器人",
+      "type": "custom_theme",
+      "description": "机器人本体、执行器、传感器、减速器与汽车零部件映射",
+      "symbols": [
+        {"symbol": "sz002050", "name": "三花智控"},
+        {"symbol": "sh601689", "name": "拓普集团"},
+        {"symbol": "sh603667", "name": "五洲新春"},
+        {"symbol": "sz002472", "name": "双环传动"},
+        {"symbol": "sh688017", "name": "绿的谐波"},
+        {"symbol": "sh603728", "name": "鸣志电器"},
+        {"symbol": "sz002747", "name": "埃斯顿"},
+        {"symbol": "sz300024", "name": "机器人"},
+        {"symbol": "sz300124", "name": "汇川技术"}
+      ]
+    },
+    {
+      "id": "semiconductor_equipment_storage",
+      "name": "半导体设备/存储",
+      "type": "custom_theme",
+      "description": "半导体设备、先进封装、存储涨价与国产替代",
+      "symbols": [
+        {"symbol": "sz002371", "name": "北方华创"},
+        {"symbol": "sh688012", "name": "中微公司"},
+        {"symbol": "sh688072", "name": "拓荆科技"},
+        {"symbol": "sh688120", "name": "华海清科"},
+        {"symbol": "sz300604", "name": "长川科技"},
+        {"symbol": "sz301308", "name": "江波龙"},
+        {"symbol": "sh688525", "name": "佰维存储"},
+        {"symbol": "sh603986", "name": "兆易创新"},
+        {"symbol": "sz001309", "name": "德明利"}
+      ]
+    },
+    {
+      "id": "coal_energy",
+      "name": "煤炭能源",
+      "type": "custom_theme",
+      "description": "动力煤、煤炭开采、能源红利与高股息",
+      "symbols": [
+        {"symbol": "sh601101", "name": "昊华能源"},
+        {"symbol": "sh601001", "name": "晋控煤业"},
+        {"symbol": "sh601898", "name": "中煤能源"},
+        {"symbol": "sh600546", "name": "山煤国际"},
+        {"symbol": "sh600348", "name": "华阳股份"},
+        {"symbol": "sz000552", "name": "甘肃能化"},
+        {"symbol": "sh601918", "name": "新集能源"}
+      ]
+    },
+    {
+      "id": "industrial_gas_helium",
+      "name": "工业气体/氦气",
+      "type": "custom_theme",
+      "description": "工业气体、电子特气、氦气与制冷气体",
+      "symbols": [
+        {"symbol": "sz002430", "name": "杭氧股份"},
+        {"symbol": "sh603318", "name": "水发燃气"},
+        {"symbol": "sh605090", "name": "九丰能源"},
+        {"symbol": "sz002549", "name": "凯美特气"},
+        {"symbol": "sz002971", "name": "和远气体"},
+        {"symbol": "sz002639", "name": "雪人集团"},
+        {"symbol": "sz000811", "name": "冰轮环境"}
+      ]
+    },
+    {
+      "id": "military_information",
+      "name": "军工信息化",
+      "type": "custom_theme",
+      "description": "军工电子、卫星、信息化与军船配套",
+      "symbols": [
+        {"symbol": "sz000547", "name": "航天发展"},
+        {"symbol": "sh600760", "name": "中航沈飞"},
+        {"symbol": "sh600893", "name": "航发动力"},
+        {"symbol": "sz002465", "name": "海格通信"},
+        {"symbol": "sz002025", "name": "航天电器"},
+        {"symbol": "sh688066", "name": "航天宏图"},
+        {"symbol": "sz000738", "name": "航发控制"}
+      ]
+    },
+    {
+      "id": "low_altitude_economy",
+      "name": "低空经济",
+      "type": "custom_theme",
+      "description": "低空飞行器、空管、复材、运营和基础设施",
+      "symbols": [
+        {"symbol": "sz000099", "name": "中信海直"},
+        {"symbol": "sz002085", "name": "万丰奥威"},
+        {"symbol": "sz002297", "name": "博云新材"},
+        {"symbol": "sh600316", "name": "洪都航空"},
+        {"symbol": "sz300034", "name": "钢研高纳"},
+        {"symbol": "sz300188", "name": "国投智能"}
+      ]
+    }
+  ]
+}

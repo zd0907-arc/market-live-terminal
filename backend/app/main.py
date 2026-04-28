@@ -34,7 +34,7 @@ except Exception as e:
     logging.error(f"Trade Calendar init failed: {e}")
 
 # 3. Now import routers
-from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest, sandbox_review, review, selection, stock_events
+from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest, sandbox_review, review, selection, stock_events, market_heat
 # Import removed
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="ZhangData Local Server",
     description="ZhangData 本地研究站后端服务",
-    version="5.0.9"
+    version="5.1.0"
 )
 
 # CORS 配置
@@ -77,6 +77,7 @@ app.include_router(stock_events.router, prefix="/api", tags=["Stock Events"])
 app.include_router(ingest.router, prefix="/api/internal/ingest", tags=["Ingest"])
 app.include_router(review.router, prefix="/api/review", tags=["Review"])
 app.include_router(selection.router, prefix="/api", tags=["Selection Research"])
+app.include_router(market_heat.router, prefix="/api", tags=["Market Heat"])
 app.include_router(sandbox_review.router, prefix="/api/sandbox", tags=["Sandbox Review"])
 
 @app.get("/api/health")
