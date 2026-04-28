@@ -980,11 +980,6 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
       if (buy === null || sell === null) return null;
       return toRatio(buy + sell, row.totalAmount);
     });
-    const qualityMarks = fusionRows.map((row, index) => {
-      if (!row.qualityInfo) return null;
-      return row.close ?? fusionRows[index - 1]?.close ?? fusionRows[index + 1]?.close ?? null;
-    });
-
     const absoluteData = buildPanelData(fusionRows, 'absolute');
     const netData = buildPanelData(fusionRows, 'net');
     const ratioData = buildPanelData(fusionRows, 'ratio');
@@ -1171,25 +1166,6 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
         lineStyle: { color: COLORS.closeLine, width: 1.2, opacity: 0.9 },
         itemStyle: { color: COLORS.closeLine },
         z: 4,
-      },
-      {
-        name: '质量提示',
-        type: 'scatter',
-        xAxisIndex: gridIndexMap.price,
-        yAxisIndex: yAxisIndexMap.price,
-        data: qualityMarks,
-        symbolSize: 16,
-        itemStyle: { color: COLORS.quality },
-        label: {
-          show: true,
-          formatter: '!',
-          color: '#0F172A',
-          fontSize: 10,
-          fontWeight: 800,
-          offset: [0, -1],
-        },
-        emphasis: { scale: false },
-        z: 6,
       },
       {
         name: '交易计划标记',
@@ -1463,7 +1439,7 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
                 <div>左柱 = 超大单，右柱 = 主力；深色是 L2 底柱，浅色是 L1 芯柱。</div>
                 <div>资金绝对值 / 净流入 / 买卖力度三张副图都共用同一视觉语言。</div>
                 <div>第四图中的细线表示买卖总额占总成交额比例：紫线 = L2 超大单，红线 = L2 主力，深绿线 = L1 超大单，浅绿线 = L1 主力。</div>
-                <div>黄色 <span className="font-bold text-amber-300">!</span> 表示该点存在 `quality_info`；若为当日未结算，则外置读数条会提示 “当前仅 L1 实时口径”。</div>
+                <div>存在 `quality_info` 的缺失 / 异常数据不再标到价格图上；可在顶部状态与详情浮层查看。</div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL2Buy }} />超大 L2 买</span>
                   <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS.superL1Buy }} />超大 L1 买</span>
