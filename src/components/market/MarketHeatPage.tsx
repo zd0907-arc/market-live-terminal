@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Flame, RefreshCw, Activity, TrendingUp, AlertTriangle, Radio, BarChart3 } from 'lucide-react';
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { fetchMarketHeatLatest, MarketHeatSector, MarketHeatSnapshot } from '../../services/marketHeatService';
+import { fetchMarketHeatHistory, fetchMarketHeatLatest, MarketHeatHistorySummary, MarketHeatSector, MarketHeatSnapshot } from '../../services/marketHeatService';
 import { APP_VERSION } from '../../version';
 
 const fmt = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -24,6 +24,8 @@ const tagClass = (tag: string) => {
   if (tag === 'fading') return 'border-red-500/30 bg-red-500/10 text-red-200';
   return 'border-slate-600 bg-slate-800/50 text-slate-300';
 };
+
+const trendColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#fb7185', '#34d399', '#f97316'];
 
 const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
   <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
@@ -85,6 +87,7 @@ const StockRow: React.FC<{ stock: MarketHeatSector['stocks'][number]; index: num
 
 const MarketHeatPage: React.FC = () => {
   const [snapshot, setSnapshot] = useState<MarketHeatSnapshot | null>(null);
+  const [history, setHistory] = useState<MarketHeatHistorySummary | null>(null);
   const [selectedId, setSelectedId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -100,6 +103,8 @@ const MarketHeatPage: React.FC = () => {
       }
       setSnapshot(data);
       setSelectedId((prev) => prev || data.hot_top?.[0]?.id || data.sectors?.[0]?.id || '');
+      const historyData = await fetchMarketHeatHistory(63, data.meta?.trade_date);
+      if (historyData) setHistory(historyData);
     } finally {
       setLoading(false);
     }
@@ -115,6 +120,20 @@ const MarketHeatPage: React.FC = () => {
   }, [snapshot, selectedId]);
 
   const leaderNames = useMemo(() => (selected?.stocks || []).slice(0, 3).map((s) => s.name).join(' / '), [selected]);
+  const topHistorySeries = useMemo(() => (history?.series || []).slice(0, 6), [history]);
+  const historyChartData = useMemo(() => {
+    if (!topHistorySeries.length) return [];
+    const dates = topHistorySeries[0]?.points?.map((point) => point.date) || [];
+    return dates.map((date) => {
+      const row: Record<string, string | number | null> = { date };
+      topHistorySeries.forEach((series) => {
+        const point = series.points.find((item) => item.date === date);
+        row[series.id] = point?.hot_score ?? null;
+      });
+      return row;
+    });
+  }, [topHistorySeries]);
+  const recentDailyTop = useMemo(() => [...(history?.daily_top || [])].slice(-18).reverse(), [history]);
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200">
@@ -155,6 +174,93 @@ const MarketHeatPage: React.FC = () => {
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-300"><AlertTriangle className="h-4 w-4 text-amber-300" />风险提示</div>
             <div className="mt-2 text-2xl font-bold text-white">{snapshot?.risk_or_fading?.[0]?.name || '--'}</div>
             <div className="mt-1 text-xs text-slate-500">过热/退潮/单日脉冲</div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">近3个月热门板块趋势</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {history?.meta?.start_date || '--'} 至 {history?.meta?.end_date || '--'}，按每日 hot_score 重建
+                </div>
+              </div>
+              <div className="text-xs text-slate-500">{history?.meta?.days || 0} 个交易日</div>
+            </div>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={historyChartData} margin={{ top: 10, right: 18, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} minTickGap={26} />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 11 }} width={38} domain={[0, 100]} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' }} />
+                  {topHistorySeries.map((series, index) => (
+                    <Line
+                      key={series.id}
+                      type="monotone"
+                      dataKey={series.id}
+                      name={series.name}
+                      stroke={trendColors[index % trendColors.length]}
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {topHistorySeries.map((series, index) => (
+                <button
+                  key={series.id}
+                  type="button"
+                  onClick={() => setSelectedId(series.id)}
+                  className="rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600"
+                >
+                  <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: trendColors[index % trendColors.length] }} />
+                  {series.name}
+                  <span className="ml-1 text-slate-500">Top3 {series.top_count}天</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="mb-3 text-sm font-semibold text-white">最近每日热门板块</div>
+            <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+              {recentDailyTop.map((day) => {
+                const leader = day.leaders?.[0];
+                return (
+                  <div key={day.date} className="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs text-slate-500">{day.date}</div>
+                      <button
+                        type="button"
+                        onClick={() => leader?.id && setSelectedId(leader.id)}
+                        className="truncate text-sm font-semibold text-white hover:text-sky-200"
+                      >
+                        {leader?.name || '--'}
+                      </button>
+                      <div className="text-sm font-semibold text-sky-200">{fmt(leader?.hot_score, 1)}</div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(day.leaders || []).slice(0, 3).map((item) => (
+                        <button
+                          key={`${day.date}-${item.id}`}
+                          type="button"
+                          onClick={() => setSelectedId(item.id)}
+                          className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400 hover:border-slate-500"
+                        >
+                          {item.name} {fmt(item.hot_score, 0)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {!history && <div className="py-8 text-center text-sm text-slate-500">历史热度加载中...</div>}
+            </div>
           </div>
         </div>
 

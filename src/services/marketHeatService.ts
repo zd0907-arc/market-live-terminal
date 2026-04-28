@@ -61,6 +61,49 @@ export interface MarketHeatSnapshot {
   sectors: MarketHeatSector[];
 }
 
+export interface MarketHeatHistoryLeader {
+  id: string;
+  name: string;
+  hot_score: number;
+  persistence_score: number;
+  pct_change: number;
+  return_5d: number;
+  return_20d: number;
+  l2_net_inflow_yi: number;
+  risk_tags?: string[];
+}
+
+export interface MarketHeatHistorySeries {
+  id: string;
+  name: string;
+  top_count: number;
+  latest_hot_score: number;
+  latest_persistence_score: number;
+  points: Array<{
+    date: string;
+    hot_score: number;
+    persistence_score: number;
+    pct_change: number;
+    return_5d: number;
+    return_20d: number;
+  }>;
+}
+
+export interface MarketHeatHistorySummary {
+  meta: {
+    start_date: string;
+    end_date: string;
+    days: number;
+    version: string;
+    source: string;
+  };
+  daily_top: Array<{
+    date: string;
+    leaders: MarketHeatHistoryLeader[];
+  }>;
+  series: MarketHeatHistorySeries[];
+}
+
 const parseApiData = async <T>(res: Response): Promise<T | null> => {
   const json = await res.json().catch(() => null);
   if (!res.ok || !json || json.code !== 200) {
@@ -78,6 +121,18 @@ export const fetchMarketHeatLatest = async (date?: string, refresh = false): Pro
     return await parseApiData<MarketHeatSnapshot>(res);
   } catch (e) {
     console.error('Fetch market heat error:', e);
+    return null;
+  }
+};
+
+export const fetchMarketHeatHistory = async (days = 63, endDate?: string): Promise<MarketHeatHistorySummary | null> => {
+  try {
+    const params = new URLSearchParams({ days: String(days) });
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/market_heat/history?${params.toString()}`);
+    return await parseApiData<MarketHeatHistorySummary>(res);
+  } catch (e) {
+    console.error('Fetch market heat history error:', e);
     return null;
   }
 };

@@ -404,6 +404,84 @@ def build_market_heat_snapshot(trade_date: Optional[str] = None) -> Dict[str, An
     }
 
 
+def build_market_heat_history_summary(end_date: Optional[str] = None, days: int = 63) -> Dict[str, Any]:
+    target = end_date or latest_trade_date()
+    if not target:
+        raise RuntimeError("无法确定最新交易日，请检查 atomic_trade_daily")
+    dates = _trade_dates(target, max(1, int(days)))
+    daily_top: List[Dict[str, Any]] = []
+    series_by_sector: Dict[str, Dict[str, Any]] = {}
+    latest_hot_ids: List[str] = []
+    for trade_date in dates:
+        snapshot = build_market_heat_snapshot(trade_date)
+        hot_top = snapshot.get("hot_top", [])
+        if trade_date == dates[-1]:
+            latest_hot_ids = [str(item.get("id")) for item in hot_top[:8]]
+        daily_top.append({
+            "date": trade_date,
+            "leaders": [
+                {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "hot_score": item.get("hot_score"),
+                    "persistence_score": item.get("persistence_score"),
+                    "pct_change": item.get("pct_change"),
+                    "return_5d": item.get("return_5d"),
+                    "return_20d": item.get("return_20d"),
+                    "l2_net_inflow_yi": item.get("l2_net_inflow_yi"),
+                    "risk_tags": item.get("risk_tags"),
+                }
+                for item in hot_top[:5]
+            ],
+        })
+        for item in snapshot.get("sectors", []):
+            sector_id = str(item.get("id"))
+            if sector_id not in series_by_sector:
+                series_by_sector[sector_id] = {
+                    "id": sector_id,
+                    "name": item.get("name"),
+                    "points": [],
+                    "top_count": 0,
+                    "latest_hot_score": 0,
+                    "latest_persistence_score": 0,
+                }
+            if hot_top and any(str(top.get("id")) == sector_id for top in hot_top[:3]):
+                series_by_sector[sector_id]["top_count"] += 1
+            series_by_sector[sector_id]["points"].append({
+                "date": trade_date,
+                "hot_score": item.get("hot_score"),
+                "persistence_score": item.get("persistence_score"),
+                "pct_change": item.get("pct_change"),
+                "return_5d": item.get("return_5d"),
+                "return_20d": item.get("return_20d"),
+            })
+            if trade_date == dates[-1]:
+                series_by_sector[sector_id]["latest_hot_score"] = item.get("hot_score")
+                series_by_sector[sector_id]["latest_persistence_score"] = item.get("persistence_score")
+
+    preferred = set(latest_hot_ids)
+    series = list(series_by_sector.values())
+    series.sort(
+        key=lambda item: (
+            1 if item["id"] in preferred else 0,
+            _safe_float(item.get("latest_hot_score")),
+            int(item.get("top_count") or 0),
+        ),
+        reverse=True,
+    )
+    return {
+        "meta": {
+            "start_date": dates[0] if dates else None,
+            "end_date": dates[-1] if dates else target,
+            "days": len(dates),
+            "version": "market_heat_history_summary_v1",
+            "source": "recomputed from local atomic_trade_daily and curated theme baskets",
+        },
+        "daily_top": daily_top,
+        "series": series,
+    }
+
+
 def snapshot_path(trade_date: str, suffix: str = "json") -> Path:
     return MARKET_HEAT_DIR / f"{trade_date}.{suffix}"
 
