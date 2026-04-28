@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
 from pydantic import BaseModel
 
 from backend.app.core.security import require_write_access
@@ -19,6 +19,7 @@ from backend.app.services.selection_research import (
 from backend.app.services.selection_research_context import (
     get_selection_research_context,
     prepare_selection_research_context,
+    prewarm_selection_research_contexts,
     quick_judge_selection_event,
 )
 from backend.app.services.selection_history_proxy import get_selection_multiframe_rows
@@ -52,6 +53,13 @@ class SelectionQuickEventJudgeRequest(BaseModel):
     symbol: Optional[str] = None
     date: Optional[str] = None
     strategy: Optional[str] = None
+
+
+class SelectionResearchPrewarmRequest(BaseModel):
+    date: Optional[str] = None
+    strategy: Optional[str] = None
+    limit: Optional[int] = 12
+    items: List[Dict[str, Any]] = []
 
 
 @router.get("/selection/health", response_model=APIResponse)
@@ -172,6 +180,30 @@ def selection_research_context_prepare(
         )
     except Exception as exc:
         return APIResponse(code=500, message=f"选股研究上下文准备失败: {exc}", data=None)
+
+
+@router.post("/selection/research-context/prewarm", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def selection_research_context_prewarm(
+    background_tasks: BackgroundTasks,
+    request: SelectionResearchPrewarmRequest = Body(...),
+):
+    try:
+        items = request.items or []
+        limit = max(1, min(int(request.limit or 12), 30))
+        background_tasks.add_task(
+            prewarm_selection_research_contexts,
+            items,
+            trade_date=request.date,
+            default_strategy=request.strategy or STABLE_CALLBACK_STRATEGY_ID,
+            limit=limit,
+        )
+        return APIResponse(
+            code=200,
+            message="研究摘要预热已触发",
+            data={"scheduled_count": min(len(items), limit)},
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"研究摘要预热触发失败: {exc}", data=None)
 
 
 @router.post("/selection/quick-event-judge", response_model=APIResponse)

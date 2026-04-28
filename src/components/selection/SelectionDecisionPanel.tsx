@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 
@@ -121,19 +121,6 @@ const normalizeStrategy = (value?: string | null): SelectionStrategy => {
   return 'stable_capital_callback';
 };
 
-const statusTone = (value?: string) => {
-  if (['强', 'confirmed', '资金+逻辑一致', '可继续研究'].includes(String(value || ''))) return 'text-emerald-200 border-emerald-500/30 bg-emerald-500/10';
-  if (['中', 'logic_only', 'funds_only', '等资金确认', '按资金策略，提示一日游风险'].includes(String(value || ''))) return 'text-amber-200 border-amber-500/30 bg-amber-500/10';
-  if (['conflict', '资金冲突'].includes(String(value || ''))) return 'text-red-200 border-red-500/30 bg-red-500/10';
-  return 'text-slate-300 border-slate-700 bg-slate-900/60';
-};
-
-const TinyBadge: React.FC<{ children: React.ReactNode; tone?: string }> = ({ children, tone = 'text-slate-300 border-slate-700 bg-slate-900/60' }) => (
-  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone}`}>
-    {children}
-  </span>
-);
-
 const levelText = (metric: string, value?: number | null) => {
   if (value == null || Number.isNaN(Number(value))) return '暂无';
   const num = Number(value);
@@ -173,8 +160,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const [researchContext, setResearchContext] = useState<SelectionResearchContextData | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [preparingContext, setPreparingContext] = useState(false);
-  const [prepareMessage, setPrepareMessage] = useState<string | null>(null);
-  const autoPrepareKeys = useRef<Set<string>>(new Set());
 
   const activeStock = useMemo<SearchResult | null>(() => {
     if (!candidate) return null;
@@ -192,7 +177,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       setEventFeed([]);
       setEventCoverage(null);
       setResearchContext(null);
-      setPrepareMessage(null);
       return;
     }
     let cancelled = false;
@@ -219,56 +203,45 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
 
   useEffect(() => {
-    if (!candidate || !profile || loadingEvents || preparingContext) return;
-    const status = researchContext?.stock_event_coverage?.coverage_status || '';
-    const hasLlmBrief = researchContext?.decision_brief?.source === 'llm_decision_brief_v1';
-    const shouldPrepare = !researchContext || !hasLlmBrief || ['db_table_empty', 'symbol_not_hydrated_or_no_events', 'no_recent_events', 'no_events_in_window', 'table_missing'].includes(status);
-    if (!shouldPrepare) return;
-    const key = `${candidate.symbol}-${candidate.trade_date}-${profile.strategy_internal_id || candidate.strategy_internal_id || ''}`;
-    if (autoPrepareKeys.current.has(key)) return;
-    autoPrepareKeys.current.add(key);
-
+    if (!candidate || !profile) return;
     let cancelled = false;
+    let count = 0;
     const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
     const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
-    setPreparingContext(true);
-    setPrepareMessage('正在补拉公司概况、财务快照和事件源，并调用 LLM 生成公司概况/决策解释...');
-    prepareSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
-      useLlm: true,
-      eventLimit: 50,
-      newsDays: 45,
-      seriesDays: 60,
-    }).then((result) => {
-      if (cancelled) return;
-      if (result?.context) {
-        setResearchContext(result.context);
-        setEventFeed(result.context.stock_event_feed?.items || []);
-        setEventCoverage(result.context.stock_event_coverage || null);
-        const hydrateStage = result.stages?.find((item) => item.step === 'hydrate_events');
-        const companyStage = result.stages?.find((item) => item.step === 'fetch_company_profile');
-        const financialStage = result.stages?.find((item) => item.step === 'fetch_financial_snapshot');
-        const briefStage = result.stages?.find((item) => item.step === 'generate_decision_brief');
-        setPrepareMessage([
-          hydrateStage?.status === 'ok' ? `事件源自动补拉完成，新增/更新 ${hydrateStage.upserted_count || 0} 条` : hydrateStage?.message,
-          companyStage?.status === 'ok' ? '公司概况已补齐' : companyStage?.message,
-          financialStage?.status === 'ok' ? `财务快照已补齐${financialStage.latest_period ? `（${financialStage.latest_period}）` : ''}` : financialStage?.message,
-          briefStage?.status === 'ok' ? 'LLM研究摘要已生成' : briefStage?.message ? `LLM摘要未生成：${briefStage.message}` : null,
-        ].filter(Boolean).join('；') || '自动补拉完成。');
+    const timer = window.setInterval(async () => {
+      count += 1;
+      const context = await fetchSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
+        eventLimit: 24,
+        eventDays: 365,
+        seriesDays: 60,
+      });
+      if (cancelled || !context) return;
+      setResearchContext((prev) => {
+        const prevGenerated = String(prev?.decision_brief?.generated_at || '');
+        const nextGenerated = String(context.decision_brief?.generated_at || '');
+        if (!prev || nextGenerated > prevGenerated || prev?.decision_brief?.source !== 'llm_decision_brief_v1') {
+          return context;
+        }
+        return prev;
+      });
+      setEventFeed(context.stock_event_feed?.items || []);
+      setEventCoverage(context.stock_event_coverage || null);
+      if (context.decision_brief?.source === 'llm_decision_brief_v1' && count >= 2) {
+        window.clearInterval(timer);
       }
-    }).finally(() => {
-      if (!cancelled) setPreparingContext(false);
-    });
+      if (count >= 24) window.clearInterval(timer);
+    }, 10000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [candidate, profile, loadingEvents, preparingContext, researchContext]);
+  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
 
   const handlePrepareContext = async () => {
     if (!candidate) return;
     const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
     const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
     setPreparingContext(true);
-    setPrepareMessage('正在补拉公告/问答/新闻，并生成公司概况和决策解释，可能需要几十秒...');
     const result = await prepareSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
       useLlm: true,
       eventLimit: 50,
@@ -279,19 +252,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       setResearchContext(result.context);
       setEventFeed(result.context.stock_event_feed?.items || []);
       setEventCoverage(result.context.stock_event_coverage || null);
-      const hydrateStage = result.stages?.find((item) => item.step === 'hydrate_events');
-      const companyStage = result.stages?.find((item) => item.step === 'fetch_company_profile');
-      const financialStage = result.stages?.find((item) => item.step === 'fetch_financial_snapshot');
-      const llmStage = result.stages?.find((item) => item.step === 'generate_decision_brief');
-      const parts = [
-        hydrateStage?.status === 'ok' ? `事件补拉完成，新增/更新 ${hydrateStage.upserted_count || 0} 条` : hydrateStage?.message,
-        companyStage?.status === 'ok' ? '公司介绍已获取' : companyStage?.message ? `公司介绍缺失：${companyStage.message}` : null,
-        financialStage?.status === 'ok' ? `财务快照已获取${financialStage.latest_period ? `（${financialStage.latest_period}）` : ''}` : financialStage?.message ? `财务快照缺失：${financialStage.message}` : null,
-        llmStage?.status === 'ok' ? '公司概况/决策解释已生成' : llmStage?.message ? `LLM摘要未生成：${llmStage.message}` : null,
-      ].filter(Boolean);
-      setPrepareMessage(parts.join('；') || '研究上下文已刷新。');
-    } else {
-      setPrepareMessage('准备失败：后端未返回有效上下文。');
     }
     setPreparingContext(false);
   };
@@ -423,7 +383,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     ].filter(Boolean).join('。')
     || '决策解释还没生成，点击“刷新研究摘要”后会把事件催化、趋势回踩和资金确认合成一段人话。';
   const auditFlags = researchContext?.source_audit?.audit_flags || [];
-  const contextCoverageStatus = researchContext?.stock_event_coverage?.coverage_status || eventCoverage?.coverage_status;
   const anchorDate = candidate.trade_date || profile.observe_date || profile.discovery_date || profile.entry_signal_date || profile.trade_plan?.signal_date || null;
   const strategyInsight = useMemo<StrategyInsight>(() => {
     const intent = profile.intent_profile || {};
@@ -634,11 +593,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
             {companyOverviewText}
           </div>
-          {prepareMessage ? (
-            <div className={`mt-3 rounded-lg border px-2 py-1.5 text-xs ${prepareMessage.includes('失败') || prepareMessage.includes('未生成') ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-violet-500/30 bg-violet-500/10 text-violet-100'}`}>
-              {prepareMessage}
-            </div>
-          ) : null}
+          <div className="mt-3 text-[11px] text-slate-500">
+            生成时间：{decisionBrief?.company_overview_generated_at || decisionBrief?.generated_at || '生成中'}
+          </div>
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
@@ -647,16 +604,12 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
               <TrendingUp className="h-4 w-4 text-emerald-300" />
               决策解释
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              <TinyBadge tone={profile.entry_allowed === false ? statusTone('logic_only') : statusTone('confirmed')}>
-                {profile.entry_allowed === false ? '观察/拦截' : '可买入'}
-              </TinyBadge>
-              <TinyBadge>{decisionBrief?.source === 'llm_decision_brief_v1' ? 'LLM摘要' : '规则兜底'}</TinyBadge>
-              <TinyBadge tone={contextCoverageStatus === 'covered' ? statusTone('confirmed') : statusTone('unknown')}>{contextCoverageStatus || 'unknown'}</TinyBadge>
-            </div>
           </div>
           <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
             {decisionExplanationText}
+          </div>
+          <div className="mt-3 text-[11px] text-slate-500">
+            生成时间：{decisionBrief?.decision_explanation_generated_at || decisionBrief?.generated_at || '生成中'}
           </div>
         </div>
       </section>

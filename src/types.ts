@@ -497,8 +497,13 @@ export interface SelectionEventInterpretation {
 export interface SelectionDecisionBrief {
   symbol?: string;
   as_of_date?: string;
+  strategy?: string;
+  signal_date?: string;
   company_overview?: string | null;
   decision_explanation?: string | null;
+  company_overview_generated_at?: string | null;
+  decision_explanation_generated_at?: string | null;
+  generated_at?: string | null;
   source?: string;
   raw_payload?: Record<string, any>;
 }

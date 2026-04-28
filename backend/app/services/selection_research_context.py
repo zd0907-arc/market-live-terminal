@@ -128,6 +128,39 @@ CREATE TABLE IF NOT EXISTS stock_selection_decision_briefs (
 )
 """
 
+COMPANY_OVERVIEW_BRIEF_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS stock_company_overview_briefs (
+    symbol TEXT PRIMARY KEY,
+    latest_financial_period TEXT,
+    company_overview TEXT,
+    source TEXT,
+    prompt_version TEXT,
+    raw_payload TEXT,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+DECISION_EXPLANATION_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS stock_selection_decision_explanations (
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    signal_date TEXT NOT NULL,
+    as_of_date TEXT NOT NULL,
+    decision_explanation TEXT,
+    source TEXT,
+    prompt_version TEXT,
+    raw_payload TEXT,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(symbol, strategy, signal_date, as_of_date)
+)
+"""
+
+DECISION_BRIEF_PROMPT_VERSION = "decision_brief_v2"
+
 
 def ensure_research_card_schema() -> None:
     with get_db_connection() as conn:
@@ -136,6 +169,8 @@ def ensure_research_card_schema() -> None:
         conn.execute(FINANCIAL_SNAPSHOT_SCHEMA_SQL)
         conn.execute(EVENT_INTERPRETATION_SCHEMA_SQL)
         conn.execute(DECISION_BRIEF_SCHEMA_SQL)
+        conn.execute(COMPANY_OVERVIEW_BRIEF_SCHEMA_SQL)
+        conn.execute(DECISION_EXPLANATION_SCHEMA_SQL)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_research_cards_symbol_date "
             "ON stock_research_cards(symbol, as_of_date DESC)"
@@ -155,6 +190,10 @@ def ensure_research_card_schema() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_selection_decision_briefs_symbol_date "
             "ON stock_selection_decision_briefs(symbol, as_of_date DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stock_selection_decision_explanations_symbol_strategy_date "
+            "ON stock_selection_decision_explanations(symbol, strategy, as_of_date DESC)"
         )
         conn.commit()
 
@@ -1445,11 +1484,46 @@ def _compact_l2_recent(price_l2_series: Dict[str, Any], limit: int = 10) -> List
     return out
 
 
-def _load_persisted_decision_brief(symbol: str, cutoff_date: str) -> Optional[Dict[str, Any]]:
+def _decision_signal_date(profile: Dict[str, Any], cutoff_date: str) -> str:
+    return str(
+        profile.get("pullback_confirm_date")
+        or profile.get("entry_signal_date")
+        or (profile.get("trade_plan") or {}).get("signal_date")
+        or profile.get("observe_date")
+        or profile.get("discovery_date")
+        or cutoff_date
+    )[:10]
+
+
+def _load_persisted_decision_brief(symbol: str, cutoff_date: str, strategy: str, profile: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     ensure_research_card_schema()
     normalized = normalize_stock_event_symbol(symbol)
+    normalized_strategy = str(strategy or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+    signal_date = _decision_signal_date(profile, cutoff_date)
     with _set_row_factory(get_db_connection()) as conn:
-        row = conn.execute(
+        overview = conn.execute(
+            """
+            SELECT *
+            FROM stock_company_overview_briefs
+            WHERE lower(symbol)=lower(?)
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+        decision = conn.execute(
+            """
+            SELECT *
+            FROM stock_selection_decision_explanations
+            WHERE lower(symbol)=lower(?)
+              AND strategy = ?
+              AND signal_date = ?
+              AND as_of_date <= ?
+            ORDER BY as_of_date DESC, updated_at DESC
+            LIMIT 1
+            """,
+            (normalized, normalized_strategy, signal_date, cutoff_date),
+        ).fetchone()
+        legacy = conn.execute(
             """
             SELECT *
             FROM stock_selection_decision_briefs
@@ -1459,22 +1533,90 @@ def _load_persisted_decision_brief(symbol: str, cutoff_date: str) -> Optional[Di
             """,
             (normalized, cutoff_date),
         ).fetchone()
-    if not row:
+    if not overview and not decision and not legacy:
         return None
-    payload = _as_row_dict(row) or {}
+    overview_payload = _as_row_dict(overview) or {}
+    decision_payload = _as_row_dict(decision) or {}
+    legacy_payload = _as_row_dict(legacy) or {}
     return {
-        "symbol": payload.get("symbol"),
-        "as_of_date": payload.get("as_of_date"),
-        "company_overview": payload.get("company_overview"),
-        "decision_explanation": payload.get("decision_explanation"),
-        "source": payload.get("source"),
-        "raw_payload": _safe_json_loads(payload.get("raw_payload"), {}),
+        "symbol": normalized,
+        "as_of_date": decision_payload.get("as_of_date") or legacy_payload.get("as_of_date") or cutoff_date,
+        "strategy": normalized_strategy,
+        "signal_date": signal_date,
+        "company_overview": overview_payload.get("company_overview") or legacy_payload.get("company_overview"),
+        "decision_explanation": decision_payload.get("decision_explanation") or legacy_payload.get("decision_explanation"),
+        "company_overview_generated_at": overview_payload.get("generated_at") or legacy_payload.get("updated_at"),
+        "decision_explanation_generated_at": decision_payload.get("generated_at") or legacy_payload.get("updated_at"),
+        "generated_at": decision_payload.get("generated_at") or overview_payload.get("generated_at") or legacy_payload.get("updated_at"),
+        "source": decision_payload.get("source") or overview_payload.get("source") or legacy_payload.get("source"),
+        "raw_payload": {
+            "company_overview": _safe_json_loads(overview_payload.get("raw_payload"), {}),
+            "decision_explanation": _safe_json_loads(decision_payload.get("raw_payload"), {}),
+            "legacy": _safe_json_loads(legacy_payload.get("raw_payload"), {}),
+        },
     }
 
 
 def _persist_decision_brief(brief: Dict[str, Any]) -> None:
     ensure_research_card_schema()
+    now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    normalized = normalize_stock_event_symbol(str(brief.get("symbol") or ""))
+    strategy = str(brief.get("strategy") or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+    signal_date = str(brief.get("signal_date") or brief.get("as_of_date") or "")[:10]
     with get_db_connection() as conn:
+        if str(brief.get("company_overview") or "").strip():
+            conn.execute(
+                """
+                INSERT INTO stock_company_overview_briefs (
+                    symbol, latest_financial_period, company_overview, source,
+                    prompt_version, raw_payload, generated_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(symbol) DO UPDATE SET
+                    latest_financial_period=excluded.latest_financial_period,
+                    company_overview=excluded.company_overview,
+                    source=excluded.source,
+                    prompt_version=excluded.prompt_version,
+                    raw_payload=excluded.raw_payload,
+                    generated_at=excluded.generated_at,
+                    updated_at=CURRENT_TIMESTAMP
+                """,
+                (
+                    normalized,
+                    brief.get("latest_financial_period"),
+                    brief.get("company_overview"),
+                    brief.get("source"),
+                    DECISION_BRIEF_PROMPT_VERSION,
+                    _json_dumps((brief.get("raw_payload") or {}).get("company_overview") or brief.get("raw_payload") or {}),
+                    now_text,
+                ),
+            )
+        if str(brief.get("decision_explanation") or "").strip():
+            conn.execute(
+                """
+                INSERT INTO stock_selection_decision_explanations (
+                    symbol, strategy, signal_date, as_of_date, decision_explanation,
+                    source, prompt_version, raw_payload, generated_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(symbol, strategy, signal_date, as_of_date) DO UPDATE SET
+                    decision_explanation=excluded.decision_explanation,
+                    source=excluded.source,
+                    prompt_version=excluded.prompt_version,
+                    raw_payload=excluded.raw_payload,
+                    generated_at=excluded.generated_at,
+                    updated_at=CURRENT_TIMESTAMP
+                """,
+                (
+                    normalized,
+                    strategy,
+                    signal_date,
+                    brief.get("as_of_date"),
+                    brief.get("decision_explanation"),
+                    brief.get("source"),
+                    DECISION_BRIEF_PROMPT_VERSION,
+                    _json_dumps((brief.get("raw_payload") or {}).get("decision_explanation") or brief.get("raw_payload") or {}),
+                    now_text,
+                ),
+            )
         conn.execute(
             """
             INSERT INTO stock_selection_decision_briefs (
@@ -1540,8 +1682,13 @@ def _build_fallback_decision_brief(
     return {
         "symbol": normalize_stock_event_symbol(symbol),
         "as_of_date": cutoff_date,
+        "strategy": str(profile.get("strategy_internal_id") or STABLE_CALLBACK_STRATEGY_ID).strip().lower(),
+        "signal_date": _decision_signal_date(profile, cutoff_date),
+        "latest_financial_period": financial_snapshot.get("latest_period"),
         "company_overview": company_overview,
         "decision_explanation": decision_explanation,
+        "company_overview_generated_at": None,
+        "decision_explanation_generated_at": None,
         "source": "rule_fallback",
         "raw_payload": {"generation": "rule_fallback"},
     }
@@ -1634,15 +1781,26 @@ def _generate_llm_decision_brief(
     brief = {
         "symbol": normalize_stock_event_symbol(symbol),
         "as_of_date": cutoff_date,
+        "strategy": str(profile.get("strategy_internal_id") or STABLE_CALLBACK_STRATEGY_ID).strip().lower(),
+        "signal_date": _decision_signal_date(profile, cutoff_date),
+        "latest_financial_period": financial_snapshot.get("latest_period"),
         "company_overview": str(payload.get("company_overview") or "").strip(),
         "decision_explanation": str(payload.get("decision_explanation") or "").strip(),
+        "company_overview_generated_at": None,
+        "decision_explanation_generated_at": None,
         "source": "llm_decision_brief_v1",
-        "raw_payload": {"generation": "llm_decision_brief_v1", "model": llm_service.config.get("model"), "raw_response": raw},
+        "raw_payload": {
+            "generation": "llm_decision_brief_v1",
+            "model": llm_service.config.get("model"),
+            "raw_response": raw,
+            "company_overview": {"model": llm_service.config.get("model"), "raw_response": raw},
+            "decision_explanation": {"model": llm_service.config.get("model"), "raw_response": raw},
+        },
     }
     if not brief["company_overview"] or not brief["decision_explanation"]:
         raise ValueError("LLM 研究摘要字段为空")
     _persist_decision_brief(brief)
-    return brief
+    return _load_persisted_decision_brief(symbol, cutoff_date, brief["strategy"], profile) or brief
 
 
 def get_selection_research_context(
@@ -1689,7 +1847,7 @@ def get_selection_research_context(
         financial_snapshot,
     )
     event_interpretation = _build_event_interpretation(profile, stock_event_feed, company_card, price_l2_series)
-    decision_brief = _load_persisted_decision_brief(normalized, cutoff_date) or _build_fallback_decision_brief(
+    decision_brief = _load_persisted_decision_brief(normalized, cutoff_date, strategy, profile) or _build_fallback_decision_brief(
         normalized,
         cutoff_date,
         company,
@@ -1814,6 +1972,71 @@ def prepare_selection_research_context(
         "hydrate_result": hydrate_result,
         "llm_result": llm_result,
         "context": context,
+    }
+
+
+def prewarm_selection_research_contexts(
+    items: Sequence[Dict[str, Any]],
+    *,
+    trade_date: Optional[str] = None,
+    default_strategy: str = STABLE_CALLBACK_STRATEGY_ID,
+    limit: int = 12,
+) -> Dict[str, Any]:
+    """Query-triggered warmup. Runs synchronously when used by scripts/background tasks."""
+    normalized_items: List[Dict[str, Any]] = []
+    seen = set()
+    for item in items or []:
+        symbol = normalize_stock_event_symbol(str(item.get("symbol") or ""))
+        if not symbol:
+            continue
+        strategy = str(item.get("strategy") or item.get("strategy_internal_id") or default_strategy or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+        date_text = _date_text(str(item.get("trade_date") or trade_date or ""))
+        key = (symbol, strategy, date_text)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized_items.append({"symbol": symbol, "strategy": strategy, "trade_date": date_text})
+        if len(normalized_items) >= max(1, int(limit)):
+            break
+
+    results: List[Dict[str, Any]] = []
+    for item in normalized_items:
+        try:
+            result = prepare_selection_research_context(
+                item["symbol"],
+                trade_date=item["trade_date"],
+                strategy=item["strategy"],
+                use_llm=True,
+                announcement_days=365,
+                qa_days=180,
+                news_days=45,
+                event_limit=50,
+                series_days=90,
+            )
+            results.append(
+                {
+                    "symbol": item["symbol"],
+                    "trade_date": item["trade_date"],
+                    "strategy": item["strategy"],
+                    "ok": result.get("llm_result", {}).get("status") == "generated",
+                }
+            )
+        except Exception as exc:
+            # 前端不展示失败原因；这里仅给调用方/日志留轻量结果。
+            results.append(
+                {
+                    "symbol": item["symbol"],
+                    "trade_date": item["trade_date"],
+                    "strategy": item["strategy"],
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+    return {
+        "requested_count": len(items or []),
+        "scheduled_count": len(normalized_items),
+        "processed_count": len(results),
+        "items": results,
     }
 
 

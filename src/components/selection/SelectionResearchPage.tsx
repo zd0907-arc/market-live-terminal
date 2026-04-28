@@ -20,6 +20,7 @@ import {
   fetchSelectionV2Evaluation,
   fetchStableCallbackEvaluation,
   fetchTrendContinuationEvaluation,
+  prewarmSelectionResearchContexts,
   refreshSelectionResearch,
   runSelectionBacktest,
 } from '../../services/selectionService';
@@ -272,6 +273,27 @@ const SelectionResearchPage: React.FC = () => {
     }
   };
 
+  const triggerResearchPrewarm = (items: SelectionCandidateItem[], dateText?: string) => {
+    if (!items.length) return;
+    const actionable = items.filter((item) => item.entry_allowed !== false);
+    const watch = items.filter((item) => item.entry_allowed === false).slice(0, 5);
+    const picked = [...actionable, ...watch].slice(0, 12);
+    if (!picked.length) return;
+    void prewarmSelectionResearchContexts({
+      date: dateText || tradeDate,
+      strategy: activeStrategy,
+      limit: 12,
+      items: picked.map((item) => ({
+        symbol: item.symbol.toLowerCase(),
+        trade_date: item.trade_date || dateText || tradeDate,
+        strategy: item.strategy_internal_id || (activeStrategy === 'daily_review' ? STABLE_CALLBACK_STRATEGY : activeStrategy),
+        rank: item.rank,
+        entry_allowed: item.entry_allowed,
+        action_label: item.action_label,
+      })),
+    });
+  };
+
   const loadHealth = async () => {
     const data = await fetchSelectionHealth();
     setHealth(data);
@@ -308,6 +330,7 @@ const SelectionResearchPage: React.FC = () => {
       setCandidates(items);
       await hydrateCandidateNames(items);
       if (nextDate) setTradeDate(nextDate);
+      triggerResearchPrewarm(items, nextDate || dateArg);
       const keepSelected = items.find((item) => item.symbol === selected?.symbol && item.strategy_internal_id === selected?.strategy_internal_id) || items[0] || null;
       setSelected(keepSelected);
     } catch (e) {

@@ -143,6 +143,30 @@ export const prepareSelectionResearchContext = async (
   }
 };
 
+export const prewarmSelectionResearchContexts = async (payload: {
+  date?: string;
+  strategy?: SelectionStrategy | string;
+  limit?: number;
+  items: Array<Record<string, any>>;
+}): Promise<{ scheduled_count?: number } | null> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/selection/research-context/prewarm`, {
+      method: 'POST',
+      headers: getWriteHeaders(true),
+      body: JSON.stringify({
+        date: payload.date,
+        strategy: payload.strategy,
+        limit: payload.limit || 12,
+        items: payload.items || [],
+      }),
+    });
+    return await parseApiData<{ scheduled_count?: number }>(res);
+  } catch (e) {
+    console.error('Prewarm selection research contexts error:', e);
+    return null;
+  }
+};
+
 export const quickJudgeSelectionEvent = async (payload: {
   messageText: string;
   symbol?: string;
