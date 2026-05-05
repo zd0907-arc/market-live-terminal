@@ -80,8 +80,28 @@
 - 回测引擎：`docs/changes/REQ-20260404-03-selection-backtest-engine.md`
 - 页面与接口：`docs/changes/REQ-20260404-04-selection-api-and-research-page.md`
 - 数据对齐与补齐：`docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`
+- 长期研究跟踪清单：`docs/selection/research_watchlist/README.md`
+- 牛市区间涨幅水位：`docs/selection/cycle_returns/README.md`
+- 小主题热点研究：`docs/selection/market_heat/README.md`
+- 强者恒强卖点验证：`docs/selection/market_heat/backtests/hot_theme_strong_momentum_sell_points.md`
 
-## 8. 下一步
+## 8. 长期跟踪清单（2026-05-02 新增）
+- 定位：研究后持续盯盘，不做自动交易。
+- 清单文件：`data/selection/research_watchlist/watchlist.json`
+- 每日快照：`data/selection/research_watchlist/snapshots/YYYY-MM-DD.csv`
+- 每日笔记：`docs/selection/research_watchlist/daily/YYYY-MM-DD.md`
+- 生成脚本：`backend/scripts/build_research_watchlist_snapshot.py`
+- 首个标的：德明利 `sz001309`
+
+## 9. 小主题热点研究（2026-05-06 更新）
+
+- 当前定位：解释市场主线、辅助候选验证、建立追强候选池；不是自动买入模块。
+- 已验证：纯热点不能直接买，L2 单因子不能定买点。
+- 当前有效方向：`强者恒强` 样本能把后20日最高涨幅超过20%的命中率从 `18.7%` 提升到 `55.9%`。
+- 交易验证：100万单账户、全仓一笔、资金占用错过新机会、考虑涨停买不到/跌停卖不出和交易成本后，`+10%半仓止盈 + 剩余按回撤/L2/时间退出` 在 2025 年变为 `124.20万`。
+- 对比结论：去掉半仓止盈后只到 `101.89万`；固定持有20日降到 `85.85万`。卖点规则比机械持有更重要。
+
+## 10. 下一步
 1. 优先补齐 `stock_universe_meta` 正式名称映射
 2. 对齐本地 `history_daily_l2/history_5m_l2` 正式覆盖
 3. 扩大回测窗口到 `2025-10 ~ 2026-02`

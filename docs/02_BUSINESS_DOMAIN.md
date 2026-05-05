@@ -20,18 +20,21 @@
 | `CAP-L2-HISTORY-FOUNDATION` | 盘后 L2 / 原子层底座 | `LIVE_PARTIAL` | `docs/domain/data-pipeline.md` |
 | `CAP-SANDBOX-REVIEW` | 沙盒复盘验证闭环 | `MAINTAINED` | `docs/domain/review-and-history.md` |
 | `CAP-SELECTION-RESEARCH` | 选股研究与回测闭环 | `LIVE_PARTIAL` | `docs/domain/selection-research.md` |
+| `CAP-MARKET-HEAT` | 热点板块 / 市场热度研究 | `EXPLORING` | `docs/selection/market_heat/README.md` |
 
 ## 3. 当前能力判断规则
 - `LIVE`：已进入当前正式主路径
 - `LIVE_PARTIAL`：主路径已存在，但还有重要增强或收口未完成
 - `MAINTAINED`：仍保留，但不是当前主线重点
+- `EXPLORING`：研究或原型中，不计入已落地核心模块，不能直接当正式策略或正式产品口径
 
 ## 4. 当前总判断
 1. 当前主线是：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**。
 2. 当前最重要的长期建设方向：
    - 原子层与旧依赖继续收口
-   - 选股研究底座继续补齐
+   - 选股研究继续验证策略有效性与真实覆盖面
    - 官方事件层继续从“事实采集”走向“事件理解”
+   - 热点板块暂时只作为研究解释、风险提示和独立追强候选池，不并入正式买入信号
 3. 所有具体需求过程，一律进入 `docs/changes/`，不再堆到本页。
 
 ## 5. 相关入口
