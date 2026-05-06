@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
+from pydantic import BaseModel
 
 from backend.app.core.security import require_write_access
 from backend.app.db.selection_db import ensure_selection_schema
@@ -12,6 +15,12 @@ from backend.app.services.selection_research import (
     list_backtest_runs,
     refresh_selection_research,
     run_selection_backtest,
+)
+from backend.app.services.selection_research_context import (
+    get_selection_research_context,
+    prepare_selection_research_context,
+    prewarm_selection_research_contexts,
+    quick_judge_selection_event,
 )
 from backend.app.services.selection_history_proxy import get_selection_multiframe_rows
 from backend.app.services.selection_strategy_v2 import (
@@ -37,6 +46,20 @@ from backend.app.services.selection_trend_continuation import (
 
 router = APIRouter()
 ensure_selection_schema()
+
+
+class SelectionQuickEventJudgeRequest(BaseModel):
+    message_text: str
+    symbol: Optional[str] = None
+    date: Optional[str] = None
+    strategy: Optional[str] = None
+
+
+class SelectionResearchPrewarmRequest(BaseModel):
+    date: Optional[str] = None
+    strategy: Optional[str] = None
+    limit: Optional[int] = 12
+    items: List[Dict[str, Any]] = []
 
 
 @router.get("/selection/health", response_model=APIResponse)
@@ -100,6 +123,103 @@ def selection_profile(
         return APIResponse(code=200, data=get_profile(symbol, date))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股画像查询失败: {exc}", data=None)
+
+
+@router.get("/selection/research-context/{symbol}", response_model=APIResponse)
+def selection_research_context(
+    symbol: str,
+    date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为画像可用日"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / trend_continuation_callback / v2 / breakout / stealth / distribution"),
+    event_limit: int = Query(50, ge=1, le=200),
+    event_days: int = Query(365, ge=1, le=3650),
+    series_days: int = Query(60, ge=1, le=240),
+):
+    try:
+        return APIResponse(
+            code=200,
+            data=get_selection_research_context(
+                symbol,
+                trade_date=date,
+                strategy=strategy,
+                event_limit=event_limit,
+                event_days=event_days,
+                series_days=series_days,
+            ),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"选股研究上下文查询失败: {exc}", data=None)
+
+
+@router.post("/selection/research-context/{symbol}/prepare", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def selection_research_context_prepare(
+    symbol: str,
+    date: str = Query(None, description="交易日 YYYY-MM-DD，事件结果会按该日截断展示"),
+    strategy: str = Query(STABLE_CALLBACK_STRATEGY_ID, description="stable_capital_callback / trend_continuation_callback / v2 / breakout / stealth / distribution"),
+    use_llm: bool = Query(True, description="是否在事件补拉后尝试生成公司研究卡"),
+    announcement_days: int = Query(365, ge=1, le=3650),
+    qa_days: int = Query(180, ge=1, le=3650),
+    news_days: int = Query(45, ge=1, le=3650),
+    event_limit: int = Query(50, ge=1, le=200),
+    series_days: int = Query(60, ge=1, le=240),
+):
+    try:
+        return APIResponse(
+            code=200,
+            message="选股研究上下文准备完成",
+            data=prepare_selection_research_context(
+                symbol,
+                trade_date=date,
+                strategy=strategy,
+                use_llm=use_llm,
+                announcement_days=announcement_days,
+                qa_days=qa_days,
+                news_days=news_days,
+                event_limit=event_limit,
+                series_days=series_days,
+            ),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"选股研究上下文准备失败: {exc}", data=None)
+
+
+@router.post("/selection/research-context/prewarm", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def selection_research_context_prewarm(
+    background_tasks: BackgroundTasks,
+    request: SelectionResearchPrewarmRequest = Body(...),
+):
+    try:
+        items = request.items or []
+        limit = max(1, min(int(request.limit or 12), 30))
+        background_tasks.add_task(
+            prewarm_selection_research_contexts,
+            items,
+            trade_date=request.date,
+            default_strategy=request.strategy or STABLE_CALLBACK_STRATEGY_ID,
+            limit=limit,
+        )
+        return APIResponse(
+            code=200,
+            message="研究摘要预热已触发",
+            data={"scheduled_count": min(len(items), limit)},
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"研究摘要预热触发失败: {exc}", data=None)
+
+
+@router.post("/selection/quick-event-judge", response_model=APIResponse)
+def selection_quick_event_judge(request: SelectionQuickEventJudgeRequest = Body(...)):
+    try:
+        return APIResponse(
+            code=200,
+            data=quick_judge_selection_event(
+                message_text=request.message_text,
+                symbol=request.symbol,
+                trade_date=request.date,
+                strategy=request.strategy or STABLE_CALLBACK_STRATEGY_ID,
+            ),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"消息快速研判失败: {exc}", data=None)
 
 
 @router.get("/selection/history/multiframe", response_model=APIResponse)

@@ -1,11 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { ExternalLink, FileText, Newspaper, ShieldAlert, TrendingUp } from 'lucide-react';
+import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 
-import HistoryView from '../dashboard/HistoryView';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
-import { fetchSelectionHistoryMultiframe, fetchStockEventCoverage, fetchStockEventFeed } from '../../services/selectionService';
-import { HistoryMultiframeGranularity, SearchResult, SelectionCandidateItem, SelectionProfileData, StockEventCoverageData, StockEventFeedItem } from '../../types';
+import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
+import {
+  HistoryMultiframeGranularity,
+  SearchResult,
+  SelectionCandidateItem,
+  SelectionEventInterpretation,
+  SelectionProfileData,
+  SelectionResearchContextData,
+  SelectionResearchEvidenceItem,
+  SelectionStrategy,
+  StockEventCoverageData,
+  StockEventFeedItem,
+} from '../../types';
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
 const fmtNum = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -77,31 +87,19 @@ interface Props {
   latestTradeDate?: string;
 }
 
-type EventGroupKey = 'official' | 'company' | 'media';
-
-const EVENT_GROUP_META: Record<EventGroupKey, { label: string; desc: string }> = {
-  official: { label: '官方披露', desc: '财报 / 公告 / 监管 / 再融资' },
-  company: { label: '公司交流', desc: '互动问答 / 业绩说明会 / 投资者关系' },
-  media: { label: '媒体资讯', desc: '快讯 / 长文 / 解读 / 调研速递' },
-};
-
-const classifyEventGroup = (item: StockEventFeedItem): EventGroupKey => {
-  const title = String(item.title || '');
-  if (
-    item.source_type === 'qa' ||
-    /投资者关系|说明会|互动|问答|调研|接待/i.test(title)
-  ) {
-    return 'company';
-  }
-  if (item.source_type === 'news') return 'media';
-  return 'official';
-};
-
 const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
 
 const COVERAGE_DAY_OPTIONS = [30, 60, 90, 120, 180] as const;
 
 type StrategyInsight = React.ComponentProps<typeof HistoryMultiframeFusionView>['strategyInsight'];
+
+const normalizeStrategy = (value?: string | null): SelectionStrategy => {
+  const text = String(value || '').trim();
+  if (['stable_capital_callback', 'trend_continuation_callback', 'stealth', 'breakout', 'distribution', 'v2'].includes(text)) {
+    return text as SelectionStrategy;
+  }
+  return 'stable_capital_callback';
+};
 
 const levelText = (metric: string, value?: number | null) => {
   if (value == null || Number.isNaN(Number(value))) return '暂无';
@@ -139,7 +137,9 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   });
   const [eventFeed, setEventFeed] = useState<StockEventFeedItem[]>([]);
   const [eventCoverage, setEventCoverage] = useState<StockEventCoverageData | null>(null);
+  const [researchContext, setResearchContext] = useState<SelectionResearchContextData | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [preparingContext, setPreparingContext] = useState(false);
 
   const activeStock = useMemo<SearchResult | null>(() => {
     if (!candidate) return null;
@@ -156,18 +156,23 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     if (!candidate) {
       setEventFeed([]);
       setEventCoverage(null);
+      setResearchContext(null);
       return;
     }
     let cancelled = false;
     setLoadingEvents(true);
-    Promise.all([
-      fetchStockEventFeed(candidate.symbol.toLowerCase(), { limit: 24 }),
-      fetchStockEventCoverage(candidate.symbol.toLowerCase(), 365),
-    ])
-      .then(([feed, coverage]) => {
+    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
+    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
+    fetchSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
+      eventLimit: 24,
+      eventDays: 365,
+      seriesDays: 60,
+    })
+      .then((context) => {
         if (cancelled) return;
-        setEventFeed(feed?.items || []);
-        setEventCoverage(coverage);
+        setResearchContext(context);
+        setEventFeed(context?.stock_event_feed?.items || []);
+        setEventCoverage(context?.stock_event_coverage || null);
       })
       .finally(() => {
         if (!cancelled) setLoadingEvents(false);
@@ -175,7 +180,61 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     return () => {
       cancelled = true;
     };
-  }, [candidate]);
+  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
+
+  useEffect(() => {
+    if (!candidate || !profile) return;
+    let cancelled = false;
+    let count = 0;
+    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
+    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
+    const timer = window.setInterval(async () => {
+      count += 1;
+      const context = await fetchSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
+        eventLimit: 24,
+        eventDays: 365,
+        seriesDays: 60,
+      });
+      if (cancelled || !context) return;
+      setResearchContext((prev) => {
+        const prevGenerated = String(prev?.decision_brief?.generated_at || '');
+        const nextGenerated = String(context.decision_brief?.generated_at || '');
+        if (!prev || nextGenerated > prevGenerated || prev?.decision_brief?.source !== 'llm_decision_brief_v1') {
+          return context;
+        }
+        return prev;
+      });
+      setEventFeed(context.stock_event_feed?.items || []);
+      setEventCoverage(context.stock_event_coverage || null);
+      if (context.decision_brief?.source === 'llm_decision_brief_v1' && count >= 2) {
+        window.clearInterval(timer);
+      }
+      if (count >= 24) window.clearInterval(timer);
+    }, 10000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
+
+  const handlePrepareContext = async () => {
+    if (!candidate) return;
+    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
+    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
+    setPreparingContext(true);
+    const result = await prepareSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
+      useLlm: true,
+      eventLimit: 50,
+      newsDays: 45,
+      seriesDays: 60,
+    });
+    if (result?.context) {
+      setResearchContext(result.context);
+      setEventFeed(result.context.stock_event_feed?.items || []);
+      setEventCoverage(result.context.stock_event_coverage || null);
+    }
+    setPreparingContext(false);
+  };
 
   useEffect(() => {
     if (!candidate?.trade_date) return;
@@ -267,15 +326,36 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     const tone = returnPct == null ? 'neutral' : returnPct >= 0 ? 'positive' : 'negative';
     return { text: text || null, tone };
   }, [effectiveEndDate, profile?.trade_plan]);
-  const groupedEventFeed = useMemo(() => {
-    const groups: Record<EventGroupKey, StockEventFeedItem[]> = {
-      official: [],
-      company: [],
-      media: [],
-    };
-    eventFeed.forEach((item) => groups[classifyEventGroup(item)].push(item));
-    return groups;
-  }, [eventFeed]);
+  const fetchHistoryRows = useCallback(({ symbol, granularity: nextGranularity, days, startDate, endDate, includeTodayPreview }: {
+    symbol: string;
+    granularity: HistoryMultiframeGranularity;
+    days: number;
+    startDate?: string;
+    endDate?: string;
+    includeTodayPreview?: boolean;
+  }) => fetchSelectionHistoryMultiframe(symbol, {
+    granularity: nextGranularity,
+    days,
+    startDate,
+    endDate,
+    includeTodayPreview,
+  }), []);
+  const researchEvidenceItems = useMemo<SelectionResearchEvidenceItem[]>(() => {
+    const persisted = researchContext?.research_evidence?.items || [];
+    if (persisted.length > 0) return persisted;
+    return eventFeed.slice(0, 6).map((item) => ({
+      evidence_key: item.event_id,
+      source: item.source_label || item.source,
+      source_type: item.source_type_label || item.source_type,
+      published_at: item.published_at,
+      title: item.title,
+      summary: item.content && item.content !== item.title ? item.content : item.title,
+      claim_tags: ['事件背景'],
+      raw_url: item.raw_url,
+      pdf_url: item.pdf_url,
+      importance: item.importance,
+    }));
+  }, [eventFeed, researchContext?.research_evidence?.items]);
 
   if (!candidate || !profile || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
@@ -286,12 +366,24 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const isStableCallback = profile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
   const isTrendContinuation = profile.strategy_internal_id === 'trend_continuation_callback' || candidate.strategy_internal_id === 'trend_continuation_callback';
   const isProductStrategy = isStableCallback || isTrendContinuation;
-  const strategyExplanation = (profile.research?.strategy_explanation as string[] | undefined) || [
-    '这不是追涨停策略，而是先发现资金异动。',
-    '启动后等待回调承接确认，确认日收盘识别，次日开盘买入。',
-    '买入后主要看累计超大单是否从峰值明显撤退。',
-    '多个风险信号同时出现时过滤。',
-  ];
+  const eventInterpretation = researchContext?.event_interpretation as SelectionEventInterpretation | undefined;
+  const decisionBrief = researchContext?.decision_brief;
+  const companyOverviewText = decisionBrief?.company_overview
+    || [
+      researchContext?.company_profile?.company_name || researchContext?.name || candidate.name || candidate.symbol,
+      researchContext?.company_profile?.main_business ? `主营：${researchContext.company_profile.main_business}` : null,
+      researchContext?.financial_snapshot?.summary_text ? `财务快照：${researchContext.financial_snapshot.summary_text}` : null,
+      eventFeed.length ? `近期事件：${eventFeed.slice(0, 3).map((item) => item.title).filter(Boolean).join('；')}` : null,
+    ].filter(Boolean).join('。')
+    || '公司概况还没生成，点击“刷新研究摘要”补拉公告、财务和LLM解释。';
+  const decisionExplanationText = decisionBrief?.decision_explanation
+    || [
+      profile.current_judgement ? `当前判断：${profile.current_judgement}` : null,
+      profile.breakout_reason_summary || [profile.setup_reason, profile.launch_reason, profile.pullback_reason].filter(Boolean).join('；'),
+      eventInterpretation?.reasoning ? `事件/资金解释：${eventInterpretation.reasoning}` : null,
+    ].filter(Boolean).join('。')
+    || '决策解释还没生成，点击“刷新研究摘要”后会把事件催化、趋势回踩和资金确认合成一段人话。';
+  const auditFlags = researchContext?.source_audit?.audit_flags || [];
   const anchorDate = candidate.trade_date || profile.observe_date || profile.discovery_date || profile.entry_signal_date || profile.trade_plan?.signal_date || null;
   const strategyInsight = useMemo<StrategyInsight>(() => {
     const intent = profile.intent_profile || {};
@@ -441,6 +533,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             tradeSummaryText={tradeSummary.text}
             tradeSummaryTone={tradeSummary.tone}
             strategyInsight={strategyInsight}
+            includeTodayPreview={false}
             headerRightSlot={(
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
                 {COVERAGE_DAY_OPTIONS.map((days) => (
@@ -455,55 +548,58 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
                 ))}
               </div>
             )}
-            fetchRows={({ symbol, granularity: nextGranularity, days, startDate, endDate, includeTodayPreview }) =>
-              fetchSelectionHistoryMultiframe(symbol, {
-                granularity: nextGranularity,
-                days,
-                startDate,
-                endDate,
-                includeTodayPreview,
-              })
-            }
+            fetchRows={fetchHistoryRows}
             onDataStatusChange={setChartStatus}
           />
         </div>
 
-        <div className="mt-3 space-y-2">
-          {granularity === '1d' && !chartStatus.hasData ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-2">
-              <HistoryView
-                activeStock={activeStock}
-                backendStatus={backendStatus}
-                forceViewMode="daily"
-                initialHistorySource="local"
-              />
-            </div>
-          ) : null}
-        </div>
+        {granularity === '1d' && !chartStatus.hasData && chartStatus.rowCount === 0 ? (
+          <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/20 px-3 py-2 text-xs text-slate-500">
+            暂无本地历史图表数据。
+          </div>
+        ) : null}
       </section>
 
-      {isProductStrategy ? (
-        <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
+      <section className="grid gap-3 xl:grid-cols-2">
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-emerald-100">{isTrendContinuation ? '趋势中继高质量回踩' : '资金流回调稳健'}</div>
-              <div className="mt-1 text-xs leading-5 text-emerald-50/80">
-                {strategyExplanation.join('；')}
-              </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Sparkles className="h-4 w-4 text-violet-300" />
+              公司概况
+              {researchContext?.as_of_cutoff ? <span className="text-[11px] font-normal text-slate-500">截至 {researchContext.as_of_cutoff}</span> : null}
             </div>
-            <div className="grid min-w-[260px] grid-cols-2 gap-2 text-xs">
-              <MetricCard label="买入状态" value={profile.entry_allowed === false ? (isTrendContinuation ? '观察中' : '风险过滤') : '可买入'} tone={profile.entry_allowed === false ? 'text-amber-200' : 'text-emerald-100'} />
-              <MetricCard label="风险标签" value={`${profile.risk_count ?? candidate.risk_count ?? 0} 个`} tone={(profile.risk_count ?? candidate.risk_count ?? 0) >= 2 ? 'text-red-200' : 'text-emerald-100'} />
+            <button
+              type="button"
+              onClick={handlePrepareContext}
+              disabled={preparingContext || loadingEvents}
+              className="rounded-lg border border-violet-500/40 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-100 hover:border-violet-300 disabled:cursor-wait disabled:opacity-60"
+            >
+              {preparingContext ? '生成中...' : '刷新研究摘要'}
+            </button>
+          </div>
+          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
+            {companyOverviewText}
+          </div>
+          <div className="mt-3 text-[11px] text-slate-500">
+            生成时间：{decisionBrief?.company_overview_generated_at || decisionBrief?.generated_at || '生成中'}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <TrendingUp className="h-4 w-4 text-emerald-300" />
+              决策解释
             </div>
           </div>
-          <div className="mt-3 grid gap-2 text-xs md:grid-cols-4">
-            <MetricCard label="纳入观察" value={profile.observe_date || profile.discovery_date || candidate.observe_date || '--'} />
-            <MetricCard label="买入确认" value={profile.pullback_confirm_date || profile.entry_signal_date || candidate.entry_signal_date || '--'} />
-            <MetricCard label="次日买入" value={profile.trade_plan?.entry_date || profile.entry_date || '--'} />
-            <MetricCard label="卖出信号/卖出" value={[profile.trade_plan?.exit_signal_date || profile.exit_signal_date, profile.trade_plan?.exit_date || profile.exit_date].filter(Boolean).join(' / ') || '--'} />
+          <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
+            {decisionExplanationText}
           </div>
-        </section>
-      ) : null}
+          <div className="mt-3 text-[11px] text-slate-500">
+            生成时间：{decisionBrief?.decision_explanation_generated_at || decisionBrief?.generated_at || '生成中'}
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr]">
@@ -604,97 +700,47 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Newspaper className="h-4 w-4 text-fuchsia-400" />
-              事件依据 / 信息来源
-            </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Newspaper className="h-4 w-4 text-fuchsia-400" />
+            研究依据
           </div>
           <div className="text-xs text-slate-500">
-            {eventCoverage?.coverage_status === 'covered'
-              ? `最近覆盖：${eventCoverage?.modules?.filter((item) => item.covered).length || 0} / ${eventCoverage?.modules?.length || 0} 类`
-              : '当前无事件覆盖摘要'}
+            生成时间：{researchContext?.research_evidence?.generated_at || '生成中'}
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(eventCoverage?.modules || [
-            { module: 'report', label: '财报', covered: false, count: 0 },
-            { module: 'announcement', label: '公告', covered: false, count: 0 },
-            { module: 'qa', label: '互动问答', covered: false, count: 0 },
-            { module: 'news', label: '财经资讯', covered: false, count: 0 },
-            { module: 'regulatory', label: '监管', covered: false, count: 0 },
-          ]).map((item) => (
-            <div key={item.module} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className="text-slate-500">{item.label}</span>
-                <span className="font-semibold text-slate-100">{item.count || 0}</span>
-                <span className={item.covered ? 'text-emerald-300' : 'text-slate-500'}>{item.covered ? '已覆盖' : '暂无'}</span>
-                <span className="text-slate-600">{compactTime(item.latest_event_time)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 grid gap-3 xl:grid-cols-3">
-          {(Object.keys(EVENT_GROUP_META) as EventGroupKey[]).map((groupKey) => {
-            const group = EVENT_GROUP_META[groupKey];
-            const items = groupedEventFeed[groupKey];
-            return (
-              <div key={groupKey} className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-white">{group.label}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400">{items.length}</div>
+        <div className="mt-3 grid gap-2 xl:grid-cols-2">
+          {researchEvidenceItems.length > 0 ? (
+            researchEvidenceItems.slice(0, 10).map((item) => (
+              <div key={item.evidence_key || `${item.title}-${item.published_at}`} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span>{item.source_type || item.source || '本地依据'} · {item.source || '本地'}</span>
+                  <span>{compactTime(item.published_at)}</span>
                 </div>
-                <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1">
-                  {loadingEvents ? (
-                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">正在加载事件依据...</div>
-                  ) : items.length > 0 ? (
-                    items.map((item) => (
-                      <div key={item.event_id} className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                          <span>{item.source_label || item.source_type_label || item.source || '事件源'}</span>
-                          <span>{compactTime(item.published_at)}</span>
-                        </div>
-                        <div className="mt-1 text-sm font-medium text-slate-100">{item.title || '--'}</div>
-                        {item.content && item.content !== item.title ? (
-                          <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.content}</div>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.raw_url ? (
-                            <a
-                              href={item.raw_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              查看原文
-                            </a>
-                          ) : null}
-                          {item.pdf_url ? (
-                            <a
-                              href={item.pdf_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-cyan-700/60 px-2 py-1 text-[11px] text-cyan-200 hover:border-cyan-500"
-                            >
-                              <FileText className="h-3 w-3" />
-                              查看PDF
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-500">当前分组暂无可展示事件。</div>
-                  )}
+                <div className="mt-1 text-sm font-semibold text-slate-100">{item.title || '--'}</div>
+                <div className="mt-1 line-clamp-3 text-xs leading-5 text-slate-300">{item.summary || '暂无摘要'}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {(item.claim_tags || []).slice(0, 4).map((tag) => (
+                    <span key={`${item.evidence_key}-${tag}`} className="rounded-full border border-fuchsia-500/25 bg-fuchsia-500/10 px-2 py-0.5 text-[11px] text-fuchsia-100">{tag}</span>
+                  ))}
+                  {item.raw_url ? (
+                    <a href={item.raw_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-500">
+                      <ExternalLink className="h-3 w-3" />
+                      原文
+                    </a>
+                  ) : null}
+                  {item.pdf_url ? (
+                    <a href={item.pdf_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-cyan-700/60 px-2 py-0.5 text-[11px] text-cyan-200 hover:border-cyan-500">
+                      <FileText className="h-3 w-3" />
+                      PDF
+                    </a>
+                  ) : null}
                 </div>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">暂无研究依据，点击刷新研究摘要。</div>
+          )}
         </div>
       </section>
     </div>
