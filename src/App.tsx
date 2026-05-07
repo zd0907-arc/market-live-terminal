@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Activity, ArrowUp, ArrowDown, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Target } from 'lucide-react';
+import { Activity, ArrowUp, ArrowDown, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Target, BrainCircuit } from 'lucide-react';
 import { HistoryMultiframeGranularity, RealTimeQuote, ReviewPoolItem, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
@@ -15,6 +15,7 @@ const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
+const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
@@ -71,6 +72,16 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">复盘页面加载中...</div>}>
         <ReviewPage />
+      </Suspense>
+    );
+  }
+
+
+  const isTrendResearchRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/trend-research');
+  if (isTrendResearchRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">趋势研究台加载中...</div>}>
+        <TrendResearchPage />
       </Suspense>
     );
   }
@@ -410,6 +421,7 @@ const App: React.FC = () => {
   const reviewHref = activeStock?.symbol ? `/review?symbol=${activeStock.symbol.toLowerCase()}` : '/review';
   const selectionHref = '/selection-research';
   const marketHeatHref = '/market-heat';
+  const trendResearchHref = '/trend-research';
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 pb-20 overflow-x-hidden">
@@ -440,6 +452,13 @@ const App: React.FC = () => {
         onSelectHistory={(res) => handleSelectStock(res)}
         rightSlot={
           <div className="flex items-center gap-2">
+            <a
+              href={trendResearchHref}
+              className="hidden rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"
+              title="打开长期趋势研究台"
+            >
+              趋势研究
+            </a>
             <a
               href={marketHeatHref}
               className="hidden rounded-lg border border-amber-700/50 bg-amber-900/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
@@ -488,6 +507,13 @@ const App: React.FC = () => {
               >
                 <TrendingUp className="h-4 w-4" />
                 去选股研究工作台
+              </a>
+              <a
+                href={trendResearchHref}
+                className="ml-2 inline-flex items-center gap-2 rounded-lg border border-cyan-600/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20"
+              >
+                <BrainCircuit className="h-4 w-4" />
+                看趋势研究
               </a>
               <a
                 href={marketHeatHref}
