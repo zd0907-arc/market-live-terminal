@@ -44,6 +44,10 @@ from datetime import datetime
 def is_background_runtime_enabled() -> bool:
     return os.getenv("ENABLE_BACKGROUND_RUNTIME", "true").strip().lower() in {"1", "true", "yes", "on"}
 
+
+def is_research_api_routes_enabled() -> bool:
+    return os.getenv("ENABLE_RESEARCH_API_ROUTES", "true").strip().lower() in {"1", "true", "yes", "on"}
+
 # 禁用不安全的HTTPS警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -54,7 +58,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="ZhangData Local Server",
     description="ZhangData 本地研究站后端服务",
-    version="5.1.2"
+    version="5.1.3"
 )
 
 # CORS 配置
@@ -76,9 +80,12 @@ app.include_router(sentiment.router, prefix="/api", tags=["Retail Sentiment"])
 app.include_router(stock_events.router, prefix="/api", tags=["Stock Events"])
 app.include_router(ingest.router, prefix="/api/internal/ingest", tags=["Ingest"])
 app.include_router(review.router, prefix="/api/review", tags=["Review"])
-app.include_router(selection.router, prefix="/api", tags=["Selection Research"])
-app.include_router(market_heat.router, prefix="/api", tags=["Market Heat"])
-app.include_router(trend_research.router, prefix="/api", tags=["Trend Research"])
+if is_research_api_routes_enabled():
+    app.include_router(selection.router, prefix="/api", tags=["Selection Research"])
+    app.include_router(market_heat.router, prefix="/api", tags=["Market Heat"])
+    app.include_router(trend_research.router, prefix="/api", tags=["Trend Research"])
+else:
+    logger.info("Research API routes are disabled by ENABLE_RESEARCH_API_ROUTES=false")
 app.include_router(sandbox_review.router, prefix="/api/sandbox", tags=["Sandbox Review"])
 
 @app.get("/api/health")

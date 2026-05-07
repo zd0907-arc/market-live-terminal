@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_CLOUD_LITE_MODE=false
+ENV VITE_CLOUD_LITE_MODE=$VITE_CLOUD_LITE_MODE
+
 # 配置 npm 淘宝镜像加速
 RUN npm config set registry https://registry.npmmirror.com
 

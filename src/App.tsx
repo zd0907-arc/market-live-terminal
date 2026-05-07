@@ -7,6 +7,7 @@ import StockQuoteHeroCard from './components/common/StockQuoteHeroCard';
 import MarketTopHeader from './components/common/MarketTopHeader';
 import QuoteMetaRow from './components/common/QuoteMetaRow';
 import { isCurrentCnTradingSession } from './utils/marketTime';
+import { CLOUD_LITE_MODE } from './config';
 
 const RealtimeView = lazy(() => import('./components/dashboard/RealtimeView'));
 const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/HistoryMultiframeFusionView'));
@@ -25,6 +26,20 @@ const getSymbolFromLocation = (): string => {
   const normalized = value.trim().toLowerCase();
   return VALID_SYMBOL_RE.test(normalized) ? normalized : '';
 };
+
+
+const CloudLiteBlockedPage: React.FC<{ title: string }> = ({ title }) => (
+  <div className="min-h-screen bg-[#0a0f1c] text-slate-200 font-sans selection:bg-blue-900 p-6">
+    <div className="mx-auto mt-20 max-w-lg rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-center shadow-2xl">
+      <div className="text-lg font-semibold text-white">{title}暂未在云端开放</div>
+      <div className="mt-2 text-sm text-slate-400">当前生产环境只保留盯盘和复盘能力。</div>
+      <div className="mt-5 flex justify-center gap-2">
+        <a href="/" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:border-slate-500">回到盯盘</a>
+        <a href="/review" className="rounded-lg border border-cyan-700/60 bg-cyan-900/30 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-800/40">打开复盘</a>
+      </div>
+    </div>
+  </div>
+);
 
 class ViewErrorBoundary extends React.Component<{ title: string; children: React.ReactNode }, { hasError: boolean; message: string }> {
   constructor(props: { title: string; children: React.ReactNode }) {
@@ -79,6 +94,7 @@ const App: React.FC = () => {
 
   const isTrendResearchRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/trend-research');
   if (isTrendResearchRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="趋势研究" />;
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">趋势研究台加载中...</div>}>
         <TrendResearchPage />
@@ -88,6 +104,7 @@ const App: React.FC = () => {
 
   const isSelectionRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-research');
   if (isSelectionRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="选股研究台" />;
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
         <SelectionResearchPage />
@@ -97,6 +114,7 @@ const App: React.FC = () => {
 
   const isLowPositionSamplesRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/market-heat/low-position-samples');
   if (isLowPositionSamplesRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="热点低位样本" />;
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">热点低位样本加载中...</div>}>
         <HotThemeLowPositionSamplesPage />
@@ -106,6 +124,7 @@ const App: React.FC = () => {
 
   const isMarketHeatRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/market-heat');
   if (isMarketHeatRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="市场热点" />;
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">市场热点温度计加载中...</div>}>
         <MarketHeatPage />
@@ -429,9 +448,9 @@ const App: React.FC = () => {
         routeHref={reviewHref}
         routeLabel="去复盘"
         routeTitle="打开复盘页面"
-        secondaryRouteHref={selectionHref}
-        secondaryRouteLabel="去选股"
-        secondaryRouteTitle="打开选股研究工作台"
+        secondaryRouteHref={CLOUD_LITE_MODE ? undefined : selectionHref}
+        secondaryRouteLabel={CLOUD_LITE_MODE ? undefined : "去选股"}
+        secondaryRouteTitle={CLOUD_LITE_MODE ? undefined : "打开选股研究工作台"}
         searchValue={query}
         isSearchFocused={isSearchFocused}
         searchResults={results}
@@ -452,20 +471,24 @@ const App: React.FC = () => {
         onSelectHistory={(res) => handleSelectStock(res)}
         rightSlot={
           <div className="flex items-center gap-2">
-            <a
-              href={trendResearchHref}
-              className="hidden rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"
-              title="打开长期趋势研究台"
-            >
-              趋势研究
-            </a>
-            <a
-              href={marketHeatHref}
-              className="hidden rounded-lg border border-amber-700/50 bg-amber-900/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
-              title="打开市场热点温度计"
-            >
-              市场热点
-            </a>
+            {!CLOUD_LITE_MODE && (
+              <>
+                <a
+                  href={trendResearchHref}
+                  className="hidden rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"
+                  title="打开长期趋势研究台"
+                >
+                  趋势研究
+                </a>
+                <a
+                  href={marketHeatHref}
+                  className="hidden rounded-lg border border-amber-700/50 bg-amber-900/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
+                  title="打开市场热点温度计"
+                >
+                  市场热点
+                </a>
+              </>
+            )}
             <ThresholdConfig onConfigUpdate={handleConfigUpdate} />
           </div>
         }
@@ -500,29 +523,31 @@ const App: React.FC = () => {
             <Activity className="w-16 h-16 mx-auto mb-4 opacity-20" />
             <p>请输入股票代码开始监控</p>
             <p className="text-xs mt-2 opacity-60">模式：实时逐笔 (Web) | 历史博弈 (Python Local)</p>
-            <div className="mt-5">
-              <a
-                href={selectionHref}
-                className="inline-flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
-              >
-                <TrendingUp className="h-4 w-4" />
-                去选股研究工作台
-              </a>
-              <a
-                href={trendResearchHref}
-                className="ml-2 inline-flex items-center gap-2 rounded-lg border border-cyan-600/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20"
-              >
-                <BrainCircuit className="h-4 w-4" />
-                看趋势研究
-              </a>
-              <a
-                href={marketHeatHref}
-                className="ml-2 inline-flex items-center gap-2 rounded-lg border border-amber-600/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
-              >
-                <BarChart3 className="h-4 w-4" />
-                看市场热点
-              </a>
-            </div>
+            {!CLOUD_LITE_MODE && (
+              <div className="mt-5">
+                <a
+                  href={selectionHref}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  去选股研究工作台
+                </a>
+                <a
+                  href={trendResearchHref}
+                  className="ml-2 inline-flex items-center gap-2 rounded-lg border border-cyan-600/40 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20"
+                >
+                  <BrainCircuit className="h-4 w-4" />
+                  看趋势研究
+                </a>
+                <a
+                  href={marketHeatHref}
+                  className="ml-2 inline-flex items-center gap-2 rounded-lg border border-amber-600/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  看市场热点
+                </a>
+              </div>
+            )}
           </div>
         )}
 

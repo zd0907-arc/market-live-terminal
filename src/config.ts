@@ -11,3 +11,11 @@ export const getWriteHeaders = (withJson: boolean = false): Record<string, strin
   }
   return headers;
 };
+
+
+const isTruthyEnv = (value: unknown): boolean => {
+  return String(value ?? '').trim().toLowerCase() === 'true' || String(value ?? '').trim() === '1';
+};
+
+// 云端轻量模式：生产只开放盯盘 + 复盘，隐藏并阻断选股/研究类页面入口。
+export const CLOUD_LITE_MODE = isTruthyEnv(import.meta.env.VITE_CLOUD_LITE_MODE || import.meta.env.VITE_CLOUD_LITE);
