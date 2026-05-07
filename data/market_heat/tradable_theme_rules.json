@@ -1,0 +1,119 @@
+{
+  "version": "tradable_theme_rules_v1",
+  "description": "把清洗后的东方财富行业/概念板块合并为 Codex 研究和页面展示使用的可交易主题。",
+  "themes": [
+    {
+      "id": "ai_compute_hardware",
+      "name": "AI算力硬件",
+      "include_keywords": ["CPO", "光通信", "光模块", "光纤", "光芯片", "算力", "数据中心", "服务器", "英伟达", "交换机"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "liquid_cooling_temperature",
+      "name": "液冷/温控",
+      "include_keywords": ["液冷", "温控", "热管理", "散热"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "semiconductor_storage",
+      "name": "半导体设备/存储",
+      "include_keywords": ["半导体", "芯片", "存储", "先进封装", "光刻", "封测", "晶圆", "集成电路"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "innovative_drug_cxo",
+      "name": "创新药/CXO",
+      "include_keywords": ["创新药", "CRO", "CXO", "医疗研发外包", "CAR-T", "细胞疗法", "化学制药", "生物制品", "医药"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "rare_earth_minor_metals",
+      "name": "稀土/小金属",
+      "include_keywords": ["稀土", "小金属", "钨", "钼", "锂", "钴", "镍", "铜", "铅锌", "黄金", "贵金属", "有色"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "battery_energy_storage",
+      "name": "电池/储能",
+      "include_keywords": ["锂电", "电池", "固态电池", "储能", "钠离子", "动力电池", "电池化学品", "正极", "负极", "电解液"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "power_grid_equipment",
+      "name": "电力设备/电网",
+      "include_keywords": ["电力设备", "智能电网", "电网", "特高压", "虚拟电厂", "输变电", "逆变器"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "robotics",
+      "name": "人形机器人/机器人",
+      "include_keywords": ["机器人", "人形机器人", "减速器", "执行器", "机器视觉", "工业母机", "工控"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "low_altitude_economy",
+      "name": "低空经济/无人机",
+      "include_keywords": ["低空", "无人机", "飞行汽车", "通用航空", "eVTOL"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "military_aerospace_ship",
+      "name": "军工/船舶/商业航天",
+      "include_keywords": ["军工", "航天", "商业航天", "大飞机", "卫星", "船舶", "海工", "航空", "兵装"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "coal_energy_power",
+      "name": "煤炭能源/电力",
+      "include_keywords": ["煤炭", "能源", "油气", "石油", "天然气", "火力发电", "电力", "公用事业"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "express_logistics",
+      "name": "快递物流",
+      "include_keywords": ["快递", "物流", "交通运输", "仓储", "跨境物流"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "consumer_electronics",
+      "name": "消费电子/PCB",
+      "include_keywords": ["消费电子", "苹果概念", "PCB", "电子元件", "电子烟", "柔性屏", "折叠屏", "智能穿戴"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "media_ai_application",
+      "name": "AI应用/传媒游戏",
+      "include_keywords": ["AI应用", "AIGC", "人工智能", "传媒", "游戏", "短剧", "影视", "数字媒体", "教育"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "chemical_material",
+      "name": "化工/新材料",
+      "include_keywords": ["基础化工", "化学制品", "磷化工", "氟化工", "有机硅", "PVDF", "膜材料", "钛白粉", "新材料"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "real_estate_infra",
+      "name": "地产/基建链",
+      "include_keywords": ["房地产", "住宅开发", "建筑", "建材", "水泥", "装配建筑", "工程建设", "房屋检测"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "food_beverage_consumption",
+      "name": "食品饮料/消费",
+      "include_keywords": ["食品", "饮料", "白酒", "调味", "零食", "旅游", "酒店", "新零售", "电商", "消费"],
+      "exclude_keywords": []
+    },
+    {
+      "id": "environmental_protection",
+      "name": "环保/碳中和",
+      "include_keywords": ["环保", "节能", "碳中和", "低碳", "污水", "固废", "土壤修复"],
+      "exclude_keywords": []
+    }
+  ],
+  "fallback": {
+    "industry_as_theme": false,
+    "min_member_count": 5,
+    "max_themes_per_stock": 8
+  }
+}

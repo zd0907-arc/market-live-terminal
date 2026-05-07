@@ -42,7 +42,12 @@
 | 官方事件层 | `/api/stock_events/*` |
 | Watchlist / Config / Ingest | `/api/watchlist`, `/api/config`, `/api/internal/ingest/*` |
 
-## 6. 全局契约红线
+## 6. 探索接口
+| 组别 | 当前口径 |
+|---|---|
+| 市场热度研究 | `/api/market_heat/latest`, `/api/market_heat/history` 当前仅作为 `CAP-MARKET-HEAT` 探索接口；在热点能力正式化前，不并入正式策略契约。 |
+
+## 7. 全局契约红线
 1. 写接口必须走 `X-Write-Token`。
 2. 空状态必须显式返回，不允许静默假空。
 3. 正式主路径与沙盒/过渡链路必须隔离。

@@ -33,6 +33,8 @@ import { APP_VERSION } from '../../version';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
 const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
+const OBSERVATION_FALLBACK_STRATEGY: SelectionStrategy = 'v2';
+const OBSERVATION_FALLBACK_LIMIT = 10;
 const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
 type ActiveStrategy = 'daily_review' | Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
 
@@ -325,15 +327,33 @@ const SelectionResearchPage: React.FC = () => {
       let items: SelectionCandidateItem[] = [];
       let nextDate = targetDate;
       if (activeStrategy === 'daily_review') {
-        const [stableData, trendData] = await Promise.all([
+        const [stableData, trendData, observeData] = await Promise.all([
           fetchSelectionCandidates(targetDate, STABLE_CALLBACK_STRATEGY, 10),
           fetchSelectionCandidates(targetDate, TREND_CONTINUATION_STRATEGY, 20),
+          fetchSelectionCandidates(targetDate, OBSERVATION_FALLBACK_STRATEGY, OBSERVATION_FALLBACK_LIMIT),
         ]);
-        items = [
+        const strictItems = [
           ...(stableData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || STABLE_CALLBACK_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[STABLE_CALLBACK_STRATEGY] })),
           ...(trendData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || TREND_CONTINUATION_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[TREND_CONTINUATION_STRATEGY] })),
         ];
-        nextDate = targetDate || stableData?.trade_date || trendData?.trade_date || '';
+        const existingSymbols = new Set(strictItems.map((item) => item.symbol.toLowerCase()));
+        const observeItems = (observeData?.items || [])
+          .filter((item) => item.entry_allowed !== false && !existingSymbols.has(item.symbol.toLowerCase()))
+          .slice(0, OBSERVATION_FALLBACK_LIMIT)
+          .map((item, index) => ({
+            ...item,
+            rank: index + 1,
+            entry_allowed: false,
+            lifecycle_phase: item.lifecycle_phase || 'trend_observation_pool',
+            lifecycle_phase_label: item.lifecycle_phase_label || '优先观察',
+            action_label: '优先观察',
+            candidate_types: [...(item.candidate_types || []), 'ai_observation_fallback'],
+            strategy_internal_id: OBSERVATION_FALLBACK_STRATEGY,
+            strategy_display_name: '优先观察池',
+            reason_summary: item.reason_summary || '旧策略强信号，作为无严格买点时的观察池',
+          }));
+        items = [...strictItems, ...observeItems];
+        nextDate = targetDate || stableData?.trade_date || trendData?.trade_date || observeData?.trade_date || '';
       } else {
         const data = await fetchSelectionCandidates(targetDate, activeStrategy, activeStrategy === TREND_CONTINUATION_STRATEGY ? 20 : 10);
         items = data?.items || [];
@@ -558,9 +578,10 @@ const SelectionResearchPage: React.FC = () => {
       ? Promise.all([
           fetchSelectionTradeDates(datePickerMin, datePickerMax, STABLE_CALLBACK_STRATEGY),
           fetchSelectionTradeDates(datePickerMin, datePickerMax, TREND_CONTINUATION_STRATEGY),
-        ]).then(([stable, trend]) => {
+          fetchSelectionTradeDates(datePickerMin, datePickerMax, OBSERVATION_FALLBACK_STRATEGY),
+        ]).then(([stable, trend, observe]) => {
           const byDate: Record<string, SelectionTradeDateItem> = {};
-          [...(stable?.items || []), ...(trend?.items || [])].forEach((item) => {
+          [...(stable?.items || []), ...(trend?.items || []), ...(observe?.items || [])].forEach((item) => {
             const prev = byDate[item.date];
             byDate[item.date] = {
               ...item,

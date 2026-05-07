@@ -975,7 +975,7 @@ def test_stock_event_collection_audit(monkeypatch, tmp_path):
     finally:
         conn.close()
 
-    payload = stock_events.audit_stock_event_collection("sz000833", days=30, recent_limit=5)
+    payload = stock_events.audit_stock_event_collection("sz000833", days=365, recent_limit=5)
 
     assert payload["collection_status"] == "partial"
     assert payload["group_counts"]["official"] >= 1

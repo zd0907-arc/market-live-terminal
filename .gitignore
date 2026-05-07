@@ -17,6 +17,7 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.obsidian/
 .DS_Store
 *.suo
 *.ntvs*
@@ -38,6 +39,17 @@ __pycache__/
 .venv/
 .run/
 
+# Tracked lightweight research/config artifacts under ignored data/
+!data/
+data/*
+!data/market_heat/
+data/market_heat/*
+!data/market_heat/*.json
+!data/selection/
+data/selection/*
+!data/selection/long_term_trends/
+!data/selection/long_term_trends/**
+
 # Environment Variables (绝对禁止提交)
 .env
 .env.local
@@ -53,6 +65,8 @@ win_cloud_autobot.py
 win_to_cloud_autobot.py
 kill_result.txt
 perf_out.txt
+NOTEBOOKLM_SYNC_TEST.md
 
 # Legacy nested repo copy (do not develop here)
 market-live-terminal/
+notebooklm-sync/dist/

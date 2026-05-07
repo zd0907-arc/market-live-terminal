@@ -28,6 +28,11 @@ MOCK_DATA_DATE = ""  # e.g., "2026-02-12"
 
 
 def candidate_atomic_db_paths() -> List[str]:
+    # 测试/临时环境经常只注入 DB_PATH 指向一个空的 tmp db。
+    # 这种情况下如果继续回退到本机正式 atomic 库，会让单元测试或临时服务混入真实数据。
+    # 正式本地研究站会显式注入 ATOMIC_*，直接启动且无 DB_PATH 时才使用默认 atomic 路径。
+    if os.getenv("DB_PATH") and not os.getenv("ATOMIC_DB_PATH") and not os.getenv("ATOMIC_MAINBOARD_DB_PATH"):
+        return []
     candidates = [
         os.getenv("ATOMIC_DB_PATH", ""),
         os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),

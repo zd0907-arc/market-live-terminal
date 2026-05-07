@@ -66,3 +66,19 @@
 - 长期趋势模块：解决“哪个产业趋势可能持续 1-3 年，谁是最核心受益者，涨了以后还能不能继续拿”。
 
 两者不能混用卖点。短线票可以按资金和 5-20 日窗口卖；长期票必须按产业逻辑、财务兑现、趋势破坏和估值透支来卖。
+
+## 6. 存储主线跟踪体系（2026-05-07）
+
+- 跟踪脚本：`backend/scripts/build_storage_trend_tracking.py`
+- 行业信号表：`data/selection/long_term_trends/storage/industry_signal_log.csv`
+- A股跟踪池：`data/selection/long_term_trends/storage/a_share_storage_watchlist.csv`
+- 估值情景配置：`data/selection/long_term_trends/storage/valuation_scenario_config.csv`
+- 最新日报：`docs/selection/long_term_trends/storage/storage_tracking_report_2026-05-07.md`
+
+使用方式：
+
+```bash
+python3 backend/scripts/build_storage_trend_tracking.py
+```
+
+输出会生成 A 股价格阶段、公司财务快照、海外原厂价格阶段、估值压力测试。

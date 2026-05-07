@@ -7,6 +7,7 @@
 ## 2. 选股研究接口
 - `GET /api/selection/health`
 - `GET /api/selection/candidates`
+- `GET /api/selection/trade-dates`
 - `GET /api/selection/profile/{symbol}`
 - `GET /api/selection/research-context/{symbol}`
 - `POST /api/selection/research-context/{symbol}/prepare`
@@ -15,6 +16,9 @@
 - `GET /api/selection/history/multiframe`
 - `GET /api/selection/backtests`
 - `GET /api/selection/backtests/{run_id}`
+- `GET /api/selection/v2/evaluate`
+- `GET /api/selection/stable-callback/evaluate`
+- `GET /api/selection/trend-continuation/evaluate`
 - `POST /api/selection/backtests/run`
 - `POST /api/selection/refresh`
 
@@ -24,3 +28,5 @@
 3. 复盘页股票池当前以正式历史覆盖为准，不再靠早期旧页面口径。
 4. 研究上下文包是页面和 Codex 的共同入口，包含 selection profile、trade plan、price/L2 series、event feed/coverage/audit、company profile、financial snapshot、decision brief、research evidence。
 5. `prepare/prewarm/quick-event-judge` 为写/生成类接口，必须走写权限。
+6. `strategy` 当前支持 `stable_capital_callback`、`trend_continuation_callback`、`v2` 以及旧兼容策略名；默认入口应优先使用稳定回调策略。
+7. 策略评估接口是研究工具，不能直接当生产交易 API。

@@ -27,3 +27,6 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 ## 5. 当前边界
 - Cloud 不承载 full atomic 全量主库
 - 不把 Mac 本地研究站能力直接等同为 Cloud 生产能力
+- Cloud Lite 必保能力只有盯盘与正式复盘；选股、热点、长期趋势研究默认本地使用
+- 后续应通过运行 profile / 环境开关隐藏或禁用 Cloud 非目标模块，不维护两套代码
+- 云端数据清理必须先列白名单，再删旧库/旧目录

@@ -1,7 +1,15 @@
 from fastapi import APIRouter, Query
 
 from backend.app.models.schemas import APIResponse
-from backend.app.services.market_heat import build_market_heat_history_summary, build_market_heat_snapshot, load_snapshot, write_snapshot
+from backend.app.services.market_heat import (
+    build_low_position_l2_sample_summary,
+    build_market_heat_history_summary,
+    build_market_heat_snapshot,
+    get_low_position_l2_sample_detail,
+    load_snapshot,
+    query_low_position_l2_samples,
+    write_snapshot,
+)
 
 router = APIRouter()
 
@@ -31,3 +39,47 @@ def market_heat_history(
         return APIResponse(code=200, data=build_market_heat_history_summary(end_date=end_date, days=days))
     except Exception as exc:
         return APIResponse(code=500, message=f'市场热度历史获取失败: {exc}', data=None)
+
+
+@router.get('/market_heat/low_position_l2_samples/summary', response_model=APIResponse)
+def low_position_l2_samples_summary():
+    try:
+        return APIResponse(code=200, data=build_low_position_l2_sample_summary())
+    except Exception as exc:
+        return APIResponse(code=500, message=f'热点低位L2样本摘要获取失败: {exc}', data=None)
+
+
+@router.get('/market_heat/low_position_l2_samples', response_model=APIResponse)
+def low_position_l2_samples(
+    start_date: str = Query(None, description='开始交易日 YYYY-MM-DD'),
+    end_date: str = Query(None, description='结束交易日 YYYY-MM-DD'),
+    outcome: str = Query('all', description='all/winner/positive/loser/negative'),
+    theme: str = Query(None, description='板块名称'),
+    sort: str = Query('date_desc', description='date_desc/date_asc/d5_desc/d5_asc/score_desc'),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    try:
+        data = query_low_position_l2_samples(
+            start_date=start_date,
+            end_date=end_date,
+            outcome=outcome,
+            theme=theme,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
+        return APIResponse(code=200, data=data)
+    except Exception as exc:
+        return APIResponse(code=500, message=f'热点低位L2样本列表获取失败: {exc}', data=None)
+
+
+@router.get('/market_heat/low_position_l2_samples/detail', response_model=APIResponse)
+def low_position_l2_sample_detail(
+    trade_date: str = Query(..., description='信号交易日 YYYY-MM-DD'),
+    symbol: str = Query(..., description='股票代码，如 sz000001'),
+):
+    try:
+        return APIResponse(code=200, data=get_low_position_l2_sample_detail(trade_date=trade_date, symbol=symbol))
+    except Exception as exc:
+        return APIResponse(code=500, message=f'热点低位L2样本详情获取失败: {exc}', data=None)

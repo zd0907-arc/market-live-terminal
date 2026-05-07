@@ -145,6 +145,9 @@ const MarketHeatPage: React.FC = () => {
           <div className="mr-2 flex items-center gap-2 text-base font-bold text-white"><Flame className="h-5 w-5 text-amber-400" />市场热点温度计</div>
           <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">v{APP_VERSION}</span>
           <span className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-400">交易日 {snapshot?.meta?.trade_date || '--'}</span>
+          <a href="/market-heat/low-position-samples" className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500">
+            热点低位样本
+          </a>
           <button type="button" onClick={() => load(true)} disabled={loading} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500 disabled:opacity-60">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />{loading ? '生成中' : '重新生成'}
           </button>

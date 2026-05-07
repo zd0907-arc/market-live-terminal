@@ -1,5 +1,12 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-07 00:30 | Codex
+- Task ID: `MOD-20260507-01-repo-consolidation-cloud-lite-freeze`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`
+- 结论: 仓库收口进入 `codex/repo-consolidation-20260506` 分支：合入 GitHub main 与本地 v5.1.0，保护 `docs/selection/long_term_trends/` 作为当前唯一持续更新研究目录，并把 Cloud 后续边界冻结为 Lite：盯盘 + 复盘优先。
+- 风险: 本轮不发布云端、不删除云端数据；热点/选股/长期研究默认本地使用，Cloud 需后续通过 profile 隐藏或禁用。
+- 链接: `docs/changes/MOD-20260507-01-repo-consolidation-cloud-lite-freeze.md`, `docs/selection/long_term_trends/README.md`
+
 ## 2026-05-06 00:45 | Codex
 - Task ID: `MOD-20260506-01-market-heat-strong-momentum-exit-research`
 - CAP: `CAP-SELECTION-RESEARCH`

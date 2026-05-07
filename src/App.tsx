@@ -14,6 +14,7 @@ const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDa
 const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
+const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
@@ -79,6 +80,15 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
         <SelectionResearchPage />
+      </Suspense>
+    );
+  }
+
+  const isLowPositionSamplesRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/market-heat/low-position-samples');
+  if (isLowPositionSamplesRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">热点低位样本加载中...</div>}>
+        <HotThemeLowPositionSamplesPage />
       </Suspense>
     );
   }

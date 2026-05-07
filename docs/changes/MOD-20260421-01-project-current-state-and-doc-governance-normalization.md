@@ -11,17 +11,18 @@
   1. **代码当前真相** 与 **core docs 描述** 漂移；
   2. `docs/changes/` 中沉淀了大量过程卡，缺少一个“现在到底什么是真的”的统一入口。
 
-## 2. 当前真相（2026-04-24）
+## 2. 当前真相（2026-04-29）
 
 ### 2.1 主代码与工作目录
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前唯一主线分支：`main`
-- 当前主线版本：`v5.0.0`
+- 当前工作版本：`v5.1.0`
 - 当前主线已包含：
   - 本地研究站口径；
   - 正式复盘主链路；
   - 选股研究工作台；
   - 官方事件层（`stock_events`）。
+- 当前主工作区允许处于 `codex/*` 当前需求分支；额外 worktree 只作为隔离研究环境，不作为默认文档整理入口。
 
 ### 2.2 当前页面入口
 - 首页：只保留新版壳层，不再保留“旧版 / 新版”切换作为当前真相描述。
@@ -30,6 +31,10 @@
   - 当前仅作为兼容入口；
   - 前端会自动收口到 `/review`。
 - 选股研究页：`/selection-research`
+- 热点板块页：`/market-heat`
+  - 当前是研究 / 原型入口；
+  - 不计入已落地核心三模块；
+  - 不把热点结果直接写入正式选股打分。
 
 ### 2.3 当前三端职责
 - Windows：raw、正式跑数、处理后正式库与研究结果真相源；
@@ -41,6 +46,12 @@
 - `docs/changes/*.md` 保留历史过程，但不再充当“当前真相入口”；
 - 若一个主题已有大量 `REQ/STG/INV/MOD` 过程卡，优先通过一张 `MOD-* current-state` 母卡收口；
 - 历史卡不删，但需要让读者一眼知道“先看哪一张”。
+
+### 2.5 当前研究冻结口径（2026-05-07）
+- 盯盘、复盘、选股、热点研究的功能开发默认进入冻结 / 收口状态，除非用户明确重新开启。
+- 当前唯一持续更新研究目录：`docs/selection/long_term_trends/`。
+- Cloud 后续只按 Lite 目标发布：盯盘 + 复盘优先；选股、热点、长期趋势研究默认不作为云端必需能力。
+- 后续清理、stash、worktree 收口时，必须确认长期趋势目录仍在工作区且已纳入版本管理。
 
 ## 3. 这次治理收口的目标
 1. 修正 core docs 中与当前代码不一致的描述；
@@ -72,6 +83,7 @@
   - canonical 路由：`/review`
   - `/sandbox-review` 仅兼容跳转
 - 选股研究页：`src/components/selection/SelectionResearchPage.tsx`
+- 热点板块研究页：`src/components/market/MarketHeatPage.tsx`（探索中）
 - 实时盯盘：`src/components/dashboard/RealtimeView.tsx`
 - 散户情绪：`src/components/sentiment/SentimentDashboard.tsx`
 
@@ -79,6 +91,7 @@
 - 应用入口：`backend/app/main.py`
 - 正式复盘路由：`backend/app/routers/review.py`
 - 选股研究路由：`backend/app/routers/selection.py`
+- 热点板块研究路由：`backend/app/routers/market_heat.py`（探索中）
 - 事件层路由：`backend/app/routers/stock_events.py`
 - sandbox 兼容路由：`backend/app/routers/sandbox_review.py`
 
@@ -101,6 +114,11 @@
   - `data/selection/selection_research.db`
   - `data/user_data.db`
 - `snapshot` 相关文件仅保留为验证 / 过渡工具，不再描述为正式主路径。
+
+## 6.6 已落地三模块现状
+- 盯盘：主路径为首页当日分时 / 历史多维，生产实时链路仍是 Windows crawler -> Cloud ingest -> Cloud 轻量库；Mac 本地只默认读同步库并支持单票按需 hydrate。
+- 正式复盘：canonical 路由 `/review`，接口为 `/api/review/pool` 与 `/api/review/data`，复用正式 L2 历史表；`/sandbox-review` 只做兼容跳转。
+- 选股研究：canonical 路由 `/selection-research`，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；当前定位是研究与观察工作台，策略效果和覆盖面仍需继续验证，不能当自动交易信号。
 
 ## 7. 风险
 - 如果后续继续直接阅读早期 `REQ/STG` 卡而不先看本卡，仍可能误把历史计划当当前真相；

@@ -795,29 +795,51 @@ def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str
     cloud_tmp_dir = f"{CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}"
     report_file = f"{cloud_tmp_dir}/cloud_merge_report.json"
     log_file = f"{cloud_tmp_dir}/cloud_merge.log"
-    pid_file = f"{cloud_tmp_dir}/cloud_merge.pid"
-    start_cmd = (
+    merge_cmd = (
         f"mkdir -p {shlex.quote(cloud_tmp_dir)} && "
-        f"rm -f {shlex.quote(report_file)} {shlex.quote(log_file)} {shlex.quote(pid_file)} && "
+        f"rm -f {shlex.quote(report_file)} {shlex.quote(log_file)} && "
         f"cd {shlex.quote(CLOUD_PROJECT_ROOT_ABS)} && "
-        f"nohup sudo -n python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
+        f"sudo -n python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
         f"--artifacts {shlex.quote(artifacts_arg)} "
         f'--source-root {shlex.quote("postclose_l2_daily")} '
         f'--mode {shlex.quote("postclose_one_command")} --json '
-        f"> {shlex.quote(report_file)} 2> {shlex.quote(log_file)} < /dev/null & echo $! > {shlex.quote(pid_file)}"
+        f"> {shlex.quote(report_file)} 2> {shlex.quote(log_file)}"
     )
-    _run_cloud_bash(start_cmd)
+    proc = subprocess.Popen(
+        [
+            "ssh",
+            "-n",
+            "-o",
+            "ServerAliveInterval=30",
+            "-o",
+            "ServerAliveCountMax=6",
+            CLOUD_HOST,
+            merge_cmd,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     merge_report: Optional[Dict[str, object]] = None
     last_log = ""
-    for _ in range(360):
-        result = _run_cloud_bash(f"test -s {shlex.quote(report_file)} && cat {shlex.quote(report_file)}", check=False)
-        stdout = str(result.stdout or "").strip()
-        if result.returncode == 0 and stdout:
-            merge_report = _parse_json_output(stdout)
-            break
-        log_result = _run_cloud_bash(f"test -f {shlex.quote(log_file)} && tail -n 20 {shlex.quote(log_file)}", check=False)
-        last_log = str(log_result.stdout or "").strip()
-        time.sleep(5)
+    try:
+        for _ in range(360):
+            result = _run_cloud_bash(f"test -s {shlex.quote(report_file)} && cat {shlex.quote(report_file)}", check=False)
+            stdout = str(result.stdout or "").strip()
+            if result.returncode == 0 and stdout:
+                merge_report = _parse_json_output(stdout)
+                break
+            log_result = _run_cloud_bash(f"test -f {shlex.quote(log_file)} && tail -n 20 {shlex.quote(log_file)}", check=False)
+            last_log = str(log_result.stdout or "").strip()
+            if proc.poll() is not None and result.returncode != 0:
+                break
+            time.sleep(5)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
     if merge_report is None:
         raise RuntimeError(f"[{trade_date}] 云端 merge 超时或无报告输出: {last_log}")
     _progress(

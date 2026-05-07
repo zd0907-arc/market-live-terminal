@@ -3,10 +3,11 @@
 ## 当前真相
 - 当前稳定基线目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前主线分支：`main`
-- 当前主线代码版本：`v5.0.0`
+- 当前工作版本：`v5.1.0`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
 - 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前运行架构总入口：`docs/changes/MOD-20260417-01-local-research-current-state.md`
+- 当前唯一持续更新研究目录：`docs/selection/long_term_trends/`
 - 当前阶段回滚锚点：
   - 老阶段：`stage-pre-selection-v4.2.32`
   - 选股进行中阶段：`stage-selection-in-progress-v4.3.2`
@@ -24,7 +25,8 @@
 ## 当前 worktree / 分支纪律
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前唯一主线分支：`main`
-- 历史 worktree / 临时分支只作为备份，不再作为默认开发入口
+- `codex/*` 分支只承接当前需求；历史 worktree / 临时分支只作为备份，不再作为默认开发入口
+- 若存在多个 worktree，默认只在上述主工作目录整理文档和做主线收口。
 
 ## 当前数据职责
 - 云端：盯盘 / 手机应急查看
@@ -44,17 +46,20 @@ npm run check:baseline
 4. Mac 不直接跨网络读 Windows sqlite 主库。
 5. `snapshot` 只作为验证/应急工具，不作为当前正式主方案。
 6. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
+7. 清理 / stash / worktree 收口前，必须确认 `docs/selection/long_term_trends/` 没被隐藏或遗漏。
 
 ## 当前文档阅读顺序
-1. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
-2. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
-3. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
-4. 需要细节时再进入：
+1. `README.md`：确认当前工作目录、版本、模块边界
+2. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
+3. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
+4. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
+5. 需要细节时再进入：
    - `docs/domain/*`
    - `docs/contracts/*`
    - `docs/ops/*`
-5. 当前需求过程统一进 `docs/changes/*`
-6. 开始做需求前，先看：`docs/ops/development-workflow.md`
+6. 选股策略细节看 `docs/strategy-rework/LONG_MEMORY.md`
+7. 当前需求过程统一进 `docs/changes/*`
+8. 开始做需求前，先看：`docs/ops/development-workflow.md`
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
@@ -99,5 +104,5 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ## 当前回退入口
 - 老阶段回退：`stage-pre-selection-v4.2.32`
 - 选股进行中阶段回退：`stage-selection-in-progress-v4.3.2`
-- 当前主线代码版本：`v5.0.0`
+- 当前工作版本：`v5.1.0`
 - 运行架构回看：`docs/changes/MOD-20260417-01-local-research-current-state.md`

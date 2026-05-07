@@ -16,6 +16,7 @@ MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "mark
 REPO_THEME_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "themes.seed.json"
 THEME_FILE = Path(os.getenv("MARKET_HEAT_THEME_FILE", str(REPO_THEME_FILE if REPO_THEME_FILE.exists() else MARKET_HEAT_DIR / "themes.seed.json")))
 ATOMIC_DB = Path(os.getenv("MARKET_HEAT_ATOMIC_DB", ATOMIC_MAINBOARD_DB_PATH))
+LOW_POSITION_L2_SAMPLES_DB = Path(os.getenv("HOT_THEME_LOW_POSITION_L2_SAMPLES_DB", str(MARKET_HEAT_DIR / "hot_theme_low_position_l2_samples.db")))
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -210,8 +211,8 @@ def _role(index: int, item: Dict[str, Any]) -> str:
     return "补涨观察"
 
 
-def build_custom_theme_sectors(trade_date: str) -> List[Dict[str, Any]]:
-    themes = load_themes()
+def build_custom_theme_sectors(trade_date: str, themes_override: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    themes = themes_override if themes_override is not None else load_themes()
     all_symbols = [item["symbol"] for theme in themes for item in theme.get("symbols", [])]
     rows_by_symbol = _fetch_symbol_rows(all_symbols, trade_date, lookback_days=90)
     sectors: List[Dict[str, Any]] = []
@@ -365,11 +366,11 @@ def _readout(sector: Dict[str, Any]) -> str:
     return "热度来自多指标合成，需结合代表票强弱和次日承接继续确认。"
 
 
-def build_market_heat_snapshot(trade_date: Optional[str] = None) -> Dict[str, Any]:
+def build_market_heat_snapshot(trade_date: Optional[str] = None, themes_override: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     target = trade_date or latest_trade_date()
     if not target:
         raise RuntimeError("无法确定最新交易日，请检查 atomic_trade_daily")
-    sectors = _score_sectors(build_custom_theme_sectors(target))
+    sectors = _score_sectors(build_custom_theme_sectors(target, themes_override=themes_override))
     hot = sorted(sectors, key=lambda item: item.get("hot_score", 0), reverse=True)
     persistent = sorted(sectors, key=lambda item: item.get("persistence_score", 0), reverse=True)
     emerging = sorted(
@@ -547,3 +548,213 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
         lines.append(f"- {sector.get('name')}：标签 {','.join(sector.get('risk_tags') or [])}；{sector.get('readout')}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _parse_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        return json.loads(str(value))
+    except Exception:
+        return value
+
+
+def _sample_db_required() -> Path:
+    if not LOW_POSITION_L2_SAMPLES_DB.exists():
+        raise FileNotFoundError(f"热点低位L2样本库不存在，请先运行 backend/scripts/export_hot_theme_low_position_l2_samples.py: {LOW_POSITION_L2_SAMPLES_DB}")
+    return LOW_POSITION_L2_SAMPLES_DB
+
+
+def _sample_row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    out = dict(row)
+    for key in ["unbuyable_limit_up_open", "intraday_fade"]:
+        if key in out:
+            out[key] = bool(out[key])
+    return out
+
+
+def build_low_position_l2_sample_summary() -> Dict[str, Any]:
+    db_path = _sample_db_required()
+    with sqlite3.connect(str(db_path), timeout=30) as conn:
+        conn.row_factory = sqlite3.Row
+        meta = {str(row["key"]): _parse_json_value(row["value"]) for row in conn.execute("SELECT key, value FROM meta")}
+        summary_row = conn.execute("SELECT payload FROM summary_json WHERE id=1").fetchone()
+        summary = json.loads(summary_row["payload"]) if summary_row else {}
+        date_row = conn.execute("SELECT MIN(trade_date) AS start_date, MAX(trade_date) AS end_date, COUNT(*) AS sample_count FROM samples").fetchone()
+        themes = [
+            {"theme_name": row["theme_name"], "count": int(row["count"])}
+            for row in conn.execute(
+                """
+                SELECT theme_name, COUNT(*) AS count
+                FROM samples
+                GROUP BY theme_name
+                ORDER BY count DESC, theme_name
+                LIMIT 100
+                """
+            )
+        ]
+    return {
+        "meta": {
+            **meta,
+            "db_path": str(db_path),
+            "start_date": date_row["start_date"] if date_row else None,
+            "end_date": date_row["end_date"] if date_row else None,
+            "sample_count": int(date_row["sample_count"] or 0) if date_row else 0,
+        },
+        "summary": summary,
+        "filters": {
+            "themes": themes,
+            "outcomes": [
+                {"value": "all", "label": "全部"},
+                {"value": "winner", "label": "D+5 > 3%"},
+                {"value": "positive", "label": "D+5 > 0"},
+                {"value": "loser", "label": "D+5 < -3%"},
+                {"value": "negative", "label": "D+5 < 0"},
+            ],
+        },
+    }
+
+
+def query_low_position_l2_samples(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    outcome: str = "all",
+    theme: Optional[str] = None,
+    sort: str = "date_desc",
+    limit: int = 200,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    db_path = _sample_db_required()
+    where: List[str] = []
+    params: List[Any] = []
+    if start_date:
+        where.append("trade_date >= ?")
+        params.append(start_date)
+    if end_date:
+        where.append("trade_date <= ?")
+        params.append(end_date)
+    if theme:
+        where.append("theme_name = ?")
+        params.append(theme)
+    if outcome == "winner":
+        where.append("d5_return_pct >= 3")
+    elif outcome == "positive":
+        where.append("d5_return_pct > 0")
+    elif outcome == "loser":
+        where.append("d5_return_pct <= -3")
+    elif outcome == "negative":
+        where.append("d5_return_pct < 0")
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    order_sql = {
+        "date_asc": "trade_date ASC, shadow_score DESC",
+        "d5_desc": "d5_return_pct DESC, trade_date DESC",
+        "d5_asc": "d5_return_pct ASC, trade_date DESC",
+        "score_desc": "shadow_score DESC, trade_date DESC",
+    }.get(sort, "trade_date DESC, shadow_score DESC")
+    fields = """
+        trade_date, symbol, name, theme_name, theme_rank, theme_recent_hits,
+        close, return_5d_pct, position_20d, ma60_distance_abs_pct,
+        amount_ratio_10d, l2_main_net_2d_yi, l2_super_net_3d_yi,
+        super_positive_days_3d, entry_date, open_gap_pct, open_gap_bin,
+        intraday_fade, entry_label, d1_return_pct, d3_return_pct, d5_return_pct,
+        d5_alpha_pct, market_liquidity_label, market_advancer_ratio, shadow_score
+    """
+    with sqlite3.connect(str(db_path), timeout=30) as conn:
+        conn.row_factory = sqlite3.Row
+        total = conn.execute(f"SELECT COUNT(*) FROM samples {where_sql}", params).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT {fields} FROM samples {where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?",
+            (*params, max(1, min(1000, int(limit))), max(0, int(offset))),
+        ).fetchall()
+    return {
+        "items": [_sample_row_to_dict(row) for row in rows],
+        "total": int(total),
+        "limit": int(limit),
+        "offset": int(offset),
+        "sort": sort,
+    }
+
+
+def _price_window(symbol: str, trade_date: str, back_days: int = 25, forward_days: int = 8) -> List[Dict[str, Any]]:
+    if not ATOMIC_DB.exists():
+        return []
+    dates = _trade_dates("9999-12-31", 500)
+    if trade_date not in dates:
+        return []
+    i = dates.index(trade_date)
+    window = dates[max(0, i - back_days): min(len(dates), i + forward_days + 1)]
+    if not window:
+        return []
+    with sqlite3.connect(str(ATOMIC_DB), timeout=30) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT trade_date, open, high, low, close, total_amount,
+                   l2_main_net_amount, l2_super_net_amount
+            FROM atomic_trade_daily
+            WHERE symbol = ?
+              AND trade_date >= ?
+              AND trade_date <= ?
+            ORDER BY trade_date
+            """,
+            (symbol, window[0], window[-1]),
+        ).fetchall()
+    return [
+        {
+            "trade_date": row["trade_date"],
+            "open": _round(row["open"], 3),
+            "high": _round(row["high"], 3),
+            "low": _round(row["low"], 3),
+            "close": _round(row["close"], 3),
+            "amount_yi": _round(_safe_float(row["total_amount"]) / 1e8, 3),
+            "l2_main_net_yi": _round(_safe_float(row["l2_main_net_amount"]) / 1e8, 3),
+            "l2_super_net_yi": _round(_safe_float(row["l2_super_net_amount"]) / 1e8, 3),
+            "is_signal_day": row["trade_date"] == trade_date,
+        }
+        for row in rows
+    ]
+
+
+def _sample_readout(sample: Dict[str, Any]) -> Dict[str, str]:
+    d5 = _safe_float(sample.get("d5_return_pct"))
+    if d5 >= 3:
+        verdict = "这是一笔有效补涨样本：D+5 明显跑赢，说明热点扩散确实点燃了低位票。"
+    elif d5 <= -3:
+        verdict = "这是失败样本：虽然资金和位置满足条件，但后续没有承接，适合重点复盘风险触发点。"
+    else:
+        verdict = "这是中性样本：信号有效性不强，更多体现为低位承接而非爆发。"
+    setup = (
+        f"{sample.get('trade_date')}，{sample.get('name')} 属于 {sample.get('theme_name')}，"
+        f"该主题近5日进入热点 Top10 {sample.get('theme_recent_hits')} 次；"
+        f"个股20日位置 {sample.get('position_20d')}，60日乖离 {sample.get('ma60_distance_abs_pct')}%，"
+        f"量能比 {sample.get('amount_ratio_10d')}。"
+    )
+    funding = (
+        f"L2主力两日净流入 {sample.get('l2_main_net_2d_yi')} 亿，"
+        f"超大单三日净流入 {sample.get('l2_super_net_3d_yi')} 亿，"
+        f"超大单阳性天数 {sample.get('super_positive_days_3d')}/3。"
+    )
+    entry = (
+        f"D+1 开盘缺口 {sample.get('open_gap_pct')}%，{sample.get('entry_label')}；"
+        f"D+3 {sample.get('d3_return_pct')}%，D+5 {sample.get('d5_return_pct')}%。"
+    )
+    return {"setup": setup, "funding": funding, "entry": entry, "verdict": verdict}
+
+
+def get_low_position_l2_sample_detail(trade_date: str, symbol: str) -> Dict[str, Any]:
+    db_path = _sample_db_required()
+    normalized = _symbol_norm(symbol)
+    with sqlite3.connect(str(db_path), timeout=30) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM samples WHERE trade_date = ? AND symbol = ?",
+            (trade_date, normalized),
+        ).fetchone()
+    if not row:
+        raise FileNotFoundError(f"样本不存在: {trade_date} {normalized}")
+    sample = _sample_row_to_dict(row)
+    return {
+        "sample": sample,
+        "readout": _sample_readout(sample),
+        "price_window": _price_window(normalized, trade_date),
+    }

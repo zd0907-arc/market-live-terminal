@@ -43,6 +43,10 @@ def test_realtime_dashboard_prefers_history_on_weekend_backfill(monkeypatch):
         "backend.app.services.analysis.get_history_1m_dashboard",
         fake_history,
     )
+    monkeypatch.setattr(
+        "backend.app.services.analysis.get_history_l2_dashboard",
+        lambda symbol, date_str: None,
+    )
 
     resp = asyncio.run(get_realtime_dashboard(symbol="sh600519", date=None))
 
@@ -91,6 +95,10 @@ def test_realtime_dashboard_weekend_backfill_falls_back_to_ticks_when_history_mi
     monkeypatch.setattr(
         "backend.app.services.analysis.get_history_1m_dashboard",
         fake_history,
+    )
+    monkeypatch.setattr(
+        "backend.app.services.analysis.get_history_l2_dashboard",
+        lambda symbol, date_str: None,
     )
 
     resp = asyncio.run(get_realtime_dashboard(symbol="sh600519", date=None))

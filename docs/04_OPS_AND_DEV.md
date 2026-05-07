@@ -61,8 +61,9 @@ bash ops/run_postclose_l2.sh
 ## 6. 当前工作目录与主线
 - 主目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 主线分支：`main`
-- 当前版本：`v5.0.0`
+- 当前工作版本：`v5.1.0`
 - 当前项目真相入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+- 临时需求分支可使用 `codex/*`，但默认不把额外 worktree 作为主开发入口。
 
 ## 7. 相关规则
 - 变更流程：`docs/06_CHANGE_MANAGEMENT.md`
