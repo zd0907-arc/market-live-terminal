@@ -1,0 +1,7 @@
+category,indicator,current_value,direction,importance,signal_state,status,source,frequency,next_check,decision_use,source_url
+热度,机器人执行器/减速器Top30天数,18次Top30，最佳第6名,watch_up,S,预热,已接入,本地市场热点DB,日,每日收盘,连续Top30才升级；连续两周不出现则降级。,/api/market_heat/fine_dashboard?days=63&pool_size=50
+海外量产,Tesla Optimus Fremont,Q1资料显示Construction；电话会指向7月底/8月启动,up,S,待兑现,半结构化,Tesla Q1 Update / Electrek,周/月,2026-07-31,实际启动并有爬坡数据则升级；延期则降级。,https://electrek.co/wp-content/uploads/sites/3/2026/04/TSLA-Q1-2026-Update.pdf | https://electrek.co/2026/04/22/tesla-optimus-production-fremont-model-sx-line/
+订单,国内执行器/减速器/丝杠订单,样机验证多，批量订单披露不足,watch,S,未充分确认,待公告,交易所公告/投资者关系,周/季,2026中报,订单和收入占比披露是从观察到研究仓的关键。,https://static.cninfo.com.cn/finalpage/2025-03-27/1222929865.PDF | https://static.cninfo.com.cn/finalpage/2025-05-06/1223478836.PDF
+价格,谐波减速器/滚柱丝杠/电机报价,未接入连续价格曲线,watch,A,数据缺口,待接入,产业链报价/公司口径,周/月,2026-05-31,有连续价格和降本曲线后，BOM价值量因子才能升分。,
+公司,中报机器人相关收入/毛利率,待2026中报披露,watch,S,待验证,待公告,上市公司定期报告,季,2026中报,收入和毛利率兑现才允许升级到订单/财报验证期。,https://www.cninfo.com.cn/new/disclosure
+A股价格,核心标的回撤承接/L2净流入,部分纯标的利润小、资金风险偏高,watch_down,A,不追高,本地快照,litong_similarity,日,每日收盘,分歧后守位且资金转正才考虑加仓；利好不涨先降级。,/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/litong_similarity/litong_similarity_all_20260331_20260430.csv

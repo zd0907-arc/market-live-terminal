@@ -1,0 +1,4 @@
+demand_link,indicator,current_signal,decision_weight,positive_signal,risk_signal,next_check,source,source_url
+CSP CapEx,Top9 北美 CSP 2026 CapEx,8300亿美元，+79% YoY,S,继续上修,资本开支下修,2026-07-31,TrendForce/PRNewswire,
+数据中心功率,Global data-center installed power,155GW，+29% YoY,S,装机功率继续上修,电力约束导致建设放慢,2026-07-31,TrendForce/PRNewswire,
+AI Server,高功率密度服务器,需跟踪GPU/AI server交付,A,高功率GPU服务器继续放量,服务器交付放缓,2026-05-31,NVIDIA/ODM/TrendForce,

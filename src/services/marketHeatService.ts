@@ -104,6 +104,154 @@ export interface MarketHeatHistorySummary {
   series: MarketHeatHistorySeries[];
 }
 
+export interface FineHeatTrendPoint {
+  date: string;
+  rank: number;
+  hot_score: number;
+  pct_change: number;
+}
+
+export interface FineHeatTheme {
+  id: string;
+  name: string;
+  sector_type: string;
+  member_count: number;
+  lifecycle: string;
+  display_score: number;
+  rank_today: number;
+  rank_prev?: number | null;
+  rank_delta: number;
+  rank_improve_5d?: number;
+  hot_score: number;
+  pct_change: number;
+  hot_change_5d: number;
+  front_hits_5: number;
+  hot_hits_5: number;
+  watch_hits_5: number;
+  front_hits_20: number;
+  hot_hits_20: number;
+  watch_hits_20: number;
+  prev_front_hits_10?: number;
+  prev_hot_hits_10?: number;
+  limit_up_count: number;
+  touch_limit_up_count: number;
+  broken_limit_up_count: number;
+  evidence: string[];
+  reason: string;
+  trend: FineHeatTrendPoint[];
+  stock_summary?: {
+    stock_count: number;
+    up_count: number;
+    up_ratio: number;
+    avg_pct_change: number;
+    limit_up_count: number;
+    touch_limit_up_count: number;
+    broken_limit_up_count: number;
+  };
+  stock_groups?: Record<string, FineHeatStock[]>;
+  stocks?: FineHeatStock[];
+}
+
+export interface FineHeatStock {
+  symbol: string;
+  name: string;
+  pct_change: number;
+  close: number;
+  amount_yi: number;
+  l2_net_inflow_yi: number;
+  is_limit_up: boolean;
+  touch_limit_up: boolean;
+  broken_limit_up: boolean;
+  return_5d?: number;
+  return_20d?: number;
+  position_20d?: number;
+  drawdown_20d?: number;
+  amount_ratio_10d?: number;
+  l2_net_inflow_3d_yi?: number;
+  l2_positive_days_3d?: number;
+  ma5?: number;
+  ma10?: number;
+  signal_label?: string;
+  signal_tone?: 'opportunity' | 'strong' | 'hot' | 'risk' | 'watch' | string;
+  opportunity_score?: number;
+  risk_score?: number;
+  history?: FineHeatStockHistoryPoint[];
+}
+
+export interface FineHeatStockHistoryPoint {
+  trade_date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  pct_change?: number;
+  amount_yi?: number;
+  l2_net_inflow_yi?: number;
+}
+
+export interface FineHeatThemeStockDetail {
+  theme_id: string;
+  trade_date: string;
+  stock_summary?: FineHeatTheme['stock_summary'];
+  stock_groups?: Record<string, FineHeatStock[]>;
+  stocks: FineHeatStock[];
+}
+
+export interface FineHeatDashboard {
+  meta: {
+    generated_at: string;
+    trade_date: string;
+    start_date: string;
+    end_date: string;
+    days: number;
+    fine_theme_count: number;
+    front_band: number;
+    orange_band: number;
+    hot_band: number;
+    watch_band: number;
+    first_hot_band?: number;
+    source: string;
+    cache_path?: string;
+    notes?: string[];
+  };
+  cards: {
+    today_strong: FineHeatTheme[];
+    new_hot: FineHeatTheme[];
+    returning: FineHeatTheme[];
+    warming: FineHeatTheme[];
+    mainline: FineHeatTheme[];
+    fading: FineHeatTheme[];
+  };
+  pool: FineHeatTheme[];
+}
+
+export interface FineHeatTradeDateItem {
+  date: string;
+  is_trade_day: boolean;
+  selectable: boolean;
+  has_cache: boolean;
+  is_latest?: boolean;
+}
+
+export interface FineHeatDatesData {
+  latest_trade_date?: string | null;
+  latest_cached_date?: string | null;
+  min_date?: string | null;
+  max_date?: string | null;
+  dates: FineHeatTradeDateItem[];
+  cache_ranges?: Array<{ start_date: string; end_date: string; path: string }>;
+}
+
+export interface FineHeatRefreshResult {
+  trade_date: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+  fine_theme_count?: number;
+  cache_path: string;
+  rebuilt: boolean;
+}
+
 export interface LowPositionL2SampleItem {
   trade_date: string;
   symbol: string;
@@ -222,6 +370,54 @@ export const fetchMarketHeatHistory = async (days = 63, endDate?: string): Promi
     return await parseApiData<MarketHeatHistorySummary>(res);
   } catch (e) {
     console.error('Fetch market heat history error:', e);
+    return null;
+  }
+};
+
+export const fetchFineHeatDashboard = async (days = 63, endDate?: string, poolSize = 18): Promise<FineHeatDashboard | null> => {
+  try {
+    const params = new URLSearchParams({ days: String(days), pool_size: String(poolSize) });
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/market_heat/fine_dashboard?${params.toString()}`);
+    return await parseApiData<FineHeatDashboard>(res);
+  } catch (e) {
+    console.error('Fetch fine heat dashboard error:', e);
+    return null;
+  }
+};
+
+export const fetchFineHeatDates = async (days = 260, endDate?: string): Promise<FineHeatDatesData | null> => {
+  try {
+    const params = new URLSearchParams({ days: String(days) });
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/market_heat/fine_dates?${params.toString()}`);
+    return await parseApiData<FineHeatDatesData>(res);
+  } catch (e) {
+    console.error('Fetch fine heat dates error:', e);
+    return null;
+  }
+};
+
+export const refreshFineHeatDashboard = async (endDate?: string, days = 63, force = true): Promise<FineHeatRefreshResult | null> => {
+  try {
+    const params = new URLSearchParams({ days: String(days), force: String(force) });
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/market_heat/fine_dashboard/refresh?${params.toString()}`, { method: 'POST' });
+    return await parseApiData<FineHeatRefreshResult>(res);
+  } catch (e) {
+    console.error('Refresh fine heat dashboard error:', e);
+    return null;
+  }
+};
+
+export const fetchFineThemeStockDetail = async (themeId: string, endDate?: string, historyDays = 45): Promise<FineHeatThemeStockDetail | null> => {
+  try {
+    const params = new URLSearchParams({ theme_id: themeId, history_days: String(historyDays) });
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/market_heat/fine_theme_stock_detail?${params.toString()}`);
+    return await parseApiData<FineHeatThemeStockDetail>(res);
+  } catch (e) {
+    console.error('Fetch fine theme stock detail error:', e);
     return null;
   }
 };

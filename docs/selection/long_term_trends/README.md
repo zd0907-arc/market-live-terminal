@@ -55,6 +55,11 @@
 - `05_ai_research_prompt.md`：以后和 AI 讨论投资线索时的固定上下文和提问模板。
 - `06_templates.md`：机会卡、标的卡、复盘卡模板。
 - `07_deep_research_workflow.md`：从生活现象到长期趋势选股的深度研究流程。
+- `08_topic_research_sop.md`：长期趋势话题标准研究 SOP，规定线索、评论区扫描、逻辑验证、观察池、五张表和阶段动作。
+- `cases/el_nino_2026-05-07.md`：厄尔尼诺 / 气候异常第一版长期趋势研究卡。
+- `cases/el_nino_2026-05-07_deep_plan.md`：厄尔尼诺 / 气候异常深度研究计划。
+- `cases/el_nino_historical_impact_2026-05-09.md`：厄尔尼诺历史事件、商品影响和行业传导研究。
+- `cases/el_nino_rubber_2026-05-09_research.md`：厄尔尼诺橡胶链长周期价格和驱动因素研究。
 - `cases/storage_2026-05-06.md`：第一张长期趋势试跑卡，研究 AI 存储/内存涨价主线。
 - `cases/storage_2026-05-06_deep_plan.md`：存储涨价主线的深度研究计划和数据清单。
 - `cases/storage_2026-05-06_research_v1.md`：存储主线第一版深度研究结论，含证据表、公司横评和估值情景。
@@ -82,3 +87,17 @@ python3 backend/scripts/build_storage_trend_tracking.py
 ```
 
 输出会生成 A 股价格阶段、公司财务快照、海外原厂价格阶段、估值压力测试。
+
+## 7. 厄尔尼诺 / 气候异常跟踪体系（2026-05-07）
+
+- 最新研究卡：`docs/selection/long_term_trends/cases/el_nino_2026-05-07.md`
+- 页面日报：`docs/selection/long_term_trends/el_nino/el_nino_tracking_report_2026-05-07.md`
+- 跟踪数据：`data/selection/long_term_trends/el_nino/`
+- 当前阶段：概率上升 / 预警期。
+- 核心结论：2026 年中后段厄尔尼诺高概率但不必然；先跟踪 NOAA/WMO、Niño 3.4 / ONI、农产品价格、水利节水、电力制冷和气候风险管理。
+- 历史影响：`docs/selection/long_term_trends/cases/el_nino_historical_impact_2026-05-09.md`；历史统计显示可可、棕榈油、橡胶、小麦在厄尔尼诺后 12 个月平均反应较强，但需要价格和库存确认。
+- 橡胶分支：`docs/selection/long_term_trends/cases/el_nino_rubber_2026-05-09_research.md`；核心结论是 2011 高点约为当前 2.5-3 倍，不是 10-20 倍，海南橡胶为 A 类核心观察，轮胎股为 C 类成本压力旁路。
+- 橡胶操作框架：`docs/selection/long_term_trends/cases/el_nino_rubber_operational_framework_2026-05-09.md`；已把橡胶拆成需求、油价/合成胶、供给、天气、库存、宏观六类评分变量，并落地总分、阈值和动作规则。
+- 橡胶跟踪脚本：`backend/scripts/build_el_nino_rubber_tracking.py`；输出 `rubber_decision_summary_*.csv`、`rubber_factor_scorecard_*.csv`、`rubber_operational_monitor_*.csv`、`rubber_weather_dashboard_*.csv`、`rubber_trade_trigger_rules_*.csv`。
+- 页面入口：趋势研究页选择 `厄尔尼诺-橡胶`，独立展示橡胶总分、六分类评分、天气监控、关键数值和触发规则。
+- 当前动作：进入长期趋势观察池，不直接当交易主线。

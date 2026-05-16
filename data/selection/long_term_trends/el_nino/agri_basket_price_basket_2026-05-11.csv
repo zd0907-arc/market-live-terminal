@@ -1,0 +1,9 @@
+category,latest_value,unit,change_20d_pct,change_60d_pct,price_status,split_research,climate_regions,transmission_logic,tracking_price,split_trigger,a_share_mapping,source,data_status
+白糖,18.7,c/lb,8.4,13.8,趋势走强,预备拆分,印度/泰国/巴西中南部,干旱和降雨偏差先影响甘蔗单产，再传到糖价。,ICE Sugar No.11,连续维持60日线上方 + 主产国产量继续下修,制糖、农业种植、糖业贸易,seed/ICE proxy,seed
+棕榈油,4020,MYR/ton,5.6,11.2,走强观察,继续观察,印尼/马来西亚,东南亚降雨异常影响棕榈鲜果串产量与库存。,Bursa Malaysia CPO,库存连续回落 + 价格突破前高,油脂油料、饲料链,seed/BMD proxy,seed
+咖啡,212.0,c/lb,4.8,9.5,偏强未确认,继续观察,巴西/越南,高温、干旱和降雨异常会影响开花与结实。,ICE Coffee C,天气扰动持续 + 产量预估再下修,咖啡加工、饮品原料,seed/ICE proxy,seed
+可可,7860,USD/ton,6.9,16.4,强趋势,预备拆分,西非/东南亚,异常高温和降雨扰动会放大病虫害与减产。,ICE Cocoa,价格维持强势 + 西非到港/研磨继续偏紧,食品原料、可可加工,seed/ICE proxy,seed
+玉米,468,c/bu,-0.9,2.2,未确认,不拆分,美国中西部/巴西/阿根廷,北美和南美天气偏差影响单产，但当前价格未形成扩散。,CBOT Corn,主产区高温少雨 + USDA 单产下修,饲料、深加工,seed/CBOT proxy,seed
+小麦,601,c/bu,1.1,3.8,弱反弹,不拆分,北美/黑海/澳洲,气候异常影响全球平衡表，但当前库存缓冲仍在。,CBOT Wheat,出口受限 + 主产区减产共振,面粉、粮油加工,seed/CBOT proxy,seed
+大豆/豆粕,3520,CNY/ton,1.7,4.1,观察中,不拆分,巴西/阿根廷/美国,南美天气偏差可扰动产量，但目前价格传导偏弱。,DCE 豆粕主连,南美产量下修 + 豆粕跟随上破,饲料、油脂油料,seed/DCE proxy,seed
+稻米,17.4,USD/cwt,2.4,6.7,边际走强,继续观察,印度/泰国/越南,季风偏差和出口政策更容易传到稻米价格。,Rough Rice,出口限制收紧 + 主产区天气恶化,种植、粮食加工,seed/CBOT proxy,seed

@@ -14,6 +14,9 @@ const HistoryMultiframeFusionView = lazy(() => import('./components/dashboard/Hi
 const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDashboard'));
 const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
+const PPOBacktestReportPage = lazy(() => import('./components/selection/PPOBacktestReportPage'));
+const OpportunityTradeReviewPage = lazy(() => import('./components/selection/OpportunityTradeReviewPage'));
+const S06FusionTradeReviewPage = lazy(() => import('./components/selection/S06FusionTradeReviewPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
@@ -108,6 +111,36 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
         <SelectionResearchPage />
+      </Suspense>
+    );
+  }
+
+  const isPpoBacktestRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-ppo-report');
+  if (isPpoBacktestRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="PPO 回测复盘" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">PPO 回测复盘加载中...</div>}>
+        <PPOBacktestReportPage />
+      </Suspense>
+    );
+  }
+
+  const isOpportunityTradeReviewRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-opportunity-review');
+  if (isOpportunityTradeReviewRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="机会发现交易复盘" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">机会发现交易复盘加载中...</div>}>
+        <OpportunityTradeReviewPage />
+      </Suspense>
+    );
+  }
+
+  const isS06FusionRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-s06-fusion-report');
+  if (isS06FusionRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="机会发现融合回测" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">机会发现融合回测加载中...</div>}>
+        <S06FusionTradeReviewPage />
       </Suspense>
     );
   }
@@ -473,6 +506,13 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             {!CLOUD_LITE_MODE && (
               <>
+                <a
+                  href="/selection-ppo-report"
+                  className="hidden rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/30 px-2.5 py-1.5 text-xs font-medium text-fuchsia-200 transition-colors hover:bg-fuchsia-800/40 md:inline-flex"
+                  title="打开 PPO 回测复盘页面"
+                >
+                  PPO复盘
+                </a>
                 <a
                   href={trendResearchHref}
                   className="hidden rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"

@@ -1,0 +1,4 @@
+date,total_score,price_confirm,demand,oil,supply,weather,inventory,macro,decision
+2026-05-09,76,1,18,10,11,16,16,5,研究观察，当前不建仓
+2026-05-10,83,1,18,10,11,16,16,12,研究观察，当前不建仓
+2026-05-12,69,1,18,4,11,8,16,12,研究观察，当前不建仓

@@ -1,0 +1,6 @@
+module,indicator,source,source_type,frequency,update_method,status,decision_use,failure_mode,source_url
+市场热度,细颗粒主题排名、前30留存、代表票,本地 /api/market_heat/fine_dashboard；fallback fine_theme_heat_daily.db,local_market_data,日,脚本自动读取,已接入,决定当前是否值得盯，以及A股是否过热。,API不可用时读SQLite；若SQLite滞后则保留用户当日rank seed。,/api/market_heat/fine_dashboard?days=63&pool_size=50
+海外龙头,TSMC advanced packaging收入、capex、AI需求,TSMC quarterly transcript,company_official,季,人工更新URL与摘要,已接入,行业趋势分核心证据。,若法说会下修需求，行业分直接降级。,https://investor.tsmc.com/english/encrypt/files/encrypt_file/reports/2026-01/51d09df96cd89ac19d65af39032b038dc2896a24/TSMC%204Q25%20Transcript.pdf
+海外OSAT,Amkor/ASE先进封装收入、CapEx、客户扩产,Amkor IR / ASE press room,company_official,季/月,人工更新,已接入,验证封测环节是否真实受益。,capex下修或毛利率不改善。,https://ir.amkor.com/static-files/1e199e2d-d9ab-45e4-9a12-aee8a68b901c | https://ase.aseglobal.com/press-room/ase-and-wus-announce-strategic-expansion/
+技术路线,玻璃基板/面板级封装验证,Intel / 公司公告 / 产业新闻,company_official,月,人工更新,半结构化,只作为长期路线加分，不直接触发买入。,没有客户认证与良率数据时不升级。,https://www.intc.com/news-events/press-releases/detail/1647/intel-unveils-industry-leading-glass-substrates-to-meet
+A股财报,先进封装收入、毛利率、订单、现金流,上交所/深交所公告,company_filing,季,中报/季报后补录,待接入,决定A股可操作分能否从观察升到研究仓。,只披露概念不披露订单或收入占比。,https://www.sse.com.cn/ | https://www.szse.cn/

@@ -750,3 +750,80 @@ export interface SelectionBacktestDetail {
   summaries: SelectionBacktestSummaryItem[];
   trades: SelectionBacktestTradeItem[];
 }
+
+export interface PpoBacktestTradeItem {
+  symbol: string;
+  name?: string | null;
+  signal_date?: string;
+  entry_bucket: string;
+  entry_date: string;
+  exit_bucket: string;
+  exit_date: string;
+  gross_entry_price: number;
+  gross_exit_price: number;
+  sold_fraction: number;
+  cost_cash: number;
+  realized_cash: number;
+  pnl_cash: number;
+  net_return_pct: number;
+  holding_days?: number;
+  max_runup_pct?: number;
+  max_drawdown_pct?: number;
+  entry_reason?: string;
+  exit_reason: string;
+  theme_names?: string;
+  theme_hits?: number;
+  best_rank?: number;
+  selection_score?: number;
+}
+
+export interface PpoBacktestReport {
+  lab_version: string;
+  mode?: string;
+  model_path?: string | null;
+  report_path?: string | null;
+  range?: { start_date?: string; end_date?: string };
+  data?: { atomic_db_path?: string; symbols?: number; rows?: number; trade_dates?: string[] };
+  training?: Record<string, any>;
+  summary: {
+    initial_budget?: number;
+    final_equity?: number;
+    total_return_pct?: number;
+    max_drawdown_pct?: number;
+    trade_count?: number;
+    open_positions?: number;
+    cash?: number;
+  };
+  total_reward?: number;
+  steps?: number;
+  policy_note?: string;
+  feature_names?: string[];
+  trades: PpoBacktestTradeItem[];
+  actions: Array<Record<string, any>>;
+  equity_curve: Array<Record<string, any>>;
+  symbol_names?: Record<string, string>;
+  by_symbol?: Array<{
+    symbol: string;
+    name?: string | null;
+    trade_count: number;
+    pnl_cash: number;
+    realized_cash: number;
+    invested_cash: number;
+    buy_count: number;
+    sell_count: number;
+    win_count: number;
+    loss_count: number;
+    max_return_pct?: number | null;
+    min_return_pct?: number | null;
+    entry_dates: string[];
+    exit_dates: string[];
+  }>;
+  by_day?: Array<{
+    date: string;
+    trade_count: number;
+    pnl_cash: number;
+    realized_cash: number;
+    open_count: number;
+    close_count: number;
+  }>;
+}

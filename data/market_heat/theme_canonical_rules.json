@@ -1,0 +1,23 @@
+{
+  "version": "theme_canonical_rules_v1",
+  "description": "市场热点细颗粒板块 canonical 治理规则。原始东财板块不改写；热点展示和研究层只使用 canonical 后的主题。",
+  "source_policy": {
+    "primary_dynamic_source": "eastmoney.push2 / eastmoney datacenter stock-plate",
+    "standard_industry_sources": ["申万/中证/证监会行业可作为背景层或交叉校验，不直接替代动态概念源"],
+    "rule": "多源板块不直接混入同一ID；不同来源如果成分股高度重叠，先进入审计，再由 canonical 规则决定展示口径。"
+  },
+  "automatic_rules": {
+    "enabled": true,
+    "dedupe_identical_members": true,
+    "near_duplicate_jaccard_threshold": 0.9,
+    "near_duplicate_min_overlap": 5,
+    "note": "Jaccard >= 0.90 的近重复板块自动只保留一个 canonical；0.75~0.90 只进审计，不自动处理。"
+  },
+  "aliases": [],
+  "manual_review_policy": {
+    "exact_duplicate": "成分股100%一致，自动只保留 canonical。",
+    "near_duplicate": "Jaccard 0.75~0.90 或小板块覆盖率 >= 0.95，输出审计名单，人工确认。",
+    "context_only": "成员数过大或交易含义过宽，只做背景，不进细颗粒热点池。",
+    "exclude": "交易属性、地域、指数、财报、持仓属性、风格标签不进热点池。"
+  }
+}

@@ -29,6 +29,7 @@ import * as StockService from '../../services/stockService';
 import QuoteMetaRow from '../common/QuoteMetaRow';
 import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
+import MarketTopHeader from '../common/MarketTopHeader';
 import { APP_VERSION } from '../../version';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
@@ -36,6 +37,7 @@ const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callb
 const OBSERVATION_FALLBACK_STRATEGY: SelectionStrategy = 'v2';
 const OBSERVATION_FALLBACK_LIMIT = 10;
 const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
+const DAILY_REVIEW_DATE_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
 type ActiveStrategy = 'daily_review' | Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
 
 const STRATEGY_OPTIONS: Array<{ value: ActiveStrategy; label: string }> = [
@@ -73,6 +75,32 @@ const isDateWithin = (value: string, minDate?: string, maxDate?: string) => {
 const fmtMarketCap = (value?: number | null) => {
   if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) return '--';
   return `${(Number(value) / 1e8).toFixed(2)}亿`;
+};
+
+const mergeTradeDateItems = (datasets: Array<SelectionTradeDatesData | null | undefined>): SelectionTradeDatesData => {
+  const byDate: Record<string, SelectionTradeDateItem> = {};
+  datasets.flatMap((data) => data?.items || []).forEach((item) => {
+    const prev = byDate[item.date];
+    byDate[item.date] = {
+      ...item,
+      signal_count: (prev?.signal_count || 0) + (item.signal_count || 0),
+      selectable: Boolean(prev?.selectable || item.selectable),
+      disabled_reason: prev?.selectable || item.selectable ? null : item.disabled_reason,
+    };
+  });
+  return { items: Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)) };
+};
+
+const latestSelectableDate = (items: SelectionTradeDateItem[]) => (
+  items.filter((item) => item.selectable).map((item) => item.date).sort().pop() || ''
+);
+
+const tradeDateItemsToMap = (items: SelectionTradeDateItem[]) => {
+  const next: Record<string, SelectionTradeDateItem> = {};
+  items.forEach((item) => {
+    next[item.date] = item;
+  });
+  return next;
 };
 
 const SectionCard: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
@@ -224,7 +252,7 @@ const TradeDatePicker: React.FC<{
             })}
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-3 text-[11px]">
-            <span className="text-slate-500">亮点=有评分数据，灰色/删除线=不可选</span>
+            <span className="text-slate-500">亮点=有主策略候选，灰色/删除线=不可选</span>
             <button type="button" onClick={jumpLatest} className="rounded-lg border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800">
               最新
             </button>
@@ -308,9 +336,18 @@ const SelectionResearchPage: React.FC = () => {
   const loadHealth = async () => {
     const data = await fetchSelectionHealth();
     setHealth(data);
-    if (data?.latest_signal_date) {
-      setPendingTradeDate((prev) => prev || data.latest_signal_date || '');
+    return data;
+  };
+
+  const loadSelectableDates = async (minDate: string, maxDate: string): Promise<SelectionTradeDatesData | null> => {
+    if (!minDate || !maxDate) return null;
+    if (activeStrategy === 'daily_review') {
+      const datasets = await Promise.all(
+        DAILY_REVIEW_DATE_STRATEGIES.map((strategy) => fetchSelectionTradeDates(minDate, maxDate, strategy))
+      );
+      return mergeTradeDateItems(datasets);
     }
+    return fetchSelectionTradeDates(minDate, maxDate, activeStrategy);
   };
 
   const loadCandidates = async (dateArg = tradeDate, force = false, prewarm = false) => {
@@ -484,9 +521,30 @@ const SelectionResearchPage: React.FC = () => {
     setRefreshing(true);
     setError('');
     try {
-      await refreshSelectionResearch(undefined, tradeDate || undefined);
-      await loadHealth();
-      await loadCandidates(tradeDate, true, true);
+      const beforeHealth = await loadHealth();
+      const latestDate = String(
+        beforeHealth?.source_snapshot?.history_bounds?.max_date
+          || beforeHealth?.source_snapshot?.atomic_bounds?.max_date
+          || beforeHealth?.latest_signal_date
+          || tradeDate
+          || ''
+      );
+      const refreshResult = latestDate
+        ? await refreshSelectionResearch(latestDate, latestDate)
+        : await refreshSelectionResearch();
+      const afterHealth = await loadHealth();
+      const minDate = String(afterHealth?.source_snapshot?.history_bounds?.min_date || afterHealth?.source_snapshot?.atomic_bounds?.min_date || datePickerMin || '2025-01-01');
+      const maxDate = String(refreshResult?.end_date || afterHealth?.latest_signal_date || latestDate || datePickerMax || '');
+      const datesData = await loadSelectableDates(minDate, maxDate);
+      setTradeDateMetaByDate(tradeDateItemsToMap(datesData?.items || []));
+      const nextDate = latestSelectableDate(datesData?.items || []) || tradeDate || pendingTradeDate || '';
+      if (nextDate) {
+        setTradeDate(nextDate);
+        setPendingTradeDate(nextDate);
+        await loadCandidates(nextDate, true, true);
+      } else {
+        await loadCandidates(tradeDate, true, true);
+      }
       await loadBacktests();
     } catch (e) {
       setError('刷新失败，请检查写权限或后端日志');
@@ -569,37 +627,25 @@ const SelectionResearchPage: React.FC = () => {
     selected && profile && String(profile.symbol || '').toLowerCase() === String(selected.symbol || '').toLowerCase(),
   );
   const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
-  const datePickerMax = String(health?.latest_signal_date || health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || '');
+  const datePickerMax = String(health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || health?.latest_signal_date || '');
+  const latestSelectableTradeDate = useMemo(() => {
+    return Object.values(tradeDateMetaByDate)
+      .filter((item) => item.selectable)
+      .map((item) => item.date)
+      .sort()
+      .pop() || '';
+  }, [tradeDateMetaByDate]);
 
   useEffect(() => {
     if (!datePickerMin || !datePickerMax) return;
     let cancelled = false;
     const loadDates = activeStrategy === 'daily_review'
-      ? Promise.all([
-          fetchSelectionTradeDates(datePickerMin, datePickerMax, STABLE_CALLBACK_STRATEGY),
-          fetchSelectionTradeDates(datePickerMin, datePickerMax, TREND_CONTINUATION_STRATEGY),
-          fetchSelectionTradeDates(datePickerMin, datePickerMax, OBSERVATION_FALLBACK_STRATEGY),
-        ]).then(([stable, trend, observe]) => {
-          const byDate: Record<string, SelectionTradeDateItem> = {};
-          [...(stable?.items || []), ...(trend?.items || []), ...(observe?.items || [])].forEach((item) => {
-            const prev = byDate[item.date];
-            byDate[item.date] = {
-              ...item,
-              signal_count: (prev?.signal_count || 0) + (item.signal_count || 0),
-              selectable: Boolean(prev?.selectable || item.selectable),
-              disabled_reason: prev?.selectable || item.selectable ? null : item.disabled_reason,
-            };
-          });
-          return { items: Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)) } as SelectionTradeDatesData;
-        })
+      ? Promise.all(DAILY_REVIEW_DATE_STRATEGIES.map((strategy) => fetchSelectionTradeDates(datePickerMin, datePickerMax, strategy))).then(mergeTradeDateItems)
       : fetchSelectionTradeDates(datePickerMin, datePickerMax, activeStrategy);
     loadDates
       .then((data) => {
         if (cancelled) return;
-        const next: Record<string, SelectionTradeDateItem> = {};
-        (data?.items || []).forEach((item) => {
-          next[item.date] = item;
-        });
+        const next = tradeDateItemsToMap(data?.items || []);
         setTradeDateMetaByDate(next);
         if (activeStrategy === 'daily_review' || PRODUCT_STRATEGIES.includes(activeStrategy)) {
           const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
@@ -706,6 +752,26 @@ const SelectionResearchPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200">
+      <MarketTopHeader
+        routeHref="/"
+        routeLabel="回到首页"
+        routeTitle="返回首页"
+        secondaryRouteHref="/selection-ppo-report"
+        secondaryRouteLabel="PPO复盘"
+        secondaryRouteTitle="打开 PPO 回测复盘页面"
+        searchValue=""
+        isSearchFocused={false}
+        searchResults={[]}
+        searchHistory={[]}
+        onSearchChange={() => {}}
+        onSearchFocus={() => {}}
+        onSearchBlur={() => {}}
+        onSearchKeyDown={() => {}}
+        onClearSearch={() => {}}
+        onSelectSearchResult={() => {}}
+        onSelectHistory={() => {}}
+        rightSlot={null}
+      />
       <div className="sticky top-0 z-40 border-b border-slate-800 bg-[#0f1623]/95 shadow-md backdrop-blur">
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-4 py-3 md:px-6">
           <a
@@ -733,7 +799,7 @@ const SelectionResearchPage: React.FC = () => {
             value={pendingTradeDate}
             minDate={datePickerMin}
             maxDate={datePickerMax}
-            latestDate={health?.latest_signal_date || undefined}
+            latestDate={latestSelectableTradeDate || undefined}
             dateMetaByDate={tradeDateMetaByDate}
             onChange={setPendingTradeDate}
           />
@@ -753,7 +819,7 @@ const SelectionResearchPage: React.FC = () => {
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            刷新
+            {refreshing ? '刷新中' : '刷新研究数据'}
           </button>
         </div>
       </div>
@@ -809,7 +875,7 @@ const SelectionResearchPage: React.FC = () => {
               )}
               {!loadingCandidates && displayCandidates.length === 0 && (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
-                  暂无候选，请先刷新数据或切换日期。
+                  暂无候选；该日期主策略没有产出，可切换有亮点的日期。
                 </div>
               )}
             </div>

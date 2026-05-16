@@ -1,0 +1,8 @@
+date,source,source_type,indicator,value,direction,affected_links,confidence,next_check,source_url,notes
+2026-04-09,NOAA/CPC,ENSO_forecast,ENSO Diagnostic Discussion,当前 ENSO-neutral；2026 年 5-7 月更可能转为厄尔尼诺，且可能延续到年末,probability_up,农业/水资源/电力负荷/保险/农产品价格,S,2026-05-14,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml,关键结论：高概率但不是必然；当前还不是已确认发生。
+2026-04-24,WMO,seasonal_climate,El Niño likelihood,WMO 提示 2026 年中后段厄尔尼诺概率上升,probability_up,全球降雨/温度/季风/粮食安全,A,2026-05-31,https://wmo.int/media/news/wmo-likelihood-increases-of-el-nino,用于交叉验证 NOAA/CPC 口径。
+2026-05-07,FAO,agriculture_risk,El Niño agriculture monitor,厄尔尼诺可能影响农业生产和粮食安全，需要跟踪重点产区旱涝,watch,粮食/软商品/农业投入品/水利,A,monthly,https://www.fao.org/el-nino/en/,只有传导到产量和价格，才算投资变量。
+2026-05-07,NOAA Climate.gov,ENSO_education,ENSO impact channels,ENSO 会改变降雨、温度和风暴路径，但影响有区域差异,watch,区域天气/电力/农业/灾害赔付,B,monthly,https://www.climate.gov/enso,避免把全球厄尔尼诺直接线性映射到中国 A 股。
+2026-04-09,NOAA/CPC,ENSO_strength_probability,OND Niño-3.4 category probabilities,Niño-3.4 ≥+0.5℃约93%；≥+1.5℃约50%；≥+2.0℃约23%,probability_up,农业/水资源/电力负荷/农产品价格,S,2026-05-14,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/strengths/index.php,年末持续概率很高，但仍是模型概率，不是已经发生。
+2026-04-24,国家气候中心相关报道,China_ENSO_forecast,中国口径,预计5月进入厄尔尼诺状态，夏秋季可能形成中等及以上强度事件,probability_up,中国农业/水资源/高温/防灾,A,2026-05-31,https://finance.sina.com.cn/jjxw/2026-04-24/doc-inhvqrwa7980867.shtml,作为中国口径辅助信号；事件确认仍需满足持续性定义。
+2026-05-07,国家气候中心,ENSO_definition,厄尔尼诺事件定义,海温距平持续达标才定义为事件,definition,事件确认标准,S,monthly,https://cmdp.ncc-cma.net/download/Monitoring/Sea/ElNino_Events_Standards.pdf,区分厄尔尼诺状态、事件确认和投资传导。

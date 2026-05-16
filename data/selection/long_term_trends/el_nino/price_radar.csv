@@ -1,0 +1,14 @@
+category,indicator,current_value,direction,importance,signal_state,status,source,frequency,next_check,decision_use,source_url
+ENSO,NOAA/CPC 厄尔尼诺概率,2026 年 5-7 月转厄尔尼诺概率上升；当前未确认发生,up,S,概率上升,已记录,NOAA/CPC,月,2026-05-14,决定是否从线索期升级到确认跟踪,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml
+ENSO,Niño 3.4 / ONI,待月度更新复核,watch,S,待验证,待接入,NOAA,周/月,2026-05-14,判断是否真正进入并维持厄尔尼诺阈值,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml
+农业,重点产区旱涝,等待 MJJ 季节预测和实况确认,watch,A,待验证,待接入,WMO / FAO / 气象部门,周/月,2026-05-31,判断气候异常是否影响真实产量,https://www.fao.org/el-nino/en/
+价格,粮食与软商品价格,暂未形成项目内结构化跟踪,watch,A,待接入,待接入,国内外期货/FAO/USDA,日/周,2026-05-31,天气影响必须落到价格才有投资意义,
+水资源,抗旱 / 节水 / 水利项目,先列入观察，不当作确认主线,watch,B,线索期,人工跟踪,政策/招投标/公司公告,周/月,2026-06-15,确认水利节水是否从政策预期变订单,
+ENSO,NOAA/CPC OND 厄尔尼诺概率,2026 年 10-12 月 Niño-3.4 ≥+0.5℃ 概率约 93%,up,S,高概率,已记录,NOAA/CPC Strengths,月,2026-05-14,判断年末持续性和强度概率,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/strengths/index.php
+ENSO,NOAA/CPC OND 强度概率,2026 年 10-12 月 ≥+1.5℃ 概率约 50%，≥+2.0℃ 概率约 23%,up,A,偏强,已记录,NOAA/CPC Strengths,月,2026-05-14,判断是否可能形成中等及以上强度事件,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/strengths/index.php
+国内口径,国家气候中心相关报道,预计5月进入厄尔尼诺状态，夏秋季可能形成中等及以上强度事件,up,A,偏强,媒体报道,国家气候中心/媒体,月,2026-05-31,中国口径辅助验证，不替代持续性确认,https://finance.sina.com.cn/jjxw/2026-04-24/doc-inhvqrwa7980867.shtml
+橡胶,RU/NR天然橡胶期货,市场讨论已开始交易厄尔尼诺天气扰动,up,S,待验证,待接入,上期所/能源中心/期货研报,日/周,2026-05-31,验证橡胶是否从天气预期进入价格趋势,
+橡胶,东南亚/海南割胶天气,5月进入割胶旺季，天气逐步成为核心题材,watch,S,待验证,待接入,气象/产业报告,周,2026-05-31,验证干旱或降雨异常是否实际影响开割和产量,
+橡胶,轮胎毛利传导,天然橡胶涨价对轮胎通常是成本压力,watch,A,反向验证,待接入,轮胎公司公告/财报,月/季,2026-08-31,区分上游受益和下游受损,
+橡胶,World Bank RSS3长周期价格,2011-02为6.2592美元/kg；2026-04为2.5056美元/kg，约2.5倍差距,watch,S,已核验,已接入,World Bank Pink Sheet,月,2026-06-05,校正历史高点和当前空间，不把单位误读当投资依据,https://www.worldbank.org/en/research/commodity-markets
+橡胶,橡胶驱动组合,需求/油价/供给周期/天气/库存/流动性六因子共同决定,watch,S,研究框架,已接入,项目研究,月,2026-05-31,避免只按厄尔尼诺单因子做期货或股票,

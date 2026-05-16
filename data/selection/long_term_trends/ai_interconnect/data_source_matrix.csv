@@ -1,0 +1,8 @@
+module,indicator,source,frequency,method,status,next_step
+本地热点,细颗粒主题排名、Top50命中、退潮/回流,/api/market_heat/fine_dashboard?days=63&pool_size=50 + local cache,日,脚本读取fine_heat_snapshots_cache，缺失时回退SQLite,已接入,每日收盘刷新ai_interconnect_market_heat
+产业分支,光模块/CPO、PCB/高速板材/CCL、铜缆/连接器、交换机/网络设备、海外验证链,行业资料 + 本地主题热度 + 公司公告,周/事件,先拆热点聚类，再把公司放入分支验证,已建立,每次主题扩散时先判断分支，而不是先给公司排序
+光模块需求,800G+份额、Google TPU光模块需求、1.6T订单,TrendForce / AOI / 公司公告,月/季,半结构化记录,已记录,补800G/1.6T连续订单与价格口径
+CPO进展,NVIDIA CPO交换机、Cignal AI OFC反馈、功耗/可靠性,NVIDIA / Cignal AI / TrendForce,发布会/季,人工更新关键节点,已记录,2026H2跟踪Spectrum-X Ethernet Photonics实际交付
+交换机/连接器,AI后端交换机端口速率、224G/448G连接器、DAC/AEC,Dell'Oro / Molex / NVIDIA / 公司公告,季/半年,按订单、收入占比、客户验证拆分公司,已记录,补国内交换机/连接器订单映射，避免泛概念
+PCB/高速板材,PCB交期、低Dk玻纤布、AI服务器PCB收入、覆铜板涨价,TrendForce / 公司年报与公告 / 主流财经新闻,月/季,按订单、毛利率、材料传导验证,已记录,中报后刷新沪电/胜宏/生益/深南的AI收入和毛利率
+A股公司研究卡,include_decision、pool_tier、branch、利润驱动、验证点、下一步动作,公司公告/年报/一季报 + 主流财经新闻,周/财报,文字研究卡；只有include_decision为进入观察池才写入观察池,已重做,持续保留未入池公司，不把研究样本误当观察池

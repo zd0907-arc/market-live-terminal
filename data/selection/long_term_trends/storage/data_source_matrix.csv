@@ -1,0 +1,8 @@
+module,indicator,source,frequency,method,status,next_step
+A股价格阶段,日线涨幅/回撤/关键位,Eastmoney Kline + Tencent fallback,日,脚本自动抓取,已接入,每日收盘刷新
+A股财务快照,营收/净利/毛利率/市值/年化PE,本地财务CSV + Eastmoney/Tencent Snapshot,季/日,半自动,已接入,中报后刷新盈利与市值
+公司验证矩阵,存货/合同负债/经营现金流/OCF净利比,Eastmoney F10 Balance/Cashflow,季,脚本自动抓取,已接入,Q2预告/中报后刷新验证
+价格周期六因子,DRAM/NAND/eSSD/DDR5/HBM/海外验证,TrendForce + Micron IR + Yahoo + 本地打分,日/周/月/季,脚本汇总 + 半结构化打分,已接入,Q3 报价出来后继续更新分数
+Enterprise SSD,2Q26 合约价 +48%~53%,TrendForce research download,月/季,半结构化接入,已接入,补连续报价时间序列
+海外原厂验证,股价阶段 + IR 口径,Yahoo Chart + Micron IR,日/季,自动价格 + 人工口径摘要,已接入,补 SK hynix / Samsung / WDC 财报口径摘要
+库存周期,原厂/渠道/模组库存,公司财报 + 渠道调研,季/周,财报已接入，渠道待接入,部分接入,补渠道库存与主控厂月营收

@@ -1,0 +1,2 @@
+as_of,total_score,max_score,stage,decision,price_gate_score,price_gate_max,price_gate_status,buy_threshold,add_threshold,reduce_threshold,weather_weight_pct,weather_score,weather_max_score,weather_status
+2026-05-09,76,100,重点盯盘/等待价格二次确认,分值已到盯盘线，但价格闸门未满分；等RU/NR同步突破或回踩不破，不追单日涨幅,1,2,价格偏强但未强确认,>=75分且价格闸门=2/2，库存或天气至少一项连续确认,>=85分且RU/NR突破2024以来高点后回踩不破,<65分或RU/NR跌破60日线,20,16,20,偏强但需持续验证

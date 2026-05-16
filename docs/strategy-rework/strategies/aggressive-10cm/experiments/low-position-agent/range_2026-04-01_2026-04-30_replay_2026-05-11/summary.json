@@ -1,0 +1,79 @@
+{
+  "tag": "range_2026-04-01_2026-04-30_replay_2026-05-11",
+  "signal_start_date": "2026-04-01",
+  "signal_end_date": "2026-04-30",
+  "replay_end_date": "2026-05-11",
+  "strategies": [
+    {
+      "strategy": "low_fund_reversal",
+      "label": "低位资金异动",
+      "description": "低位横盘后两日主力净流入抬升，次日早盘继续净流入，偏启动异动。"
+    },
+    {
+      "strategy": "first_board_acceptance",
+      "label": "首板后承接",
+      "description": "热点主题内，前一日强承接且选股信号偏突破，次日只接首板后未充分加速的承接。"
+    },
+    {
+      "strategy": "funding_return",
+      "label": "资金回流",
+      "description": "主题仍热、个股未脱离低位，量能回到常态区间，资金回流后做次日确认。"
+    }
+  ],
+  "summaries": [
+    {
+      "strategy": "funding_return",
+      "strategy_label": "资金回流",
+      "description": "主题仍热、个股未脱离低位，量能回到常态区间，资金回流后做次日确认。",
+      "signal_start_date": "2026-04-01",
+      "signal_end_date": "2026-04-30",
+      "replay_end_date": "2026-05-11",
+      "initial_capital": 1000000.0,
+      "ending_capital": 1005972.11,
+      "total_return_pct": 0.5972,
+      "trade_count": 1,
+      "win_rate_pct": 100.0,
+      "avg_net_return_pct": 2.3888,
+      "median_net_return_pct": 2.3888,
+      "profit_factor": 999.0,
+      "max_drawdown_pct": -0.5937,
+      "avg_hold_days": 4.0
+    },
+    {
+      "strategy": "low_fund_reversal",
+      "strategy_label": "低位资金异动",
+      "description": "低位横盘后两日主力净流入抬升，次日早盘继续净流入，偏启动异动。",
+      "signal_start_date": "2026-04-01",
+      "signal_end_date": "2026-04-30",
+      "replay_end_date": "2026-05-11",
+      "initial_capital": 1000000.0,
+      "ending_capital": 1000000.0,
+      "total_return_pct": 0.0,
+      "trade_count": 0,
+      "win_rate_pct": 0.0,
+      "avg_net_return_pct": 0.0,
+      "median_net_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "avg_hold_days": 0.0
+    },
+    {
+      "strategy": "first_board_acceptance",
+      "strategy_label": "首板后承接",
+      "description": "热点主题内，前一日强承接且选股信号偏突破，次日只接首板后未充分加速的承接。",
+      "signal_start_date": "2026-04-01",
+      "signal_end_date": "2026-04-30",
+      "replay_end_date": "2026-05-11",
+      "initial_capital": 1000000.0,
+      "ending_capital": 1000000.0,
+      "total_return_pct": 0.0,
+      "trade_count": 0,
+      "win_rate_pct": 0.0,
+      "avg_net_return_pct": 0.0,
+      "median_net_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "avg_hold_days": 0.0
+    }
+  ]
+}

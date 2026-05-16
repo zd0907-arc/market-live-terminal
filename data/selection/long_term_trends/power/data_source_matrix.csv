@@ -1,0 +1,5 @@
+module,indicator,source,frequency,method,status,next_step
+A股价格阶段,日线涨幅/回撤/关键位,Eastmoney Kline,日,脚本抓取,已接入,每日收盘刷新
+A股财务快照,Q1营收/净利/毛利率/市值,本地财务CSV + Eastmoney Snapshot,季/日,半自动,已接入,中报补订单/现金流
+数据中心需求,CSP CapEx/装机功率,TrendForce/PRNewswire,季,人工/AI记录,已记录,跟踪下一次上修/下修
+设备订单,电网设备/UPS/液冷订单,公司公告/招标/财报,周/月/季,待定,待接入,建立订单证据表

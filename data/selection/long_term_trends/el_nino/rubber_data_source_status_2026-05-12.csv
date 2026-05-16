@@ -1,0 +1,15 @@
+source,status,as_of,note,url
+Eastmoney RU,local,2026-05-12,快速收束模式关闭外部价格刷新，沿用本地RU历史表最新行（截至2026-05-12）。,https://push2.eastmoney.com/api/qt/stock/get
+Eastmoney NR,local,2026-05-12,快速收束模式关闭外部价格刷新，沿用本地NR历史表最新行（截至2026-05-12）。,https://push2.eastmoney.com/api/qt/stock/get
+Yahoo Brent,fallback,2026-05-01,快速收束模式：未等待Yahoo/FRED外部行情，沿用脚本内最近可得fallback；不伪造今日实时油价。,https://finance.yahoo.com/quote/BZ%3DF
+Yahoo WTI,fallback,2026-05-04,快速收束模式：未等待Yahoo/FRED外部行情，沿用脚本内最近可得fallback；不伪造今日实时油价。,https://finance.yahoo.com/quote/CL%3DF
+FRED macro dollar,fallback,2026-05-01,快速收束模式：未等待FRED外部CSV，沿用脚本内最近可得fallback；宏观分数按待校验/降权解释。,
+FRED macro copper,fallback,2026-03-01,快速收束模式：未等待FRED外部CSV，沿用脚本内最近可得fallback；宏观分数按待校验/降权解释。,
+FRED macro commodity,fallback,2026-03-01,快速收束模式：未等待FRED外部CSV，沿用脚本内最近可得fallback；宏观分数按待校验/降权解释。,
+FRED macro rate10y,fallback,2026-05-07,快速收束模式：未等待FRED外部CSV，沿用脚本内最近可得fallback；宏观分数按待校验/降权解释。,
+Eastmoney/Tencent 601118,fallback,2026-05-08,快速收束模式：未等待股票行情外部源，沿用脚本内最近可得fallback；股票映射仅作旁证。,https://quote.eastmoney.com/sh601118.html
+Open-Meteo weather,cached,2026-05-12,使用已存在缓存：rubber_weather_dashboard_2026-05-12.csv,https://open-meteo.com/en/docs/historical-weather-api
+NOAA ENSO,checked,2026-04-09,截至本次更新，CPC ENSO 诊断讨论页最新可用讨论为2026-04-09；下一次月度讨论预定2026-05-14。因此本页不把ENSO文字当作5月12日新催化，只用产区实际天气验证。,https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml
+ANRPC,checked,2026-03,ANRPC月报页面可查至2026年3月口径；供给周期仍按年度小缺口处理，未拿到5月12日即时产量/出口新数。,https://www.anrpc.org/newsla/anrpc-releases-monthly-nr-statistical-report%2C-march-2026
+轮胎开工/青岛库存/社会库存,stale,2026-05-07,本次未自动取得2026-05-12可校验的新周度行业数据；需求、库存仍沿用2026-05-07行业日报转载口径，并在页面标注截至日期。,https://finance.sina.com.cn/money/future/wemedia/2026-05-07/doc-inhxanxf5028723.shtml
+World Bank Pink Sheet,local,2026-04,长周期RSS3/TSR20使用本地月度表，最新为2026-04；用于历史位置判断，不替代国内期货交易价。,https://www.worldbank.org/en/research/commodity-markets

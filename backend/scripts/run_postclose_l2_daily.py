@@ -69,6 +69,9 @@ LAN_WINDOWS_HOST = os.getenv("L2_WIN_LAN_HOST", "192.168.3.108").strip()
 CLOUD_PUBLIC_HTTP_HOST = os.getenv("L2_CLOUD_PUBLIC_HTTP_HOST", "111.229.144.202").strip()
 LAN_SYNC_PORT = int(os.getenv("L2_LAN_SYNC_PORT", "18765"))
 CLOUD_RELAY_PORT = int(os.getenv("L2_CLOUD_RELAY_PORT", "18766"))
+LAN_HTTP_START_ATTEMPTS = int(os.getenv("L2_LAN_HTTP_START_ATTEMPTS", "2"))
+ALLOW_CLOUD_RELAY_WHEN_LAN_REACHABLE = os.getenv("L2_ALLOW_CLOUD_RELAY_WHEN_LAN_REACHABLE", "").strip().lower() in {"1", "true", "yes"}
+FORCE_LAN_SCP = os.getenv("L2_FORCE_LAN_SCP", "").strip().lower() in {"1", "true", "yes"}
 HTTP_SYNC_TIMEOUT = int(os.getenv("L2_HTTP_SYNC_TIMEOUT", "1800"))
 SYNC_ROOT_REL = ".run/postclose_sync"
 SOFT_WARNING_PATTERNS = (
@@ -395,6 +398,25 @@ def _http_download_to_local(url: str, local_path: Path, token: str, expected_siz
     raise RuntimeError(f"HTTP 下载失败: {url}") from last_error
 
 
+def _scp_windows_file_to_local(remote_path: str, local_path: Path, expected_size: int = -1) -> Dict[str, object]:
+    _ensure_local_parent(local_path)
+    tmp_path = local_path.with_name(f"{local_path.name}.part")
+    if tmp_path.exists():
+        tmp_path.unlink()
+    _run(["scp", f"{WIN_HOST}:{_win_scp_path(remote_path)}", str(tmp_path)], check=True)
+    local_size = tmp_path.stat().st_size if tmp_path.exists() else -1
+    if expected_size >= 0 and local_size != expected_size:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise RuntimeError(f"scp size mismatch: expected={expected_size} actual={local_size}")
+    if local_path.exists():
+        _backup_local_file(local_path)
+    tmp_path.replace(local_path)
+    return {"local": str(local_path), "bytes": local_size, "transport": "LAN_SCP"}
+
+
 def _windows_relative_under_project(remote_path: str) -> str:
     remote = str(PureWindowsPath(str(remote_path))).replace("/", "\\")
     project = str(PureWindowsPath(WIN_PROJECT_ROOT)).replace("/", "\\").rstrip("\\")
@@ -442,6 +464,20 @@ def _start_windows_http_relay(token: str) -> Dict[str, object]:
         "port": LAN_SYNC_PORT,
         "process": proc,
     }
+
+
+def _start_windows_http_relay_with_retries(token: str) -> Dict[str, object]:
+    last_error: Optional[Exception] = None
+    attempts = max(1, int(LAN_HTTP_START_ATTEMPTS))
+    for attempt in range(1, attempts + 1):
+        try:
+            return _start_windows_http_relay(token)
+        except Exception as exc:
+            last_error = exc
+            _stop_windows_http_relay()
+            if attempt < attempts:
+                time.sleep(3)
+    raise RuntimeError(f"局域网 HTTP relay 启动失败，已重试 {attempts} 次") from last_error
 
 
 def _stop_windows_http_relay() -> None:
@@ -512,14 +548,36 @@ fi
 
 def _resolve_mac_sync_transport(trade_date: str) -> Dict[str, object]:
     token = uuid.uuid4().hex
-    if _tcp_reachable(LAN_WINDOWS_HOST, port=LAN_SYNC_PORT, timeout=1.0) or _tcp_reachable(LAN_WINDOWS_HOST, port=22, timeout=1.0):
+    lan_http_reachable = _tcp_reachable(LAN_WINDOWS_HOST, port=LAN_SYNC_PORT, timeout=1.0)
+    lan_ssh_reachable = _tcp_reachable(LAN_WINDOWS_HOST, port=22, timeout=1.0)
+    if FORCE_LAN_SCP and lan_ssh_reachable:
+        _progress(f"[{trade_date}] Mac 同步路径判定：mode=LAN_SCP reason=已强制局域网 scp")
+        return {
+            "mode": "LAN_SCP",
+            "token": token,
+            "base_url": "",
+            "remote_root": WIN_PROJECT_ROOT,
+            "port": 22,
+        }
+    if lan_http_reachable or lan_ssh_reachable:
         try:
-            context = _start_windows_http_relay(token)
+            context = _start_windows_http_relay_with_retries(token)
             _progress(
                 f"[{trade_date}] Mac 同步路径判定：mode=LAN_HTTP reason=局域网 HTTP 直拉"
             )
             return context
         except Exception as exc:
+            if lan_ssh_reachable and not ALLOW_CLOUD_RELAY_WHEN_LAN_REACHABLE:
+                _progress(
+                    f"[{trade_date}] Mac 同步路径判定：mode=LAN_SCP reason=局域网 SSH 可达但 HTTP relay 不可用，改走局域网 scp: {exc}"
+                )
+                return {
+                    "mode": "LAN_SCP",
+                    "token": token,
+                    "base_url": "",
+                    "remote_root": WIN_PROJECT_ROOT,
+                    "port": 22,
+                }
             _progress(
                 f"[{trade_date}] Mac 同步路径判定：局域网不可用，回退云中转: {exc}"
             )
@@ -567,6 +625,10 @@ def _sync_windows_file_to_local(remote_path: str, local_path: Path, sync_context
     if str(sync_context.get("mode")) == "LAN_HTTP":
         rel_path = _windows_relative_under_project(resolved_remote)
         url = f"{str(sync_context['base_url']).rstrip('/')}/{urllib.parse.quote(rel_path)}"
+    elif str(sync_context.get("mode")) == "LAN_SCP":
+        result = _scp_windows_file_to_local(resolved_remote, local_path, remote_size)
+        result.update({"remote": resolved_remote})
+        return result
     else:
         remote_name = f"uploads/{PureWindowsPath(str(resolved_remote)).name}"
         _upload_windows_file_to_cloud_relay(resolved_remote, remote_name, sync_context)

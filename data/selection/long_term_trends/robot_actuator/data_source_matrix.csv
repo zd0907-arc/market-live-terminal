@@ -1,0 +1,6 @@
+module,indicator,source,frequency,method,status,next_step
+市场热度,机器人/执行器/减速器Top50、Top30、热度分、L2,fine_theme_heat_daily.db / fine_dashboard API,日,脚本直接读本地SQLite,已接入,每日收盘刷新
+海外量产,Optimus产线、量产时间、爬坡节奏,Tesla Q1 Update / 财报电话会,周/月,人工结构化,半结构化,补Tesla官方生产更新
+订单验证,定点、批量订单、客户验证、收入占比,交易所公告/投资者关系活动,周/季,人工结构化,部分接入,中报后更新订单和收入字段
+BOM价格,谐波减速器、滚柱丝杠、电机、传感器报价,产业链报价/行业机构,周/月,待接入,缺口,找到可重复报价源
+A股可操作,公司研究卡、观察池准入、估值状态、资金和价格阶段,本地litong_similarity + 公告,日/季,本地快照 + 人工研究卡,已接入基础版,补实时日线和公告后反应

@@ -44,6 +44,7 @@ interface HistoryMultiframeFusionViewProps {
   } | null;
   tradeMarkers?: Array<{
     date?: string | null;
+    datetime?: string | null;
     type: 'entry' | 'exit';
     label: string;
     note?: string | null;
@@ -719,6 +720,40 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
     if (!tradeMarkers.length || !fusionRows.length) return [];
     return tradeMarkers
       .map((marker) => {
+        if (!marker.datetime && !marker.date) return null;
+        const exactIndex = marker.datetime
+          ? fusionRows.findIndex((row) => row.datetime === marker.datetime || row.datetime >= marker.datetime!)
+          : -1;
+        if (exactIndex >= 0) {
+          const row = fusionRows[exactIndex];
+          const priceBase = marker.type === 'exit'
+            ? (row.high ?? row.close ?? row.open)
+            : (row.low ?? row.close ?? row.open);
+          if (priceBase === null || !Number.isFinite(priceBase)) return null;
+          const yValue = marker.type === 'exit' ? priceBase * 1.018 : priceBase * 0.982;
+          const color = marker.type === 'entry' ? '#38BDF8' : marker.simulated ? '#F59E0B' : '#F43F5E';
+          const bg = marker.type === 'entry' ? 'rgba(14, 116, 144, 0.92)' : marker.simulated ? 'rgba(146, 64, 14, 0.92)' : 'rgba(159, 18, 57, 0.92)';
+          return {
+            value: [exactIndex, yValue, marker.note || ''],
+            symbol: marker.type === 'entry' ? 'triangle' : 'pin',
+            symbolRotate: marker.type === 'entry' ? 180 : 0,
+            symbolOffset: marker.type === 'entry' ? [0, 8] : [0, -8],
+            itemStyle: { color, borderColor: '#0F172A', borderWidth: 1 },
+            label: {
+              show: true,
+              formatter: marker.label,
+              position: marker.type === 'entry' ? 'bottom' : 'top',
+              color: '#E0F2FE',
+              backgroundColor: bg,
+              borderColor: color,
+              borderWidth: 1,
+              borderRadius: 5,
+              padding: [3, 7],
+              fontSize: 11,
+              fontWeight: 700,
+            },
+          };
+        }
         if (!marker.date) return null;
         const matching = fusionRows
           .map((row, index) => ({ row, index }))

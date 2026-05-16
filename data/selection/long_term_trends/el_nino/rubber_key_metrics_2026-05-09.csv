@@ -1,0 +1,8 @@
+metric,label,value
+data_source,"World Bank Pink Sheet monthly nominal USD prices, updated 2026-05-04",
+rss3_peak_month,2011M02,6.2592
+rss3_latest_month,2026M04,2.5056
+peak_to_latest_multiple,,2.4980842911877397
+latest_as_pct_of_peak,,40.030674846625764
+top_annual_avg_year,2011,4.823157022085
+latest_annual_avg_year,2026YTD,2.32465

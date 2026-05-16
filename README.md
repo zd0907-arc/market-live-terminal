@@ -1,12 +1,12 @@
-# ZhangData 金融实时终端（v5.1.3）
+# ZhangData 金融实时终端（v5.1.5）
 
 ## 项目定位
-- 当前工作版本：`v5.1.3`
+- 当前工作版本：`v5.1.5`
 - 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；云端生产默认只开放盯盘与复盘。
-- 当前探索中能力：热点板块 / 市场热度研究；只作为研究分支，不默认并入已落地三模块。
+- 当前探索中能力：热点板块 / 市场热度研究；本地研究站已升级市场主线情报看板，云端轻量模式仍默认不开放研究页。
 
 ## 快速启动（本地）
 

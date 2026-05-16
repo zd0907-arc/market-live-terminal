@@ -1,5 +1,16 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-07 09:33 | Codex
+- Task ID: `MOD-20260507-02-el-nino-trend-research-intake`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 新增厄尔尼诺 / 气候异常长期趋势线索：官方口径是 2026 年中后段概率上升但非必然；已落研究卡、结构化跟踪数据，并接入趋势研究 API/页面。
+- 补充: 已固化长期趋势话题 SOP，并按流程补齐厄尔尼诺深度计划；橡胶链纳入观察，海南橡胶为 A 类核心观察，轮胎股为 C 类成本压力旁路。
+- 2026-05-09 补充: 完成橡胶长周期研究，World Bank RSS3 显示 2011-02 高点 6.2592 美元/kg，2026-04 为 2.5056 美元/kg，高点约为当前 2.5 倍；2011 式行情需要需求、天气、库存、油价和流动性共振。
+- 2026-05-09 继续补充: 已解释并接入 RU/NR 主连、RU-NR价差、2024以来价格阶段；基于 NOAA ONI 和 World Bank 商品价格完成历史厄尔尼诺商品影响统计，优先研究顺序收敛为橡胶、棕榈油/油脂、粮食种业/水利抗旱。
+- 风险: 当前仍是线索期，没有 A 股个股横评；需等待 2026-05-14 NOAA/CPC 更新和后续农产品/水利/电力传导验证。
+- 验证: `npm run check:version`、`npm run build` 通过。
+- 链接: `docs/changes/MOD-20260507-02-el-nino-trend-research-intake.md`, `docs/selection/long_term_trends/cases/el_nino_2026-05-07.md`
+
 ## 2026-05-07 00:30 | Codex
 - Task ID: `MOD-20260507-01-repo-consolidation-cloud-lite-freeze`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`

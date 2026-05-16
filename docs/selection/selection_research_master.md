@@ -108,10 +108,24 @@
 4. 增加 L2 确认 / 热度过滤 / 市值层分层统计
 5. 二期再做动态出货退出回测
 
-## 11. 长期趋势选股档案（2026-05-06 新增）
+## 11. 机会发现模型（2026-05-16 新增）
+
+- 定位：盘后模型候选源 + 盘后持仓管理，不替代现有工作台策略。
+- 最终说明书：`docs/selection/opportunity_discovery_model_final.md`
+- 清理与落地清单：`docs/selection/selection_research_cleanup_plan.md`
+- 保留模型：
+  - 星火机会模型 `spark_opportunity_selector`
+  - 守势持仓模型 `sentinel_postclose_exit`
+- 保留组合：
+  - 星火进攻版 `spark_aggressive`
+  - 星火稳健版 `spark_guarded`
+- 当前判断：研究可用，不建议无脑实盘；应先接入工作台统一候选池和模拟盘。
+
+## 12. 长期趋势选股档案（2026-05-06 新增）
 
 - 定位：研究生活线索、产业趋势、利润弹性、动态估值和长期持仓纪律。
 - 目录：`docs/selection/long_term_trends/README.md`
 - 线索 Inbox：`data/selection/long_term_trends/idea_inbox.md`
+- 本次新增线索：厄尔尼诺 / 气候异常；既有主线：AI 存储 / 内存涨价。
 - 原则：不和短线资金/热点模块混用卖点；长期票按产业逻辑、财务验证、趋势破坏和估值透支来复盘。
 - 用法：以后讨论长期投资线索时，先读取 `05_ai_research_prompt.md`，让 AI 带着用户真实案例和行为模式做研究。

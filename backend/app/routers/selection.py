@@ -16,6 +16,7 @@ from backend.app.services.selection_research import (
     refresh_selection_research,
     run_selection_backtest,
 )
+from backend.app.services.intraday_evolution_lab import load_ppo_report_payload
 from backend.app.services.selection_research_context import (
     get_selection_research_context,
     prepare_selection_research_context,
@@ -60,6 +61,10 @@ class SelectionResearchPrewarmRequest(BaseModel):
     strategy: Optional[str] = None
     limit: Optional[int] = 12
     items: List[Dict[str, Any]] = []
+
+
+class SelectionPpoReportRequest(BaseModel):
+    report_path: Optional[str] = None
 
 
 @router.get("/selection/health", response_model=APIResponse)
@@ -316,6 +321,15 @@ def selection_backtests_run(request: SelectionBacktestRunRequest):
         return APIResponse(code=200, message="回测执行完成", data=payload)
     except Exception as exc:
         return APIResponse(code=500, message=f"选股回测执行失败: {exc}", data=None)
+
+
+@router.get("/selection/ppo-backtest-report", response_model=APIResponse)
+def selection_ppo_backtest_report(report_path: str = Query(None, description="PPO 回测结果 JSON 路径")):
+    try:
+        payload = load_ppo_report_payload(report_path or None)
+        return APIResponse(code=200, data=payload)
+    except Exception as exc:
+        return APIResponse(code=500, message=f"PPO 回测报告读取失败: {exc}", data=None)
 
 
 @router.post("/selection/refresh", response_model=APIResponse, dependencies=[Depends(require_write_access)])

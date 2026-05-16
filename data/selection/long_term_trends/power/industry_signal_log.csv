@@ -1,0 +1,3 @@
+date,source,source_type,indicator,value,direction,affected_links,confidence,next_check,source_url,notes
+2026-05-06,TrendForce/PRNewswire,CSP_capex,Top nine North American CSP 2026 CapEx,US$830B and +79% YoY,up,AI data center/power/grid/UPS/cooling/storage,high,2026-07-31,https://www.prnewswire.com/news-releases/north-american-ai-data-center-expansion-drives-2026-capex-of-top-nine-csps-to-us830-billion-says-trendforce-302764269.html,需求侧核心信号
+2026-05-06,TrendForce/PRNewswire,data_center_power,Global data-center installed power in 2026,155GW and +29% YoY,up,电力/配电/液冷/储能/数据中心,high,2026-07-31,https://www.prnewswire.com/news-releases/north-american-ai-data-center-expansion-drives-2026-capex-of-top-nine-csps-to-us830-billion-says-trendforce-302764269.html,AI电力线索的直接依据

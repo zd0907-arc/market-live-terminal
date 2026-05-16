@@ -1,0 +1,16 @@
+module,indicator,source,frequency,method,status,next_step
+ENSO 概率,ENSO Diagnostic Discussion,NOAA/CPC,月,人工记录，后续可结构化,已接入研究卡,2026-05-14 复核最新更新
+季节气候,Global Seasonal Climate Update,WMO,季/月,人工记录,已接入研究卡,跟踪 2026 年中后段预测变化
+农业风险,El Niño agriculture monitor,FAO,不定期/月,人工记录,已接入研究卡,补重点产区和作物清单
+商品价格,粮食/软商品期货与现货,国内外期货/FAO/USDA,日/周,待定,待接入,建立玉米、小麦、白糖、咖啡、可可、棕榈油价格表
+A股映射,种子/化肥/农药/水利节水/电力制冷,公司公告/财报/行情,周/月,待定,待建池,等 ENSO 确认后再做第一版 A 股横评
+NOAA 强度概率,Niño-3.4 分强度概率,NOAA/CPC Strengths,月,人工记录,已记录,每月更新MJJ~OND概率曲线
+中国口径,国家气候中心ENSO监测与定义,国家气候中心/月度监测,月,人工记录,半接入,补官方月报或稳定入口
+A股观察池,水利节水/种业/农资/高温制冷,公司公告/财报/行情,周/月,人工初筛,已建第一版观察池,后续补价格阶段和财务快照
+橡胶长周期,RSS3/TSR20月度价格,World Bank Pink Sheet,月,脚本下载并清洗,已接入,rubber_worldbank_monthly_1960_2026.csv
+橡胶驱动,需求/油价/供给/天气/库存/流动性,项目研究框架,月/周,人工维护,已建框架,rubber_driver_relationships.csv
+橡胶操作框架,RU/NR/轮胎开工/库存/天气/油价/供给/海南橡胶,东方财富/行业日报/Open-Meteo/FRED/ANRPC/公司公告,日/周/月,脚本+人工校验,已接入,rubber_operational_monitor_2026-05-09.csv
+橡胶六分类评分,需求/油价/供给/天气/库存/宏观六项权重评分,项目评分模型+稳定数据源,日/周/月,脚本生成总分和决策阈值,已接入页面,rubber_factor_scorecard_2026-05-09.csv
+橡胶产区天气,泰国/印尼/越南/海南30日降雨与14日预报,Open-Meteo Archive/Forecast API,日/周,脚本抓取并与1991-2020同期均值比较,已接入,rubber_weather_dashboard_2026-05-09.csv
+橡胶操作阈值,线索期/预备期/进场试错/主升确认/退出规则,项目研究框架,周,脚本生成+人工复核,已接入,rubber_trade_trigger_rules_2026-05-09.csv
+橡胶宏观商品,美元贸易加权指数/铜价/商品指数CRB替代/美国10年期利率,FRED,日/月,脚本抓取并进入宏观流动性评分,已接入页面,rubber_operational_monitor_2026-05-10.csv

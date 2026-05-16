@@ -9,6 +9,7 @@ import {
   SelectionQuickEventJudgeData,
   SelectionResearchContextData,
   SelectionResearchContextPrepareData,
+  PpoBacktestReport,
   SelectionStrategy,
   SelectionTradeDatesData,
   StockEventCoverageData,
@@ -332,6 +333,18 @@ export const fetchSelectionHistoryMultiframe = async (
   } catch (e) {
     console.error('Fetch selection history multiframe error:', e);
     return [];
+  }
+};
+
+export const fetchSelectionPpoBacktestReport = async (reportPath?: string): Promise<PpoBacktestReport | null> => {
+  try {
+    const params = new URLSearchParams();
+    if (reportPath) params.set('report_path', reportPath);
+    const res = await fetch(`${API_BASE_URL}/selection/ppo-backtest-report${params.toString() ? `?${params.toString()}` : ''}`);
+    return await parseApiData<PpoBacktestReport>(res);
+  } catch (e) {
+    console.error('Fetch PPO backtest report error:', e);
+    return null;
   }
 };
 

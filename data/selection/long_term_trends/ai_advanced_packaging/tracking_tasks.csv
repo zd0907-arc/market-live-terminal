@@ -1,0 +1,6 @@
+task,frequency,priority,current_status,watch_variable,upgrade_trigger,add_position_trigger,downgrade_trigger,owner_note,source_url
+细颗粒热点留存,每日,S,已接入,封测/先进封装/半导体材料/玻璃基板是否仍在前30,连续3日有2个以上相关主题前10,强热点回踩不破，代表票放量承接,连续5日退出前30或只剩玻璃基板题材票,这是外露动态变量，不放hover。,/api/market_heat/fine_dashboard?days=63&pool_size=50
+TSMC先进封装验证,每季,S,已接入,advanced packaging收入占比、capex、客户需求,收入占比/产能继续上行,海外口径强且A股封测回踩确认,TSMC下修AI或advanced packaging指引,行业分的硬锚。,https://investor.tsmc.com/english/encrypt/files/encrypt_file/reports/2026-01/51d09df96cd89ac19d65af39032b038dc2896a24/TSMC%204Q25%20Transcript.pdf
+A股中报订单验证,季报/中报,S,待公告,先进封装收入、毛利率、订单、现金流,长电/通富/华天至少两家披露真实增量,订单和毛利率同步改善，且估值消化,财报没有收入占比、毛利率或现金流支撑,没有财报验证不升研究仓。,https://www.sse.com.cn/ | https://www.szse.cn/
+IC载板/封装材料导入,月/季,A,观察,FC-BGA、ABF、GMC、球形硅微粉客户认证和放量,客户认证转订单，产能利用率提升,材料公司毛利率随高端产品占比提升,订单仍停留在送样/认证，收入不兑现,用于筛掉泛材料票。,https://www.sse.com.cn/ | https://www.szse.cn/
+玻璃基板路线验证,周/月,A,早期,客户认证、小批量订单、TGV/翘曲/良率数据,有客户或量产节点公告,从题材票扩散到设备/材料订单,涨停退潮且没有订单/良率进展,路线长期重要，但短期不当主因。,https://www.intc.com/news-events/press-releases/detail/1647/intel-unveils-industry-leading-glass-substrates-to-meet

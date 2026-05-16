@@ -72,3 +72,7 @@ class SelectionBacktestRunRequest(BaseModel):
     max_positions_per_day: int = 10
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
+
+
+class SelectionPpoReportRequest(BaseModel):
+    report_path: Optional[str] = None
