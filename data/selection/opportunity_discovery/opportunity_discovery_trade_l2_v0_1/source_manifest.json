@@ -1,0 +1,30 @@
+{
+  "source_id": "spark_opportunity_selector",
+  "source_name": "星火机会模型 1.0",
+  "source_type": "model",
+  "source_version": "1.0",
+  "artifact_version": "opportunity_discovery_trade_l2_v0_1",
+  "horizon": "22d",
+  "status": "watch_only",
+  "owner_note": "研究可用，需人工确认次日开盘条件；接入工作台后先做 watch_only 前推观察。",
+  "package_id": "spark_opportunity_selector@1.0",
+  "artifact_paths": {
+    "model": "model.joblib",
+    "feature_columns": "feature_columns.json",
+    "latest_candidates": "latest_candidates.csv",
+    "latest_actionable_candidates": "latest_actionable_candidates.csv",
+    "summary": "summary.json"
+  },
+  "train_start_date": "2025-01-02",
+  "train_end_date": "2026-05-14",
+  "label_definition": "D日盘后信号，D+1开盘买入，未来22个交易日最大冲高机会分。",
+  "data_sources": [
+    "/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db",
+    "/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db",
+    "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db"
+  ],
+  "point_in_time_safe": true,
+  "candidate_adapter": "backend.app.services.spark_opportunity_selector.generate_daily_candidates",
+  "bridge_adapter": "backend.app.services.spark_opportunity_selector.generate_candidates_from_latest_csv",
+  "created_at": "2026-05-16 20:19:35"
+}

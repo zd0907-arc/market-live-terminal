@@ -49,6 +49,12 @@ data/market_heat/*
 data/selection/*
 !data/selection/long_term_trends/
 !data/selection/long_term_trends/**
+!data/selection/opportunity_discovery/
+data/selection/opportunity_discovery/*
+!data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/
+data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/*
+!data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/source_manifest.json
+!data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/sample_candidates_2026-05-14.json
 
 # Environment Variables (绝对禁止提交)
 .env

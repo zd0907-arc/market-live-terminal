@@ -112,6 +112,7 @@
 
 - 定位：盘后模型候选源 + 盘后持仓管理，不替代现有工作台策略。
 - 最终说明书：`docs/selection/opportunity_discovery_model_final.md`
+- 模型开发与接入 SOP：`docs/selection/model_development_sop.md`
 - 清理与落地清单：`docs/selection/selection_research_cleanup_plan.md`
 - 保留模型：
   - 星火机会模型 `spark_opportunity_selector`

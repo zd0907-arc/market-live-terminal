@@ -10,6 +10,8 @@
 
 1. **星火机会模型**
    - 英文 ID：`spark_opportunity_selector`
+   - 对外版本：`1.0`
+   - 完整包 ID：`spark_opportunity_selector@1.0`
    - 作用：每天盘后从全市场选出次日可关注/可买的机会票。
    - 对应产物：`opportunity_discovery_trade_l2_v0_1/model.joblib`
 
@@ -392,6 +394,8 @@ ID：`spark_guarded`
 - 星火机会模型：
   - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/model.joblib`
   - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/feature_columns.json`
+  - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/source_manifest.json`
+  - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/sample_candidates_2026-05-14.json`
   - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/latest_candidates.csv`
 
 - 守势持仓模型：
