@@ -13,6 +13,9 @@
 ## 已落地数据
 
 - 小主题日度热度：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db`
+- 细颗粒主题统一训练表：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db`
+- 板块热度预测库：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_forecast.db`
+- 当前预测模型：`/Users/dong/Desktop/AIGC/market-data/market_heat/models/fine_theme_heat_forecast_latest.joblib`
 - 个股 L1/L2 底座：`/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db`
 - 当前细颗粒看板缓存：`/Users/dong/Desktop/AIGC/market-data/market_heat/cache/fine_heat_snapshots_*_m5_80.json`
 - 热点大涨样本：`/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv`
@@ -81,6 +84,7 @@ GET  /api/market_heat/fine_dashboard
 POST /api/market_heat/fine_dashboard/refresh
 GET  /api/market_heat/fine_dates
 GET  /api/market_heat/fine_theme_stock_detail
+GET  /api/market_heat/fine_theme_forecast
 ```
 
 接口说明：
@@ -89,6 +93,7 @@ GET  /api/market_heat/fine_theme_stock_detail
 - `fine_dashboard/refresh`：重建最近 N 个交易日细颗粒热点快照。
 - `fine_dates`：返回可查询交易日及缓存状态。
 - `fine_theme_stock_detail`：返回单个细颗粒主题的成分股、微型 K 线和排序辅助字段。
+- `fine_theme_forecast`：返回模型预测的未来 3/5 日进入 Top10/Top15/Top30 候选。
 
 ## 关键研究结论
 
@@ -142,6 +147,50 @@ GET  /api/market_heat/fine_theme_stock_detail
 +10% 半仓止盈是策略收益核心，不是可有可无的风控动作。
 固定持有 20 日最差，因为强者恒强样本的真实高点来得很快，后面容易回吐。
 ```
+
+### 5. 主线延续预警
+
+已落地第三版 focused 模型：只做“主线延续”一件事，不预测冷启动新热点，也不单独训练回流模型。
+
+候选宇宙仍使用 `continuation_reheat`，含义是“近期有热度记忆、存在延续可能的主题”。`68` 是 `2026-05-13` 的候选池大小，不是页面推荐数；页面/API 默认只展示 Top5。
+
+训练目标为 `future_mainline_extension_5d`：
+
+- 未来 5 个交易日内至少一次进入 Top15；
+- 且未来 5 个交易日内至少 2 次位于 Top30；
+- 且进入 Top15 的那天不能被判定为明显单票拉动。
+
+不设置成分股数量硬下限。模型使用 `up_ratio`、`strong_count/member_count`、`limit_up_count/member_count`、`l2_positive_ratio` 合成广度特征，并用 `lead_stock_pressure` 对单票拉动做软惩罚。
+
+当前模型验证区间：`2026-02-25 ~ 2026-05-06`。
+
+| 目标 | 样本基线 | Top10命中 | 提升 |
+|---|---:|---:|---:|
+| 未来5日主线延续 | 17.02% | 22.67% | 1.33x |
+
+页面实际按 Top5 使用：
+
+| 口径 | 结果 |
+|---|---:|
+| 验证期 Top5 单主题命中 | 24.89% |
+| 月度滚动 Top5 单主题命中 | 19.43% |
+| 月度滚动每天5个至少1个命中 | 62.30% |
+
+当前判断：模型已经比候选池随机挑选有提升，但还不是强模型；它适合作为“主线是否可能继续”的观察入口，不适合作为买点或个股筛选依据。
+
+训练与预测命令：
+
+```bash
+python3 backend/scripts/train_fine_theme_heat_forecast_model.py --prediction-date 2026-05-13 --validation-days 45 --universe continuation_reheat
+```
+
+已完成的基线结果见：
+
+- `docs/selection/market_heat/fine_theme_heat_forecast_baseline_2026-05-13.md`
+
+正式计划见：
+
+- `docs/changes/REQ-20260513-01-hot-theme-forecasting-roadmap.md`
 
 ## 核心文件
 

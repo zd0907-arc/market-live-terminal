@@ -197,6 +197,41 @@ export interface FineHeatThemeStockDetail {
   stocks: FineHeatStock[];
 }
 
+export interface FineHeatForecastItem {
+  trade_date: string;
+  theme_id: string;
+  theme_name: string;
+  sector_code: string;
+  sector_type: string;
+  current_rank: number;
+  current_hot_score: number;
+  probability: number;
+  probability_pct: number;
+  score_rank: number;
+  probability_percentile: number;
+}
+
+export interface FineHeatForecast {
+  meta: {
+    trade_date: string;
+    model_version: string;
+    target: string;
+    horizon_days: number;
+    rank_band: number;
+    limit: number;
+    model_created_at?: string | null;
+    train_start_date?: string | null;
+    train_end_date?: string | null;
+    validation_start_date?: string | null;
+    validation_end_date?: string | null;
+    model_path?: string | null;
+    feature_count: number;
+    universe?: string;
+  };
+  metrics: Record<string, number | string | null>;
+  items: FineHeatForecastItem[];
+}
+
 export interface FineHeatDashboard {
   meta: {
     generated_at: string;
@@ -418,6 +453,24 @@ export const fetchFineThemeStockDetail = async (themeId: string, endDate?: strin
     return await parseApiData<FineHeatThemeStockDetail>(res);
   } catch (e) {
     console.error('Fetch fine theme stock detail error:', e);
+    return null;
+  }
+};
+
+export const fetchFineThemeForecast = async (
+  tradeDate?: string,
+  target = 'future_mainline_extension_5d',
+  limit = 5,
+  modelVersion?: string,
+): Promise<FineHeatForecast | null> => {
+  try {
+    const params = new URLSearchParams({ target, limit: String(limit) });
+    if (tradeDate) params.set('trade_date', tradeDate);
+    if (modelVersion) params.set('model_version', modelVersion);
+    const res = await fetch(`${API_BASE_URL}/market_heat/fine_theme_forecast?${params.toString()}`);
+    return await parseApiData<FineHeatForecast>(res);
+  } catch (e) {
+    console.error('Fetch fine theme forecast error:', e);
     return null;
   }
 };

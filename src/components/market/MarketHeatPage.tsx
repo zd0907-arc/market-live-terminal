@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Flame, RefreshCw, Activity, TrendingUp, Zap, ShieldAlert, Crosshair, X, ChevronRight, Calendar, ChevronLeft } from 'lucide-react';
-import { fetchFineHeatDashboard, fetchFineHeatDates, fetchFineThemeStockDetail, refreshFineHeatDashboard, FineHeatDashboard, FineHeatDatesData, FineHeatStock, FineHeatTheme, FineHeatThemeStockDetail, FineHeatTradeDateItem } from '../../services/marketHeatService';
+import { fetchFineHeatDashboard, fetchFineHeatDates, fetchFineThemeForecast, fetchFineThemeStockDetail, refreshFineHeatDashboard, FineHeatDashboard, FineHeatDatesData, FineHeatForecast, FineHeatForecastItem, FineHeatStock, FineHeatTheme, FineHeatThemeStockDetail, FineHeatTradeDateItem } from '../../services/marketHeatService';
 import * as StockService from '../../services/stockService';
 import { HistoryMultiframeGranularity, SearchResult } from '../../types';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
@@ -32,6 +32,7 @@ const lifecycleClass = (label?: string) => {
   if (label === '持续升温') return 'border-amber-500/30 bg-amber-500/10 text-amber-200';
   if (label === '持续主线') return 'border-violet-500/30 bg-violet-500/10 text-violet-200';
   if (label === '退潮观察') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+  if (label === '主线延续预警') return 'border-sky-500/30 bg-sky-500/10 text-sky-200';
   return 'border-slate-700 bg-slate-800/50 text-slate-300';
 };
 
@@ -124,6 +125,56 @@ const HotspotPool: React.FC<{
     </div>
   </section>
 );
+
+const ForecastStrip: React.FC<{
+  forecast: FineHeatForecast | null;
+  dashboard: FineHeatDashboard | null;
+  selectedId: string;
+  onSelect: (item: FineHeatForecastItem) => void;
+}> = ({ forecast, dashboard, selectedId, onSelect }) => {
+  const items = forecast?.items || [];
+  if (!forecast || !items.length) return null;
+  const metric = forecast.metrics || {};
+  return (
+    <section className="mb-2 rounded-lg border border-sky-500/20 bg-slate-950/55 p-2">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[13px] font-bold text-white">
+          <Crosshair className="h-4 w-4 text-sky-300" />
+          主线延续预警
+          <span className={`rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] ${mono} text-sky-100`}>
+            未来{forecast.meta.horizon_days}日延续
+          </span>
+        </div>
+        <div className={`text-[10px] ${mono} text-slate-500`}>
+          Top5命中 {fmt(Number(metric.precision_at_5 ?? metric.precision_at_10) * 100, 1)}% · 候选宇宙 {forecast.meta.universe || 'all'}
+        </div>
+      </div>
+      <div className="flex gap-1 overflow-x-auto pb-0.5">
+        {items.slice(0, 5).map((item) => {
+          const active = selectedId === item.theme_id;
+          const live = dashboard?.pool?.find((theme) => theme.id === item.theme_id);
+          return (
+            <button
+              key={`forecast-${item.theme_id}`}
+              type="button"
+              onClick={() => onSelect(item)}
+              className={`shrink-0 rounded-md border px-2 py-1.5 text-left transition ${active ? 'border-sky-400/70 bg-sky-500/20' : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'}`}
+              title={`${item.theme_name}，模型概率 ${fmt(item.probability_pct, 1)}%，当前排名 #${item.current_rank}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="max-w-[90px] truncate text-xs font-bold text-white">{item.theme_name}</span>
+                <span className={`${mono} text-[10px] text-sky-200`}>{fmt(item.probability_pct, 0)}%</span>
+              </div>
+              <div className={`mt-0.5 text-[10px] ${mono} text-slate-500`}>
+                预警#{item.score_rank} · 今#{item.current_rank}{live?.lifecycle ? ` · ${live.lifecycle}` : ''}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
 const StockMiniCard: React.FC<{ stock: NonNullable<FineHeatTheme['stocks']>[number] }> = ({ stock }) => {
   const positive = Number(stock.pct_change) >= 0;
@@ -643,6 +694,7 @@ const HeatTradeDatePicker: React.FC<{
 
 const MarketHeatPage: React.FC = () => {
   const [fineDashboard, setFineDashboard] = useState<FineHeatDashboard | null>(null);
+  const [fineForecast, setFineForecast] = useState<FineHeatForecast | null>(null);
   const [fineDates, setFineDates] = useState<FineHeatDatesData | null>(null);
   const [heatDate, setHeatDate] = useState<string>('');
   const [selectedFineId, setSelectedFineId] = useState<string>('');
@@ -670,6 +722,7 @@ const MarketHeatPage: React.FC = () => {
       if (fineData) {
         setFineDashboard(fineData);
         setHeatDate(fineData.meta.trade_date);
+        fetchFineThemeForecast(fineData.meta.trade_date, 'future_mainline_extension_5d', 5).then(setFineForecast);
         setSelectedFineId((prev) => {
           const all = [
             ...(fineData.pool || []),
@@ -685,6 +738,7 @@ const MarketHeatPage: React.FC = () => {
         });
       } else {
         setFineDashboard(null);
+        setFineForecast(null);
         setSelectedFineId('');
         setError((prev) => prev || `所选日 ${targetDate || '最新'} 还没有细颗粒热点缓存，请点击“刷新最新数据”生成`);
       }
@@ -741,8 +795,38 @@ const MarketHeatPage: React.FC = () => {
       ...(fineDashboard.cards?.mainline || []),
       ...(fineDashboard.cards?.fading || []),
     ];
-    return all.find((item) => item.id === selectedFineId) || fineDashboard.pool?.[0] || null;
-  }, [fineDashboard, selectedFineId]);
+    const found = all.find((item) => item.id === selectedFineId);
+    if (found) return found;
+    const forecastItem = fineForecast?.items?.find((item) => item.theme_id === selectedFineId);
+    if (forecastItem) {
+      return {
+        id: forecastItem.theme_id,
+        name: forecastItem.theme_name,
+        sector_type: forecastItem.sector_type,
+        member_count: 0,
+        lifecycle: '主线延续预警',
+        display_score: forecastItem.probability,
+        rank_today: forecastItem.current_rank,
+        rank_delta: 0,
+        hot_score: forecastItem.current_hot_score,
+        pct_change: 0,
+        hot_change_5d: 0,
+        front_hits_5: 0,
+        hot_hits_5: 0,
+        watch_hits_5: 0,
+        front_hits_20: 0,
+        hot_hits_20: 0,
+        watch_hits_20: 0,
+        limit_up_count: 0,
+        touch_limit_up_count: 0,
+        broken_limit_up_count: 0,
+        evidence: [`模型概率 ${fmt(forecastItem.probability_pct, 1)}%`, `预警排名 #${forecastItem.score_rank}`],
+        reason: `模型预测未来${fineForecast?.meta.horizon_days || 5}日主线延续`,
+        trend: [],
+      } as FineHeatTheme;
+    }
+    return fineDashboard.pool?.[0] || null;
+  }, [fineDashboard, fineForecast, selectedFineId]);
 
   useEffect(() => {
     setSelectedFineStock(null);
@@ -871,68 +955,76 @@ const MarketHeatPage: React.FC = () => {
               {activeFineStock ? (
                 <StockInlineDetailPanel stock={activeFineStock} theme={selectedFineWithStocks} onClose={() => setSelectedFineStock(null)} />
               ) : (
-                <div className="grid gap-2 lg:grid-cols-2 xl:grid-cols-3">
-                  <HotspotPool
-                    title="今日最强"
-                    subtitle="今日排名 Top5"
-                    icon={<Flame className="h-4 w-4 text-red-300" />}
-                    items={fineDashboard?.cards?.today_strong || []}
+                <>
+                  <ForecastStrip
+                    forecast={fineForecast}
                     dashboard={fineDashboard}
                     selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-red-500/20"
+                    onSelect={(item) => setSelectedFineId(item.theme_id)}
                   />
-                  <HotspotPool
-                    title="首次新热"
-                    subtitle="近20日少热，今天进Top15"
-                    icon={<Zap className="h-4 w-4 text-red-300" />}
-                    items={fineDashboard?.cards?.new_hot || []}
-                    dashboard={fineDashboard}
-                    selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-red-500/20"
-                  />
-                  <HotspotPool
-                    title="主线再加速"
-                    subtitle="近20日反复活跃，今天进Top10"
-                    icon={<RefreshCw className="h-4 w-4 text-orange-300" />}
-                    items={fineDashboard?.cards?.returning || []}
-                    dashboard={fineDashboard}
-                    selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-orange-500/20"
-                  />
-                  <HotspotPool
-                    title="持续升温"
-                    subtitle="Top6-Top30，近5日明显抬升"
-                    icon={<TrendingUp className="h-4 w-4 text-amber-300" />}
-                    items={fineDashboard?.cards?.warming || []}
-                    dashboard={fineDashboard}
-                    selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-amber-500/20"
-                  />
-                  <HotspotPool
-                    title="持续主线"
-                    subtitle="仍在Top30，近20日反复热"
-                    icon={<Activity className="h-4 w-4 text-violet-300" />}
-                    items={fineDashboard?.cards?.mainline || []}
-                    dashboard={fineDashboard}
-                    selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-violet-500/20"
-                  />
-                  <HotspotPool
-                    title="退潮观察"
-                    subtitle="跌出Top30，近期从前排掉队"
-                    icon={<ShieldAlert className="h-4 w-4 text-emerald-300" />}
-                    items={fineDashboard?.cards?.fading || []}
-                    dashboard={fineDashboard}
-                    selectedId={selectedFine?.id || ''}
-                    onSelect={setSelectedFineId}
-                    tone="border-emerald-500/20"
-                  />
-                </div>
+                  <div className="grid gap-2 lg:grid-cols-2 xl:grid-cols-3">
+                    <HotspotPool
+                      title="今日最强"
+                      subtitle="今日排名 Top5"
+                      icon={<Flame className="h-4 w-4 text-red-300" />}
+                      items={fineDashboard?.cards?.today_strong || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-red-500/20"
+                    />
+                    <HotspotPool
+                      title="首次新热"
+                      subtitle="近20日少热，今天进Top15"
+                      icon={<Zap className="h-4 w-4 text-red-300" />}
+                      items={fineDashboard?.cards?.new_hot || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-red-500/20"
+                    />
+                    <HotspotPool
+                      title="主线再加速"
+                      subtitle="近20日反复活跃，今天进Top10"
+                      icon={<RefreshCw className="h-4 w-4 text-orange-300" />}
+                      items={fineDashboard?.cards?.returning || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-orange-500/20"
+                    />
+                    <HotspotPool
+                      title="持续升温"
+                      subtitle="Top6-Top30，近5日明显抬升"
+                      icon={<TrendingUp className="h-4 w-4 text-amber-300" />}
+                      items={fineDashboard?.cards?.warming || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-amber-500/20"
+                    />
+                    <HotspotPool
+                      title="持续主线"
+                      subtitle="仍在Top30，近20日反复热"
+                      icon={<Activity className="h-4 w-4 text-violet-300" />}
+                      items={fineDashboard?.cards?.mainline || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-violet-500/20"
+                    />
+                    <HotspotPool
+                      title="退潮观察"
+                      subtitle="跌出Top30，近期从前排掉队"
+                      icon={<ShieldAlert className="h-4 w-4 text-emerald-300" />}
+                      items={fineDashboard?.cards?.fading || []}
+                      dashboard={fineDashboard}
+                      selectedId={selectedFine?.id || ''}
+                      onSelect={setSelectedFineId}
+                      tone="border-emerald-500/20"
+                    />
+                  </div>
+                </>
               )}
               {!fineDashboard ? <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/40 p-6 text-center text-sm text-slate-500">细颗粒热点看板加载中...</div> : null}
             </div>

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Query
 from backend.app.models.schemas import APIResponse
 from backend.app.services.market_heat import (
     build_fine_market_heat_dashboard,
+    build_fine_theme_heat_forecast,
     build_fine_theme_stock_detail,
     build_low_position_l2_sample_summary,
     build_market_heat_history_summary,
@@ -90,6 +91,27 @@ def market_heat_fine_theme_stock_detail(
         return APIResponse(code=200, data=build_fine_theme_stock_detail(theme_id=theme_id, end_date=end_date, history_days=history_days))
     except Exception as exc:
         return APIResponse(code=500, message=f'细颗粒主题成分股详情获取失败: {exc}', data=None)
+
+
+@router.get('/market_heat/fine_theme_forecast', response_model=APIResponse)
+def market_heat_fine_theme_forecast(
+    trade_date: str = Query(None, description='预测基准交易日 YYYY-MM-DD，默认最新'),
+    target: str = Query('future_mainline_extension_5d', description='预测目标，如 future_mainline_extension_5d / future_top15_5d / future_top30_5d'),
+    limit: int = Query(5, ge=1, le=50, description='返回候选数量'),
+    model_version: str = Query(None, description='模型版本，默认取该交易日最新版本'),
+):
+    try:
+        return APIResponse(
+            code=200,
+            data=build_fine_theme_heat_forecast(
+                trade_date=trade_date,
+                target=target,
+                limit=limit,
+                model_version=model_version,
+            ),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f'细颗粒主题预测获取失败: {exc}', data=None)
 
 
 @router.get('/market_heat/low_position_l2_samples/summary', response_model=APIResponse)

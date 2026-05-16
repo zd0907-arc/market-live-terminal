@@ -33,6 +33,7 @@ LOW_POSITION_L2_SAMPLES_DB = Path(os.getenv("HOT_THEME_LOW_POSITION_L2_SAMPLES_D
 FINE_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "fine_hotspot_rules.json"
 THEME_CANONICAL_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "theme_canonical_rules.json"
 TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(DATA_DIR, "market_heat", "tradable_theme_map.db")))
+FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(DATA_DIR, "market_heat", "fine_theme_heat_forecast.db")))
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -712,6 +713,128 @@ def list_fine_heat_trade_dates(end_date: Optional[str] = None, days: int = 260) 
             {"start_date": start, "end_date": end, "path": str(path)}
             for start, end, path in sorted(ranges, key=lambda item: (item[1], item[0]), reverse=True)[:20]
         ],
+    }
+
+
+def _latest_fine_heat_forecast_version(conn: sqlite3.Connection, trade_date: str) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT model_version
+        FROM fine_theme_heat_forecast_predictions
+        WHERE trade_date = ?
+        GROUP BY model_version
+        ORDER BY MAX(created_at) DESC
+        LIMIT 1
+        """,
+        (trade_date,),
+    ).fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+def build_fine_theme_heat_forecast(
+    trade_date: Optional[str] = None,
+    target: str = "future_mainline_extension_5d",
+    limit: int = 5,
+    model_version: Optional[str] = None,
+) -> Dict[str, Any]:
+    if not FINE_THEME_HEAT_FORECAST_DB.exists():
+        raise FileNotFoundError(f"未找到热点预测库：{FINE_THEME_HEAT_FORECAST_DB}")
+    target_date = trade_date or latest_trade_date()
+    if not target_date:
+        raise RuntimeError("无法确定最新交易日，请检查 atomic_trade_daily")
+    max_limit = max(1, min(int(limit), 200))
+    with sqlite3.connect(str(FINE_THEME_HEAT_FORECAST_DB), timeout=30) as conn:
+        conn.row_factory = sqlite3.Row
+        resolved_version = model_version or _latest_fine_heat_forecast_version(conn, target_date)
+        if not resolved_version:
+            raise FileNotFoundError(f"{target_date} 尚无热点预测结果，请先运行预测模型训练脚本")
+        run = conn.execute(
+            """
+            SELECT model_version, train_start_date, train_end_date, validation_start_date,
+                   validation_end_date, prediction_date, feature_columns_json, metrics_json,
+                   model_path, created_at
+            FROM fine_theme_heat_forecast_runs
+            WHERE model_version = ?
+            """,
+            (resolved_version,),
+        ).fetchone()
+        rows = conn.execute(
+            """
+            SELECT trade_date, model_version, target, horizon_days, rank_band, theme_id,
+                   theme_name, sector_code, sector_type, current_rank, current_hot_score,
+                   probability, score_rank, probability_percentile, created_at
+            FROM fine_theme_heat_forecast_predictions
+            WHERE trade_date = ? AND model_version = ? AND target = ?
+            ORDER BY score_rank
+            LIMIT ?
+            """,
+            (target_date, resolved_version, target, max_limit),
+        ).fetchall()
+        if not rows:
+            available = [
+                str(row[0])
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT target
+                    FROM fine_theme_heat_forecast_predictions
+                    WHERE trade_date = ? AND model_version = ?
+                    ORDER BY target
+                    """,
+                    (target_date, resolved_version),
+                ).fetchall()
+            ]
+            raise KeyError(f"未找到预测目标 {target}，可用目标：{', '.join(available) if available else '无'}")
+
+    metrics: Dict[str, Any] = {}
+    feature_columns: List[str] = []
+    if run:
+        try:
+            metrics = json.loads(str(run["metrics_json"] or "{}"))
+        except Exception:
+            metrics = {}
+        try:
+            feature_columns = list(json.loads(str(run["feature_columns_json"] or "[]")))
+        except Exception:
+            feature_columns = []
+    universe = str(metrics.get("universe") or "all") if isinstance(metrics, dict) else "all"
+    metric_payload = metrics.get("metrics", metrics) if isinstance(metrics, dict) else {}
+
+    items = [
+        {
+            "trade_date": str(row["trade_date"]),
+            "theme_id": str(row["theme_id"]),
+            "theme_name": str(row["theme_name"]),
+            "sector_code": str(row["sector_code"] or ""),
+            "sector_type": str(row["sector_type"] or ""),
+            "current_rank": int(row["current_rank"]),
+            "current_hot_score": _round(row["current_hot_score"], 2),
+            "probability": _round(row["probability"], 4),
+            "probability_pct": _round(_safe_float(row["probability"]) * 100, 1),
+            "score_rank": int(row["score_rank"]),
+            "probability_percentile": _round(row["probability_percentile"], 4),
+        }
+        for row in rows
+    ]
+    first = rows[0]
+    return {
+        "meta": {
+            "trade_date": target_date,
+            "model_version": resolved_version,
+            "target": target,
+            "horizon_days": int(first["horizon_days"]),
+            "rank_band": int(first["rank_band"]),
+            "limit": max_limit,
+            "model_created_at": str(run["created_at"]) if run else None,
+            "train_start_date": str(run["train_start_date"]) if run else None,
+            "train_end_date": str(run["train_end_date"]) if run else None,
+            "validation_start_date": str(run["validation_start_date"]) if run else None,
+            "validation_end_date": str(run["validation_end_date"]) if run else None,
+            "model_path": str(run["model_path"]) if run else None,
+            "feature_count": len(feature_columns),
+            "universe": universe,
+        },
+        "metrics": metric_payload.get(target, {}) if isinstance(metric_payload, dict) else {},
+        "items": items,
     }
 
 
