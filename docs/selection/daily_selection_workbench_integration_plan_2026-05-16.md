@@ -15,7 +15,7 @@
 
 - PPO / evolution lab：仍有页面、API、服务和 79M 数据目录引用，建议第三批单独删。
 - 旧研究脚本：可作为旧实验重跑入口，先不和产物清理混删。
-- `aggressive_10cm`、长期趋势、热点研究：属于其他研究线，单独判断。
+- `aggressive_10cm`、长期趋势、热点研究：属于其他研究线，单独判断；热点主题暂不进入每日选股候选池。
 
 接下来开发不应该继续围绕“选择一个策略下拉框”做。正确方向是：
 
@@ -56,6 +56,7 @@ src/components/selection/SelectionResearchPage.tsx
 - 不支持模型来源，例如星火机会模型。
 - 同一只票多来源命中时没有合并，只是多条候选。
 - 日期可选性仍依赖单策略或两个策略的结果，不看模型结果。
+- `v2` 观察池实际价值低，应从日常候选池移除，只保留为后台调试/回测入口。
 
 ### 后端 API
 
@@ -80,7 +81,7 @@ backend/app/routers/selection.py
 |---|---|
 | `stable_capital_callback` | `selection_stable_callback.py`，读 S01 实验 CSV |
 | `trend_continuation_callback` | `selection_trend_continuation.py`，读 S02 实验 CSV |
-| `v2` | `selection_strategy_v2.py`，实时从 atomic/selection 库计算 |
+| `v2` | `selection_strategy_v2.py`，实时从 atomic/selection 库计算；不进入新日常候选池 |
 | `stealth/breakout/distribution` | `selection_research.py`，旧信号表 |
 
 主要问题：
@@ -119,12 +120,15 @@ backend/app/routers/selection.py
 
 | 来源 | source_id | 类型 | 当前状态 | 接入建议 |
 |---|---|---|---|---|
-| 资金流回调稳健 | `stable_capital_callback` | 规则策略 | 页面已接入，但读 CSV | 第一批迁入统一候选池 |
-| 趋势中继高质量回踩 | `trend_continuation_callback` | 规则策略 | 页面已接入，但读 CSV | 第一批迁入统一候选池 |
-| 旧策略观察池 | `v2` | 规则/特征观察 | 实时计算 | 只作为观察池来源 |
-| 星火机会模型 | `spark_opportunity_selector` | 模型 | 有模型和 latest CSV，未入库 | 第一批模型来源 |
-| 守势持仓模型 | `sentinel_postclose_exit` | 持仓动作模型 | 有模型/摘要，未接持仓输入 | 第二阶段接入动作建议 |
-| 热点主题 | `market_heat` | 主题来源 | 独立页面已做 | 后续作为共振标签，不先做主候选 |
+| 资金流回调稳健 | `stable_capital_callback` | 规则策略 | 页面已接入，但读 CSV | 第一批迁入每日真实跑数 |
+| 趋势中继高质量回踩 | `trend_continuation_callback` | 规则策略 | 页面已接入，但读 CSV | 第一批迁入每日真实跑数 |
+| 星火机会模型 | `spark_opportunity_selector` | 模型 | 有模型和 latest CSV，未入库 | 第一批先接候选，后补标准每日推理 |
+| 守势持仓模型 | `sentinel_postclose_exit` | 持仓动作模型 | 当前研究产物不能直接作为每日动作接口 | 等新模型产出符合契约后接入 |
+
+明确不进入 P1：
+
+- `v2` 旧策略观察池：从日常候选池移除。
+- 热点主题：暂时不作为候选来源，只保留后续做解释/共振标签的可能。
 
 ## 目标产品形态
 
@@ -150,7 +154,7 @@ backend/app/routers/selection.py
 |---|---|
 | 股票名/代码 | 保持现在格式 |
 | 总排序 | 综合候选池排序 |
-| 来源标签 | `星火机会`、`资金流回调`、`趋势中继`、`旧策略观察` |
+| 来源标签 | `星火机会`、`资金流回调`、`趋势中继` |
 | 动作标签 | `明日可买`、`观察`、`风险拦截`、`持有`、`次日卖出` |
 | 多来源命中 | 显示来源数量和徽标 |
 | 简短原因 | 取最高优先级来源的 `reason_summary` |
@@ -258,6 +262,95 @@ backend/app/routers/selection.py
 
 ## 后端改造
 
+## 外部模型/策略接入要求
+
+后续其他会话开发的新模型或新策略，要先满足“每日候选来源契约”，才能接入工作台。工作台不直接读取临时 CSV、训练报告或任意格式 JSON。
+
+### 候选生成契约
+
+每个来源必须提供一个稳定的每日产物：
+
+```text
+run(source_id, trade_date) -> candidate records
+```
+
+最低要求：
+
+| 要求 | 说明 |
+|---|---|
+| 点时可用 | 只能使用 `trade_date` 当日收盘前已经存在的数据 |
+| 可重复运行 | 同一天重复运行结果可覆盖，不产生重复候选 |
+| 输出目标日期 | 必须明确 `trade_date`，不能只写“latest” |
+| 输出来源信息 | 必须有稳定 `source_id`、中文名、版本号 |
+| 输出候选解释 | 每条候选必须有 `reason_summary` 和结构化因子 |
+| 输出风险/拦截 | 不能买的票必须写 `suggested_action=blocked/watch` 和原因 |
+| 不依赖页面选择 | 来源由后台注册和每日任务调度，不由页面下拉框决定 |
+
+### 标准候选记录
+
+每个模型/策略至少输出这些字段：
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `trade_date` | 是 | 信号日，YYYY-MM-DD |
+| `symbol` | 是 | `sh600000` / `sz000001` 格式 |
+| `name` | 否 | 没有可由系统补 |
+| `source_id` | 是 | 稳定英文 ID |
+| `source_name` | 是 | 中文名 |
+| `source_type` | 是 | `model` / `rule_strategy` |
+| `source_version` | 是 | 模型或策略版本 |
+| `rank` | 是 | 来源内部排序 |
+| `score` | 是 | 来源内部分数 |
+| `score_scale` | 否 | 默认 `raw`，可为 `0_100`、`probability` |
+| `horizon` | 是 | `1d` / `5d` / `22d` / `swing` |
+| `suggested_action` | 是 | `candidate_buy` / `watch` / `blocked` |
+| `action_label` | 是 | 中文动作 |
+| `entry_allowed` | 是 | 是否允许作为明日可操作 |
+| `buy_rule` | 否 | 买入约束 |
+| `reason_summary` | 是 | 一句话解释 |
+| `risk_tags` | 否 | 数组 |
+| `entry_block_reasons` | 否 | 数组 |
+| `explain_factors` | 是 | 结构化解释对象 |
+| `raw_payload` | 否 | 原始输出，供追溯 |
+
+### 标准 Python 适配器
+
+每个可接入来源建议提供一个适配器函数：
+
+```python
+def generate_daily_candidates(trade_date: str, *, limit: int = 50) -> list[dict]:
+    ...
+```
+
+如果是模型，还要提供：
+
+```python
+MODEL_SOURCE_ID = "spark_opportunity_selector"
+MODEL_SOURCE_NAME = "星火机会模型"
+MODEL_SOURCE_TYPE = "model"
+MODEL_VERSION = "..."
+```
+
+工作台只认适配器返回的标准候选记录，不关心模型内部是 joblib、csv、pytorch 还是规则函数。
+
+### 当前两个新模型的判断
+
+| 模型 | 当前状态 | 接入判断 |
+|---|---|---|
+| 星火机会模型 | 有 `latest_candidates.csv`，但按目标日期每日推理还没生产化 | P1 可先导入 latest 产物，P3 再补标准推理适配器 |
+| 守势持仓模型 | 当前是研究回测产物，缺真实/模拟持仓输入和每日动作输出 | 不在 P1 硬接；等新版输出 `model_action_daily` 契约后接入 |
+
+### 对其他会话的交付要求
+
+其他会话如果开发新模型，要交付：
+
+1. 模型/策略说明：source_id、中文名、周期、适用场景、不能用的场景。
+2. 每日推理脚本或适配器：输入 `trade_date`，输出标准候选记录。
+3. 依赖数据说明：读哪些库/表/文件，是否点时安全。
+4. 输出样例：至少 1 天 JSON 或 DataFrame 示例。
+5. 回测摘要：样本范围、胜率、收益、回撤、主要风险。
+6. 接入状态：`active`、`watch_only`、`disabled`。
+
 ### 新增服务
 
 建议新增：
@@ -298,10 +391,10 @@ backend/scripts/run_daily_model_signals.py
 第一版做三件事：
 
 1. 确认 `selection_feature_daily` 和 `selection_signal_daily` 已覆盖目标日期。
-2. 读取星火模型最新候选并写入统一候选表。
-3. 读取 S01/S02/v2 候选并写入统一候选表。
+2. 运行或导入符合契约的候选来源。
+3. 写入 `selection_candidate_sources` 和 `selection_candidate_daily`。
 
-第一版可以先不重新训练星火模型，只把已有 `latest_candidates.csv` 入库；随后再把“按日期推理”补齐。
+P1 允许星火模型先导入已有 `latest_candidates.csv`，但这只是过渡；正式接入必须补“按目标日期推理”的适配器。
 
 ## 星火模型接入方式
 
@@ -342,17 +435,29 @@ horizon: 22d
 - 生成目标日期候选。
 - 写入统一表。
 
+星火模型的最终适配器要求：
+
+```text
+trade_date -> 从正式 selection/atomic/heat 库读点时特征 -> 预测 -> 标准候选记录
+```
+
+不能只依赖固定 latest 文件。
+
 ## 规则策略接入方式
 
-第一阶段直接复用现有服务：
+P1 可以暂时复用现有服务做过渡：
 
 - `get_stable_callback_candidates(date)`
 - `get_trend_continuation_candidates(date)`
-- `get_candidates_v2_api(date)`
 
 由 `run_daily_model_signals.py` 或 `selection_daily_workbench.py` 统一转换成 `selection_candidate_sources`。
 
-后续再把 S01/S02 从 CSV 迁入正式库，避免继续依赖 `docs/strategy-rework/.../experiments/*.csv`。
+但正式版本必须把 S01/S02 改成每日真实跑数：
+
+- 不再长期读取 `docs/strategy-rework/.../experiments/*.csv`。
+- 策略运行结果写入统一候选表。
+- 每天刷新后，如果当天有信号，页面自动展示。
+- 如果当天没有信号，日期仍可选，但页面明确显示该来源无候选。
 
 ## 综合排序规则
 
@@ -362,7 +467,6 @@ horizon: 22d
 2. 多来源命中加分。
 3. 模型主来源和规则主来源都命中时优先。
 4. `risk_count >= 2` 或有硬拦截原因，降级为 blocked。
-5. 旧 `v2` 只作为观察池，不把它单独推到最前。
 
 建议权重：
 
@@ -402,7 +506,6 @@ base_score = source normalized score
 - 全部
 - 模型
 - 策略
-- 观察
 - 已拦截
 
 不要恢复“按策略切换主列表”的下拉框。
@@ -435,7 +538,7 @@ codex/daily-selection-workbench
 - 新增数据库表。
 - 新增 `selection_candidate_store.py`。
 - 新增 `run_daily_model_signals.py`。
-- 先导入星火 `latest_actionable_candidates.csv` + 当前 S01/S02/v2 候选。
+- 先导入星火 `latest_actionable_candidates.csv` + 当前 S01/S02 候选。
 - 新增 `/selection/daily-candidates` 和 `/selection/daily-trade-dates`。
 - 页面去掉策略下拉框，改读统一接口。
 
@@ -449,6 +552,7 @@ codex/daily-selection-workbench
 
 - 星火模型按目标日期从正式库推理，而不是读 `latest_candidates.csv`。
 - 每天盘后数据刷新后自动写入统一候选池。
+- S01/S02 规则策略也改成每日计算并入库，不再读固定 CSV。
 
 ### P4：守势持仓动作
 
