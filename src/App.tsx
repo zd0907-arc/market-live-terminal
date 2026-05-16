@@ -16,7 +16,6 @@ const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 const PPOBacktestReportPage = lazy(() => import('./components/selection/PPOBacktestReportPage'));
 const OpportunityTradeReviewPage = lazy(() => import('./components/selection/OpportunityTradeReviewPage'));
-const S06FusionTradeReviewPage = lazy(() => import('./components/selection/S06FusionTradeReviewPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
@@ -131,16 +130,6 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">机会发现交易复盘加载中...</div>}>
         <OpportunityTradeReviewPage />
-      </Suspense>
-    );
-  }
-
-  const isS06FusionRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-s06-fusion-report');
-  if (isS06FusionRoute) {
-    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="机会发现融合回测" />;
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">机会发现融合回测加载中...</div>}>
-        <S06FusionTradeReviewPage />
       </Suspense>
     );
   }
