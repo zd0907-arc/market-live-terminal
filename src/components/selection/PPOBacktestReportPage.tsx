@@ -278,9 +278,9 @@ const PPOBacktestReportPage: React.FC = () => {
         routeHref="/"
         routeLabel="回到首页"
         routeTitle="返回首页"
-        secondaryRouteHref="/selection-research"
-        secondaryRouteLabel="去选股"
-        secondaryRouteTitle="打开选股研究工作台"
+        secondaryRouteHref="/model-training"
+        secondaryRouteLabel="模型训练"
+        secondaryRouteTitle="返回模型训练任务清单"
         searchValue=""
         isSearchFocused={false}
         searchResults={[]}
@@ -292,7 +292,7 @@ const PPOBacktestReportPage: React.FC = () => {
         onClearSearch={() => {}}
         onSelectSearchResult={() => {}}
         onSelectHistory={() => {}}
-        rightSlot={<a href="/selection-research" className="rounded-lg border border-cyan-700/50 bg-cyan-900/25 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-800/35">返回研究台</a>}
+        rightSlot={<a href="/model-training" className="rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/25 px-3 py-1.5 text-xs text-fuchsia-200 hover:bg-fuchsia-800/35">返回任务清单</a>}
       />
       <main className="mx-auto max-w-[1600px] space-y-4 p-3 md:p-6">
         {error ? <div className="rounded-xl border border-red-800 bg-red-950/25 px-4 py-3 text-sm text-red-200">{error}</div> : null}

@@ -764,9 +764,6 @@ const SelectionResearchPage: React.FC = () => {
         routeHref="/"
         routeLabel="回到首页"
         routeTitle="返回首页"
-        secondaryRouteHref="/selection-ppo-report"
-        secondaryRouteLabel="PPO复盘"
-        secondaryRouteTitle="打开 PPO 回测复盘页面"
         searchValue=""
         isSearchFocused={false}
         searchResults={[]}

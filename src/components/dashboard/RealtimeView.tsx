@@ -60,6 +60,10 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
     const [isLoadingFusion, setIsLoadingFusion] = useState(false);
     const requestSeqRef = useRef(0);
 
+    useEffect(() => {
+        setSelectedDate('');
+    }, [activeStock?.symbol]);
+
     const getChinaNow = () => {
         const now = new Date();
         const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -197,6 +201,13 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
                     setLastUpdated(now.toTimeString().split(' ')[0]); // 24-hour format HH:MM:SS
                     if (data.display_date) {
                         setDisplayDate(data.display_date);
+                    }
+                    if (
+                        !selectedDate
+                        && data.default_display_scope === 'previous_trade_day'
+                        && data.default_display_date
+                    ) {
+                        setSelectedDate(data.default_display_date);
                     }
                     if (intervalId && data.market_status !== 'trading') {
                         clearInterval(intervalId);

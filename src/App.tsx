@@ -15,6 +15,7 @@ const SentimentDashboard = lazy(() => import('./components/sentiment/SentimentDa
 const ReviewPage = lazy(() => import('./components/sandbox/SandboxReviewPage'));
 const SelectionResearchPage = lazy(() => import('./components/selection/SelectionResearchPage'));
 const PPOBacktestReportPage = lazy(() => import('./components/selection/PPOBacktestReportPage'));
+const ModelTrainingPage = lazy(() => import('./components/model/ModelTrainingPage'));
 const OpportunityTradeReviewPage = lazy(() => import('./components/selection/OpportunityTradeReviewPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
@@ -110,6 +111,26 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">选股研究台加载中...</div>}>
         <SelectionResearchPage />
+      </Suspense>
+    );
+  }
+
+  const isModelTrainingPpoRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/model-training/ppo-backtest');
+  if (isModelTrainingPpoRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="模型训练" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">模型训练详情加载中...</div>}>
+        <PPOBacktestReportPage />
+      </Suspense>
+    );
+  }
+
+  const isModelTrainingRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/model-training');
+  if (isModelTrainingRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="模型训练" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">模型训练加载中...</div>}>
+        <ModelTrainingPage />
       </Suspense>
     );
   }
@@ -461,6 +482,7 @@ const App: React.FC = () => {
   );
   const reviewHref = activeStock?.symbol ? `/review?symbol=${activeStock.symbol.toLowerCase()}` : '/review';
   const selectionHref = '/selection-research';
+  const modelTrainingHref = '/model-training';
   const marketHeatHref = '/market-heat';
   const trendResearchHref = '/trend-research';
 
@@ -492,26 +514,26 @@ const App: React.FC = () => {
         onSelectSearchResult={(res) => handleSelectStock(res)}
         onSelectHistory={(res) => handleSelectStock(res)}
         rightSlot={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
             {!CLOUD_LITE_MODE && (
               <>
                 <a
-                  href="/selection-ppo-report"
-                  className="hidden rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/30 px-2.5 py-1.5 text-xs font-medium text-fuchsia-200 transition-colors hover:bg-fuchsia-800/40 md:inline-flex"
-                  title="打开 PPO 回测复盘页面"
+                  href={modelTrainingHref}
+                  className="hidden h-9 items-center rounded-lg border border-fuchsia-700/50 bg-fuchsia-900/30 px-3 text-xs font-medium text-fuchsia-200 transition-colors hover:bg-fuchsia-800/40 md:inline-flex"
+                  title="打开模型训练模块"
                 >
-                  PPO复盘
+                  模型训练
                 </a>
                 <a
                   href={trendResearchHref}
-                  className="hidden rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"
+                  className="hidden h-9 items-center rounded-lg border border-cyan-700/50 bg-cyan-900/30 px-3 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-800/40 md:inline-flex"
                   title="打开长期趋势研究台"
                 >
                   趋势研究
                 </a>
                 <a
                   href={marketHeatHref}
-                  className="hidden rounded-lg border border-amber-700/50 bg-amber-900/30 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
+                  className="hidden h-9 items-center rounded-lg border border-amber-700/50 bg-amber-900/30 px-3 text-xs font-medium text-amber-200 transition-colors hover:bg-amber-800/40 md:inline-flex"
                   title="打开市场热点温度计"
                 >
                   市场热点
@@ -574,6 +596,13 @@ const App: React.FC = () => {
                 >
                   <BarChart3 className="h-4 w-4" />
                   看市场热点
+                </a>
+                <a
+                  href={modelTrainingHref}
+                  className="ml-2 inline-flex items-center gap-2 rounded-lg border border-fuchsia-600/40 bg-fuchsia-500/10 px-4 py-2 text-sm font-medium text-fuchsia-200 hover:bg-fuchsia-500/20"
+                >
+                  <BrainCircuit className="h-4 w-4" />
+                  模型训练
                 </a>
               </div>
             )}

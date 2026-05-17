@@ -18,10 +18,10 @@ const ThresholdConfig: React.FC<ThresholdConfigProps> = ({ onConfigUpdate }) => 
         <div className="relative">
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors flex items-center gap-2"
+                className="flex h-9 items-center gap-2 rounded-lg bg-slate-800 px-3 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
                 title="系统配置"
             >
-                <Settings className="w-5 h-5" />
+                <Settings className="h-4 w-4" />
                 <span className="text-xs font-medium hidden md:inline">配置</span>
             </button>
 

@@ -83,7 +83,7 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
             ) : null}
           </div>
 
-          <div className="relative flex-1 max-w-3xl flex items-center gap-2 md:gap-4" ref={searchContainerRef}>
+          <div className="relative flex-1 max-w-xl flex items-center gap-2 md:gap-4" ref={searchContainerRef}>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4 md:w-5 md:h-5" />
               <input
@@ -158,7 +158,7 @@ const MarketTopHeader: React.FC<MarketTopHeaderProps> = ({
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-4 w-48 justify-end">
+          <div className="hidden md:flex min-w-[360px] shrink-0 items-center justify-end gap-2">
             {rightSlot}
           </div>
         </div>
