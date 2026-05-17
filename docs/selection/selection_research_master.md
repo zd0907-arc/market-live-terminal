@@ -74,6 +74,7 @@
 - 云端 fallback 当前只接在**选股模块右侧**，不改原盯盘/复盘主链路
 
 ## 7. 文档入口
+- 工作台统一候选池入口：`docs/selection/daily_candidate_source_contract.md`
 - 当前真实状态母卡：`docs/changes/MOD-20260404-01-selection-research-current-state.md`
 - 数据底座：`docs/changes/REQ-20260404-01-selection-data-foundation.md`
 - 特征与信号：`docs/changes/REQ-20260404-02-selection-features-and-signals.md`
@@ -82,7 +83,7 @@
 - 数据对齐与补齐：`docs/changes/REQ-20260404-05-selection-data-alignment-and-backfill.md`
 - 长期研究跟踪清单：`docs/selection/research_watchlist/README.md`
 - 牛市区间涨幅水位：`docs/selection/cycle_returns/README.md`
-- 小主题热点研究：`docs/selection/market_heat/README.md`
+- 小主题热点研究（选股研究子专题，不是独立主线）：`docs/selection/market_heat/README.md`
 - 强者恒强卖点验证：`docs/selection/market_heat/backtests/hot_theme_strong_momentum_sell_points.md`
 
 ## 8. 长期跟踪清单（2026-05-02 新增）
@@ -110,7 +111,7 @@
 
 ## 11. 机会发现模型（2026-05-16 新增）
 
-- 定位：盘后模型候选源 + 盘后持仓管理，不替代现有工作台策略。
+- 定位：盘后模型候选源 + 盘后持仓管理；入口上应并入工作台统一候选池，不另起独立主线。
 - 最终说明书：`docs/selection/opportunity_discovery_model_final.md`
 - 模型开发与接入 SOP：`docs/selection/model_development_sop.md`
 - 清理与落地清单：`docs/selection/selection_research_cleanup_plan.md`

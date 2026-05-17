@@ -1,5 +1,12 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-16 21:35 | Codex
+- Task ID: `MOD-20260516-01-project-governance-phase1`
+- CAP: `N/A`
+- 结论: 已完成治理线第一阶段收口：只补治理规则、入口文档和只读巡检纪律；明确治理工作先在 `main` 只读排查，存在并行 worktree 时必须使用独立治理分支 / worktree；过程只进 change card，handoff 只保留短日志。
+- 风险: 本轮不触碰业务代码、不调整 README、不改 `market_heat` 业务文档；`07_PENDING_TODO.md` 仅固化清理规则，未逐项执行清理。
+- 链接: `docs/changes/MOD-20260516-01-project-governance-phase1.md`, `docs/selection/daily_candidate_source_contract.md`
+
 ## 2026-05-07 09:33 | Codex
 - Task ID: `MOD-20260507-02-el-nino-trend-research-intake`
 - CAP: `CAP-SELECTION-RESEARCH`

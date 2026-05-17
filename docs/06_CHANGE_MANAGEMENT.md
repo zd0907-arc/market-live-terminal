@@ -38,15 +38,17 @@
 8. 归档信息（归档时间、归档 ID、归档路径）
 
 ## 4. 执行顺序（强制，线性）
-1. 在 `docs/changes/` 新建变更卡。
-2. 在 `02` 对应 CAP 卡登记“拟变更点”。
-3. 实施代码/配置改动并本地验证。
-4. 如需发布，按 `04` 执行发布；生产冒烟由你手动执行，AI 负责给出清单与回填模板。
-5. 发版任务必须执行版本一致性核对（`package.json`、`src/version.ts`、`README.md`）。
-6. 回填 `02`（实现摘要+验收）与 `AI_HANDOFF_LOG`（短日志）。
-7. 如有阻塞，更新 `07`；若阻塞已解决或需求方向已变，必须把对应项从 `07` 移除或归档。
-8. 若 `AI_HANDOFF_LOG` 超出最近 `1~2` 个版本窗口，必须把旧窗口整理到 archive summary，再压缩主文件。
-9. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
+1. 先在 `main` 做只读排查，确认范围与事实，不直接改文件。
+2. 在 `docs/changes/` 新建变更卡。
+3. 若仓库存在并行 worktree，治理工作必须切到独立治理分支 / worktree 后再改文档。
+4. 在 `02` 对应 CAP 卡登记“拟变更点”。
+5. 实施代码/配置改动并本地验证。
+6. 如需发布，按 `04` 执行发布；生产冒烟由你手动执行，AI 负责给出清单与回填模板。
+7. 发版任务必须执行版本一致性核对（`package.json`、`src/version.ts`、`README.md`）。
+8. 回填 `02`（实现摘要+验收）与 `AI_HANDOFF_LOG`（短日志）。
+9. 如有阻塞，更新 `07`；若阻塞已解决或需求方向已变，必须把对应项从 `07` 移除或归档。
+10. 若 `AI_HANDOFF_LOG` 超出最近 `1~2` 个版本窗口，必须把旧窗口整理到 archive summary，再压缩主文件。
+11. 任务完成后归档变更卡到 `docs/archive/changes/`（命名规则见 `docs/archive/ARCHIVE_NAMING_STANDARD.md`）。
 
 ## 4.1 两步快路径（默认推荐）
 - **Step 1：文档管理**（`$governance-doc-keeper` AFTER）
@@ -62,7 +64,10 @@
 2. 一旦要改 repo 文件，立刻开 `codex/*` 分支；
 3. 默认**只开分支**，不额外开 worktree；
 4. 只有在“并行多需求 / 需要独立运行环境 / 长时间隔离验证”时才额外开 worktree；
-5. 开发完成后，至少完成：
+5. 若当前已存在并行 worktree，治理类工作必须放在独立治理分支 / worktree，不能和业务实现共用工作目录；
+6. 过程记录只进入对应 `docs/changes/*`，`AI_HANDOFF_LOG.md` 只保留短日志结论；
+7. 已解决或已失效的 pending 必须从 `07_PENDING_TODO.md` 清理；
+8. 开发完成后，至少完成：
    - 用户可见的明确产品改动必须同步升版本号，并在 release notes 中写清可见变化
    - `npm run check:baseline`
    - 若已到用户验收阶段，必须把对应 worktree/分支的前后端服务启动到用户可刷新验证的地址
@@ -71,7 +76,7 @@
    - 清理 `07` 中已解决/失效项
    - 检查 `AI_HANDOFF_LOG` 是否需要归档旧窗口
    - 变更卡结果回填
-6. 合回 `main` 后：
+9. 合回 `main` 后：
    - 删除临时 `codex/*` 分支；
    - 若使用过额外 worktree，移除该 worktree；
    - 本地最终回到干净 `main`。

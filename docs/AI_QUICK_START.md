@@ -27,6 +27,7 @@
 - 当前唯一主线分支：`main`
 - `codex/*` 分支只承接当前需求；历史 worktree / 临时分支只作为备份，不再作为默认开发入口
 - 若存在多个 worktree，默认只在上述主工作目录整理文档和做主线收口。
+- 若要做治理线收口，先在 `main` 只读排查；进入写入阶段时，治理工作必须放到独立治理分支 / worktree。
 
 ## 当前数据职责
 - 云端：盯盘 / 手机应急查看
@@ -53,13 +54,14 @@ npm run check:baseline
 2. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
 3. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
 4. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
-5. 需要细节时再进入：
+5. 若任务属于选股研究入口治理，先看 `docs/selection/daily_candidate_source_contract.md`，它是工作台统一候选池入口说明
+6. 需要细节时再进入：
    - `docs/domain/*`
    - `docs/contracts/*`
    - `docs/ops/*`
-6. 选股策略细节看 `docs/strategy-rework/LONG_MEMORY.md`
-7. 当前需求过程统一进 `docs/changes/*`
-8. 开始做需求前，先看：`docs/ops/development-workflow.md`
+7. 选股策略细节看 `docs/strategy-rework/LONG_MEMORY.md`
+8. 当前需求过程统一进 `docs/changes/*`
+9. 开始做需求前，先看：`docs/ops/development-workflow.md`
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`

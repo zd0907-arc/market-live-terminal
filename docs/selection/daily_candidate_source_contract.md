@@ -1,16 +1,38 @@
-# 每日候选来源接入契约
+# Daily Candidate Source Contract（每日候选源契约）
 
-## 结论
+## 1. 定位
 
-任何新模型或新策略要接入选股工作台，都必须输出标准“每日候选记录”。工作台不直接读取训练报告、临时 CSV、随意命名 JSON 或 Notebook 输出。
+本文档定义工作台统一候选池的单一入口，回答“每日候选从哪里来、如何汇入同一入口、哪些只是子专题解释层”。
 
-接入目标：
+统一链路：
 
 ```text
 trade_date -> source adapter -> standard candidate records -> selection_candidate_sources -> selection_candidate_daily -> workbench
 ```
 
-## 来源注册
+## 2. 当前统一入口
+
+- 工作台统一候选池入口：`Selection Research` 工作台。
+- `机会发现模型` / `spark_opportunity_selector` 是盘后模型候选源，接入工作台统一候选池和模拟盘。
+- 日常入口应先从统一候选池进入，再决定是否查看热点、复盘、长期趋势等子专题解释。
+
+## 3. 候选源边界
+
+主候选源：
+
+- `Selection Research` 工作台主候选池。
+- `机会发现模型` 输出的盘后模型候选。
+
+子专题，不是独立主线入口：
+
+- `market_heat`
+  - 定位：选股研究子专题。
+  - 作用：解释市场主线、辅助候选验证、建立追强候选池。
+  - 边界：不是独立主线，不单独定义项目级候选入口。
+
+工作台不直接读取训练报告、临时 CSV、随意命名 JSON 或 Notebook 输出；任何新模型或新策略要接入选股工作台，都必须输出标准“每日候选记录”。
+
+## 4. 来源注册
 
 每个来源必须先登记：
 
@@ -26,7 +48,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 
 暂不进入候选池的东西也可以登记为 `disabled`，但页面不展示。
 
-## 候选记录
+## 5. 候选记录
 
 适配器返回 `list[dict]`，每条记录至少包含：
 
@@ -61,7 +83,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 }
 ```
 
-## 字段约束
+## 6. 字段约束
 
 | 字段 | 必填 | 约束 |
 |---|---|---|
@@ -87,7 +109,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 - `candidate_tags`
 - `artifact_path`
 
-## 点时安全
+## 7. 点时安全
 
 所有来源必须保证：
 
@@ -102,7 +124,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 - 只输出 latest 而不支持明确 `trade_date`。
 - 输出文件覆盖后无法知道来自哪个模型版本。
 
-## Python 适配器
+## 8. Python 适配器
 
 推荐每个来源暴露：
 
@@ -119,7 +141,7 @@ def generate_daily_candidates(trade_date: str, *, limit: int = 50) -> list[dict]
 
 工作台每日任务只调用适配器，不进入模型内部实现。
 
-## 持仓动作模型
+## 9. 持仓动作模型
 
 持仓模型不要混进候选记录。它输出 `model_action_daily`：
 
@@ -150,7 +172,7 @@ def generate_daily_candidates(trade_date: str, *, limit: int = 50) -> list[dict]
 
 持仓模型接入前必须先有 `model_position_daily` 输入，不能只靠历史回测产物生成动作。
 
-## 交付清单
+## 10. 交付清单
 
 其他会话开发新来源时，至少交付：
 
@@ -163,3 +185,9 @@ def generate_daily_candidates(trade_date: str, *, limit: int = 50) -> list[dict]
 7. 是否允许进入 `active`，还是只能 `watch_only`。
 
 不满足这些要求的模型，只能保留在研究目录，不能接入每日选股工作台。
+
+## 11. 治理使用规则
+
+1. 先确认当前任务是治理入口澄清还是业务实现。
+2. 治理入口澄清时，只更新本契约、`selection_research_master.md` 与入口文档。
+3. 若涉及候选池合流、页面入口或策略实现，必须另开 change card，不在本契约中直接展开。

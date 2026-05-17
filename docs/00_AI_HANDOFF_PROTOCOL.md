@@ -36,6 +36,7 @@
 ## 4. 交接日志规则（短日志）
 
 - `AI_HANDOFF_LOG.md` 仅记录短日志，不写长篇过程。
+- 过程细节、排查过程、讨论来回只进入对应 `docs/changes/*` 变更卡，不回写到 `AI_HANDOFF_LOG.md`。
 - 每条日志必须包含：
   - `Task ID / Change Card ID`
   - `涉及 CAP ID`
@@ -59,6 +60,7 @@
 - 若接口变更，契约文档已更新
 - Handoff 短日志已登记 Task ID
 - 阻塞事项已登记到 `07_PENDING_TODO.md`
+- 已解决 / 已失效 pending 必须从 `07_PENDING_TODO.md` 清理，不继续挂在主清单里
 - 当前需求已按 `docs/ops/development-workflow.md` 完成收尾动作
 
 ## 7. 禁止行为（红线）
@@ -66,3 +68,4 @@
 - 禁止在需求卡未更新时直接实现业务逻辑改动。
 - 禁止在 Handoff 里写“无法复现/已修复”但没有 Task ID 与 CAP 链接。
 - 禁止使用历史临时结论覆盖主册规则。
+- 禁止把过程型排查记录直接堆到核心文档或 `AI_HANDOFF_LOG.md`，应回到对应 change card。

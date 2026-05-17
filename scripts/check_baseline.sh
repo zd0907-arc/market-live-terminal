@@ -35,6 +35,10 @@ echo "==> Version consistency"
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_version_consistency.py"
 
 echo
+echo "==> Governance read-only check"
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_governance.py"
+
+echo
 echo "==> Backend tests"
 "$PYTHON_BIN" -m pytest "$ROOT_DIR/backend/tests" -q
 
