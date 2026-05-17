@@ -40,7 +40,7 @@ Mac 当前正式训练入口应使用 compact：
 
 1. `2024-09 ~ 2024-12` 尚未进入 Mac compact。
 2. `2025-01 ~ 2026-02` 目前只有 trade / limit，缺 order / book / auction。
-3. 指数日线还没有稳定落入训练库，必须补 `中证1000 > 20日线`。
+3. 指数日线不再作为 P0 阻塞项；当前支持 no-index 训练，训练侧需要指数时再单独补。
 4. heat 不覆盖 `2024-09 ~ 2024-12`，不能默认为“没有热点”。
 5. compact current 当前没有 `atomic_open_auction_*` 表；旧 full backup 有 auction 表。P0 特征库先不强依赖 auction，除非后续模型训练侧明确要求 auction 进入 P0。
 
@@ -172,8 +172,8 @@ P0 表：
 |---|---|
 | `model_feature_build_runs` | 每次构建必写，失败也写 |
 | `model_feature_manifest` | 每张表覆盖、行数、source、coverage |
-| `model_market_index_daily` | 至少中证1000，建议同步 500/300/上证/创业板 |
-| `model_market_state_daily_v1` | 市场环境，必须含中证1000 20日线字段 |
+| `model_market_index_daily` | 可选指数输入表；P0 允许为空 |
+| `model_market_state_daily_v1` | 市场环境；无指数时 `has_index_data=0` 且 `csi1000_*` 为空 |
 | `model_feature_daily_v1` | `symbol + trade_date` 日级宽表 |
 | `model_feature_intraday_shape_v1` | 5m 压缩形态表 |
 | `model_label_forward_return_v1` | 标签表，严禁生产候选读取 |
@@ -218,7 +218,7 @@ model_feature_exit_daily_v1
 | 市场成交额、涨跌中位数、涨跌家数 | `atomic_trade_daily` |
 | 涨停、跌停、炸板率 | `atomic_limit_state_daily` |
 | order/book 当日覆盖 | `atomic_order_daily` / `atomic_book_state_daily` |
-| 中证1000和其他指数 | `model_market_index_daily` |
+| 中证1000和其他指数 | 可选：`model_market_index_daily` |
 | 热点集中度和主题生命周期 | `fine_theme_heat_daily_v2` 优先，必要时回退 v1 |
 
 `model_feature_intraday_shape_v1`：
@@ -373,11 +373,11 @@ P0 必须通过：
 1. 新库包含 P0 七张表。
 2. `2026-02` 样本 order/book coverage 为 0，不误填。
 3. `2026-03` 样本 order/book coverage 为 1。
-4. `model_market_state_daily_v1` 中 `csi1000_above_ma20` warmup 后只为 0/1。
+4. no-index 样本允许 `has_index_data=0` 且 `csi1000_*` 为空；模型训练侧必须排除指数字段。
 5. 新增代码不引用 `atomic_limit_state_5m`。
 6. 新增构建脚本不硬编码 `market_atomic_mainboard_full_reverse.db`。
 7. 特征表不含未来标签字段。
-8. 验证报告写明缺失交易日、coverage 摘要、中证1000字段完整性。
+8. 验证报告写明缺失交易日、coverage 摘要、指数字段是否降级。
 
 ## 实施分支建议
 
@@ -404,7 +404,7 @@ branch: codex/model-feature-store-v1
 | Agent | 类型 | 写权限 | 目标 |
 |---|---|---|---|
 | Schema Worker | worker | `backend/scripts/sql/model_feature_store_schema.sql` | P0 七张表 DDL、索引、manifest/build_runs |
-| Validator Worker | worker | `backend/scripts/validate_model_feature_store.py` | 验证表存在、coverage、中证1000、标签隔离、报告 JSON |
+| Validator Worker | worker | `backend/scripts/validate_model_feature_store.py` | 验证表存在、coverage、no-index 降级、标签隔离、报告 JSON |
 | Builder Explorer | explorer | 无写权限 | 梳理 `build_model_feature_store.py` 的最小实现路线 |
 
 后续可继续拆：

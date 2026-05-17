@@ -28,6 +28,7 @@ from backend.app.services.market_heat import (
 )
 from backend.scripts.analyze_hot_sector_granularity import DEFAULT_FINE_RULES, load_fine_sector_themes, load_json
 from backend.scripts.build_fine_theme_heat_daily import lifecycle_for
+from backend.app.services import market_heat
 
 
 DEFAULT_TRADABLE_THEME_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(DATA_DIR, "market_heat", "tradable_theme_map.db")))
@@ -37,14 +38,21 @@ def resolve_default_atomic_db() -> Path:
         return Path(explicit)
     for path in candidate_atomic_db_paths():
         candidate = Path(path)
-        if candidate.exists():
+        if candidate.exists() and candidate.stat().st_size > 0:
             return candidate
+    compact = Path(DATA_DIR) / "atomic_facts" / "shadow" / "market_atomic_mainboard_compact_current.db"
+    if compact.exists() and compact.stat().st_size > 0:
+        return compact
     return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
 
 
 DEFAULT_ATOMIC_DB = resolve_default_atomic_db()
 DEFAULT_OUT_DB = Path(os.getenv("FINE_THEME_HEAT_V2_DB", os.path.join(DATA_DIR, "market_heat", "fine_theme_heat_daily_v2.db")))
 DEFAULT_REPORT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
+
+
+def use_atomic_db(atomic_db: Path) -> None:
+    market_heat.ATOMIC_DB = Path(atomic_db)
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -299,6 +307,7 @@ def compute_lifecycle(
 
 def rebuild(end_date: str, days: int, force: bool) -> Dict[str, Any]:
     ensure_market_heat_dir()
+    use_atomic_db(DEFAULT_ATOMIC_DB)
     theme_meta = _load_fine_theme_members_cached()
     themes = build_theme_lookup(theme_meta)
     if not themes:

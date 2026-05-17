@@ -136,7 +136,7 @@ def parse_args() -> argparse.Namespace:
         "--mode",
         choices=["prediction", "training"],
         default="prediction",
-        help="prediction allows incomplete forward labels; training requires complete labels and index data",
+        help="prediction allows incomplete forward labels; training requires complete labels; index data is optional in P0",
     )
     parser.add_argument(
         "--scan-path",

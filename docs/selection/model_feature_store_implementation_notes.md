@@ -141,6 +141,12 @@ label_complete_asof_date < validation_start
 
 指数不进入每日盘后 P0 强依赖，也不从 Windows 原始 L2 日包抽取。
 
+当前正式口径：
+
+1. P0 支持 no-index 训练。
+2. `has_index_data=0` 或 `csi1000_*` 为空时，模型训练侧必须排除所有指数字段。
+3. 指数只作为训练侧可选增强，不进入每日盘后强依赖。
+
 原因：
 
 1. Mac compact 里出现的 `sz000852` 是股票代码，不是中证1000指数，不能作为 `000852.SH` 使用。
@@ -176,13 +182,133 @@ backend/scripts/sync_model_market_index_daily.py
 2. 模型训练任务需要指数特征时，训练前单独执行并把结果作为 `build_model_feature_store.py --index-db` 输入。
 3. 没有指数时，feature store 保留 `has_index_data=0`，`csi1000_*` 为空，validator 报 warning 但不阻塞 P0。
 
+## 验收命令
+
+prediction 样本构建：
+
+```bash
+python3 backend/scripts/build_model_feature_store.py \
+  --start-date 2026-05-13 \
+  --end-date 2026-05-15 \
+  --reset-target
+```
+
+prediction 验证：
+
+```bash
+python3 backend/scripts/validate_model_feature_store.py \
+  --mode prediction \
+  --db /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db \
+  --output /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_validation_20260513_20260515.json
+```
+
+training smoke 构建：
+
+```bash
+python3 backend/scripts/build_model_feature_store.py \
+  --start-date 2026-04-01 \
+  --end-date 2026-04-03 \
+  --target-db /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_label_smoke.db \
+  --reset-target
+```
+
+training 验证：
+
+```bash
+python3 backend/scripts/validate_model_feature_store.py \
+  --mode training \
+  --db /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_label_smoke.db \
+  --output /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_label_smoke_validation_training.json
+```
+
+输出位置：
+
+```text
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_label_smoke.db
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_validation_20260513_20260515.json
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_label_smoke_validation_training.json
+```
+
+不要提交 git：
+
+```text
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store*.db
+/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store*_validation*.json
+/Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
+/tmp/fine_theme_heat_daily_smoke*.db
+/tmp/fine_theme_heat_daily_smoke*.md
+```
+
+## Heat 覆盖检查
+
+当前正式 heat 库覆盖：
+
+| 表 | 覆盖 | 交易日 | 行数 |
+|---|---|---:|---:|
+| `fine_theme_heat_daily_v2` | `2025-01-02 ~ 2026-05-13` | 325 | 205,638 |
+| `fine_theme_heat_daily` | `2025-01-02 ~ 2026-04-30` | 319 | 15,950 |
+| `fine_theme_member_daily` | `2025-01-02 ~ 2026-04-30` | 319 | 93,770 |
+| `fine_theme_lifecycle_daily` | `2025-01-02 ~ 2026-04-30` | 319 | 15,950 |
+
+当前 Mac compact 覆盖 `2025-01-02 ~ 2026-05-15`，所以 `2024-09 ~ 2024-12` 暂时不能在 Mac 上稳定回建 heat；必须等 2024-09 之后的 atomic compact 重跑入库后再验证。
+
+已用临时库验证 v1 heat/member/lifecycle 可回建：
+
+```bash
+python3 backend/scripts/build_fine_theme_heat_daily.py \
+  --start-date 2025-01-02 \
+  --end-date 2025-01-03 \
+  --atomic-db /Users/dong/Desktop/AIGC/market-data/atomic_facts/shadow/market_atomic_mainboard_compact_current.db \
+  --out-db /tmp/fine_theme_heat_daily_smoke.db \
+  --report /tmp/fine_theme_heat_daily_smoke.md \
+  --warmup-days 20 \
+  --top-k 50
+```
+
+结果：
+
+| 样本 | heat | member | lifecycle |
+|---|---:|---:|---:|
+| `2025-01-02 ~ 2025-01-03` | 100 | 595 | 100 |
+| `2026-05-13 ~ 2026-05-15` | 150 | 733 | 150 |
+
+已用临时库验证 v2 heat 可回建：
+
+```bash
+MARKET_HEAT_ATOMIC_DB=/Users/dong/Desktop/AIGC/market-data/atomic_facts/shadow/market_atomic_mainboard_compact_current.db \
+FINE_THEME_HEAT_V2_DB=/tmp/fine_theme_heat_daily_v2_smoke_202605.db \
+python3 backend/scripts/build_fine_theme_heat_daily_v2.py \
+  --end-date 2026-05-15 \
+  --days 30 \
+  --force
+```
+
+结果：
+
+| 样本 | v2 heat |
+|---|---:|
+| `2025-01-02 ~ 2025-01-03` | 1,264 |
+| `2026-03-27 ~ 2026-05-15` | 18,990 |
+
+注意：v2 builder 只写 `fine_theme_heat_daily_v2`，不写 `fine_theme_member_daily`；成员表仍由 v1 builder 负责。
+
+训练口径先保留两套：
+
+| 口径 | 使用方式 |
+|---|---|
+| `with_heat` | 只使用 `has_heat=1` 的样本，允许 `hot_theme_*`、主题 rank、lifecycle、member role 等字段入模 |
+| `no_heat` | 排除所有 heat 派生字段；`has_heat` 只作为覆盖诊断，不作为收益预测特征 |
+
+下一步重点不是大跑历史，而是先确认 2024-09 之后 atomic compact 补齐后，`fine_theme_heat_daily_v2` 和 `fine_theme_member_daily` 能否按同一脚本稳定回建。
+
 ## 下一步
 
 先把当前 `model_feature_store.db` 和 validation JSON 给模型训练侧看字段是否够用。
 
 如果字段方向确认，下一步再做：
 
-1. 修复或补跑 `fine_theme_heat_daily_v2` 到最近交易日。
-2. 训练任务需要指数时，训练前单独同步外部指数日线并重建训练窗口 feature store。
+1. 先补齐并验证 heat 覆盖，尤其是 `fine_theme_heat_daily_v2` / `fine_theme_member_daily`。
+2. 训练任务如果明确要指数增强，再由训练侧单独准备指数数据。
 3. Windows 单日重跑 `2026-05-15`，记录 D/Z 盘、解压峰值、DB 增量。
 4. 再选 `2024-09-02` 和 `2025-01` 的 2~3 天做 full L2 跨历史验证。
