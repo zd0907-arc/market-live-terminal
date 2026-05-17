@@ -279,7 +279,7 @@ def _score_dataset(
     data["h5_score_on_22_scale"] = score_22_mean + data["zh5_day"] * score_22_std
     data["entry_target"] = _entry_target(data)
     pool = data[pd.to_numeric(data["rank_22_full"], errors="coerce").fillna(999999) <= int(config.candidate_pool_topn)].copy()
-    label_before_validation = pd.to_datetime(pool["label_end_date"]) < pd.to_datetime(config.validation_start)
+    label_before_validation = pd.to_datetime(pool["label_complete_asof_date"]) < pd.to_datetime(config.validation_start)
     signal_in_validation = pd.to_datetime(pool["trade_date"]) >= pd.to_datetime(config.validation_start)
     pool["split"] = np.select(
         [label_before_validation, signal_in_validation],

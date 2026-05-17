@@ -227,7 +227,7 @@ def _score_split(
     config: base.OpportunityConfig,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Pipeline, List[str]]:
     feature_cols = base.available_feature_columns(data, include_orderbook=False)
-    train = data[pd.to_datetime(data["label_end_date"]) < pd.to_datetime(validation_start)].copy()
+    train = data[pd.to_datetime(data["label_complete_asof_date"]) < pd.to_datetime(validation_start)].copy()
     valid = data[(data["trade_date"] >= validation_start) & (data["trade_date"] <= validation_end)].copy()
     train_filtered = base._apply_historical_entry_filter(train, config)
     valid_filtered = base._apply_historical_entry_filter(valid, config)

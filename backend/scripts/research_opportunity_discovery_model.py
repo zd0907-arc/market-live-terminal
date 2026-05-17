@@ -1722,7 +1722,7 @@ def train_command(args: argparse.Namespace) -> None:
     if not feature_cols:
         raise RuntimeError("No feature columns are available")
 
-    train = data[pd.to_datetime(data["label_end_date"]) < pd.to_datetime(str(config.validation_start))].copy()
+    train = data[pd.to_datetime(data["label_complete_asof_date"]) < pd.to_datetime(str(config.validation_start))].copy()
     valid = data[data["trade_date"] >= str(config.validation_start)].copy()
     if config.validation_end:
         valid = valid[valid["trade_date"] <= str(config.validation_end)].copy()
