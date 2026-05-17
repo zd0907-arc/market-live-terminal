@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.app.core.config import DATA_DIR, ROOT_DIR
+from backend.app.core.config import DATA_DIR, ROOT_DIR, candidate_atomic_db_paths
 from backend.app.services.market_heat import (
     _load_fine_theme_members_cached,
     _symbol_norm,
@@ -31,7 +31,18 @@ from backend.scripts.build_fine_theme_heat_daily import lifecycle_for
 
 
 DEFAULT_TRADABLE_THEME_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(DATA_DIR, "market_heat", "tradable_theme_map.db")))
-DEFAULT_ATOMIC_DB = Path(os.getenv("MARKET_HEAT_ATOMIC_DB", os.path.join(DATA_DIR, "atomic_facts", "market_atomic_mainboard_full_reverse.db")))
+def resolve_default_atomic_db() -> Path:
+    explicit = os.getenv("MARKET_HEAT_ATOMIC_DB", "").strip()
+    if explicit:
+        return Path(explicit)
+    for path in candidate_atomic_db_paths():
+        candidate = Path(path)
+        if candidate.exists():
+            return candidate
+    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+
+
+DEFAULT_ATOMIC_DB = resolve_default_atomic_db()
 DEFAULT_OUT_DB = Path(os.getenv("FINE_THEME_HEAT_V2_DB", os.path.join(DATA_DIR, "market_heat", "fine_theme_heat_daily_v2.db")))
 DEFAULT_REPORT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
 
