@@ -623,10 +623,21 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
   const touchActiveRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const lastDefaultAnchorRef = useRef<string | null>(null);
+  const loadSeqRef = useRef(0);
 
   useEffect(() => {
+    const requestSeq = loadSeqRef.current + 1;
+    loadSeqRef.current = requestSeq;
+    if (!activeStock) {
+      setRows([]);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+    setRows([]);
+    setActiveDataIndex(null);
+    setAnchorKey(null);
     const load = async () => {
-      if (!activeStock) return;
       setLoading(true);
       setError('');
       try {
@@ -646,15 +657,20 @@ const HistoryMultiframeFusionView: React.FC<HistoryMultiframeFusionViewProps> = 
           endDate,
           includeTodayPreview,
         });
+        if (requestSeq !== loadSeqRef.current) return;
         setRows(data);
       } catch (e: any) {
+        if (requestSeq !== loadSeqRef.current) return;
         setError(e?.message || '获取历史多维数据失败');
       } finally {
-        setLoading(false);
+        if (requestSeq === loadSeqRef.current) setLoading(false);
       }
     };
 
     load();
+    return () => {
+      if (requestSeq === loadSeqRef.current) loadSeqRef.current += 1;
+    };
   }, [activeStock, granularity, refreshKey, startDate, endDate, includeTodayPreview, fetchRows]);
 
   useEffect(() => {

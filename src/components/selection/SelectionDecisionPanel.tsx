@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 
@@ -79,6 +79,12 @@ const maxDateText = (...values: Array<string | null | undefined>) => {
   return valid.sort()[valid.length - 1];
 };
 
+const minDateText = (...values: Array<string | null | undefined>) => {
+  const valid = values.map((item) => String(item || '').slice(0, 10)).filter(Boolean);
+  if (!valid.length) return '';
+  return valid.sort()[0];
+};
+
 interface Props {
   candidate: SelectionCandidateItem | null;
   profile: SelectionProfileData | null;
@@ -140,6 +146,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const [researchContext, setResearchContext] = useState<SelectionResearchContextData | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [preparingContext, setPreparingContext] = useState(false);
+  const researchRequestSeqRef = useRef(0);
 
   const activeStock = useMemo<SearchResult | null>(() => {
     if (!candidate) return null;
@@ -154,12 +161,18 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
   useEffect(() => {
     if (!candidate) {
+      researchRequestSeqRef.current += 1;
       setEventFeed([]);
       setEventCoverage(null);
       setResearchContext(null);
       return;
     }
     let cancelled = false;
+    const requestSeq = researchRequestSeqRef.current + 1;
+    researchRequestSeqRef.current = requestSeq;
+    setEventFeed([]);
+    setEventCoverage(null);
+    setResearchContext(null);
     setLoadingEvents(true);
     const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
     const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
@@ -169,13 +182,13 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       seriesDays: 60,
     })
       .then((context) => {
-        if (cancelled) return;
+        if (cancelled || requestSeq !== researchRequestSeqRef.current) return;
         setResearchContext(context);
         setEventFeed(context?.stock_event_feed?.items || []);
         setEventCoverage(context?.stock_event_coverage || null);
       })
       .finally(() => {
-        if (!cancelled) setLoadingEvents(false);
+        if (!cancelled && requestSeq === researchRequestSeqRef.current) setLoadingEvents(false);
       });
     return () => {
       cancelled = true;
@@ -248,9 +261,24 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     profile?.trade_date,
     candidate?.trade_date,
   ) || formatDateInput(new Date());
-  const effectiveStartDate = useMemo(() => shiftDate(effectiveEndDate, -coverageDays), [coverageDays, effectiveEndDate]);
+  const signalAnchorDate = minDateText(
+    candidate?.observe_date,
+    profile?.observe_date,
+    candidate?.discovery_date,
+    profile?.discovery_date,
+    candidate?.entry_signal_date,
+    profile?.entry_signal_date,
+    candidate?.trade_date,
+  ) || candidate?.trade_date || effectiveEndDate;
+  const effectiveStartDate = useMemo(() => {
+    const lookbackStart = shiftDate(effectiveEndDate, -coverageDays);
+    const anchorStart = signalAnchorDate ? shiftDate(signalAnchorDate, -20) : lookbackStart;
+    return minDateText(lookbackStart, anchorStart) || lookbackStart;
+  }, [coverageDays, effectiveEndDate, signalAnchorDate]);
   const tradePlanMarkers = useMemo(() => {
     const plan = profile?.trade_plan;
+    const entrySignalDate = profile?.pullback_confirm_date || profile?.entry_signal_date || candidate?.entry_signal_date || plan?.signal_date || candidate?.trade_date;
+    const plannedEntryDate = plan?.entry_date || profile?.entry_date || candidate?.entry_date;
     const markers: Array<{ date?: string | null; type: 'entry' | 'exit'; label: string; note?: string | null; simulated?: boolean }> = [];
     const seen = new Set<string>();
     const pushMarker = (marker: { date?: string | null; type: 'entry' | 'exit'; label: string; note?: string | null; simulated?: boolean }) => {
@@ -277,13 +305,13 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       });
     }
     pushMarker({
-      date: profile?.pullback_confirm_date || profile?.entry_signal_date || candidate?.entry_signal_date || plan?.signal_date,
+      date: entrySignalDate,
       type: 'entry',
       label: '买入确认',
-      note: '确认日收盘识别，次日执行',
+      note: plannedEntryDate ? `确认日收盘识别，计划 ${plannedEntryDate} 执行` : '确认日收盘识别，待下一交易日执行',
     });
     pushMarker({
-      date: plan?.entry_date || profile?.entry_date || candidate?.entry_date,
+      date: plannedEntryDate,
       type: 'entry',
       label: '买入',
       note: plan?.entry_price ? `买入价 ${fmtNum(plan.entry_price)}` : '计划买入日',
@@ -357,14 +385,18 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     }));
   }, [eventFeed, researchContext?.research_evidence?.items]);
 
-  if (!candidate || !profile || !activeStock) {
+  if (!candidate || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
   }
 
-  const candidateTypeText = (profile.candidate_types || candidate.candidate_types || []).join(' / ');
-  const tradePlan = profile.trade_plan;
-  const isStableCallback = profile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
-  const isTrendContinuation = profile.strategy_internal_id === 'trend_continuation_callback' || candidate.strategy_internal_id === 'trend_continuation_callback';
+  const activeProfile = profile || (candidate as unknown as SelectionProfileData);
+  const candidateTypeText = (activeProfile.candidate_types || candidate.candidate_types || []).join(' / ');
+  const tradePlan = activeProfile.trade_plan;
+  const displayedEntrySignalDate = activeProfile.pullback_confirm_date || activeProfile.entry_signal_date || candidate.entry_signal_date || tradePlan?.signal_date || candidate.trade_date;
+  const displayedEntryDate = tradePlan?.entry_date || activeProfile.entry_date || candidate.entry_date;
+  const isStableCallback = activeProfile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
+  const isTrendContinuation = activeProfile.strategy_internal_id === 'trend_continuation_callback' || candidate.strategy_internal_id === 'trend_continuation_callback';
+  const isSparkModel = activeProfile.strategy_internal_id === 'spark_opportunity_selector' || candidate.strategy_internal_id === 'spark_opportunity_selector';
   const isProductStrategy = isStableCallback || isTrendContinuation;
   const eventInterpretation = researchContext?.event_interpretation as SelectionEventInterpretation | undefined;
   const decisionBrief = researchContext?.decision_brief;
@@ -378,20 +410,20 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     || '公司概况还没生成，点击“刷新研究摘要”补拉公告、财务和LLM解释。';
   const decisionExplanationText = decisionBrief?.decision_explanation
     || [
-      profile.current_judgement ? `当前判断：${profile.current_judgement}` : null,
-      profile.breakout_reason_summary || [profile.setup_reason, profile.launch_reason, profile.pullback_reason].filter(Boolean).join('；'),
+      activeProfile.current_judgement ? `当前判断：${activeProfile.current_judgement}` : null,
+      activeProfile.breakout_reason_summary || [activeProfile.setup_reason, activeProfile.launch_reason, activeProfile.pullback_reason].filter(Boolean).join('；') || candidate.reason_summary,
       eventInterpretation?.reasoning ? `事件/资金解释：${eventInterpretation.reasoning}` : null,
     ].filter(Boolean).join('。')
     || '决策解释还没生成，点击“刷新研究摘要”后会把事件催化、趋势回踩和资金确认合成一段人话。';
   const auditFlags = researchContext?.source_audit?.audit_flags || [];
-  const anchorDate = candidate.trade_date || profile.observe_date || profile.discovery_date || profile.entry_signal_date || profile.trade_plan?.signal_date || null;
-  const strategyInsight = useMemo<StrategyInsight>(() => {
-    const intent = profile.intent_profile || {};
-    const entrySignalDate = profile.pullback_confirm_date || profile.entry_signal_date || candidate.entry_signal_date || profile.trade_plan?.signal_date;
-    const observeDate = profile.observe_date || profile.discovery_date || candidate.observe_date;
-    const entryDate = profile.trade_plan?.entry_date || profile.entry_date || candidate.entry_date;
-    const exitSignalDate = profile.trade_plan?.exit_signal_date || profile.exit_signal_date || candidate.exit_signal_date;
-    const exitDate = profile.trade_plan?.exit_date || profile.exit_date || candidate.exit_date;
+  const anchorDate = candidate.trade_date || activeProfile.observe_date || activeProfile.discovery_date || activeProfile.entry_signal_date || activeProfile.trade_plan?.signal_date || null;
+  const strategyInsight: StrategyInsight = (() => {
+    const intent = activeProfile.intent_profile || {};
+    const entrySignalDate = displayedEntrySignalDate;
+    const observeDate = activeProfile.observe_date || activeProfile.discovery_date || candidate.observe_date;
+    const entryDate = activeProfile.trade_plan?.entry_date || activeProfile.entry_date || candidate.entry_date;
+    const exitSignalDate = activeProfile.trade_plan?.exit_signal_date || activeProfile.exit_signal_date || candidate.exit_signal_date;
+    const exitDate = activeProfile.trade_plan?.exit_date || activeProfile.exit_date || candidate.exit_date;
 
     if (isTrendContinuation) {
       const activeStrength = Number(intent.confirm_active_buy_strength ?? candidate.confirm_active_buy_strength);
@@ -399,7 +431,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       const trendScore = Number(intent.trend_score ?? candidate.breakout_score);
       const fundScore = Number(intent.fund_score ?? candidate.stealth_score);
       const repairScore = Number(intent.repair_score ?? candidate.distribution_score);
-      const isBuy = profile.entry_allowed !== false;
+      const isBuy = activeProfile.entry_allowed !== false;
       return {
         title: isBuy ? '买入确认' : '观察中',
         subtitle: isBuy
@@ -450,7 +482,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             title: '退出逻辑',
             rows: [
               { label: '核心规则', value: '累计超大单', desc: '累计超大单增速下降不是风险；累计值真实下降、并从峰值明显回撤，才是风险。' },
-              { label: '当前说明', value: profile.exit_plan_summary || '待跟踪', desc: '卖出信号通常是收盘后识别，下一交易日执行。' },
+              { label: '当前说明', value: activeProfile.exit_plan_summary || '待跟踪', desc: '卖出信号通常是收盘后识别，下一交易日执行。' },
             ],
           },
         ],
@@ -458,20 +490,20 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     }
 
     if (isStableCallback) {
-      const setupScore = Number(intent.setup_score ?? profile.stealth_score);
-      const launchReturn = Number(intent.launch3_return_pct ?? profile.breakout_score);
+      const setupScore = Number(intent.setup_score ?? activeProfile.stealth_score);
+      const launchReturn = Number(intent.launch3_return_pct ?? activeProfile.breakout_score);
       const supportSpread = Number(intent.pullback_support_spread_avg);
-      const riskCount = Number(profile.risk_count ?? candidate.risk_count ?? 0);
-      const isBuy = profile.entry_allowed !== false;
+      const riskCount = Number(activeProfile.risk_count ?? candidate.risk_count ?? 0);
+      const isBuy = activeProfile.entry_allowed !== false;
       return {
         title: isBuy ? '可买入' : '风险拦截',
-        subtitle: `${profile.discovery_date || '--'}观察 → ${entrySignalDate || '--'}回调承接确认`,
+        subtitle: `${activeProfile.discovery_date || '--'}观察 → ${entrySignalDate || '--'}回调承接确认`,
         tone: isBuy ? 'positive' : 'watch',
         sections: [
           {
             title: '信号链路',
             rows: [
-              { label: '纳入观察', value: profile.discovery_date || '--', desc: '先发现资金异动和启动迹象，不追当天暴涨。' },
+              { label: '纳入观察', value: activeProfile.discovery_date || '--', desc: '先发现资金异动和启动迹象，不追当天暴涨。' },
               { label: '买入确认', value: entrySignalDate || '--', desc: '启动后出现回调承接，确认日收盘识别，计划次日买入。' },
               { label: '计划买入', value: entryDate || '--', desc: '回测里用次日开盘价。' },
               { label: '卖出信号/卖出', value: [exitSignalDate, exitDate].filter(Boolean).join(' / ') || '待跟踪', desc: '买入后盯累计超大单和组合风险。' },
@@ -506,12 +538,30 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       };
     }
 
+    if (isSparkModel) {
+      return {
+        title: activeProfile.entry_allowed === false ? '观察/风险提示' : '模型推荐',
+        subtitle: `${displayedEntrySignalDate || '--'}盘后推荐 → ${displayedEntryDate || '待下一交易日'}计划买入`,
+        tone: activeProfile.entry_allowed === false ? 'watch' : 'positive',
+        sections: [
+          {
+            title: '信号链路',
+            rows: [
+              { label: '推荐日', value: displayedEntrySignalDate || '--', desc: '星火机会模型在该交易日盘后给出候选。' },
+              { label: '计划买入', value: displayedEntryDate || '待下一交易日', desc: '默认按下一交易日开盘执行，但需满足高开不超过规则。' },
+              { label: '执行条件', value: activeProfile.exit_plan_summary || candidate.exit_plan_summary || '次日开盘高开不超过6.8%且不接近涨停才买', desc: '这是模型当前的可买性约束，不满足则只观察。' },
+            ],
+          },
+        ],
+      };
+    }
+
     return null;
-  }, [candidate, isStableCallback, isTrendContinuation, profile]);
+  })();
 
   return (
     <div className="space-y-3">
-      {profile.profile_date_fallback_used && profile.requested_trade_date && profile.requested_trade_date !== profile.trade_date ? (
+      {profile?.profile_date_fallback_used && profile.requested_trade_date && profile.requested_trade_date !== profile.trade_date ? (
         <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
           你当前查看的日期是 {profile.requested_trade_date}，但选股画像最新只算到 {profile.trade_date}，右侧判断先按最近可用画像日展示。
         </div>
@@ -526,8 +576,8 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             onGranularityChange={setGranularity}
             startDate={effectiveStartDate}
             endDate={effectiveEndDate}
-            signalDate={candidate.trade_date}
-            signalLabel="信号日"
+            signalDate={candidate.entry_signal_date || candidate.trade_date}
+            signalLabel="推荐日"
             defaultAnchorDate={anchorDate}
             tradeMarkers={tradePlanMarkers}
             tradeSummaryText={tradeSummary.text}
@@ -566,6 +616,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <Sparkles className="h-4 w-4 text-violet-300" />
               公司概况
+              {loadingEvents ? <span className="text-[11px] font-normal text-violet-200/70">研究资料加载中</span> : null}
               {researchContext?.as_of_cutoff ? <span className="text-[11px] font-normal text-slate-500">截至 {researchContext.as_of_cutoff}</span> : null}
             </div>
             <button
@@ -578,7 +629,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             </button>
           </div>
           <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
-            {companyOverviewText}
+            {loadingEvents && !researchContext ? '基础行情和策略详情已先加载，公告、财务和研究摘要正在后台补充。' : companyOverviewText}
           </div>
           <div className="mt-3 text-[11px] text-slate-500">
             生成时间：{decisionBrief?.company_overview_generated_at || decisionBrief?.generated_at || '生成中'}
@@ -590,10 +641,11 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <TrendingUp className="h-4 w-4 text-emerald-300" />
               决策解释
+              {loadingEvents ? <span className="text-[11px] font-normal text-emerald-200/70">研究资料加载中</span> : null}
             </div>
           </div>
           <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-100">
-            {decisionExplanationText}
+            {loadingEvents && !researchContext ? '策略信号先按当前候选展示；研究摘要完成后会补充事件、财务和解释。' : decisionExplanationText}
           </div>
           <div className="mt-3 text-[11px] text-slate-500">
             生成时间：{decisionBrief?.decision_explanation_generated_at || decisionBrief?.generated_at || '生成中'}
@@ -606,28 +658,28 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">信号链路</div>
             <div className="mt-1 text-sm text-slate-100">
-              信号日 {candidate.trade_date || '--'}
-              {tradePlan?.entry_date ? ` → 入场 ${tradePlan.entry_date}` : ''}
+              推荐日 {displayedEntrySignalDate || '--'}
+              {displayedEntryDate ? ` → 计划买入 ${displayedEntryDate}` : ' → 计划买入 待下一交易日'}
               {tradePlan?.exit_signal_date ? ` → 出场提示 ${tradePlan.exit_signal_date}` : ''}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              {tradePlan?.exit_reason || profile.current_judgement || '当前无交易计划说明'}
+              {tradePlan?.exit_reason || activeProfile.current_judgement || '当前无交易计划说明'}
             </div>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">候选类型</div>
             <div className="mt-1 text-sm font-semibold text-slate-100">{candidateTypeText || '--'}</div>
             <div className="mt-1 text-xs text-slate-400">
-              {profile.intent_profile?.intent_label ? `意图：${profile.intent_profile.intent_label}` : '当前无意图标签'}
+              {activeProfile.intent_profile?.intent_label ? `意图：${activeProfile.intent_profile.intent_label}` : '当前无意图标签'}
             </div>
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">入场结论</div>
-            <div className={`mt-1 text-sm font-semibold ${profile.entry_allowed === false ? 'text-amber-300' : 'text-emerald-300'}`}>
-              {profile.entry_allowed === false ? (isTrendContinuation ? '观察中' : '已拦截') : isProductStrategy ? '可买入' : '允许进场'}
+            <div className={`mt-1 text-sm font-semibold ${activeProfile.entry_allowed === false ? 'text-amber-300' : 'text-emerald-300'}`}>
+              {activeProfile.entry_allowed === false ? (isTrendContinuation ? '观察中' : '已拦截') : isProductStrategy ? '可买入' : '允许进场'}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              {(profile.entry_block_reasons || []).length > 0 ? profile.entry_block_reasons?.join('；') : isProductStrategy ? '确认日收盘识别，计划次日开盘买入' : '当前未触发入场拦截'}
+              {(activeProfile.entry_block_reasons || []).length > 0 ? activeProfile.entry_block_reasons?.join('；') : (isProductStrategy || isSparkModel) ? '确认日收盘识别，计划次日开盘买入' : '当前未触发入场拦截'}
             </div>
           </div>
         </div>
@@ -641,14 +693,14 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
           <div className="mt-2 text-sm leading-6 text-slate-200">
             {isStableCallback
-              ? [profile.setup_reason, profile.launch_reason, profile.pullback_reason].filter(Boolean).join('；')
-              : profile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
+              ? [activeProfile.setup_reason, activeProfile.launch_reason, activeProfile.pullback_reason].filter(Boolean).join('；')
+              : activeProfile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <MetricCard label="5日净流入" value={fmtAmt(profile.net_inflow_5d)} />
-            <MetricCard label="10日正流入占比" value={fmtPct((profile.positive_inflow_ratio_10d || 0) * 100, 1)} />
-            <MetricCard label="距前20高点" value={fmtPct(profile.breakout_vs_prev20_high_pct)} />
-            <MetricCard label="L2确认强度" value={fmtNum(profile.l2_vs_l1_strength)} />
+            <MetricCard label="5日净流入" value={fmtAmt(activeProfile.net_inflow_5d)} />
+            <MetricCard label="10日正流入占比" value={fmtPct((activeProfile.positive_inflow_ratio_10d || 0) * 100, 1)} />
+            <MetricCard label="距前20高点" value={fmtPct(activeProfile.breakout_vs_prev20_high_pct)} />
+            <MetricCard label="L2确认强度" value={fmtNum(activeProfile.l2_vs_l1_strength)} />
           </div>
         </section>
 
@@ -659,14 +711,14 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
           <div className="mt-2 text-sm leading-6 text-slate-200">
             {isStableCallback
-              ? ((profile.risk_labels || candidate.risk_labels || []).length > 0 ? (profile.risk_labels || candidate.risk_labels || []).join('；') : '组合风险标签未达到过滤阈值。')
-              : profile.distribution_reason_summary || '当前未见明显出货压力'}
+              ? ((activeProfile.risk_labels || candidate.risk_labels || []).length > 0 ? (activeProfile.risk_labels || candidate.risk_labels || []).join('；') : '组合风险标签未达到过滤阈值。')
+              : activeProfile.distribution_reason_summary || '当前未见明显出货压力'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <MetricCard label="出货风险分" value={fmtNum(profile.distribution_score)} tone={scoreTone(profile.distribution_score)} />
-            <MetricCard label="20日涨幅" value={fmtPct(profile.return_20d_pct)} />
-            <MetricCard label="情绪热比" value={fmtNum(profile.sentiment_heat_ratio)} />
-            <MetricCard label="L2事件" value={profile.l2_order_event_available ? '增强可用' : '弱化版'} />
+            <MetricCard label="出货风险分" value={fmtNum(activeProfile.distribution_score)} tone={scoreTone(activeProfile.distribution_score)} />
+            <MetricCard label="20日涨幅" value={fmtPct(activeProfile.return_20d_pct)} />
+            <MetricCard label="情绪热比" value={fmtNum(activeProfile.sentiment_heat_ratio)} />
+            <MetricCard label="L2事件" value={activeProfile.l2_order_event_available ? '增强可用' : '弱化版'} />
           </div>
         </section>
 
@@ -676,8 +728,8 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             事件时间线
           </div>
           <div className="mt-3 max-h-[320px] space-y-2 overflow-auto pr-1">
-            {(profile.event_timeline || []).length > 0 ? (
-              (profile.event_timeline || []).map((item, idx) => (
+            {(activeProfile.event_timeline || []).length > 0 ? (
+              (activeProfile.event_timeline || []).map((item, idx) => (
                 <div key={`${item.kind}-${item.time}-${idx}`} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
                     <span>{item.kind === 'daily_score' ? '情绪日评分' : `${item.source || '事件源'} / ${item.event_type || '事件'}`}</span>

@@ -52,6 +52,65 @@ export const fetchSelectionCandidates = async (
   }
 };
 
+export const fetchDailySelectionCandidates = async (
+  date?: string,
+  limit = 50,
+  sourceType?: string
+): Promise<SelectionCandidatesResponse | null> => {
+  try {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (date) params.set('date', date);
+    if (sourceType) params.set('source_type', sourceType);
+    const res = await fetch(`${API_BASE_URL}/selection/daily-candidates?${params.toString()}`);
+    return await parseApiData<SelectionCandidatesResponse>(res);
+  } catch (e) {
+    console.error('Fetch daily selection candidates error:', e);
+    return null;
+  }
+};
+
+export const fetchDailySelectionTradeDates = async (
+  startDate?: string,
+  endDate?: string
+): Promise<SelectionTradeDatesData | null> => {
+  try {
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    const res = await fetch(`${API_BASE_URL}/selection/daily-trade-dates?${params.toString()}`);
+    return await parseApiData<SelectionTradeDatesData>(res);
+  } catch (e) {
+    console.error('Fetch daily selection trade dates error:', e);
+    return null;
+  }
+};
+
+export const fetchDailySelectionProfile = async (symbol: string, date: string): Promise<SelectionProfileData | null> => {
+  try {
+    const params = new URLSearchParams({ date });
+    const res = await fetch(`${API_BASE_URL}/selection/daily-profile/${symbol}?${params.toString()}`);
+    return await parseApiData<SelectionProfileData>(res);
+  } catch (e) {
+    console.error('Fetch daily selection profile error:', e);
+    return null;
+  }
+};
+
+export const refreshDailySelectionCandidates = async (date: string, limit = 50, sources?: string[]): Promise<any | null> => {
+  try {
+    const params = new URLSearchParams({ date, limit: String(limit) });
+    if (sources?.length) params.set('sources', sources.join(','));
+    const res = await fetch(`${API_BASE_URL}/selection/daily-refresh?${params.toString()}`, {
+      method: 'POST',
+      headers: getWriteHeaders(),
+    });
+    return await parseApiData<any>(res);
+  } catch (e) {
+    console.error('Refresh daily selection candidates error:', e);
+    return null;
+  }
+};
+
 export const fetchSelectionTradeDates = async (
   startDate?: string,
   endDate?: string,

@@ -24,6 +24,7 @@ def main() -> None:
     refresh_parser = subparsers.add_parser("refresh", help="生成/刷新特征与信号")
     refresh_parser.add_argument("--start-date", default=None)
     refresh_parser.add_argument("--end-date", default=None)
+    refresh_parser.add_argument("--skip-daily-candidates", action="store_true", help="只刷新特征/信号，不生成每日统一候选池")
 
     candidates_parser = subparsers.add_parser("candidates", help="查看某日候选")
     candidates_parser.add_argument("--date", default=None)
@@ -43,7 +44,12 @@ def main() -> None:
 
     if args.command == "refresh":
         result = refresh_selection_research(start_date=args.start_date, end_date=args.end_date)
-        print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
+        payload = result.__dict__.copy()
+        if not args.skip_daily_candidates:
+            from backend.app.services.selection_daily_workbench import run_daily_selection_sources
+
+            payload["daily_candidates"] = run_daily_selection_sources(result.end_date)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
     if args.command == "candidates":

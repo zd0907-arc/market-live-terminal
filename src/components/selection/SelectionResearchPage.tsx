@@ -12,16 +12,17 @@ import {
   SelectionTradeDatesData,
 } from '../../types';
 import {
+  fetchDailySelectionCandidates,
+  fetchDailySelectionProfile,
+  fetchDailySelectionTradeDates,
   fetchSelectionBacktestDetail,
   fetchSelectionBacktests,
-  fetchSelectionCandidates,
   fetchSelectionHealth,
-  fetchSelectionProfile,
-  fetchSelectionTradeDates,
   fetchSelectionV2Evaluation,
   fetchStableCallbackEvaluation,
   fetchTrendContinuationEvaluation,
   prewarmSelectionResearchContexts,
+  refreshDailySelectionCandidates,
   refreshSelectionResearch,
   runSelectionBacktest,
 } from '../../services/selectionService';
@@ -34,21 +35,18 @@ import { APP_VERSION } from '../../version';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
 const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
-const OBSERVATION_FALLBACK_STRATEGY: SelectionStrategy = 'v2';
-const OBSERVATION_FALLBACK_LIMIT = 10;
 const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
-const DAILY_REVIEW_DATE_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
-type ActiveStrategy = 'daily_review' | Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
+type ActiveStrategy = Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
 
 const STRATEGY_OPTIONS: Array<{ value: ActiveStrategy; label: string }> = [
-  { value: 'daily_review', label: '每日复盘决策' },
   { value: 'stable_capital_callback', label: '资金流回调稳健' },
   { value: 'trend_continuation_callback', label: '趋势中继高质量回踩' },
   { value: 'v2', label: '旧策略对照' },
 ];
 
 const STRATEGY_LABELS: Record<string, string> = {
-  daily_review: '每日复盘决策',
+  daily_candidate_pool: '每日综合候选池',
+  spark_opportunity_selector: '星火机会模型 1.0',
   stable_capital_callback: '资金流回调稳健',
   trend_continuation_callback: '趋势中继高质量回踩',
   v2: '旧策略对照',
@@ -56,6 +54,27 @@ const STRATEGY_LABELS: Record<string, string> = {
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
 const fmtNum = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
+const fmtSourceLabel = (source: Record<string, any>) => {
+  const name = source.source_name || STRATEGY_LABELS[String(source.source_id)] || source.source_id || '来源';
+  const rank = source.rank != null && !Number.isNaN(Number(source.rank)) ? `源#${Number(source.rank)}` : '';
+  const score = source.score != null && !Number.isNaN(Number(source.score)) ? `源分${fmtNum(Number(source.score), 2)}` : '';
+  const strength = source.source_strength_label ? `${source.source_strength_label}` : '';
+  return [name, rank, score, strength].filter(Boolean).join(' ');
+};
+const sourceBadgeClass = (sourceId?: string) => {
+  if (sourceId === 'spark_opportunity_selector') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
+  if (sourceId === 'trend_continuation_callback') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (sourceId === 'stable_capital_callback') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  return 'border-slate-700 bg-slate-950 text-slate-400';
+};
+const fmtSortScoreLabel = (item: SelectionCandidateItem) => {
+  const rankScore = Number(item.selection_rank_score ?? item.score);
+  const sourceScore = Number(item.source_score ?? item.score);
+  if (Number.isFinite(rankScore) && Number.isFinite(sourceScore) && Math.abs(rankScore - sourceScore) > 0.01) {
+    return `排序分｜源分${fmtNum(sourceScore)}`;
+  }
+  return '综合分';
+};
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 const parseDateOnly = (value?: string | null): Date | null => {
@@ -265,7 +284,7 @@ const TradeDatePicker: React.FC<{
 
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
-  const [activeStrategy, setActiveStrategy] = useState<ActiveStrategy>('daily_review');
+  const [activeStrategy, setActiveStrategy] = useState<ActiveStrategy>(STABLE_CALLBACK_STRATEGY);
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
@@ -273,7 +292,7 @@ const SelectionResearchPage: React.FC = () => {
   const [profile, setProfile] = useState<SelectionProfileData | null>(null);
   const [quote, setQuote] = useState<any | null>(null);
   const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
-  const [backendStatus, setBackendStatus] = useState(false);
+  const [backendStatus, setBackendStatus] = useState(true);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [backtestRuns, setBacktestRuns] = useState<SelectionBacktestRunItem[]>([]);
   const [backtestDetail, setBacktestDetail] = useState<SelectionBacktestDetail | null>(null);
@@ -289,6 +308,10 @@ const SelectionResearchPage: React.FC = () => {
   const [error, setError] = useState('');
   const selectedRef = useRef<SelectionCandidateItem | null>(null);
   const lastLoadedKeyRef = useRef('');
+  const candidatesRequestSeqRef = useRef(0);
+  const profileRequestSeqRef = useRef(0);
+  const candidateLoadDateRef = useRef('');
+  const backendHealthFailureCountRef = useRef(0);
   const dateInitializedRef = useRef(false);
   const prewarmNextLoadRef = useRef(false);
 
@@ -320,12 +343,12 @@ const SelectionResearchPage: React.FC = () => {
     if (!picked.length) return;
     void prewarmSelectionResearchContexts({
       date: dateText || tradeDate,
-      strategy: activeStrategy,
+      strategy: 'daily_candidate_pool',
       limit: 12,
       items: picked.map((item) => ({
         symbol: item.symbol.toLowerCase(),
         trade_date: item.trade_date || dateText || tradeDate,
-        strategy: item.strategy_internal_id || (activeStrategy === 'daily_review' ? STABLE_CALLBACK_STRATEGY : activeStrategy),
+        strategy: item.strategy_internal_id || 'daily_candidate_pool',
         rank: item.rank,
         entry_allowed: item.entry_allowed,
         action_label: item.action_label,
@@ -341,75 +364,69 @@ const SelectionResearchPage: React.FC = () => {
 
   const loadSelectableDates = async (minDate: string, maxDate: string): Promise<SelectionTradeDatesData | null> => {
     if (!minDate || !maxDate) return null;
-    if (activeStrategy === 'daily_review') {
-      const datasets = await Promise.all(
-        DAILY_REVIEW_DATE_STRATEGIES.map((strategy) => fetchSelectionTradeDates(minDate, maxDate, strategy))
-      );
-      return mergeTradeDateItems(datasets);
+    return fetchDailySelectionTradeDates(minDate, maxDate);
+  };
+
+  const shiftSelectableDate = (direction: -1 | 1) => {
+    const dates = Object.values(tradeDateMetaByDate)
+      .filter((item) => item.selectable)
+      .map((item) => item.date)
+      .sort();
+    if (!dates.length) return;
+    const current = pendingTradeDate || tradeDate;
+    let index = dates.indexOf(current);
+    if (index < 0) index = direction > 0 ? -1 : dates.length;
+    const next = dates[index + direction];
+    if (next) {
+      lastLoadedKeyRef.current = '';
+      setPendingTradeDate(next);
+      setTradeDate(next);
     }
-    return fetchSelectionTradeDates(minDate, maxDate, activeStrategy);
   };
 
   const loadCandidates = async (dateArg = tradeDate, force = false, prewarm = false) => {
     const targetDate = dateArg || tradeDate;
     if (!targetDate) return;
-    const loadKey = `${activeStrategy}:${targetDate}`;
+    const loadKey = `daily_candidate_pool:${targetDate}`;
     if (!force && lastLoadedKeyRef.current === loadKey) return;
     lastLoadedKeyRef.current = loadKey;
     const shouldPrewarm = prewarm || prewarmNextLoadRef.current;
     prewarmNextLoadRef.current = false;
+    const requestSeq = candidatesRequestSeqRef.current + 1;
+    candidatesRequestSeqRef.current = requestSeq;
+    candidateLoadDateRef.current = targetDate;
     setLoadingCandidates(true);
     setError('');
+    if (selectedRef.current?.trade_date !== targetDate) {
+      setCandidates([]);
+      setSelected(null);
+      setProfile(null);
+    }
     try {
-      let items: SelectionCandidateItem[] = [];
-      let nextDate = targetDate;
-      if (activeStrategy === 'daily_review') {
-        const [stableData, trendData, observeData] = await Promise.all([
-          fetchSelectionCandidates(targetDate, STABLE_CALLBACK_STRATEGY, 10),
-          fetchSelectionCandidates(targetDate, TREND_CONTINUATION_STRATEGY, 20),
-          fetchSelectionCandidates(targetDate, OBSERVATION_FALLBACK_STRATEGY, OBSERVATION_FALLBACK_LIMIT),
-        ]);
-        const strictItems = [
-          ...(stableData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || STABLE_CALLBACK_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[STABLE_CALLBACK_STRATEGY] })),
-          ...(trendData?.items || []).map((item) => ({ ...item, strategy_internal_id: item.strategy_internal_id || TREND_CONTINUATION_STRATEGY, strategy_display_name: item.strategy_display_name || STRATEGY_LABELS[TREND_CONTINUATION_STRATEGY] })),
-        ];
-        const existingSymbols = new Set(strictItems.map((item) => item.symbol.toLowerCase()));
-        const observeItems = (observeData?.items || [])
-          .filter((item) => item.entry_allowed !== false && !existingSymbols.has(item.symbol.toLowerCase()))
-          .slice(0, OBSERVATION_FALLBACK_LIMIT)
-          .map((item, index) => ({
-            ...item,
-            rank: index + 1,
-            entry_allowed: false,
-            lifecycle_phase: item.lifecycle_phase || 'trend_observation_pool',
-            lifecycle_phase_label: item.lifecycle_phase_label || '优先观察',
-            action_label: '优先观察',
-            candidate_types: [...(item.candidate_types || []), 'ai_observation_fallback'],
-            strategy_internal_id: OBSERVATION_FALLBACK_STRATEGY,
-            strategy_display_name: '优先观察池',
-            reason_summary: item.reason_summary || '旧策略强信号，作为无严格买点时的观察池',
-          }));
-        items = [...strictItems, ...observeItems];
-        nextDate = targetDate || stableData?.trade_date || trendData?.trade_date || observeData?.trade_date || '';
-      } else {
-        const data = await fetchSelectionCandidates(targetDate, activeStrategy, activeStrategy === TREND_CONTINUATION_STRATEGY ? 20 : 10);
-        items = data?.items || [];
-        nextDate = targetDate || data?.trade_date || '';
-      }
+      const data = await fetchDailySelectionCandidates(targetDate, 80);
+      if (requestSeq !== candidatesRequestSeqRef.current || targetDate !== candidateLoadDateRef.current) return;
+      const items = data?.items || [];
+      const nextDate = targetDate || data?.trade_date || '';
       setCandidates(items);
-      await hydrateCandidateNames(items);
       if (shouldPrewarm) {
         triggerResearchPrewarm(items, nextDate || targetDate);
       }
       const prevSelected = selectedRef.current;
-      const keepSelected = items.find((item) => item.symbol === prevSelected?.symbol && item.strategy_internal_id === prevSelected?.strategy_internal_id) || items[0] || null;
+      const keepSelected = (
+        prevSelected?.trade_date === targetDate
+          ? items.find((item) => item.symbol === prevSelected?.symbol && item.trade_date === prevSelected.trade_date)
+          : null
+      ) || items[0] || null;
       setSelected(keepSelected);
       if (!keepSelected) setProfile(null);
+      void hydrateCandidateNames(items);
     } catch (e) {
-      lastLoadedKeyRef.current = '';
-      setError('候选加载失败');
+      if (requestSeq === candidatesRequestSeqRef.current) {
+        lastLoadedKeyRef.current = '';
+        setError('候选加载失败');
+      }
     } finally {
-      setLoadingCandidates(false);
+      if (requestSeq === candidatesRequestSeqRef.current) setLoadingCandidates(false);
     }
   };
 
@@ -426,13 +443,32 @@ const SelectionResearchPage: React.FC = () => {
   useEffect(() => {
     loadHealth();
     loadBacktests();
+    let cancelled = false;
+    const check = () => {
+      StockService.checkBackendHealth().then((ok) => {
+        if (cancelled) return;
+        if (ok) {
+          backendHealthFailureCountRef.current = 0;
+          setBackendStatus(true);
+          return;
+        }
+        backendHealthFailureCountRef.current += 1;
+        if (backendHealthFailureCountRef.current >= 3) setBackendStatus(false);
+      });
+    };
+    check();
+    const timer = window.setInterval(check, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
     if (!tradeDate) return;
     loadCandidates(tradeDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tradeDate, activeStrategy]);
+  }, [tradeDate]);
 
   const handleApplyTradeDate = async () => {
     if (!pendingTradeDate) return;
@@ -446,26 +482,28 @@ const SelectionResearchPage: React.FC = () => {
 
   useEffect(() => {
     if (!selected) {
+      profileRequestSeqRef.current += 1;
       setProfile(null);
       setLoadingProfile(false);
       return;
     }
     let cancelled = false;
+    const requestSeq = profileRequestSeqRef.current + 1;
+    profileRequestSeqRef.current = requestSeq;
+    const profileDate = selected.trade_date || tradeDate;
+    const profileSymbol = selected.symbol;
     setLoadingProfile(true);
-    const profileStrategy = activeStrategy === 'daily_review'
-      ? ((selected.strategy_internal_id as SelectionStrategy | undefined) || STABLE_CALLBACK_STRATEGY)
-      : activeStrategy;
-    fetchSelectionProfile(selected.symbol, tradeDate || undefined, profileStrategy)
+    fetchDailySelectionProfile(profileSymbol, profileDate)
       .then((data) => {
-        if (!cancelled) setProfile(data);
+        if (!cancelled && requestSeq === profileRequestSeqRef.current) setProfile(data);
       })
       .finally(() => {
-        if (!cancelled) setLoadingProfile(false);
+        if (!cancelled && requestSeq === profileRequestSeqRef.current) setLoadingProfile(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [selected, tradeDate, activeStrategy]);
+  }, [selected, tradeDate]);
 
   useEffect(() => {
     if (!selected) {
@@ -493,11 +531,6 @@ const SelectionResearchPage: React.FC = () => {
       if (!cancelled) setIsWatchlisted(Boolean(items.find((item) => item.symbol === symbol)));
     }).catch(() => {
       if (!cancelled) setIsWatchlisted(false);
-    });
-    StockService.checkBackendHealth().then((ok) => {
-      if (!cancelled) setBackendStatus(ok);
-    }).catch(() => {
-      if (!cancelled) setBackendStatus(false);
     });
     return () => {
       cancelled = true;
@@ -532,6 +565,9 @@ const SelectionResearchPage: React.FC = () => {
       const refreshResult = latestDate
         ? await refreshSelectionResearch(latestDate, latestDate)
         : await refreshSelectionResearch();
+      if (latestDate) {
+        await refreshDailySelectionCandidates(latestDate, 80);
+      }
       const afterHealth = await loadHealth();
       const minDate = String(afterHealth?.source_snapshot?.history_bounds?.min_date || afterHealth?.source_snapshot?.atomic_bounds?.min_date || datePickerMin || '2025-01-01');
       const maxDate = String(refreshResult?.end_date || afterHealth?.latest_signal_date || latestDate || datePickerMax || '');
@@ -557,10 +593,6 @@ const SelectionResearchPage: React.FC = () => {
     setRunningBacktest(true);
     setError('');
     try {
-      if (activeStrategy === 'daily_review') {
-        setError('每日复盘是多策略聚合视图；回测请切换到单个策略后运行。');
-        return;
-      }
       if (PRODUCT_STRATEGIES.includes(activeStrategy) || activeStrategy === 'v2') {
         const payload = activeStrategy === STABLE_CALLBACK_STRATEGY ? await fetchStableCallbackEvaluation({
           start_date: backtestStartDate,
@@ -605,9 +637,11 @@ const SelectionResearchPage: React.FC = () => {
 
   const dailyGroups = useMemo(() => {
     const isWatch = (item: SelectionCandidateItem) => item.entry_allowed === false && (
+      item.lifecycle_phase === 'watch' ||
       item.lifecycle_phase === 'trend_observation_pool' ||
       item.candidate_types?.some((type) => String(type).includes('observe')) ||
-      item.action_label === '观察中'
+      item.action_label === '观察中' ||
+      item.action_label === '观察'
     );
     return {
       actionable: displayCandidates.filter((item) => item.entry_allowed !== false),
@@ -639,25 +673,21 @@ const SelectionResearchPage: React.FC = () => {
   useEffect(() => {
     if (!datePickerMin || !datePickerMax) return;
     let cancelled = false;
-    const loadDates = activeStrategy === 'daily_review'
-      ? Promise.all(DAILY_REVIEW_DATE_STRATEGIES.map((strategy) => fetchSelectionTradeDates(datePickerMin, datePickerMax, strategy))).then(mergeTradeDateItems)
-      : fetchSelectionTradeDates(datePickerMin, datePickerMax, activeStrategy);
+    const loadDates = fetchDailySelectionTradeDates(datePickerMin, datePickerMax);
     loadDates
       .then((data) => {
         if (cancelled) return;
         const next = tradeDateItemsToMap(data?.items || []);
         setTradeDateMetaByDate(next);
-        if (activeStrategy === 'daily_review' || PRODUCT_STRATEGIES.includes(activeStrategy)) {
-          const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
-          const currentApplied = tradeDate;
-          const shouldInitialize = !dateInitializedRef.current;
-          const currentInvalid = Boolean(currentApplied && (next[currentApplied]?.selectable === false || !next[currentApplied]));
-          if (latestSelectable && (shouldInitialize || currentInvalid)) {
-            dateInitializedRef.current = true;
-            lastLoadedKeyRef.current = '';
-            setTradeDate(latestSelectable);
-            setPendingTradeDate(latestSelectable);
-          }
+        const latestSelectable = (data?.items || []).filter((item) => item.selectable).map((item) => item.date).sort().pop();
+        const currentApplied = tradeDate;
+        const shouldInitialize = !dateInitializedRef.current;
+        const currentInvalid = Boolean(currentApplied && (next[currentApplied]?.selectable === false || !next[currentApplied]));
+        if (latestSelectable && (shouldInitialize || currentInvalid)) {
+          dateInitializedRef.current = true;
+          lastLoadedKeyRef.current = '';
+          setTradeDate(latestSelectable);
+          setPendingTradeDate(latestSelectable);
         }
       })
       .catch(() => {
@@ -666,15 +696,15 @@ const SelectionResearchPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeStrategy, datePickerMax, datePickerMin]);
+  }, [datePickerMax, datePickerMin]);
 
-  const renderCandidateItem = (item: SelectionCandidateItem & { displayName?: string }) => {
-    const strategyId = item.strategy_internal_id || activeStrategy;
-    const isProduct = strategyId === STABLE_CALLBACK_STRATEGY || strategyId === TREND_CONTINUATION_STRATEGY || activeStrategy === 'daily_review';
-    const active = selected?.symbol === item.symbol && (activeStrategy !== 'daily_review' || selected?.strategy_internal_id === item.strategy_internal_id);
+  const renderCandidateItem = (item: SelectionCandidateItem & { displayName?: string }, sectionRank: number) => {
+    const strategyId = item.strategy_internal_id || item.primary_source_id || 'daily_candidate_pool';
+    const active = selected?.symbol === item.symbol && selected?.trade_date === item.trade_date;
+    const sourceLabels = (item.source_details?.length ? item.source_details : [{ source_id: strategyId, source_name: item.strategy_display_name || STRATEGY_LABELS[String(strategyId)] || strategyId }]).slice(0, 3);
     return (
       <button
-        key={`${item.strategy_internal_id || activeStrategy}-${item.symbol}-${item.trade_date}-${item.rank}`}
+        key={`daily_candidate_pool-${item.symbol}-${item.trade_date}-${item.rank}`}
         type="button"
         onClick={() => setSelected(item)}
         className={`w-full px-4 py-3 text-left transition ${active ? 'bg-sky-500/10' : 'hover:bg-slate-950/35'}`}
@@ -682,62 +712,40 @@ const SelectionResearchPage: React.FC = () => {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-500">#{item.rank || '--'}</span>
+              <span className="text-[11px] text-slate-500">#{sectionRank || '--'}</span>
               <span className="truncate text-sm font-semibold text-white">{item.displayName}</span>
               <span className="shrink-0 text-[11px] text-slate-500">{item.symbol}</span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
-              <span className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-400">
-                {item.strategy_display_name || STRATEGY_LABELS[String(strategyId)] || strategyId}
-              </span>
-              <span className={`rounded border px-1.5 py-0.5 ${item.entry_allowed === false ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'}`}>
-                {item.action_label || item.lifecycle_phase_label || '--'}
-              </span>
+              {sourceLabels.map((source: Record<string, any>) => (
+                <span key={`${item.symbol}-${source.source_id || source.source_name}`} className={`rounded border px-1.5 py-0.5 ${sourceBadgeClass(String(source.source_id || ''))}`}>
+                  {fmtSourceLabel(source)}
+                </span>
+              ))}
+              {(item.source_count || 0) > sourceLabels.length ? (
+                <span className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-500">+{(item.source_count || 0) - sourceLabels.length}</span>
+              ) : null}
             </div>
           </div>
-          {isProduct ? (
-            <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
-              <div>
-                <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
-                <div className="text-slate-500">排序</div>
-              </div>
-              <div>
-                <div className={`text-sm font-semibold ${(item.risk_count || 0) >= 2 ? 'text-red-300' : (item.risk_count || 0) === 1 ? 'text-amber-200' : 'text-emerald-200'}`}>{item.risk_count ?? 0}</div>
-                <div className="text-slate-500">风险</div>
-              </div>
-              <div>
-                <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
-                <div className="text-slate-500">状态</div>
-              </div>
+          <div className="grid min-w-[132px] shrink-0 grid-cols-2 gap-2 text-right text-[10px]">
+            <div>
+              <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
+              <div className="whitespace-nowrap text-slate-500">{fmtSortScoreLabel(item)}</div>
             </div>
-          ) : (
-            <div className="grid min-w-[168px] shrink-0 grid-cols-3 gap-2 text-right text-[10px]">
-              <div>
-                <div className="text-sm font-semibold text-sky-200">{fmtNum(item.selection_rank_score ?? item.score)}</div>
-                <div className="text-slate-500">排序</div>
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-violet-200">{item.lifecycle_phase_label || '--'}</div>
-                <div className="text-slate-500">阶段</div>
-              </div>
-              <div>
-                <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
-                <div className="text-slate-500">动作</div>
-              </div>
+            <div>
+              <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
+              <div className="text-slate-500">动作</div>
             </div>
-          )}
+          </div>
         </div>
-        {isProduct ? (
-          <div className="mt-1 truncate text-xs text-slate-500">
-            {item.reason_summary || item.pullback_reason || '回调承接确认'}
-          </div>
-        ) : null}
+        <div className="mt-1 truncate text-xs text-slate-500">
+          {item.reason_summary || item.pullback_reason || '暂无来源解释'}
+        </div>
       </button>
     );
   };
 
   const renderCandidateSection = (title: string, items: Array<SelectionCandidateItem & { displayName?: string }>, tone: string) => {
-    if (activeStrategy !== 'daily_review') return items.map(renderCandidateItem);
     if (!items.length) return null;
     return (
       <div className="border-b border-slate-800/80 last:border-b-0">
@@ -745,7 +753,7 @@ const SelectionResearchPage: React.FC = () => {
           <span className={tone}>{title}</span>
           <span className="ml-2 text-slate-600">{items.length}</span>
         </div>
-        <div className="divide-y divide-slate-800/80">{items.map(renderCandidateItem)}</div>
+        <div className="divide-y divide-slate-800/80">{items.map((item, index) => renderCandidateItem(item, index + 1))}</div>
       </div>
     );
   };
@@ -785,16 +793,16 @@ const SelectionResearchPage: React.FC = () => {
           <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
             v{APP_VERSION}
           </span>
-          <select
-            value={activeStrategy}
-            onChange={(e) => setActiveStrategy(e.target.value as ActiveStrategy)}
-            className="h-9 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
-            aria-label="选择策略"
+          <button
+            type="button"
+            onClick={() => shiftSelectableDate(-1)}
+            disabled={!pendingTradeDate}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="前一个可选日期"
+            title="前一个可选日期"
           >
-            {STRATEGY_OPTIONS.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
           <TradeDatePicker
             value={pendingTradeDate}
             minDate={datePickerMin}
@@ -805,12 +813,22 @@ const SelectionResearchPage: React.FC = () => {
           />
           <button
             type="button"
+            onClick={() => shiftSelectableDate(1)}
+            disabled={!pendingTradeDate}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="后一个可选日期"
+            title="后一个可选日期"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={handleApplyTradeDate}
             disabled={!pendingTradeDate || loadingCandidates}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <ShieldCheck className={`h-4 w-4 ${loadingCandidates ? 'animate-pulse' : ''}`} />
-            {loadingCandidates ? '查询中' : '查询候选'}
+            {loadingCandidates ? '查询中' : '查看候选'}
           </button>
           <button
             type="button"
@@ -819,7 +837,7 @@ const SelectionResearchPage: React.FC = () => {
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? '刷新中' : '刷新研究数据'}
+            {refreshing ? '刷新中' : '刷新当日候选'}
           </button>
         </div>
       </div>
@@ -827,7 +845,7 @@ const SelectionResearchPage: React.FC = () => {
       <div className="mx-auto max-w-[1800px] space-y-4 px-4 py-4 md:px-6">
         {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
-        {selected && profile ? (
+        {selected ? (
           <StockQuoteHeroCard
             name={heroName}
             symbol={selected.symbol.toUpperCase()}
@@ -840,7 +858,7 @@ const SelectionResearchPage: React.FC = () => {
             amount={quote?.amount}
             turnoverRate={turnoverRate}
             latestLabel={`最新 ${selected.trade_date}`}
-            marketCapLabel={fmtMarketCap(profile.market_cap)}
+            marketCapLabel={fmtMarketCap(profile?.market_cap ?? selected.market_cap)}
             metaRow={
               <QuoteMetaRow
                 isWatchlisted={isWatchlisted}
@@ -857,25 +875,19 @@ const SelectionResearchPage: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2 text-lg font-bold text-white">
                   <TrendingUp className="h-5 w-5 text-amber-400" />
-                  当日策略候选
+                  每日综合候选
                   <span className="text-xs font-medium text-slate-500">{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}</span>
                 </div>
               </div>
               {loadingCandidates ? <span className="text-xs text-slate-500">加载中...</span> : null}
             </div>
             <div>
-              {activeStrategy === 'daily_review' ? (
-                <>
-                  {renderCandidateSection('明日可操作', dailyGroups.actionable, 'text-emerald-300')}
-                  {renderCandidateSection('观察中', dailyGroups.watch, 'text-amber-300')}
-                  {renderCandidateSection('已拦截 / 风险提示', dailyGroups.blocked, 'text-red-300')}
-                </>
-              ) : (
-                <div className="divide-y divide-slate-800/80">{displayCandidates.map(renderCandidateItem)}</div>
-              )}
+              {renderCandidateSection('明日可操作', dailyGroups.actionable, 'text-emerald-300')}
+              {renderCandidateSection('观察中', dailyGroups.watch, 'text-amber-300')}
+              {renderCandidateSection('已拦截 / 风险提示', dailyGroups.blocked, 'text-red-300')}
               {!loadingCandidates && displayCandidates.length === 0 && (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
-                  暂无候选；该日期主策略没有产出，可切换有亮点的日期。
+                  暂无候选；该日期没有模型或策略产出。
                 </div>
               )}
             </div>
@@ -883,16 +895,17 @@ const SelectionResearchPage: React.FC = () => {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-2">
             {loadingProfile && !profileMatchesSelected ? (
-              <div className="py-16 text-center text-sm text-slate-500">右侧复盘视图加载中...</div>
-            ) : (
-              <SelectionDecisionPanel
-                candidate={selected}
-                profile={profile}
-                displayName={selectedDisplayName}
-                backendStatus={backendStatus}
-                latestTradeDate={health?.latest_signal_date || undefined}
-              />
-            )}
+              <div className="mb-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                基础详情已先展示，画像和研究资料正在后台补充。
+              </div>
+            ) : null}
+            <SelectionDecisionPanel
+              candidate={selected}
+              profile={profile}
+              displayName={selectedDisplayName}
+              backendStatus={backendStatus}
+              latestTradeDate={health?.latest_signal_date || undefined}
+            />
           </div>
         </div>
 
@@ -905,7 +918,20 @@ const SelectionResearchPage: React.FC = () => {
             <span className="text-xs font-normal text-slate-500">默认收起，不影响日常选股</span>
           </summary>
           <div className="space-y-4 border-t border-slate-800 px-4 py-4">
-            <div className="grid gap-3 md:grid-cols-[180px_180px_auto_auto] md:items-end">
+            <div className="grid gap-3 md:grid-cols-[220px_180px_180px_auto_auto] md:items-end">
+              <label className="text-xs text-slate-400">
+                验证策略
+                <select
+                  value={activeStrategy}
+                  onChange={(e) => setActiveStrategy(e.target.value as ActiveStrategy)}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
+                  aria-label="选择验证策略"
+                >
+                  {STRATEGY_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </select>
+              </label>
               <label className="text-xs text-slate-400">
                 开始日期
                 <input type="date" value={backtestStartDate} onChange={(e) => setBacktestStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />

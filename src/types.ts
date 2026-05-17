@@ -351,6 +351,7 @@ export interface SelectionCandidateItem {
   candidate_types?: string[];
   selection_rank_score?: number | null;
   selection_rank_mode?: string;
+  source_score?: number | null;
   lifecycle_phase?: string;
   lifecycle_phase_label?: string;
   action_label?: string;
@@ -381,6 +382,17 @@ export interface SelectionCandidateItem {
   repair_score?: number | null;
   confirm_active_buy_strength?: number | null;
   confirm_main_net_ratio?: number | null;
+  source_count?: number;
+  source_ids?: string[];
+  source_types?: string[];
+  primary_source_id?: string;
+  primary_source_name?: string;
+  primary_source_type?: string;
+  source_details?: Array<Record<string, any> & {
+    source_score_percentile?: number;
+    source_strength_label?: string;
+    source_score_distribution?: Record<string, number>;
+  }>;
 }
 
 export interface SelectionCandidatesResponse {

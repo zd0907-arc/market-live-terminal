@@ -65,6 +65,7 @@ LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "marke
 LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", "").strip()
+LOCAL_DAILY_SELECTION_PY_CMD = os.getenv("SELECTION_DAILY_PY_CMD", "").strip()
 LAN_WINDOWS_HOST = os.getenv("L2_WIN_LAN_HOST", "192.168.3.108").strip()
 CLOUD_PUBLIC_HTTP_HOST = os.getenv("L2_CLOUD_PUBLIC_HTTP_HOST", "111.229.144.202").strip()
 LAN_SYNC_PORT = int(os.getenv("L2_LAN_SYNC_PORT", "18765"))
@@ -206,8 +207,32 @@ def _resolve_local_python() -> str:
     return shutil.which("python3") or sys.executable
 
 
+def _python_has_modules(python_cmd: str, modules: Sequence[str]) -> bool:
+    return all(_python_has_module(python_cmd, module) for module in modules)
+
+
+def _resolve_daily_selection_python() -> str:
+    required = ("pandas", "sklearn", "joblib")
+    candidates = [
+        LOCAL_DAILY_SELECTION_PY_CMD,
+        LOCAL_PY_CMD,
+        str(ROOT_DIR / ".venv" / "bin" / "python"),
+        "/usr/bin/python3",
+        "/opt/homebrew/bin/python3",
+        shutil.which("python3") or "",
+        sys.executable,
+    ]
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and Path(text).exists() and _python_has_modules(text, required):
+            return text
+    return LOCAL_PY_CMD or shutil.which("python3") or sys.executable
+
+
 if not LOCAL_PY_CMD:
     LOCAL_PY_CMD = _resolve_local_python()
+if not LOCAL_DAILY_SELECTION_PY_CMD:
+    LOCAL_DAILY_SELECTION_PY_CMD = _resolve_daily_selection_python()
 
 
 def _ssh(host: str, remote_command: str, *, check: bool = True) -> subprocess.CompletedProcess:
@@ -1051,7 +1076,7 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_
         f'set ATOMIC_DB_PATH={WIN_ATOMIC_DB}&& '
         f'set SELECTION_DB_PATH={selection_db}&& '
         f'cd /d {WIN_PROJECT_ROOT} && '
-        f'{WIN_PY_CMD} backend\\scripts\\run_selection_research.py refresh --start-date {iso_date} --end-date {iso_date}"'
+        f'{WIN_PY_CMD} backend\\scripts\\run_selection_research.py refresh --start-date {iso_date} --end-date {iso_date} --skip-daily-candidates"'
     )
     refresh_result = _ssh(WIN_HOST, refresh_cmd)
     refresh_report = _parse_json_output(refresh_result.stdout)
@@ -1093,10 +1118,21 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_
     )
     merge_report = _parse_json_output(merge_result.stdout)
     _progress(f"[{trade_date}] Mac selection 增量合并完成")
+    daily_signal_result = _run(
+        [
+            LOCAL_DAILY_SELECTION_PY_CMD,
+            str(ROOT_DIR / "backend" / "scripts" / "run_daily_model_signals.py"),
+            "--date",
+            iso_date,
+        ]
+    )
+    daily_signal_report = _parse_json_output(daily_signal_result.stdout)
+    _progress(f"[{trade_date}] Mac 每日统一候选池生成完成")
     return {
         "windows_selection_refresh": refresh_report,
         "selection_delta_export": export_report,
         "local_selection_merge": merge_report,
+        "local_daily_selection_candidates": daily_signal_report,
         "local_delta_path": str(local_delta),
     }
 

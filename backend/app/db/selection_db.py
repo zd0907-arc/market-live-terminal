@@ -189,6 +189,95 @@ def ensure_selection_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_selection_backtest_summary_run
             ON selection_backtest_summary(run_id, holding_days, strategy_name);
+
+            CREATE TABLE IF NOT EXISTS selection_strategy_registry (
+                source_id TEXT PRIMARY KEY,
+                source_name TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                artifact_version TEXT,
+                horizon TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                owner_note TEXT,
+                description TEXT,
+                metadata_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS selection_strategy_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trade_date TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                source_version TEXT,
+                run_status TEXT NOT NULL,
+                candidate_count INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_selection_strategy_runs_date
+            ON selection_strategy_runs(trade_date, source_id, started_at);
+
+            CREATE TABLE IF NOT EXISTS selection_candidate_sources (
+                trade_date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                source_id TEXT NOT NULL,
+                source_name TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                artifact_version TEXT,
+                source_status TEXT NOT NULL DEFAULT 'active',
+                rank INTEGER NOT NULL,
+                score REAL NOT NULL,
+                score_scale TEXT,
+                horizon TEXT,
+                suggested_action TEXT NOT NULL,
+                action_label TEXT,
+                entry_allowed INTEGER NOT NULL DEFAULT 0,
+                buy_rule TEXT,
+                reason_summary TEXT,
+                risk_tags_json TEXT,
+                entry_block_reasons_json TEXT,
+                explain_factors_json TEXT,
+                raw_payload_json TEXT,
+                artifact_path TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(trade_date, symbol, source_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_selection_candidate_sources_date
+            ON selection_candidate_sources(trade_date, source_type, source_id, rank);
+            CREATE INDEX IF NOT EXISTS idx_selection_candidate_sources_symbol
+            ON selection_candidate_sources(symbol, trade_date);
+
+            CREATE TABLE IF NOT EXISTS selection_candidate_daily (
+                trade_date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                combined_rank INTEGER NOT NULL,
+                combined_score REAL NOT NULL,
+                suggested_action TEXT NOT NULL,
+                action_label TEXT,
+                entry_allowed INTEGER NOT NULL DEFAULT 0,
+                source_count INTEGER NOT NULL DEFAULT 0,
+                source_ids_json TEXT,
+                source_types_json TEXT,
+                primary_source_id TEXT,
+                primary_source_name TEXT,
+                primary_source_type TEXT,
+                reason_summary TEXT,
+                risk_tags_json TEXT,
+                entry_block_reasons_json TEXT,
+                buy_rule TEXT,
+                source_details_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(trade_date, symbol)
+            );
+            CREATE INDEX IF NOT EXISTS idx_selection_candidate_daily_date
+            ON selection_candidate_daily(trade_date, suggested_action, combined_rank);
             """
         )
         _ensure_column(conn, "selection_backtest_trades", "fixed_exit_return_pct", "REAL")

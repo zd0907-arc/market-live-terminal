@@ -337,7 +337,7 @@ MODEL_VERSION = "..."
 
 | 模型 | 当前状态 | 接入判断 |
 |---|---|---|
-| 星火机会模型 | 有 `latest_candidates.csv`，但按目标日期每日推理还没生产化 | P1 可先导入 latest 产物，P3 再补标准推理适配器 |
+| 星火机会模型 | 已冻结 1.0，并提供 `generate_daily_candidates(trade_date)` 标准适配器；保留 latest CSV 桥接作为兜底 | P1 进入统一候选池，默认 `watch_only` 前推观察 |
 | 守势持仓模型 | 当前是研究回测产物，缺真实/模拟持仓输入和每日动作输出 | 不在 P1 硬接；等新版输出 `model_action_daily` 契约后接入 |
 
 ### 对其他会话的交付要求
@@ -353,7 +353,7 @@ MODEL_VERSION = "..."
 
 ### 新增服务
 
-建议新增：
+已新增：
 
 ```text
 backend/app/services/selection_daily_workbench.py
@@ -369,7 +369,7 @@ backend/app/services/selection_candidate_store.py
 
 ### 新增 API
 
-建议新增，不破坏旧接口：
+已新增，不破坏旧接口：
 
 | 接口 | 作用 |
 |---|---|
@@ -382,7 +382,7 @@ backend/app/services/selection_candidate_store.py
 
 ### 新增每日脚本
 
-建议新增：
+已新增：
 
 ```text
 backend/scripts/run_daily_model_signals.py
@@ -398,50 +398,38 @@ P1 允许星火模型先导入已有 `latest_candidates.csv`，但这只是过�
 
 ## 星火模型接入方式
 
-第一阶段先做“产物入库”：
+当前第一阶段已经改成“按日期推理优先，latest CSV 桥接兜底”：
 
 ```text
-data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/latest_actionable_candidates.csv
+trade_date
+→ backend.app.services.spark_opportunity_selector.generate_daily_candidates(trade_date)
 → selection_candidate_sources
 → selection_candidate_daily
 ```
 
-映射：
+如果模型依赖或特征文件不可用，P1 允许短期兜底：
 
-| CSV 字段 | 入库字段 |
-|---|---|
-| `trade_date` | `trade_date` |
-| `symbol` | `symbol` |
-| `final_score` / `action_score` | `score` |
-| `rank` | CSV 顺序生成 |
-| `action_status` | `suggested_action` |
-| `tomorrow_buy_rule` | `buy_rule` |
-| `risk_note` | `risk_tags_json` |
-| `model_score`、`rule_score`、`breakout_score` 等 | `explain_factors_json` |
+```text
+latest_candidates.csv
+→ generate_candidates_from_latest_csv(trade_date)
+→ selection_candidate_sources
+```
 
 来源标签：
 
 ```text
 source_id: spark_opportunity_selector
-source_name: 星火机会模型
+source_name: 星火机会模型 1.0
 source_type: model
 horizon: 22d
+status: watch_only
 ```
 
-第二阶段再做“按目标日期推理”：
+后续仍要补生产化细节：
 
-- 从模型目录加载 `model.joblib` 和 `feature_columns.json`。
-- 从正式库读取目标日期特征。
-- 生成目标日期候选。
-- 写入统一表。
-
-星火模型的最终适配器要求：
-
-```text
-trade_date -> 从正式 selection/atomic/heat 库读点时特征 -> 预测 -> 标准候选记录
-```
-
-不能只依赖固定 latest 文件。
+- 模型目录、atomic/selection/heat 库路径由每日任务显式配置。
+- 运行结果记录到 `selection_strategy_runs`。
+- watch_only 观察稳定后，再把 registry 状态切到 `active`。
 
 ## 规则策略接入方式
 

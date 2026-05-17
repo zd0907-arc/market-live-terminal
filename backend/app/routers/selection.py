@@ -16,6 +16,12 @@ from backend.app.services.selection_research import (
     refresh_selection_research,
     run_selection_backtest,
 )
+from backend.app.services.selection_daily_workbench import (
+    get_daily_selection_candidates,
+    get_daily_selection_profile,
+    get_daily_selection_trade_dates,
+    run_daily_selection_sources,
+)
 from backend.app.services.intraday_evolution_lab import load_ppo_report_payload
 from backend.app.services.selection_research_context import (
     get_selection_research_context,
@@ -109,6 +115,54 @@ def selection_trade_dates(
         return APIResponse(code=200, data=get_selection_trade_dates(start_date, end_date, strategy=strategy))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股交易日查询失败: {exc}", data=None)
+
+
+@router.get("/selection/daily-candidates", response_model=APIResponse)
+def selection_daily_candidates(
+    date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新统一候选日"),
+    limit: int = Query(50, ge=1, le=500),
+    source_type: str = Query(None, description="可选：model / rule_strategy"),
+):
+    try:
+        normalized_source_type = source_type if isinstance(source_type, str) and source_type else None
+        return APIResponse(code=200, data=get_daily_selection_candidates(date, limit=limit, source_type=normalized_source_type))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"每日选股候选查询失败: {exc}", data=None)
+
+
+@router.get("/selection/daily-trade-dates", response_model=APIResponse)
+def selection_daily_trade_dates(
+    start_date: str = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: str = Query(None, description="结束日期 YYYY-MM-DD"),
+):
+    try:
+        return APIResponse(code=200, data=get_daily_selection_trade_dates(start_date, end_date))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"每日选股交易日查询失败: {exc}", data=None)
+
+
+@router.get("/selection/daily-profile/{symbol}", response_model=APIResponse)
+def selection_daily_profile(
+    symbol: str,
+    date: str = Query(..., description="交易日 YYYY-MM-DD"),
+):
+    try:
+        return APIResponse(code=200, data=get_daily_selection_profile(symbol, date))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"每日选股画像查询失败: {exc}", data=None)
+
+
+@router.post("/selection/daily-refresh", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def selection_daily_refresh(
+    date: str = Query(..., description="交易日 YYYY-MM-DD"),
+    limit: int = Query(50, ge=1, le=500),
+    sources: str = Query(None, description="逗号分隔 source_id；缺省运行全部 active P1 来源"),
+):
+    try:
+        source_ids = [item.strip() for item in str(sources or "").split(",") if item.strip()] or None
+        return APIResponse(code=200, data=run_daily_selection_sources(date, limit=limit, source_ids=source_ids))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"每日选股候选刷新失败: {exc}", data=None)
 
 
 @router.get("/selection/profile/{symbol}", response_model=APIResponse)

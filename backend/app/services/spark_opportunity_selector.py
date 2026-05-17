@@ -4,6 +4,7 @@ import csv
 import json
 import math
 import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -204,8 +205,29 @@ def _raw_payload(row: Any) -> Dict[str, Any]:
         "signal_locked_limit_up_like",
         "hot_theme_is_climax_hot",
         "action_status",
+        "entry_signal_date",
+        "entry_date",
     ]
     return {key: _jsonable(_row_get(row, key)) for key in keys if _row_get(row, key) is not None}
+
+
+def _next_trade_date(trade_date: str, atomic_db: Optional[str | Path] = None) -> Optional[str]:
+    db_path = _atomic_db(atomic_db)
+    if not db_path.exists():
+        return None
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            """
+            SELECT MIN(trade_date) AS next_date
+            FROM atomic_trade_daily
+            WHERE trade_date > ?
+            """,
+            (str(trade_date),),
+        ).fetchone()
+        return str(row[0]) if row and row[0] else None
+    finally:
+        conn.close()
 
 
 def standardize_candidate_row(row: Any, rank: int) -> Dict[str, Any]:
@@ -213,6 +235,7 @@ def standardize_candidate_row(row: Any, rank: int) -> Dict[str, Any]:
     symbol = _clean_text(_row_get(row, "symbol")).lower()
     action = _action_fields(row)
     score = _safe_float(_row_get(row, "action_score", _row_get(row, "final_score", 0.0)))
+    entry_date = _clean_text(_row_get(row, "entry_date"))
     return {
         "trade_date": trade_date,
         "symbol": symbol,
@@ -234,7 +257,11 @@ def standardize_candidate_row(row: Any, rank: int) -> Dict[str, Any]:
         "risk_tags": _risk_tags(row),
         "entry_block_reasons": action["entry_block_reasons"],
         "explain_factors": _explain_factors(row),
-        "raw_payload": _raw_payload(row),
+        "raw_payload": {
+            **_raw_payload(row),
+            "entry_signal_date": _clean_text(_row_get(row, "entry_signal_date"), trade_date),
+            "entry_date": entry_date or None,
+        },
         "artifact_path": str(_model_dir() / "model.joblib"),
     }
 
@@ -378,6 +405,8 @@ def generate_daily_candidates(
         default="actionable",
     )
     panel["tomorrow_buy_rule"] = DEFAULT_BUY_RULE
+    panel["entry_signal_date"] = signal_date
+    panel["entry_date"] = _next_trade_date(signal_date, atomic_db=atomic_db)
     panel["risk_note"] = np.select(
         [
             panel.get("signal_locked_limit_up_like", 0).astype(float) > 0,
