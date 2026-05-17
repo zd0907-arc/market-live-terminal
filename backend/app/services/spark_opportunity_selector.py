@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.app.core.config import candidate_atomic_db_paths
+
 SOURCE_ID = "spark_opportunity_selector"
 SOURCE_NAME = "星火机会模型 1.0"
 SOURCE_TYPE = "model"
@@ -44,7 +46,14 @@ def _model_dir(model_dir: Optional[str | Path] = None) -> Path:
 
 
 def _atomic_db(path: Optional[str | Path] = None) -> Path:
-    return Path(path or os.getenv("SPARK_OPPORTUNITY_ATOMIC_DB") or DEFAULT_ATOMIC_DB)
+    explicit = path or os.getenv("SPARK_OPPORTUNITY_ATOMIC_DB")
+    if explicit:
+        return Path(explicit)
+    for candidate in candidate_atomic_db_paths():
+        candidate_path = Path(candidate)
+        if candidate_path.exists():
+            return candidate_path
+    return DEFAULT_ATOMIC_DB
 
 
 def _selection_db(path: Optional[str | Path] = None) -> Path:
@@ -406,7 +415,7 @@ def generate_daily_candidates(
     )
     panel["tomorrow_buy_rule"] = DEFAULT_BUY_RULE
     panel["entry_signal_date"] = signal_date
-    panel["entry_date"] = _next_trade_date(signal_date, atomic_db=atomic_db)
+    panel["entry_date"] = _next_trade_date(signal_date, atomic_db=_atomic_db(atomic_db))
     panel["risk_note"] = np.select(
         [
             panel.get("signal_locked_limit_up_like", 0).astype(float) > 0,
@@ -460,7 +469,7 @@ def write_source_manifest(model_dir: Optional[str | Path] = None) -> Path:
         "train_end_date": "2026-05-14",
         "label_definition": "D日盘后信号，D+1开盘买入，未来22个交易日最大冲高机会分。",
         "data_sources": [
-            str(DEFAULT_ATOMIC_DB),
+            str(_atomic_db()),
             str(DEFAULT_SELECTION_DB),
             str(DEFAULT_HEAT_DB),
         ],
