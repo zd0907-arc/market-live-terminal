@@ -219,9 +219,9 @@ def catalog_intraday_data(*, db_path: Optional[str] = None) -> Dict[str, Any]:
         "atomic_trade_5m",
         "atomic_order_5m",
         "atomic_book_state_5m",
-        "atomic_limit_state_5m",
         "atomic_trade_daily",
         "atomic_order_daily",
+        "atomic_limit_state_daily",
     ]
     out: Dict[str, Any] = {
         "lab_version": LAB_VERSION,
@@ -229,7 +229,7 @@ def catalog_intraday_data(*, db_path: Optional[str] = None) -> Dict[str, Any]:
         "tables": {},
         "recommended_windows": {
             "full_l2_order_book": {"start_date": "2026-03-02", "reason": "5m trade/order/book state all available"},
-            "weak_trade_l2": {"start_date": "2025-01-02", "reason": "trade/limit 5m available before order/book coverage"},
+            "weak_trade_l2": {"start_date": "2025-01-02", "reason": "trade 5m available before order/book coverage"},
         },
         "raw_extract_policy": "not_required_for_normal_research; only for rebuild/audit/finer_tick_studies",
         "universe_policy": "mainboard_10cm_symbols_ranked_by_previous_trade_date_amount",
@@ -373,7 +373,7 @@ def load_intraday_panel(
     with _connect_ro(path) as conn:
         has_order = _table_exists(conn, "atomic_order_5m")
         has_book = _table_exists(conn, "atomic_book_state_5m")
-        has_limit = _table_exists(conn, "atomic_limit_state_5m")
+        has_limit_daily = _table_exists(conn, "atomic_limit_state_daily")
         order_select = (
             """
             o.add_buy_amount,
@@ -420,19 +420,49 @@ def load_intraday_panel(
         book_join = "LEFT JOIN atomic_book_state_5m AS b ON b.symbol = t.symbol AND b.bucket_start = t.bucket_start" if has_book else ""
         limit_select = (
             """
-            l.risk_flag_type,
-            l.prev_close,
-            l.up_limit_price,
-            l.down_limit_price,
-            l.touch_limit_up,
-            l.touch_limit_down,
-            l.is_limit_up_close_5m,
-            l.is_limit_down_close_5m,
-            l.near_limit_up_ratio,
-            l.near_limit_down_ratio,
-            l.state_label_5m
+            COALESCE(d.risk_flag_type, 'normal') AS risk_flag_type,
+            d.prev_close,
+            d.up_limit_price,
+            d.down_limit_price,
+            CASE
+              WHEN d.up_limit_price IS NOT NULL AND t.high >= d.up_limit_price - 0.005 THEN 1
+              ELSE 0
+            END AS touch_limit_up,
+            CASE
+              WHEN d.down_limit_price IS NOT NULL AND t.low <= d.down_limit_price + 0.005 THEN 1
+              ELSE 0
+            END AS touch_limit_down,
+            CASE
+              WHEN d.up_limit_price IS NOT NULL AND abs(t.close - d.up_limit_price) <= 0.005 THEN 1
+              ELSE 0
+            END AS is_limit_up_close_5m,
+            CASE
+              WHEN d.down_limit_price IS NOT NULL AND abs(t.close - d.down_limit_price) <= 0.005 THEN 1
+              ELSE 0
+            END AS is_limit_down_close_5m,
+            CASE
+              WHEN d.up_limit_price IS NOT NULL
+               AND d.prev_close IS NOT NULL
+               AND d.up_limit_price != d.prev_close
+                THEN 1.0 - abs(d.up_limit_price - t.close) / abs(d.up_limit_price - d.prev_close)
+              ELSE 0.0
+            END AS near_limit_up_ratio,
+            CASE
+              WHEN d.down_limit_price IS NOT NULL
+               AND d.prev_close IS NOT NULL
+               AND d.down_limit_price != d.prev_close
+                THEN 1.0 - abs(d.down_limit_price - t.close) / abs(d.down_limit_price - d.prev_close)
+              ELSE 0.0
+            END AS near_limit_down_ratio,
+            CASE
+              WHEN d.up_limit_price IS NOT NULL AND abs(t.close - d.up_limit_price) <= 0.005 THEN 'sealed_up'
+              WHEN d.down_limit_price IS NOT NULL AND abs(t.close - d.down_limit_price) <= 0.005 THEN 'sealed_down'
+              WHEN d.up_limit_price IS NOT NULL AND t.high >= d.up_limit_price - 0.005 THEN 'broken_up'
+              WHEN d.down_limit_price IS NOT NULL AND t.low <= d.down_limit_price + 0.005 THEN 'broken_down'
+              ELSE 'normal'
+            END AS state_label_5m
             """
-            if has_limit
+            if has_limit_daily
             else """
             'normal' AS risk_flag_type,
             0.0 AS prev_close,
@@ -444,10 +474,10 @@ def load_intraday_panel(
             0 AS is_limit_down_close_5m,
             0.0 AS near_limit_up_ratio,
             0.0 AS near_limit_down_ratio,
-            '' AS state_label_5m
+            'normal' AS state_label_5m
             """
         )
-        limit_join = "LEFT JOIN atomic_limit_state_5m AS l ON l.symbol = t.symbol AND l.bucket_start = t.bucket_start" if has_limit else ""
+        limit_join = "LEFT JOIN atomic_limit_state_daily AS d ON d.symbol = t.symbol AND d.trade_date = t.trade_date" if has_limit_daily else ""
         df = pd.read_sql_query(
             f"""
             SELECT

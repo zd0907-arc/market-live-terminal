@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from backend.app.core.config import DB_FILE, candidate_atomic_db_paths
@@ -83,7 +83,7 @@ def _get_atomic_history_connection() -> Optional[sqlite3.Connection]:
     db_path = _resolve_atomic_db_path()
     if not db_path:
         return None
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -521,6 +521,15 @@ def _calc_super_ratio(buy_amount: object, sell_amount: object, total_amount: obj
     return ((buy + sell) / total) * 100.0
 
 
+def _bucket_start_lower_bound(trade_date: str) -> str:
+    return f"{str(trade_date)[:10]} 00:00:00"
+
+
+def _bucket_start_upper_bound(trade_date: str) -> str:
+    parsed = datetime.strptime(str(trade_date)[:10], "%Y-%m-%d")
+    return (parsed + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
+
+
 def _query_atomic_history_5m_rows(
     symbol: str,
     start_date: Optional[str] = None,
@@ -535,11 +544,11 @@ def _query_atomic_history_5m_rows(
         clauses = ["t.symbol=?"]
         params: List[object] = [normalize_l2_symbol(symbol)]
         if start_date:
-            clauses.append("t.trade_date>=?")
-            params.append(str(start_date))
+            clauses.append("t.bucket_start>=?")
+            params.append(_bucket_start_lower_bound(str(start_date)))
         if end_date:
-            clauses.append("t.trade_date<=?")
-            params.append(str(end_date))
+            clauses.append("t.bucket_start<?")
+            params.append(_bucket_start_upper_bound(str(end_date)))
 
         rows = conn.execute(
             f"""

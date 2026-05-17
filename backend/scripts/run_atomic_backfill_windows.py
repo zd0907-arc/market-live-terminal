@@ -95,7 +95,7 @@ def ensure_atomic_db(atomic_db: Path) -> None:
         conn.executescript(OPEN_AUCTION_SCHEMA.read_text(encoding="utf-8"))
         conn.executescript(OPEN_AUCTION_PHASE_SCHEMA.read_text(encoding="utf-8"))
         conn.executescript(BOOK_STATE_SCHEMA.read_text(encoding="utf-8"))
-        ensure_limit_schema(conn)
+        ensure_limit_schema(conn, include_5m=False)
         ensure_limit_rules(conn)
         conn.commit()
 
@@ -617,8 +617,8 @@ def main() -> None:
 
     with sqlite3.connect(atomic_db) as conn:
         print(f"[atomic-backfill] rebuild_limit_state date_from={min_date} date_to={max_date}", flush=True)
-        rows_5m_limit, daily_rows_limit = build_limit_state(conn, [], min_date, max_date)
-        replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [], min_date, max_date)
+        rows_5m_limit, daily_rows_limit = build_limit_state(conn, [], min_date, max_date, include_5m=False)
+        replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [], min_date, max_date, replace_5m=False)
         conn.commit()
 
     state["status"] = "done"
@@ -630,7 +630,7 @@ def main() -> None:
             "config": str(config_path),
             "atomic_db": str(atomic_db),
             "reports": reports,
-            "limit_state_5m_rows": len(rows_5m_limit),
+            "limit_state_5m_rows": None,
             "limit_state_daily_rows": len(daily_rows_limit),
             "completed_day_count": len(state["completed_days"]),
         },

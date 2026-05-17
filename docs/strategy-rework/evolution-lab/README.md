@@ -4,7 +4,7 @@
 
 ## 数据口径
 
-- 主窗口：`2026-03-02 ~ 2026-05-12`，使用 `atomic_trade_5m + atomic_order_5m + atomic_book_state_5m + atomic_limit_state_5m`。
+- 主窗口：`2026-03-02 ~ 2026-05-12`，使用 `atomic_trade_5m + atomic_order_5m + atomic_book_state_5m + atomic_limit_state_daily`；5分钟触板/封板字段由 5m 行情和日级涨跌停价按需派生。
 - 弱窗口：`2025-01-02 ~ 2026-03-01`，只适合成交/L2资金流版本，不能和 full order/book 结果混排。
 - 默认股票池：10cm 主板票，并按上一交易日成交额 TopN 预选，避免用当日收盘后的成交额裁剪样本。
 - raw 解压只用于补新日包、重建特征、逐笔级研究、数据审计；常规策略搜索不依赖 raw。

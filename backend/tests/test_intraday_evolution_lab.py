@@ -82,22 +82,22 @@ def _init_db(path: Path) -> Path:
                 book_state_label TEXT NULL,
                 PRIMARY KEY(symbol, bucket_start)
             );
-            CREATE TABLE atomic_limit_state_5m (
+            CREATE TABLE atomic_limit_state_daily (
                 symbol TEXT NOT NULL,
                 trade_date TEXT NOT NULL,
-                bucket_start TEXT NOT NULL,
+                board_type TEXT NOT NULL,
                 risk_flag_type TEXT NOT NULL,
                 prev_close REAL NULL,
                 up_limit_price REAL NULL,
                 down_limit_price REAL NULL,
                 touch_limit_up INTEGER NOT NULL DEFAULT 0,
                 touch_limit_down INTEGER NOT NULL DEFAULT 0,
-                is_limit_up_close_5m INTEGER NOT NULL DEFAULT 0,
-                is_limit_down_close_5m INTEGER NOT NULL DEFAULT 0,
-                near_limit_up_ratio REAL NULL,
-                near_limit_down_ratio REAL NULL,
-                state_label_5m TEXT NOT NULL,
-                PRIMARY KEY(symbol, bucket_start)
+                is_limit_up_close INTEGER NOT NULL DEFAULT 0,
+                is_limit_down_close INTEGER NOT NULL DEFAULT 0,
+                broken_limit_up INTEGER NOT NULL DEFAULT 0,
+                broken_limit_down INTEGER NOT NULL DEFAULT 0,
+                limit_state_label TEXT NOT NULL,
+                PRIMARY KEY(symbol, trade_date)
             );
             """
         )
@@ -112,7 +112,7 @@ def _seed_day(conn: sqlite3.Connection, symbol: str, trade_date: str, *, base: f
     rows_trade = []
     rows_order = []
     rows_book = []
-    rows_limit = []
+    rows_limit_daily = []
     price = base
     total_day_amount = 0.0
     high_day = base
@@ -145,10 +145,27 @@ def _seed_day(conn: sqlite3.Connection, symbol: str, trade_date: str, *, base: f
         rows_trade.append((symbol, trade_date, bucket, open_price, high, low, close, amount, 200_000.0, 200, l2_main, l2_super, l2_main * 0.6, l2_super * 0.6))
         rows_order.append((symbol, trade_date, bucket, amount * 0.4, amount * 0.2, amount * 0.1, amount * 0.08, cvd, oib, 100))
         rows_book.append((symbol, trade_date, bucket, amount * 0.8, amount * 0.5, amount, amount * 0.7, book, 1.2, "bid_dominant"))
-        rows_limit.append((symbol, trade_date, bucket, "normal", base, base * 1.1, base * 0.9, 0, 0, 0, 0, 0.0, 0.0, "normal"))
     conn.execute(
         "INSERT INTO atomic_trade_daily(symbol, trade_date, open, high, low, close, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (symbol, trade_date, base, high_day, low_day, price, total_day_amount),
+    )
+    rows_limit_daily.append(
+        (
+            symbol,
+            trade_date,
+            "sh_main" if symbol.lower().startswith("sh") else "sz_main",
+            "normal",
+            base,
+            base * 1.1,
+            base * 0.9,
+            int(high_day >= base * 1.1 - 0.005),
+            int(low_day <= base * 0.9 + 0.005),
+            int(abs(price - base * 1.1) <= 0.005),
+            int(abs(price - base * 0.9) <= 0.005),
+            int(high_day >= base * 1.1 - 0.005 and abs(price - base * 1.1) > 0.005),
+            int(low_day <= base * 0.9 + 0.005 and abs(price - base * 0.9) > 0.005),
+            "normal",
+        )
     )
     conn.executemany(
         """
@@ -180,13 +197,13 @@ def _seed_day(conn: sqlite3.Connection, symbol: str, trade_date: str, *, base: f
     )
     conn.executemany(
         """
-        INSERT INTO atomic_limit_state_5m (
-            symbol, trade_date, bucket_start, risk_flag_type, prev_close, up_limit_price, down_limit_price,
-            touch_limit_up, touch_limit_down, is_limit_up_close_5m, is_limit_down_close_5m,
-            near_limit_up_ratio, near_limit_down_ratio, state_label_5m
+        INSERT INTO atomic_limit_state_daily (
+            symbol, trade_date, board_type, risk_flag_type, prev_close, up_limit_price, down_limit_price,
+            touch_limit_up, touch_limit_down, is_limit_up_close, is_limit_down_close,
+            broken_limit_up, broken_limit_down, limit_state_label
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        rows_limit,
+        rows_limit_daily,
     )
 
 
@@ -221,6 +238,41 @@ def test_universe_uses_prior_day_amount_not_current_day_amount(tmp_path):
     panel = load_intraday_panel("2026-03-03", "2026-03-03", db_path=str(db), max_symbols_per_day=1)
 
     assert sorted(panel["symbol"].unique().tolist()) == ["sh600001"]
+
+
+def test_intraday_panel_derives_limit_fields_from_daily_state_without_5m_table(tmp_path):
+    db = _init_db(tmp_path)
+    conn = sqlite3.connect(str(db))
+    try:
+        _seed_day(conn, "sh600001", "2026-03-02", base=10.0, signal_bucket_idx=2)
+        conn.execute(
+            """
+            UPDATE atomic_trade_5m
+            SET high = 11.0, close = 10.8
+            WHERE symbol = 'sh600001'
+              AND bucket_start = '2026-03-02 09:40:00'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE atomic_limit_state_daily
+            SET touch_limit_up = 1,
+                broken_limit_up = 1,
+                limit_state_label = 'broken_up'
+            WHERE symbol = 'sh600001'
+              AND trade_date = '2026-03-02'
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    panel = load_intraday_panel("2026-03-02", "2026-03-02", db_path=str(db), symbols=["sh600001"])
+    target = panel[panel["bucket_start"] == "2026-03-02 09:40:00"].iloc[0]
+
+    assert target["touch_limit_up"] == 1
+    assert target["is_limit_up_close_5m"] == 0
+    assert target["state_label_5m"] == "broken_up"
 
 
 def test_universe_is_filtered_per_trade_date(tmp_path):

@@ -35,7 +35,6 @@ TABLES_TO_COUNT = [
     "atomic_open_auction_phase_l2_daily",
     "atomic_open_auction_manifest",
     "atomic_limit_state_daily",
-    "atomic_limit_state_5m",
 ]
 
 
@@ -82,7 +81,8 @@ def table_counts(conn: sqlite3.Connection) -> Dict[str, int]:
     cur = conn.cursor()
     out: Dict[str, int] = {}
     for table in TABLES_TO_COUNT:
-        out[table] = cur.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+        row = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+        out[table] = cur.execute(f"SELECT count(*) FROM {table}").fetchone()[0] if row else 0
     return out
 
 
@@ -116,19 +116,17 @@ def main() -> None:
     expected_keys = expected_day_keys(config, cutoff_date=cutoff_date)
     missing_keys = [key for key in expected_keys if key not in set(completed_keys)]
 
-    limit_rows_5m = 0
     limit_rows_daily = 0
     with sqlite3.connect(atomic_db) as conn:
-        ensure_limit_schema(conn)
+        ensure_limit_schema(conn, include_5m=False)
         ensure_limit_rules(conn)
         if not args.skip_limit_state:
             batches = parse_batches(config.get("batches", []))
             min_date = min(batch.date_from for batch in batches)
             max_date = max(batch.date_to for batch in batches)
-            rows_5m_limit, daily_rows_limit = build_limit_state(conn, [], min_date, max_date)
-            replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [], min_date, max_date)
+            rows_5m_limit, daily_rows_limit = build_limit_state(conn, [], min_date, max_date, include_5m=False)
+            replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [], min_date, max_date, replace_5m=False)
             conn.commit()
-            limit_rows_5m = len(rows_5m_limit)
             limit_rows_daily = len(daily_rows_limit)
         counts = table_counts(conn)
         trade_month_counts = month_counts(conn, "atomic_trade_daily")
@@ -163,7 +161,7 @@ def main() -> None:
         "failed_day_count": len(failed_days),
         "failed_days": failed_days[:20],
         "limit_state_rebuilt": not args.skip_limit_state,
-        "limit_state_5m_rows": limit_rows_5m or counts["atomic_limit_state_5m"],
+        "limit_state_5m_rows": None,
         "limit_state_daily_rows": limit_rows_daily or counts["atomic_limit_state_daily"],
         "table_counts": counts,
         "trade_month_day_counts": trade_month_counts,

@@ -12,12 +12,23 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import ATOMIC_MAINBOARD_DB_PATH, DATA_DIR, ROOT_DIR
+from backend.app.core.config import DATA_DIR, ROOT_DIR, candidate_atomic_db_paths
 
 MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
 REPO_THEME_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "themes.seed.json"
 THEME_FILE = Path(os.getenv("MARKET_HEAT_THEME_FILE", str(REPO_THEME_FILE if REPO_THEME_FILE.exists() else MARKET_HEAT_DIR / "themes.seed.json")))
-ATOMIC_DB = Path(os.getenv("MARKET_HEAT_ATOMIC_DB", ATOMIC_MAINBOARD_DB_PATH))
+def _resolve_market_heat_atomic_db() -> Path:
+    explicit = os.getenv("MARKET_HEAT_ATOMIC_DB", "").strip()
+    if explicit:
+        return Path(explicit)
+    for path in candidate_atomic_db_paths():
+        candidate = Path(path)
+        if candidate.exists():
+            return candidate
+    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+
+
+ATOMIC_DB = _resolve_market_heat_atomic_db()
 LOW_POSITION_L2_SAMPLES_DB = Path(os.getenv("HOT_THEME_LOW_POSITION_L2_SAMPLES_DB", str(MARKET_HEAT_DIR / "hot_theme_low_position_l2_samples.db")))
 FINE_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "fine_hotspot_rules.json"
 THEME_CANONICAL_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "theme_canonical_rules.json"

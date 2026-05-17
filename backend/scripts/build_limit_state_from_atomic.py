@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ATOMIC_DB = REPO_ROOT / "data" / "atomic_facts" / "market_atomic.db"
 LIMIT_STATE_SCHEMA = REPO_ROOT / "backend" / "scripts" / "sql" / "limit_state_schema.sql"
+LEGACY_5M_SCHEMA = REPO_ROOT / "backend" / "scripts" / "sql" / "limit_state_legacy_5m_schema.sql"
 
 DEFAULT_RULES = [
     ("sh_main", "normal", 0.10, 0.01, "2000-01-01", None, "SSE main board default"),
@@ -39,12 +40,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--symbols", default="", help="Comma-separated symbols")
     parser.add_argument("--date-from", default="", help="Optional inclusive YYYY-MM-DD")
     parser.add_argument("--date-to", default="", help="Optional inclusive YYYY-MM-DD")
+    parser.add_argument("--include-5m", action="store_true", help="Also rebuild legacy atomic_limit_state_5m")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
+def ensure_schema(conn: sqlite3.Connection, *, include_5m: bool = True) -> None:
     conn.executescript(LIMIT_STATE_SCHEMA.read_text(encoding="utf-8"))
+    if include_5m:
+        conn.executescript(LEGACY_5M_SCHEMA.read_text(encoding="utf-8"))
     conn.commit()
 
 
@@ -153,7 +157,14 @@ def near_ratio(price: float, barrier: Optional[float], prev_close: Optional[floa
     return float(1 - abs(barrier - price) / abs(barrier - prev_close))
 
 
-def build_limit_state(conn: sqlite3.Connection, symbols: Sequence[str], date_from: str, date_to: str) -> Tuple[List[Tuple], List[Tuple]]:
+def build_limit_state(
+    conn: sqlite3.Connection,
+    symbols: Sequence[str],
+    date_from: str,
+    date_to: str,
+    *,
+    include_5m: bool = True,
+) -> Tuple[List[Tuple], List[Tuple]]:
     where_clause, params = build_where_clause(symbols, date_from, date_to)
     daily = conn.execute(
         f"""
@@ -231,33 +242,34 @@ def build_limit_state(conn: sqlite3.Connection, symbols: Sequence[str], date_fro
                 first_touch_down = first_touch_down or bucket_start
                 last_touch_down = bucket_start
 
-            rows_5m.append(
-                (
-                    symbol,
-                    trade_date,
-                    bucket_start,
-                    board_type,
-                    risk_flag_type,
-                    prev_close,
-                    up_limit_price,
-                    down_limit_price,
-                    limit_pct,
-                    tick_size,
-                    float(b_open),
-                    float(b_high),
-                    float(b_low),
-                    float(b_close),
-                    touch_up,
-                    touch_down,
-                    close_up,
-                    close_down,
-                    near_ratio(float(b_close), up_limit_price, prev_close),
-                    near_ratio(float(b_close), down_limit_price, prev_close),
-                    classify_label(touch_up, touch_down, close_up, close_down),
-                    "trade_limit_state",
-                    "；".join(quality_parts) if quality_parts else None,
+            if include_5m:
+                rows_5m.append(
+                    (
+                        symbol,
+                        trade_date,
+                        bucket_start,
+                        board_type,
+                        risk_flag_type,
+                        prev_close,
+                        up_limit_price,
+                        down_limit_price,
+                        limit_pct,
+                        tick_size,
+                        float(b_open),
+                        float(b_high),
+                        float(b_low),
+                        float(b_close),
+                        touch_up,
+                        touch_down,
+                        close_up,
+                        close_down,
+                        near_ratio(float(b_close), up_limit_price, prev_close),
+                        near_ratio(float(b_close), down_limit_price, prev_close),
+                        classify_label(touch_up, touch_down, close_up, close_down),
+                        "trade_limit_state",
+                        "；".join(quality_parts) if quality_parts else None,
+                    )
                 )
-            )
 
         if up_limit_price is not None:
             touch_limit_up = int(float(high_price) >= up_limit_price - 0.005)
@@ -307,11 +319,21 @@ def build_limit_state(conn: sqlite3.Connection, symbols: Sequence[str], date_fro
     return rows_5m, daily_rows
 
 
-def replace_rows(conn: sqlite3.Connection, rows_5m: Sequence[Tuple], daily_rows: Sequence[Tuple], symbols: Sequence[str], date_from: str, date_to: str) -> None:
+def replace_rows(
+    conn: sqlite3.Connection,
+    rows_5m: Sequence[Tuple],
+    daily_rows: Sequence[Tuple],
+    symbols: Sequence[str],
+    date_from: str,
+    date_to: str,
+    *,
+    replace_5m: bool = True,
+) -> None:
     where_clause, params = build_where_clause(symbols, date_from, date_to)
-    conn.execute(f"DELETE FROM atomic_limit_state_5m {where_clause}", params)
+    if replace_5m:
+        conn.execute(f"DELETE FROM atomic_limit_state_5m {where_clause}", params)
     conn.execute(f"DELETE FROM atomic_limit_state_daily {where_clause}", params)
-    if rows_5m:
+    if replace_5m and rows_5m:
         conn.executemany(
             """
             INSERT INTO atomic_limit_state_5m (
@@ -354,11 +376,25 @@ def main() -> None:
         raise SystemExit(f"Atomic DB not found: {args.atomic_db}")
     symbols = [s.strip().lower() for s in args.symbols.split(",") if s.strip()]
     with sqlite3.connect(args.atomic_db) as conn:
-        ensure_schema(conn)
+        ensure_schema(conn, include_5m=bool(args.include_5m))
         ensure_default_rules(conn)
-        rows_5m, daily_rows = build_limit_state(conn, symbols, args.date_from, args.date_to)
+        rows_5m, daily_rows = build_limit_state(
+            conn,
+            symbols,
+            args.date_from,
+            args.date_to,
+            include_5m=bool(args.include_5m),
+        )
         if not args.dry_run:
-            replace_rows(conn, rows_5m, daily_rows, symbols, args.date_from, args.date_to)
+            replace_rows(
+                conn,
+                rows_5m,
+                daily_rows,
+                symbols,
+                args.date_from,
+                args.date_to,
+                replace_5m=bool(args.include_5m),
+            )
             conn.commit()
     print(
         {
@@ -368,6 +404,7 @@ def main() -> None:
             "date_to": args.date_to or None,
             "rows_5m": len(rows_5m),
             "rows_daily": len(daily_rows),
+            "include_5m": bool(args.include_5m),
             "dry_run": bool(args.dry_run),
         }
     )

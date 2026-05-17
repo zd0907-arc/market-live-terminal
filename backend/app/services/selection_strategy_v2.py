@@ -78,12 +78,11 @@ class SelectionV2Params:
 
 def _candidate_v2_atomic_paths() -> List[str]:
     configured = candidate_atomic_db_paths()
-    extra = [os.getenv("SELECTION_V2_ATOMIC_DB_PATH", "").strip()]
-    if os.path.exists(DEFAULT_FORMAL_ATOMIC_DB):
-        extra.append(DEFAULT_FORMAL_ATOMIC_DB)
+    explicit = [os.getenv("SELECTION_V2_ATOMIC_DB_PATH", "").strip()]
+    defaults = [DEFAULT_FORMAL_ATOMIC_DB] if os.path.exists(DEFAULT_FORMAL_ATOMIC_DB) else []
     out: List[str] = []
     seen = set()
-    for raw in [*extra, *configured]:
+    for raw in [*explicit, *configured, *defaults]:
         path = str(raw or "").strip()
         if not path or path in seen:
             continue

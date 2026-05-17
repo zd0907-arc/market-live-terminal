@@ -26,7 +26,6 @@ TABLE_SPECS: List[Tuple[str, str]] = [
     ("atomic_open_auction_phase_l1_daily", "trade_date"),
     ("atomic_open_auction_phase_l2_daily", "trade_date"),
     ("atomic_open_auction_manifest", "trade_date"),
-    ("atomic_limit_state_5m", "trade_date"),
     ("atomic_limit_state_daily", "trade_date"),
 ]
 

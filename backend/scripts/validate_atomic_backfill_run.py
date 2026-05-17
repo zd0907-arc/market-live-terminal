@@ -96,6 +96,13 @@ def daily_distinct_counts(conn: sqlite3.Connection, table: str) -> Dict[str, int
     return {row[0]: row[1] for row in rows}
 
 
+def table_count(conn: sqlite3.Connection, table: str) -> int:
+    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    if not row:
+        return 0
+    return int(conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] or 0)
+
+
 def sample_rows(conn: sqlite3.Connection, sample_size: int) -> Dict[str, List[Dict[str, object]]]:
     out: Dict[str, List[Dict[str, object]]] = {}
     conn.row_factory = sqlite3.Row
@@ -124,12 +131,12 @@ def main() -> None:
 
     with sqlite3.connect(atomic_db) as conn:
         counts = {
-            "trade_daily": conn.execute("SELECT count(*) FROM atomic_trade_daily").fetchone()[0],
-            "order_daily": conn.execute("SELECT count(*) FROM atomic_order_daily").fetchone()[0],
-            "book_daily": conn.execute("SELECT count(*) FROM atomic_book_state_daily").fetchone()[0],
-            "auction_manifest": conn.execute("SELECT count(*) FROM atomic_open_auction_manifest").fetchone()[0],
-            "limit_daily": conn.execute("SELECT count(*) FROM atomic_limit_state_daily").fetchone()[0],
-            "limit_5m": conn.execute("SELECT count(*) FROM atomic_limit_state_5m").fetchone()[0],
+            "trade_daily": table_count(conn, "atomic_trade_daily"),
+            "order_daily": table_count(conn, "atomic_order_daily"),
+            "book_daily": table_count(conn, "atomic_book_state_daily"),
+            "auction_manifest": table_count(conn, "atomic_open_auction_manifest"),
+            "limit_daily": table_count(conn, "atomic_limit_state_daily"),
+            "limit_5m": None,
         }
         trade_month_days = daily_distinct_counts(conn, "atomic_trade_daily")
         limit_month_days = daily_distinct_counts(conn, "atomic_limit_state_daily")

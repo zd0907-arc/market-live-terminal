@@ -19,6 +19,11 @@ DEFAULT_ATOMIC_MAINBOARD_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic
 DEFAULT_ATOMIC_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic.db")
 ATOMIC_MAINBOARD_DB_PATH = os.getenv("ATOMIC_MAINBOARD_DB_PATH", DEFAULT_ATOMIC_MAINBOARD_DB_FILE)
 ATOMIC_DB_PATH = os.getenv("ATOMIC_DB_PATH", DEFAULT_ATOMIC_DB_FILE)
+ATOMIC_COMPACT_DB_PATH = os.getenv("ATOMIC_COMPACT_DB_PATH", "")
+
+
+def _env_flag(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 # 模拟日期配置 (格式: YYYY-MM-DD)
@@ -31,9 +36,19 @@ def candidate_atomic_db_paths() -> List[str]:
     # 测试/临时环境经常只注入 DB_PATH 指向一个空的 tmp db。
     # 这种情况下如果继续回退到本机正式 atomic 库，会让单元测试或临时服务混入真实数据。
     # 正式本地研究站会显式注入 ATOMIC_*，直接启动且无 DB_PATH 时才使用默认 atomic 路径。
-    if os.getenv("DB_PATH") and not os.getenv("ATOMIC_DB_PATH") and not os.getenv("ATOMIC_MAINBOARD_DB_PATH"):
+    compact_candidates = []
+    compact_path = os.getenv("ATOMIC_COMPACT_DB_PATH", "").strip()
+    if _env_flag("ENABLE_ATOMIC_COMPACT_READ") and compact_path:
+        compact_candidates.append(compact_path)
+    if (
+        os.getenv("DB_PATH")
+        and not os.getenv("ATOMIC_DB_PATH")
+        and not os.getenv("ATOMIC_MAINBOARD_DB_PATH")
+        and not compact_candidates
+    ):
         return []
     candidates = [
+        *compact_candidates,
         os.getenv("ATOMIC_DB_PATH", ""),
         os.getenv("ATOMIC_MAINBOARD_DB_PATH", ""),
         ATOMIC_MAINBOARD_DB_PATH,

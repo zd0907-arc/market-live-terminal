@@ -144,7 +144,7 @@ def init_atomic_db(source_db: Path, atomic_db: Path, symbol: str, date_from: str
         conn.executescript(OPEN_AUCTION_SCHEMA.read_text(encoding="utf-8"))
         conn.executescript(OPEN_AUCTION_PHASE_SCHEMA.read_text(encoding="utf-8"))
         conn.executescript(BOOK_STATE_SCHEMA.read_text(encoding="utf-8"))
-        ensure_limit_schema(conn)
+        ensure_limit_schema(conn, include_5m=False)
         ensure_limit_rules(conn)
         conn.commit()
 
@@ -889,8 +889,8 @@ def main() -> None:
 
     results.sort(key=lambda x: (x["trade_date"], x["kind"]))
     with sqlite3.connect(return_args.atomic_db) as conn:
-        rows_5m_limit, daily_rows_limit = build_limit_state(conn, [symbol], date_from, date_to)
-        replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [symbol], date_from, date_to)
+        rows_5m_limit, daily_rows_limit = build_limit_state(conn, [symbol], date_from, date_to, include_5m=False)
+        replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [symbol], date_from, date_to, replace_5m=False)
         conn.commit()
     print(
         {
@@ -901,7 +901,7 @@ def main() -> None:
             "success_count": len(results),
             "failure_count": len(failures),
             "workers": int(return_args.workers),
-            "limit_state_5m_rows": len(rows_5m_limit),
+            "limit_state_5m_rows": None,
             "limit_state_daily_rows": len(daily_rows_limit),
             "results": results,
             "failures": failures,
