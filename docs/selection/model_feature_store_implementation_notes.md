@@ -182,7 +182,104 @@ backend/scripts/sync_model_market_index_daily.py
 2. 模型训练任务需要指数特征时，训练前单独执行并把结果作为 `build_model_feature_store.py --index-db` 输入。
 3. 没有指数时，feature store 保留 `has_index_data=0`，`csi1000_*` 为空，validator 报 warning 但不阻塞 P0。
 
-## 验收命令
+## 每日盘后增量口径
+
+每日盘后是“当天跑完就同步到 Mac”的链路，目标是让本地研究站和页面可直接读到当天结果。
+
+主入口保留：
+
+```bash
+bash ops/run_postclose_l2.sh --date 20260515
+```
+
+该入口应完成：
+
+```text
+1. Windows 解压当天原始包并构建 L2 / atomic / selection 当日增量。
+2. 导出当日 delta DB。
+3. 同步当日 delta DB 到 Mac。
+4. 合并到 Mac 的 market / atomic / selection 主库。
+5. 在 Mac 触发每日统一候选池。
+6. 写出 .run/postclose_l2/latest.json 供状态检查。
+```
+
+当前推荐票/每日候选池触发点：
+
+```bash
+python3 backend/scripts/run_selection_research.py refresh \
+  --start-date 2026-05-15 \
+  --end-date 2026-05-15 \
+  --skip-daily-candidates
+
+python3 backend/scripts/run_daily_model_signals.py \
+  --date 2026-05-15
+```
+
+在 `run_postclose_l2_daily.py` 中，Windows 侧先刷新 `selection_feature_daily / selection_signal_daily`，导出当日 selection delta；Mac 合并后再运行 `run_daily_model_signals.py --date`，生成页面使用的每日统一候选池。
+
+状态检查：
+
+```bash
+bash ops/check_postclose_l2_status.sh
+```
+
+每日链路允许把当天小 delta 拉回 Mac；这和历史批量不同。
+
+## 历史批量跑数口径
+
+历史批量重跑默认采用 Windows-only：
+
+```text
+原始包解压、atomic DB、selection DB、model_feature_store DB、validation JSON
+全部先落在 Windows D:/market-live-terminal/data 或 .run 目录。
+```
+
+批量期间不要按天把大 DB 回传 Mac。Mac 侧只拉小的日志、report JSON、validation JSON 摘要用于验收。等历史数据全量跑完、口径稳定后，再决定哪些历史 DB 一次性导入 Mac。
+
+Windows 长任务控制口径：
+
+```text
+Mac 侧只负责下发一次后台任务启动指令。
+任务启动后，Windows 端必须自行持续执行，不依赖 Mac/SSH 实时会话存活。
+Mac 侧只定期轮询任务状态、日志、report JSON、validation JSON。
+SSH 不稳定时只重试轮询，不改变执行方案，不改成碎片化手工跑。
+```
+
+历史批量追求吞吐，不按天同步 Mac：
+
+```text
+1. full L2 批量：Windows 连续处理整月原始包，开启预解压下一天。
+2. label tail 可用 l2_trade_only：只补 forward label 所需的 trade daily / 5m，减少 order/book 处理成本。
+3. 每天处理完即清理 Z: 解压目录，只保留 DB、report、state、log。
+4. 大 DB 留在 Windows；Mac 只拉小 JSON 验收。
+5. 按月验收，不按天回传。
+```
+
+历史批量中的选股/推荐票触发方式：
+
+```text
+批量回补 atomic 后，在 Windows 对对应日期段运行 selection refresh。
+如果需要历史页面/研究候选池，再在 Windows 对日期段运行 run_daily_model_signals.py --start-date/--end-date。
+这些结果留在 Windows selection DB；不每日同步到 Mac。
+```
+
+命令形态：
+
+```bash
+set DB_PATH=D:\market-live-terminal\data\market_data.db
+set ATOMIC_MAINBOARD_DB_PATH=D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db
+set ATOMIC_DB_PATH=D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db
+set SELECTION_DB_PATH=D:\market-live-terminal\data\selection\selection_research_windows.db
+
+python backend\scripts\run_selection_research.py refresh ^
+  --start-date 2026-04-13 ^
+  --end-date 2026-04-30 ^
+  --skip-daily-candidates
+
+python backend\scripts\run_daily_model_signals.py ^
+  --start-date 2026-04-13 ^
+  --end-date 2026-04-30
+```
 
 prediction 样本构建：
 
@@ -238,6 +335,36 @@ python3 backend/scripts/validate_model_feature_store.py \
 /Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
 /tmp/fine_theme_heat_daily_smoke*.db
 /tmp/fine_theme_heat_daily_smoke*.md
+```
+
+## 2026-04 剩余窗口计划
+
+已完成：
+
+```text
+2026-04-01 ~ 2026-04-10
+full L2 atomic + label tail + model feature store training validation
+validation status=pass
+```
+
+下一步跑完 4 月：
+
+```text
+1. Windows 后台任务补 full L2：2026-04-13 ~ 2026-04-30。
+2. 继续复用同一个 smoke atomic DB：
+   D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db
+3. 构建 2026-04-01 ~ 2026-04-30 feature store，输出仍留 Windows。
+4. 验收拆成两份：
+   - 2026-04-01 ~ 2026-04-13：training mode，可覆盖 22d label。
+   - 2026-04-14 ~ 2026-04-30：prediction/coverage mode，22d label 需要 2026-05-15 之后的数据，不能强行当完整训练样本。
+5. 只回传 report JSON / validation JSON 摘要，不回传 DB。
+```
+
+预计耗时：
+
+```text
+2026-04-13 ~ 2026-04-30 约 14 个交易日。
+full L2 当前实测 7~9 分钟/交易日，预计 2~2.5 小时。
 ```
 
 ## Heat 覆盖检查

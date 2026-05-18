@@ -883,6 +883,56 @@ def validate_training_labels(conn: sqlite3.Connection, feature_version: str) -> 
     return details, ok
 
 
+def validate_limit_state_sanity(conn: sqlite3.Connection) -> tuple[dict[str, Any], bool]:
+    table = "model_feature_daily_v1"
+    if not table_exists(conn, table):
+        return {"table": table, "available": False}, False
+    daily_rows = conn.execute(
+        f"""
+        SELECT
+          trade_date,
+          COUNT(*) AS rows,
+          SUM(CASE WHEN COALESCE(touch_limit_up, 0) = 1 THEN 1 ELSE 0 END) AS touch_limit_up_count,
+          SUM(CASE WHEN COALESCE(is_limit_up_close, 0) = 1 THEN 1 ELSE 0 END) AS is_limit_up_close_count
+        FROM {table}
+        GROUP BY trade_date
+        ORDER BY trade_date
+        """
+    ).fetchall()
+    high_mismatch = conn.execute(
+        f"""
+        SELECT symbol, trade_date, high, prev_close, touch_limit_up, board_type, risk_flag_type
+        FROM {table}
+        WHERE prev_close > 0
+          AND high / prev_close >= 1.098
+          AND COALESCE(touch_limit_up, 0) = 0
+        ORDER BY trade_date, symbol
+        LIMIT 100
+        """
+    ).fetchall()
+    close_mismatch = conn.execute(
+        f"""
+        SELECT symbol, trade_date, close, prev_close, is_limit_up_close, board_type, risk_flag_type
+        FROM {table}
+        WHERE prev_close > 0
+          AND close / prev_close >= 1.098
+          AND COALESCE(is_limit_up_close, 0) = 0
+        ORDER BY trade_date, symbol
+        LIMIT 100
+        """
+    ).fetchall()
+    zero_touch_days = [dict(row) for row in daily_rows if int(row["touch_limit_up_count"] or 0) == 0]
+    details = {
+        "table": table,
+        "daily_summary": [dict(row) for row in daily_rows],
+        "zero_touch_limit_up_days": zero_touch_days,
+        "high_ge_9p8_touch_eq_0_samples": [dict(row) for row in high_mismatch],
+        "close_ge_9p8_close_eq_0_samples": [dict(row) for row in close_mismatch],
+    }
+    ok = bool(daily_rows) and not zero_touch_days
+    return details, ok
+
+
 def scan_files(paths: list[str], pattern: str, max_hits: int) -> tuple[dict[str, Any], bool]:
     if not paths:
         return {"enabled": False, "paths": []}, True
@@ -973,6 +1023,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
             order_book_details, order_book_ok = validate_order_book_coverage(conn, args.feature_version)
             heat_null_details, heat_null_ok = validate_heat_null_semantics(conn, args.feature_version)
             training_label_details, training_label_ok = validate_training_labels(conn, args.feature_version)
+            limit_state_details, limit_state_ok = validate_limit_state_sanity(conn)
             forbidden_columns_details, forbidden_columns_ok = validate_forbidden_feature_columns(conn)
     except sqlite3.Error as exc:
         payload["status"] = "fail"
@@ -996,6 +1047,10 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
     payload["checks"]["training_label_integrity"] = {
         "ok": training_label_ok if args.mode == "training" else True,
         "details": training_label_details,
+    }
+    payload["checks"]["limit_state_sanity"] = {
+        "ok": limit_state_ok,
+        "details": limit_state_details,
     }
     payload["checks"]["feature_tables_without_label_fields"] = {
         "ok": forbidden_columns_ok,

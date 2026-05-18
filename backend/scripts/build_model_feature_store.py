@@ -105,6 +105,8 @@ def requested_window(args: argparse.Namespace) -> tuple[str, str]:
 
 def quote_file_uri(path: Path, readonly: bool = True) -> str:
     resolved = path.expanduser().resolve()
+    if os.name == "nt":
+        return str(resolved)
     mode = "ro" if readonly else "rwc"
     return f"file:{quote(str(resolved))}?mode={mode}"
 
@@ -137,6 +139,9 @@ def table_exists(conn: sqlite3.Connection, qualified: str) -> bool:
         schema, table = qualified.split(".", 1)
     else:
         schema, table = "main", qualified
+    attached = {row[1] for row in conn.execute("PRAGMA database_list")}
+    if schema not in attached:
+        return False
     row = conn.execute(
         f"SELECT 1 FROM {schema}.sqlite_master WHERE type='table' AND name=? LIMIT 1",
         (table,),

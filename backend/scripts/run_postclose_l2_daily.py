@@ -62,7 +62,12 @@ LOCAL_DATA_ROOT = Path(
     or (str(DEFAULT_MAC_DATA_ROOT) if DEFAULT_MAC_DATA_ROOT.exists() else str(ROOT_DIR / "data"))
 )
 LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
-LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
+LOCAL_ATOMIC_DB = Path(
+    os.getenv(
+        "LOCAL_ATOMIC_DB",
+        str(LOCAL_DATA_ROOT / "atomic_facts" / "shadow" / "market_atomic_mainboard_compact_current.db"),
+    )
+)
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", "").strip()
 LOCAL_DAILY_SELECTION_PY_CMD = os.getenv("SELECTION_DAILY_PY_CMD", "").strip()
@@ -425,6 +430,13 @@ def _http_download_to_local(url: str, local_path: Path, token: str, expected_siz
 
 def _scp_windows_file_to_local(remote_path: str, local_path: Path, expected_size: int = -1) -> Dict[str, object]:
     _ensure_local_parent(local_path)
+    for sidecar in (
+        local_path.with_name(f"{local_path.name}-wal"),
+        local_path.with_name(f"{local_path.name}-shm"),
+        local_path.with_name(f"{local_path.name}.db-wal"),
+        local_path.with_name(f"{local_path.name}.db-shm"),
+    ):
+        sidecar.unlink(missing_ok=True)
     tmp_path = local_path.with_name(f"{local_path.name}.part")
     if tmp_path.exists():
         tmp_path.unlink()
@@ -439,6 +451,13 @@ def _scp_windows_file_to_local(remote_path: str, local_path: Path, expected_size
     if local_path.exists():
         _backup_local_file(local_path)
     tmp_path.replace(local_path)
+    for sidecar in (
+        local_path.with_name(f"{local_path.name}-wal"),
+        local_path.with_name(f"{local_path.name}-shm"),
+        local_path.with_name(f"{local_path.name}.db-wal"),
+        local_path.with_name(f"{local_path.name}.db-shm"),
+    ):
+        sidecar.unlink(missing_ok=True)
     return {"local": str(local_path), "bytes": local_size, "transport": "LAN_SCP"}
 
 
@@ -982,8 +1001,10 @@ def _write_windows_atomic_single_day_config(trade_date: str, local_day_root: Pat
     iso_date = _compact_to_iso(trade_date)
     kind = "l2" if trade_date >= "20260301" else "legacy"
     win_root_py = WIN_PROJECT_ROOT.replace("\\", "/")
+    selection_db = _resolve_windows_selection_db()
     config = {
         "atomic_db": WIN_ATOMIC_DB.replace("\\", "/"),
+        "selection_db": selection_db.replace("\\", "/") if selection_db else "",
         "market_root": WIN_MARKET_ROOT.replace("\\", "/"),
         "extract_root": r"Z:/atomic_stage",
         "workers": 12,
@@ -1012,6 +1033,13 @@ def _write_windows_atomic_single_day_config(trade_date: str, local_day_root: Pat
     local_config.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     remote_dir = f"{WIN_PROJECT_ROOT}\\.run\\postclose_atomic\\{trade_date}"
     remote_config = f"{WIN_PROJECT_ROOT}/.run/postclose_atomic/{trade_date}/atomic_config.json"
+    # Force a fresh single-day atomic run. Recreate the whole day directory so stale
+    # state/report or leftover delta files cannot short-circuit Windows atomic work.
+    _ssh(
+        WIN_HOST,
+        f'cmd /c if exist "{remote_dir}" rmdir /s /q "{remote_dir}"',
+        check=False,
+    )
     _ssh(WIN_HOST, f'cmd /c if not exist "{remote_dir}" mkdir "{remote_dir}"', check=False)
     _run(["scp", str(local_config), f"{WIN_HOST}:{_win_scp_path(remote_config)}"], check=True)
     return remote_config
@@ -1134,6 +1162,52 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_
         "local_selection_merge": merge_report,
         "local_daily_selection_candidates": daily_signal_report,
         "local_delta_path": str(local_delta),
+    }
+
+
+def _run_local_selection_pipeline(trade_date: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    _progress(f"[{trade_date}] 开始更新 Mac 本地 selection 主库")
+    env = os.environ.copy()
+    env["DB_PATH"] = str(LOCAL_MARKET_DB)
+    env["ATOMIC_MAINBOARD_DB_PATH"] = str(LOCAL_ATOMIC_DB)
+    env["ATOMIC_DB_PATH"] = str(LOCAL_ATOMIC_DB)
+    env["SELECTION_DB_PATH"] = str(LOCAL_SELECTION_DB)
+    refresh_result = subprocess.run(
+        [
+            LOCAL_PY_CMD,
+            str(ROOT_DIR / "backend" / "scripts" / "run_selection_research.py"),
+            "refresh",
+            "--start-date",
+            iso_date,
+            "--end-date",
+            iso_date,
+            "--skip-daily-candidates",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    refresh_report = _parse_json_output(refresh_result.stdout)
+    _progress(f"[{trade_date}] Mac selection refresh 完成")
+    daily_signal_result = subprocess.run(
+        [
+            LOCAL_DAILY_SELECTION_PY_CMD,
+            str(ROOT_DIR / "backend" / "scripts" / "run_daily_model_signals.py"),
+            "--date",
+            iso_date,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    daily_signal_report = _parse_json_output(daily_signal_result.stdout)
+    _progress(f"[{trade_date}] Mac 每日统一候选池生成完成")
+    return {
+        "local_selection_refresh": refresh_report,
+        "local_daily_selection_candidates": daily_signal_report,
     }
 
 
@@ -1412,11 +1486,19 @@ def run_day(
                 local_day_root=local_day_root,
                 sync_context=sync_context,
             )
-            selection_sync_report = _run_windows_selection_pipeline(
-                trade_date=trade_date,
-                local_day_root=local_day_root,
-                sync_context=sync_context,
-            )
+            try:
+                selection_sync_report = _run_windows_selection_pipeline(
+                    trade_date=trade_date,
+                    local_day_root=local_day_root,
+                    sync_context=sync_context,
+                )
+            except Exception as exc:
+                _progress(f"[{trade_date}] Windows selection 失败，回退到 Mac 本地 selection: {exc}")
+                selection_sync_report = {
+                    "fallback": "local_selection_refresh",
+                    "windows_error": str(exc),
+                    **_run_local_selection_pipeline(trade_date),
+                }
 
         if not skip_cloud_merge:
             cloud_artifacts = [

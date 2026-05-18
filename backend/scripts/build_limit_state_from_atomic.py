@@ -37,6 +37,7 @@ class LimitRule:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build atomic limit state tables from atomic trade tables.")
     parser.add_argument("--atomic-db", type=Path, default=DEFAULT_ATOMIC_DB)
+    parser.add_argument("--selection-db", type=Path, default=None, help="Optional selection_research.db for ST name detection")
     parser.add_argument("--symbols", default="", help="Comma-separated symbols")
     parser.add_argument("--date-from", default="", help="Optional inclusive YYYY-MM-DD")
     parser.add_argument("--date-to", default="", help="Optional inclusive YYYY-MM-DD")
@@ -75,6 +76,13 @@ def detect_board_type(symbol: str) -> str:
     if s.startswith("sh"):
         return "sh_main"
     return "sz_main"
+
+
+def detect_risk_flag_type(name: Optional[str]) -> str:
+    text = str(name or "").strip().upper()
+    if "ST" in text:
+        return "st"
+    return "normal"
 
 
 def load_rules(conn: sqlite3.Connection) -> Dict[Tuple[str, str], List[LimitRule]]:
@@ -139,6 +147,19 @@ def build_where_clause(symbols: Sequence[str], date_from: str, date_to: str) -> 
     return "WHERE " + " AND ".join(clauses), params
 
 
+def qualify_where_clause(where_clause: str, alias: str) -> str:
+    if not where_clause:
+        return where_clause
+    qualified = where_clause
+    for column in ("symbol", "trade_date"):
+        qualified = qualified.replace(f"{column} ", f"{alias}.{column} ")
+        qualified = qualified.replace(f"{column}>", f"{alias}.{column}>")
+        qualified = qualified.replace(f"{column}<", f"{alias}.{column}<")
+        qualified = qualified.replace(f"{column}=", f"{alias}.{column}=")
+        qualified = qualified.replace(f"{column} IN", f"{alias}.{column} IN")
+    return qualified
+
+
 def classify_label(touch_up: int, touch_down: int, close_up: int, close_down: int) -> str:
     if close_up:
         return "sealed_up"
@@ -157,6 +178,12 @@ def near_ratio(price: float, barrier: Optional[float], prev_close: Optional[floa
     return float(1 - abs(barrier - price) / abs(barrier - prev_close))
 
 
+def limit_tolerance(prev_close: Optional[float]) -> float:
+    if prev_close is None or prev_close <= 0:
+        return 0.005
+    return max(0.005, prev_close * 0.002)
+
+
 def build_limit_state(
     conn: sqlite3.Connection,
     symbols: Sequence[str],
@@ -164,17 +191,46 @@ def build_limit_state(
     date_to: str,
     *,
     include_5m: bool = True,
+    selection_alias: str = "",
 ) -> Tuple[List[Tuple], List[Tuple]]:
     where_clause, params = build_where_clause(symbols, date_from, date_to)
-    daily = conn.execute(
-        f"""
-        SELECT symbol, trade_date, open, high, low, close
-        FROM atomic_trade_daily
-        {where_clause}
-        ORDER BY symbol, trade_date
-        """,
-        params,
-    ).fetchall()
+    qualified_where_clause = qualify_where_clause(where_clause, "t")
+    feature_source = ""
+    if selection_alias:
+        feature_source = f"{selection_alias}.selection_feature_daily"
+    elif conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='selection_feature_daily' LIMIT 1"
+    ).fetchone():
+        feature_source = "selection_feature_daily"
+    if feature_source:
+        daily = conn.execute(
+            f"""
+            SELECT
+              t.symbol,
+              t.trade_date,
+              t.open,
+              t.high,
+              t.low,
+              t.close,
+              sf.name
+            FROM atomic_trade_daily AS t
+            LEFT JOIN {feature_source} AS sf
+              ON sf.symbol = t.symbol AND sf.trade_date = t.trade_date
+            {qualified_where_clause}
+            ORDER BY t.symbol, t.trade_date
+            """,
+            params,
+        ).fetchall()
+    else:
+        daily = conn.execute(
+            f"""
+            SELECT symbol, trade_date, open, high, low, close, NULL AS name
+            FROM atomic_trade_daily
+            {where_clause}
+            ORDER BY symbol, trade_date
+            """,
+            params,
+        ).fetchall()
     bars = conn.execute(
         f"""
         SELECT symbol, trade_date, bucket_start, open, high, low, close
@@ -192,11 +248,40 @@ def build_limit_state(
     rules = load_rules(conn)
     daily_rows: List[Tuple] = []
     rows_5m: List[Tuple] = []
-    prev_close_map: Dict[str, float] = {}
+    prev_close_map: Dict[str, float] = {
+        str(row[0]): float(row[1])
+        for row in conn.execute(
+            f"""
+            WITH requested AS (
+              SELECT DISTINCT symbol, MIN(trade_date) AS first_trade_date
+              FROM atomic_trade_daily
+              {where_clause}
+              GROUP BY symbol
+            ),
+            ranked_prev AS (
+              SELECT
+                t.symbol,
+                t.close,
+                ROW_NUMBER() OVER (
+                  PARTITION BY t.symbol
+                  ORDER BY t.trade_date DESC
+                ) AS rn
+              FROM atomic_trade_daily AS t
+              JOIN requested AS r
+                ON r.symbol = t.symbol
+               AND t.trade_date < r.first_trade_date
+            )
+            SELECT symbol, close
+            FROM ranked_prev
+            WHERE rn = 1
+            """,
+            params,
+        ).fetchall()
+    }
 
-    for symbol, trade_date, open_price, high_price, low_price, close_price in daily:
+    for symbol, trade_date, open_price, high_price, low_price, close_price, name in daily:
         board_type = detect_board_type(symbol)
-        risk_flag_type = "normal"
+        risk_flag_type = detect_risk_flag_type(name)
         prev_close = prev_close_map.get(symbol)
         quality_parts: List[str] = []
         limit_pct = None
@@ -222,14 +307,15 @@ def build_limit_state(
 
         for b in day_bars:
             _, _, bucket_start, b_open, b_high, b_low, b_close = b
+            tol = limit_tolerance(prev_close)
             if up_limit_price is not None:
-                touch_up = int(float(b_high) >= up_limit_price - 0.005)
-                close_up = int(abs(float(b_close) - up_limit_price) <= 0.005)
+                touch_up = int(float(b_high) >= up_limit_price - tol)
+                close_up = int(float(b_close) >= up_limit_price - tol)
             else:
                 touch_up = close_up = 0
             if down_limit_price is not None:
-                touch_down = int(float(b_low) <= down_limit_price + 0.005)
-                close_down = int(abs(float(b_close) - down_limit_price) <= 0.005)
+                touch_down = int(float(b_low) <= down_limit_price + tol)
+                close_down = int(float(b_close) <= down_limit_price + tol)
             else:
                 touch_down = close_down = 0
 
@@ -271,14 +357,15 @@ def build_limit_state(
                     )
                 )
 
+        tol = limit_tolerance(prev_close)
         if up_limit_price is not None:
-            touch_limit_up = int(float(high_price) >= up_limit_price - 0.005)
-            is_limit_up_close = int(abs(float(close_price) - up_limit_price) <= 0.005)
+            touch_limit_up = int(float(high_price) >= up_limit_price - tol)
+            is_limit_up_close = int(float(close_price) >= up_limit_price - tol)
         else:
             touch_limit_up = is_limit_up_close = 0
         if down_limit_price is not None:
-            touch_limit_down = int(float(low_price) <= down_limit_price + 0.005)
-            is_limit_down_close = int(abs(float(close_price) - down_limit_price) <= 0.005)
+            touch_limit_down = int(float(low_price) <= down_limit_price + tol)
+            is_limit_down_close = int(float(close_price) <= down_limit_price + tol)
         else:
             touch_limit_down = is_limit_down_close = 0
 
@@ -376,6 +463,8 @@ def main() -> None:
         raise SystemExit(f"Atomic DB not found: {args.atomic_db}")
     symbols = [s.strip().lower() for s in args.symbols.split(",") if s.strip()]
     with sqlite3.connect(args.atomic_db) as conn:
+        if args.selection_db and args.selection_db.exists():
+            conn.execute("ATTACH DATABASE ? AS sel", (str(args.selection_db.expanduser().resolve()),))
         ensure_schema(conn, include_5m=bool(args.include_5m))
         ensure_default_rules(conn)
         rows_5m, daily_rows = build_limit_state(
@@ -384,6 +473,7 @@ def main() -> None:
             args.date_from,
             args.date_to,
             include_5m=bool(args.include_5m),
+            selection_alias="sel" if args.selection_db and args.selection_db.exists() else "",
         )
         if not args.dry_run:
             replace_rows(
