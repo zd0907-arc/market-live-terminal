@@ -74,8 +74,9 @@
 ## T-033 过程材料分级清理与入口降噪
 - 状态：`ACTIVE`
 - 当前事实：系统页面/模块已经形成主链、研究主线、实验专题三层，但仓库里仍堆积大量过程卡、历史研究、专题实验文档和脚本族。当前最大的治理风险不是“代码还不够漂亮”，而是过时材料仍在持续误导后续实现。第一批风险分级已完成；`docs/changes` 的 5 张高风险现状型过程卡、`docs/strategy-rework/handoff-for-next-ai.md`，以及 `docs/strategy-rework/README.md`、`docs/selection/daily_candidate_source_contract.md`、`docs/selection/opportunity_discovery_model_final.md`、`docs/04_OPS_AND_DEV.md` 的入口提示已补齐。第二批已执行：`docs/selection` 顶层 4 份一次性清理过程文档已迁入 `docs/archive/`，并新增 `selection_research_archive_decision_summary.md` 承接压缩结论。第三批已完成：`docs/strategy-rework/current-inventory.md`、`project-status-20260427.md`、`experiment-decision-log.md` 已迁 archive；`LONG_MEMORY / current-strategy-conclusion / current-research-operating-summary` 已收成新的默认三件套。当前又补了 `docs/ops/atomic-script-families-boundary.md`，把 `full_reverse / atomic backfill / bench / snapshot` 的历史脚本族边界单独收口。现在又补了系统地图与阶段摘要草稿，开始把主链 / 研究主线 / 专题层 / 三端职责固定成更稳定的总图。
+- 重新评估结果：继续压历史文档的收益已经不高，后续只保留能直接消除错误入口、重复承接或冲突语义的最小改动；治理重心转向代码层共享壳和双轨实现收口。
 - 下一步：
-  1. 基于 `docs/ops/atomic-script-families-boundary.md` 继续判断哪些历史脚本族只保留文档边界，哪些后续值得改名或迁移；
-  2. 继续补更大范围的阶段汇总：把零散过程卡压缩成少数几份版本阶段总结和主题总结，减少未来 AI 反复读垃圾材料的成本；
-  3. 待阶段汇总补齐后，再判断哪些对象只保留 archive，哪些对象可以进一步删除。
+  1. 按 `docs/changes/MOD-20260520-04-code-governance-plan.md` 的第一批范围推进代码治理评估；
+  2. 文档侧只保留必要的入口澄清和追溯索引，不再追加大面积瘦身；
+  3. 等代码治理落一轮结果后，再决定是否还需要做最后一轮归档压缩。
 - 关联任务：`MOD-20260519-01`, `MOD-20260519-02`, `MOD-20260424-02`, `MOD-20260424-03`
