@@ -1,5 +1,22 @@
 # 2026-04-27 选股策略项目状态
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-strategy-research-project-status-20260427
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/strategy-rework/project-status-20260427.md
+- Status: FROZEN
+
+## 入口提示
+
+默认阅读顺序：
+
+1. `docs/strategy-rework/LONG_MEMORY.md`
+2. `docs/strategy-rework/current-strategy-conclusion.md`
+3. `docs/strategy-rework/current-research-operating-summary.md`
+
+本文档已降级为阶段性项目状态快照，只在需要追溯 2026-04-27 前后项目推进状态时再看，不作为当前默认入口。
+
 ## 当前结论
 
 当前已经从“单策略实验页”推进到“每日复盘决策页”。

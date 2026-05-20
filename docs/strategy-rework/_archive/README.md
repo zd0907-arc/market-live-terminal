@@ -20,5 +20,5 @@
 ```text
 LONG_MEMORY.md
 current-strategy-conclusion.md
-experiment-decision-log.md
+current-research-operating-summary.md
 ```

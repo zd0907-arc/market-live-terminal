@@ -1,5 +1,12 @@
 # 机会发现模型研究归档摘要（2026-05-16）
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-opportunity-discovery-research-archive-summary
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/selection/opportunity_discovery_archive_summary.md
+- Status: FROZEN
+
 ## 当前结论
 
 机会发现模型只作为“盘后候选生成器”保留，不作为完整自动交易策略。

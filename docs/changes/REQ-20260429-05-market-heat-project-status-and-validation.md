@@ -1,5 +1,10 @@
 # 热门板块/板块热度项目阶段报告
 
+> 说明：这是阶段性过程材料，不是当前 market-heat 方案的唯一真相。
+> 当前入口先读：[MOD-20260421-01-project-current-state-and-doc-governance-normalization](docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md)。
+> 主题池与现行口径补读：[docs/selection/market_heat/README](docs/selection/market_heat/README.md)。
+> 本文档现在主要适合用来回看当时的验证目标、阶段判断和历史结论。
+
 ## 目标
 
 本项目不是为了用“板块热”直接买股票，而是验证：

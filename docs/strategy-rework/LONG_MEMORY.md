@@ -1,5 +1,16 @@
 # 选股策略研究长记忆
 
+## 当前默认阅读顺序
+
+1. `docs/strategy-rework/LONG_MEMORY.md`
+2. `docs/strategy-rework/current-strategy-conclusion.md`
+3. `docs/strategy-rework/current-research-operating-summary.md`
+
+需要追溯历史过程时，再看：
+
+- `docs/archive/ARC-LEG-20260519-strategy-research-project-status-20260427.md`
+- `docs/archive/ARC-LEG-20260519-strategy-research-experiment-decision-log.md`
+
 ## 一句话结论
 
 当前选股策略已经从“单策略调试”推进到“每日复盘决策”：
@@ -20,11 +31,11 @@
 当前选股模块应作为研究/观察/复盘决策工作台，不应被描述为稳定自动买入系统。
 ```
 
-最新状态：
+配套入口：
 
 ```text
-docs/strategy-rework/project-status-20260427.md
-docs/strategy-rework/review-page-user-story.md
+docs/strategy-rework/current-strategy-conclusion.md
+docs/strategy-rework/current-research-operating-summary.md
 ```
 
 ## 用户目标
@@ -347,10 +358,9 @@ docs/selection/market_heat/backtests/strong_momentum_exit_compare_2025.md
 
 | 文档 | 用途 |
 |---|---|
-| `project-status-20260427.md` | 当前项目状态 |
 | `current-strategy-conclusion.md` | 当前策略结论 |
 | `product-integration-stable-callback-strategy.md` | 产品接入说明 |
-| `experiment-decision-log.md` | 实验采纳/不采纳登记 |
+| `docs/archive/ARC-LEG-20260519-strategy-research-experiment-decision-log.md` | 实验采纳/不采纳追溯台账 |
 | `strategies/S02-capital-breakout-continuation/next-buy-point-plan.md` | 趋势中继下一版方案 |
 | `archive-index.md` | 归档索引 |
 | `_shared/data-sources.md` | 数据源 |

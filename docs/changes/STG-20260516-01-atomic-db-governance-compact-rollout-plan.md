@@ -1,5 +1,11 @@
 # Atomic DB 治理、页面融合与上线验证计划
 
+> 说明：这是一次治理推进过程的历史记录，不是当前唯一真相。
+> 当前入口先读：[MOD-20260411-14-market-data-governance-current-state](docs/changes/MOD-20260411-14-market-data-governance-current-state.md)。
+> 再补读：[MOD-20260421-01-project-current-state-and-doc-governance-normalization](docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md)。
+> 本文档现在主要适合用来回看当时的 rollout 决策、验证范围和暂停点。
+> 本文中的 `full_reverse / compact cutover / shadow` 验证步骤属于治理过程，不应被复用为当前日常跑数或本地启动默认步骤；脚本族边界见 `docs/ops/atomic-script-families-boundary.md`。
+
 状态：COMPACT_DEFAULT_USER_ACCEPTED_IN_WORKTREE  
 分支：`codex/db-governance`  
 worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-db-governance`  

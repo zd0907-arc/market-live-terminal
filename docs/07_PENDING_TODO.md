@@ -42,22 +42,14 @@
 
 ## T-022 选股工作台数据对齐与本地补齐
 - 状态：`ACTIVE`
-- 当前事实：选股工作台能力已可用，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；但当前仍只能视为研究/观察工作台，不能当稳定自动买入信号。问题从“只有数据底座不完整”扩大为“数据对齐 + 策略效果/覆盖面滚动验证”两层。
+- 当前事实：选股工作台能力已可用，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；但当前仍只能视为研究/观察工作台，不能当稳定自动买入信号。最新复核结果是：主链能跑，但还不能叫“完美支持”，当前最实的缺口是 `stock_universe_meta` 为空、`2026-04-01 ~ 2026-04-10` 的 `history_*_l2` 缺口、以及 `market_heat` 仍可能读到空的 old full_reverse / 旧 snapshot cache。
 - 下一步：
   1. 补 `stock_universe_meta`；
-  2. 恢复本地 `history_daily_l2 / history_5m_l2` 的正式覆盖；
-  3. 跟踪资金流回调稳健与趋势中继最近信号的真实后续表现；
-  4. 明确哪些策略结果只做解释/观察，哪些可以进入模拟盘优先级。
+  2. 恢复 `2026-04-01 ~ 2026-04-10` 的 `history_daily_l2 / history_5m_l2` 正式覆盖，并决定是否显式暴露 atomic fallback/source；
+  3. 清理 `market_heat` 旧 snapshot/cache，并让 atomic source 明确收敛到 compact；
+  4. 跟踪资金流回调稳健与趋势中继最近信号的真实后续表现；
+  5. 明确哪些策略结果只做解释/观察，哪些可以进入模拟盘优先级。
 - 关联任务：`CHG-20260404-02`, `REL-20260427-selection-strategy-research-v5.0.9`, `MOD-20260429-07`
-
-## T-026 原子事实层主路径后续收口
-- 状态：`ACTIVE`
-- 当前事实：atomic 已进入主线，但“进入主线”不等于运行时代码已经彻底脱离旧表依赖。
-- 下一步：
-  1. 盘点仍直连旧表/兼容链路的运行时代码；
-  2. 明确 Cloud 轻量盯盘与 Mac 本地研究站各自允许保留的旧依赖；
-  3. 与 `T-031` 联动做测试库回归。
-- 关联任务：`CHG-20260415-01`
 
 ## T-027 单票新闻 / 公告 / 互动问答事件层基础建设
 - 状态：`ACTIVE`
@@ -70,10 +62,20 @@
 
 ## T-031 存量表依赖剥离验证
 - 状态：`ACTIVE`
-- 当前事实：运行时代码仍直接依赖多张存量表，因此“旧表存在”不等于“现在就能删”。
+- 当前事实：运行时代码仍存在旧表/旧 snapshot/旧 source 候选顺序残留，因此“主链能跑”不等于“旧路径已经退干净”。
 - 下一步：
   1. 复制测试版 `market_data.db`；
   2. 按表组删除存量表；
   3. 让本地服务指向测试库做回归；
-  4. 明确哪些依赖尚未切干净。
+  4. 明确哪些依赖尚未切干净，尤其 `review/data`、`history/multiframe`、`market_heat latest/fine dashboard`；
+  5. 记录哪些链路只是 atomic merge / cache 命中后勉强可用，哪些已经真正完成新基线切换。
 - 关联任务：`CHG-20260417-01`
+
+## T-033 过程材料分级清理与入口降噪
+- 状态：`ACTIVE`
+- 当前事实：系统页面/模块已经形成主链、研究主线、实验专题三层，但仓库里仍堆积大量过程卡、历史研究、专题实验文档和脚本族。当前最大的治理风险不是“代码还不够漂亮”，而是过时材料仍在持续误导后续实现。第一批风险分级已完成；`docs/changes` 的 5 张高风险现状型过程卡、`docs/strategy-rework/handoff-for-next-ai.md`，以及 `docs/strategy-rework/README.md`、`docs/selection/daily_candidate_source_contract.md`、`docs/selection/opportunity_discovery_model_final.md`、`docs/04_OPS_AND_DEV.md` 的入口提示已补齐。第二批已执行：`docs/selection` 顶层 4 份一次性清理过程文档已迁入 `docs/archive/`，并新增 `selection_research_archive_decision_summary.md` 承接压缩结论。第三批已完成：`docs/strategy-rework/current-inventory.md`、`project-status-20260427.md`、`experiment-decision-log.md` 已迁 archive；`LONG_MEMORY / current-strategy-conclusion / current-research-operating-summary` 已收成新的默认三件套。当前又补了 `docs/ops/atomic-script-families-boundary.md`，把 `full_reverse / atomic backfill / bench / snapshot` 的历史脚本族边界单独收口。现在又补了系统地图与阶段摘要草稿，开始把主链 / 研究主线 / 专题层 / 三端职责固定成更稳定的总图。
+- 下一步：
+  1. 基于 `docs/ops/atomic-script-families-boundary.md` 继续判断哪些历史脚本族只保留文档边界，哪些后续值得改名或迁移；
+  2. 继续补更大范围的阶段汇总：把零散过程卡压缩成少数几份版本阶段总结和主题总结，减少未来 AI 反复读垃圾材料的成本；
+  3. 待阶段汇总补齐后，再判断哪些对象只保留 archive，哪些对象可以进一步删除。
+- 关联任务：`MOD-20260519-01`, `MOD-20260519-02`, `MOD-20260424-02`, `MOD-20260424-03`

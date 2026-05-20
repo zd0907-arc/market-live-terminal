@@ -1,5 +1,12 @@
 # 选股研究清理删除清单（2026-05-16）
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-selection-cleanup-deleted-manifest
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/selection/selection_cleanup_deleted_manifest_2026-05-16.md
+- Status: FROZEN
+
 ## 回滚边界
 
 - 清理前 checkpoint：`5eef68e chore: checkpoint selection research before cleanup`
@@ -25,7 +32,7 @@
 
 ## 第二批删除范围
 
-已先将研究结论汇总到 `docs/selection/opportunity_discovery_archive_summary.md`。
+已先将研究结论压缩到 `docs/selection/selection_research_archive_decision_summary.md`，详细实验摘要保留在 `docs/archive/ARC-LEG-20260519-opportunity-discovery-research-archive-summary.md`。
 
 | 路径 | 状态 | 删除前大小 | 原因 |
 |---|---:|---:|---|

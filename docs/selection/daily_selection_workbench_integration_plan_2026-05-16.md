@@ -9,7 +9,7 @@
 - S06 融合复盘页和静态报告。
 - 已替代的 `postclose_exit_v0_1/`。
 - H5、早盘执行、卖飞审计、旧滚动 split 等过程性实验产物。
-- 旧 S06 编号文档，结论已合并到 `docs/selection/opportunity_discovery_archive_summary.md`。
+- 旧 S06 编号文档和对应实验结论，已压缩到 `docs/selection/selection_research_archive_decision_summary.md`；详细留痕已迁入 `docs/archive/`。
 
 未清理但暂不阻塞开发：
 

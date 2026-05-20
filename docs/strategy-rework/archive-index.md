@@ -1,5 +1,15 @@
 # 归档索引
 
+## 入口提示
+
+默认阅读顺序：
+
+1. `docs/strategy-rework/LONG_MEMORY.md`
+2. `docs/strategy-rework/current-strategy-conclusion.md`
+3. `docs/strategy-rework/current-research-operating-summary.md`
+
+本页只用于查归档和历史材料，不作为当前研究入口。需要追溯时，再看 `docs/archive/ARC-LEG-20260519-strategy-research-project-status-20260427.md` 与 `docs/archive/ARC-LEG-20260519-strategy-research-experiment-decision-log.md`。
+
 ## 说明
 
 当前不直接删除旧实验文件，原因是：
@@ -13,7 +23,7 @@
 
 ```text
 不再作为当前决策入口；
-统一从 current-strategy-conclusion.md 和 experiment-decision-log.md 看结论。
+统一先从 LONG_MEMORY.md、current-strategy-conclusion.md、current-research-operating-summary.md 进入。
 ```
 
 ## 归档类资料
@@ -70,8 +80,9 @@ docs/strategy-rework/strategies/v1-trend-reversal-confirmation/
 后续先看：
 
 ```text
+docs/strategy-rework/LONG_MEMORY.md
 docs/strategy-rework/current-strategy-conclusion.md
-docs/strategy-rework/experiment-decision-log.md
+docs/strategy-rework/current-research-operating-summary.md
 ```
 
 

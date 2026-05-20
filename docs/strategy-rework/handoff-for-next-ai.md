@@ -1,5 +1,11 @@
 # 给后续开发 AI 的交接说明
 
+> 提示：这份文档是策略重构阶段的 AI 交接材料，不是当前唯一真相。
+> 先看：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`。
+> 再看当前总入口：`docs/strategy-rework/README.md`、`docs/strategy-rework/current-research-operating-summary.md`。
+> 如需当前策略结论，优先看 `docs/strategy-rework/current-strategy-conclusion.md`；如需阶段承接，补看 `docs/strategy-rework/current-research-operating-summary.md`。
+> 这份文档现在适合用于理解当时 worktree 背景、实验状态和历史交接语境。
+
 ## 1. 当前工作区
 
 - Worktree：`/Users/dong/Desktop/AIGC/market-live-terminal-selection-strategy-rework`

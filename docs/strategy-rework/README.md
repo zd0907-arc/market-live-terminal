@@ -1,13 +1,16 @@
 # 选股策略重构研究
 
+> 说明：这里是“策略研究专题入口”，不是整个项目当前真相，也不代表全项目唯一先读入口。
+> 正式进入项目时，先读项目总入口与当前真相页；确认主线后，再回到这里看策略研究材料。
+
 ## 当前结论
 
 ## 当前项目状态
 
-最新状态见：
+当前阶段摘要见：
 
 ```text
-project-status-20260427.md
+current-research-operating-summary.md
 ```
 
 核心结论：
@@ -35,7 +38,7 @@ project-status-20260427.md
 ```text
 LONG_MEMORY.md                    # 策略研究长记忆
 current-strategy-conclusion.md      # 当前策略结论
-experiment-decision-log.md          # 实验采纳/不采纳登记
+current-research-operating-summary.md # 当前研究运营摘要
 archive-index.md                    # 旧资料归档索引
 ```
 
@@ -63,7 +66,7 @@ archive-index.md                    # 旧资料归档索引
 | `_shared/sample-definition.md` | 共用样本定义 |
 | `data-map-current.md` | 当前字段和业务含义 |
 | `handoff-for-next-ai.md` | 给其他 AI 的交接背景 |
-| `project-status-20260427.md` | 当前完成情况评估 |
+| `current-research-operating-summary.md` | 当前研究运营摘要 |
 | `review-page-user-story.md` | 复盘页面用户 Story 与优化空间 |
 
 ## 目录结构

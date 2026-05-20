@@ -54,14 +54,15 @@ npm run check:baseline
 2. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
 3. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
 4. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
-5. 若任务属于选股研究入口治理，先看 `docs/selection/daily_candidate_source_contract.md`，它是工作台统一候选池入口说明
-6. 需要细节时再进入：
+5. 非正式 `ops` 脚本边界看 `docs/ops/atomic-script-families-boundary.md`
+6. 若任务属于选股研究入口治理，先看 `docs/selection/daily_candidate_source_contract.md`，它是工作台统一候选池入口说明
+7. 需要细节时再进入：
    - `docs/domain/*`
    - `docs/contracts/*`
    - `docs/ops/*`
-7. 选股策略细节看 `docs/strategy-rework/LONG_MEMORY.md`
-8. 当前需求过程统一进 `docs/changes/*`
-9. 开始做需求前，先看：`docs/ops/development-workflow.md`
+8. 选股策略细节先看 `docs/strategy-rework/LONG_MEMORY.md`；当前阶段状态补充看 `docs/strategy-rework/current-research-operating-summary.md`
+9. 当前需求过程统一进 `docs/changes/*`
+10. 开始做需求前，先看：`docs/ops/development-workflow.md`
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
@@ -70,6 +71,8 @@ npm run check:baseline
 - 每日盘后总控：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/run_postclose_l2.sh`
 - 每日盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/check_postclose_l2_status.sh`
 - Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/sync_windows_research_snapshot.sh`
+
+除白名单脚本外，其他 `ops` 脚本默认先按历史工具处理；具体边界见 `docs/ops/atomic-script-families-boundary.md`。
 
 ## 每天盘后要跑的指令
 ```bash

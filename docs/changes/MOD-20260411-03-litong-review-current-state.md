@@ -1,5 +1,10 @@
 # MOD-20260411-03 利通电子复盘专项：当前已做、发现的问题、下一步计划
 
+> 提示：这份文档是利通电子单案例过程材料，不代表当前系统主状态。
+> 先看：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`。
+> 选股/策略当前入口再看：`docs/selection/selection_research_master.md`、`docs/strategy-rework/README.md`。
+> 这份文档现在适合用于回看利通专项复盘、样本反推和单案例问题追踪。
+
 ## 1. 基本信息
 - 标题：利通电子复盘专项：当前已做、发现的问题、下一步计划
 - 状态：ACTIVE

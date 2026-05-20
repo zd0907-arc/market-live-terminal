@@ -1,4 +1,9 @@
-# Selection Research Master（选股研究总册）
+# Selection Research Master（选股研究历史总册）
+
+> 说明：这里是“选股研究历史总册”，不是当前默认入口。
+> 当前默认入口先看 `docs/selection/daily_candidate_source_contract.md` 和 `docs/selection/opportunity_discovery_model_final.md`。
+> 本页只保留旧阶段脉络，不再作为当前决策入口。
+> 本主题下顶层 `final / plan / cleanup` 一类文件大多属于过程材料或收口材料，默认不要把它们当成全项目总入口。
 
 > 当前定位：一期先做 **Top10 启动确认候选 + 右侧复盘决策视图 + 详情内出货风险识别**，把“选股 -> 看图 -> 决策”主工作流跑通。
 
@@ -114,7 +119,7 @@
 - 定位：盘后模型候选源 + 盘后持仓管理；入口上应并入工作台统一候选池，不另起独立主线。
 - 最终说明书：`docs/selection/opportunity_discovery_model_final.md`
 - 模型开发与接入 SOP：`docs/selection/model_development_sop.md`
-- 清理与落地清单：`docs/selection/selection_research_cleanup_plan.md`
+- 历史清理摘要：`docs/selection/selection_research_archive_decision_summary.md`
 - 保留模型：
   - 星火机会模型 `spark_opportunity_selector`
   - 守势持仓模型 `sentinel_postclose_exit`

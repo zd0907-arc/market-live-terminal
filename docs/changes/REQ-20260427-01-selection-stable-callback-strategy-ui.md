@@ -152,7 +152,7 @@ strategy_internal_id = stable_capital_callback
 ```text
 docs/strategy-rework/LONG_MEMORY.md
 docs/strategy-rework/current-strategy-conclusion.md
-docs/strategy-rework/experiment-decision-log.md
+docs/strategy-rework/current-research-operating-summary.md
 docs/strategy-rework/product-integration-stable-callback-strategy.md
 ```
 

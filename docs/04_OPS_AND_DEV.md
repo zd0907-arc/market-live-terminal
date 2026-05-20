@@ -2,6 +2,7 @@
 
 > 目标：只回答“当前正式怎么运行、怎么发布、怎么验真、详细步骤去哪看”。
 > 详细操作不再堆在本页；本页是运维/开发长记忆入口。
+> 正式操作先从本页列出的 runbook 和少数正式脚本进入，不要默认从 `ops/` 目录里的历史 `bench / full_reverse / atomic` 族脚本开始。
 
 ## 1. 当前正式运行拓扑
 - **Cloud**：轻量盯盘 / 手机应急查看
@@ -25,8 +26,12 @@
 | Cloud 发版 / 冒烟 / 回滚 | `docs/ops/cloud-release.md` |
 | 盘后 L2 / 原子层 / 日跑总控 | `docs/ops/postclose-l2-runbook.md` |
 | 标准开发流程 / 分支收口 / 文档收尾 | `docs/ops/development-workflow.md` |
+| 历史脚本族边界 | `docs/ops/atomic-script-families-boundary.md` |
 
-## 4. 当前常用脚本
+## 4. 正式脚本白名单
+> 只有下列脚本属于当前正式默认入口；正式操作、runbook、交接说明默认只引用这些脚本。
+> 未列入本表的 `ops/` / `scripts/` 脚本，默认都不是正式入口。
+
 | 用途 | 脚本 |
 |---|---|
 | Mac 首次全量同步 | `ops/bootstrap_mac_full_processed_sync.sh` |
@@ -37,6 +42,10 @@
 | Windows 脚本同步 | `sync_to_windows.sh` |
 | 云端发布 | `deploy_to_cloud.sh` |
 | 基线检查 | `scripts/check_baseline.sh` |
+
+> `bench / full_reverse / atomic backfill` 一类脚本族属于历史遗留、验证排查或二线运行工具；
+> 它们可以在专项排查或人工授权场景下使用，但不是当前正式日常入口，也不应在默认 runbook 中替代上述白名单脚本。
+> 具体边界见：`docs/ops/atomic-script-families-boundary.md`
 
 > 实时盯盘 Windows 任务：
 ```bash

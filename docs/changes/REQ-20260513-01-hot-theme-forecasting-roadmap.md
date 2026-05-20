@@ -1,5 +1,10 @@
 # REQ-20260513-01-hot-theme-forecasting-roadmap
 
+> 说明：这是 forecasting 方向的历史路线稿，不是当前唯一执行口径。
+> 当前入口先读：[MOD-20260421-01-project-current-state-and-doc-governance-normalization](docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md)。
+> 若要看 market-heat 主线落地结果，再读：[REL-20260512-v5.1.4-market-heat-mainline-dashboard](docs/changes/REL-20260512-v5.1.4-market-heat-mainline-dashboard.md)。
+> 本文档现在主要适合用来回看 forecasting 设想、建模边界和当时的 roadmap。
+
 ## 目标
 
 把市场热点页的 6 个池子升级为“主线延续预警”输入层，先判断当前已有热度记忆的主题在未来 5 个交易日是否还能延续。暂不预测冷启动新热点，暂不进入个股买点模型。

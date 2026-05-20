@@ -1,5 +1,12 @@
 # 选股研究清理执行 TODO（2026-05-16）
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-selection-cleanup-execution-todo
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/selection/selection_cleanup_execution_todo_2026-05-16.md
+- Status: FROZEN
+
 ## 当前结论
 
 已在 `main` 上完成一次存档提交：
@@ -12,7 +19,7 @@
 
 本清单基于：
 
-- `docs/selection/selection_research_cleanup_plan.md`
+- `docs/archive/ARC-LEG-20260519-selection-research-cleanup-plan.md`
 - `docs/strategy-rework/current-inventory.md`
 - `docs/strategy-rework/data-map-current.md`
 - `docs/strategy-rework/current-strategy-conclusion.md`
@@ -73,7 +80,7 @@ git switch -c codex/daily-selection-workbench
 已执行第一批清理，删除明细见：
 
 ```text
-docs/selection/selection_cleanup_deleted_manifest_2026-05-16.md
+docs/archive/ARC-LEG-20260519-selection-cleanup-deleted-manifest.md
 ```
 
 本批只删已经被明确替代、且不影响当前主线的目录/文件。
@@ -99,7 +106,7 @@ rg -n "S06FusionTradeReviewPage|s06-fusion-h5-22-report|postclose_exit_v0_1|fusi
 已将结论汇总到：
 
 ```text
-docs/selection/opportunity_discovery_archive_summary.md
+docs/selection/selection_research_archive_decision_summary.md
 ```
 
 并删除原始目录。
@@ -117,7 +124,7 @@ docs/selection/opportunity_discovery_archive_summary.md
 建议新增一个摘要文件：
 
 ```text
-docs/selection/opportunity_discovery_archive_summary.md
+docs/selection/selection_research_archive_decision_summary.md
 ```
 
 ## 第三批大概率删除

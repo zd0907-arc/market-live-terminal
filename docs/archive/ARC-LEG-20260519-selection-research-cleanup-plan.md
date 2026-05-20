@@ -1,5 +1,12 @@
 # 选股研究清理与模型落地清单
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-selection-research-cleanup-plan
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/selection/selection_research_cleanup_plan.md
+- Status: FROZEN
+
 更新时间：2026-05-16
 
 ## 结论

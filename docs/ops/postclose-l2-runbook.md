@@ -1,5 +1,8 @@
 # 盘后 L2 / 原子层日跑总控
 
+> 本文只覆盖当前正式日跑；`full_reverse / atomic backfill / bench / snapshot` 脚本族属于历史或专项工具，默认不作为本 runbook 的替代入口。
+> 具体边界见：`docs/ops/atomic-script-families-boundary.md`
+
 ## 1. 当前正式语义
 当前正式日跑主路径是：
 1. Windows 产出原始包与跑数结果
