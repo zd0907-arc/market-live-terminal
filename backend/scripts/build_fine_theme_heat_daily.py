@@ -32,7 +32,7 @@ def resolve_default_atomic_db() -> Path:
         candidate = Path(path)
         if candidate.exists() and candidate.stat().st_size > 0:
             return candidate
-    compact = Path(DATA_DIR) / "atomic_facts" / "shadow" / "market_atomic_mainboard_compact_current.db"
+    compact = Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
     if compact.exists() and compact.stat().st_size > 0:
         return compact
     return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"

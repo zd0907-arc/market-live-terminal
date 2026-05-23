@@ -256,6 +256,8 @@ def load_config(path: Path) -> Dict[str, object]:
     data.setdefault("l2_trade_only", False)
     data.setdefault("prefetch_next_day_extract", False)
     data.setdefault("stop_on_failure", True)
+    data.setdefault("max_failed_items_per_day", 0)
+    data.setdefault("max_failed_item_ratio_per_day", 0.0)
     data.setdefault("cleanup_extracted", True)
     data.setdefault("symbols", [])
     data.setdefault("extract_patterns", [])
@@ -468,6 +470,24 @@ def _run_process_shard(
     }
 
 
+def _failure_policy(config: Dict[str, object], item_count: int, failure_count: int) -> Dict[str, object]:
+    max_failed_items = int(config.get("max_failed_items_per_day", 0) or 0)
+    max_failed_ratio = float(config.get("max_failed_item_ratio_per_day", 0.0) or 0.0)
+    ratio = (failure_count / item_count) if item_count > 0 else 0.0
+    checks: List[bool] = []
+    if max_failed_items > 0:
+        checks.append(failure_count <= max_failed_items)
+    if max_failed_ratio > 0:
+        checks.append(ratio <= max_failed_ratio)
+    tolerated = failure_count > 0 and bool(checks) and all(checks)
+    return {
+        "max_failed_items_per_day": max_failed_items,
+        "max_failed_item_ratio_per_day": max_failed_ratio,
+        "failure_ratio": round(ratio, 6),
+        "tolerated": tolerated,
+    }
+
+
 def _merge_shard_tables(target_db: Path, shard_dbs: Sequence[Path]) -> None:
     with sqlite3.connect(target_db) as conn:
         conn.execute("PRAGMA synchronous = OFF")
@@ -639,6 +659,7 @@ def run_day(
             f"success={total_success} failure={len(failures)} total_sec={total_elapsed}",
             flush=True,
         )
+        failure_policy = _failure_policy(config, len(items), len(failures))
         report = {
             "batch": batch.name,
             "kind": batch.kind,
@@ -648,6 +669,7 @@ def run_day(
             "success_count": total_success,
             "failure_count": len(failures),
             "failures": failures[:20],
+            "failure_policy": failure_policy,
             "timing_seconds": {
                 "extract": extract_elapsed,
                 "list_items": list_elapsed,
@@ -656,7 +678,13 @@ def run_day(
                 "total": total_elapsed,
             },
         }
-        if failures and bool(config.get("stop_on_failure", True)):
+        if failures and failure_policy["tolerated"]:
+            print(
+                f"[atomic-backfill] day={trade_date} batch={batch.name} tolerated_failures="
+                f"{len(failures)} ratio={failure_policy['failure_ratio']}",
+                flush=True,
+            )
+        if failures and bool(config.get("stop_on_failure", True)) and not failure_policy["tolerated"]:
             raise RuntimeError(json.dumps(report, ensure_ascii=False))
         return report, prefetch_thread, prefetch_key
     finally:

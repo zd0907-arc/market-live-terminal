@@ -13,7 +13,7 @@ DB_PATH_DEFAULT="$DATA_ROOT/market_data.db"
 USER_DB_PATH_DEFAULT="$DATA_ROOT/user_data.db"
 SELECTION_DB_DEFAULT="$DATA_ROOT/selection/selection_research.db"
 ATOMIC_DB_DEFAULT="$DATA_ROOT/atomic_facts/market_atomic_mainboard_full_reverse.db"
-ATOMIC_COMPACT_DB_DEFAULT="$DATA_ROOT/atomic_facts/shadow/market_atomic_mainboard_compact_current.db"
+ATOMIC_COMPACT_DB_DEFAULT="$DATA_ROOT/atomic_facts/market_atomic_mainboard_compact_current.db"
 
 export DB_PATH="${DB_PATH:-$DB_PATH_DEFAULT}"
 export USER_DB_PATH="${USER_DB_PATH:-$USER_DB_PATH_DEFAULT}"

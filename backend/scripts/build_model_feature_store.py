@@ -18,7 +18,7 @@ from urllib.parse import quote
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
 DEFAULT_TARGET_DB = DATA_ROOT / "selection" / "model_feature_store.db"
-DEFAULT_ATOMIC_DB = DATA_ROOT / "atomic_facts" / "shadow" / "market_atomic_mainboard_compact_current.db"
+DEFAULT_ATOMIC_DB = DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = DATA_ROOT / "selection" / "selection_research.db"
 DEFAULT_HEAT_DB = DATA_ROOT / "market_heat" / "fine_theme_heat_daily.db"
 DEFAULT_HEAT_V2_DB = DATA_ROOT / "market_heat" / "fine_theme_heat_daily_v2.db"

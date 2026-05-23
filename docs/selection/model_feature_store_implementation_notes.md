@@ -180,27 +180,32 @@ backend/scripts/sync_model_market_index_daily.py
 
 1. 每日盘后不默认运行。
 2. 模型训练任务需要指数特征时，训练前单独执行并把结果作为 `build_model_feature_store.py --index-db` 输入。
-3. 没有指数时，feature store 保留 `has_index_data=0`，`csi1000_*` 为空，validator 报 warning 但不阻塞 P0。
+3. 新框架日跑会先刷新本地 `model_market_index_daily.db`，再构建 `model_feature_store.db`；指数刷新失败只告警，不阻断 atomic / selection / model_feature_store 主链路。
+4. 没有指数时，feature store 保留 `has_index_data=0`，`csi1000_*` 为空，validator 报 warning 但不阻塞 P0。
 
-## 每日盘后增量口径
+## 新框架每日盘后增量口径
 
-每日盘后是“当天跑完就同步到 Mac”的链路，目标是让本地研究站和页面可直接读到当天结果。
+每日盘后是“Windows 跑当天、Mac 拉当天 delta 合并”的链路，目标是让本地研究站、selection 和模型特征库都能直接读到当天结果。
 
-主入口保留：
+新入口：
 
 ```bash
-bash ops/run_postclose_l2.sh --date 20260515
+bash ops/run_daily_new_framework.sh --date 20260518
 ```
 
 该入口应完成：
 
 ```text
-1. Windows 解压当天原始包并构建 L2 / atomic / selection 当日增量。
-2. 导出当日 delta DB。
-3. 同步当日 delta DB 到 Mac。
-4. 合并到 Mac 的 market / atomic / selection 主库。
-5. 在 Mac 触发每日统一候选池。
-6. 写出 .run/postclose_l2/latest.json 供状态检查。
+1. Windows 从 D:\MarketData 读取当天 .7z。
+2. 解压和 worker staging 只落 Z:\atomic_stage。
+3. Windows 写入当前新 compact atomic DB。
+4. Windows 刷新 selection_research_windows.db。
+5. Windows 追加 model_feature_store DB。
+6. Windows 导出 atomic / selection / model_feature_store 三个 day delta。
+7. Mac 通过 LAN HTTP；失败时回退 LAN SCP，拉回三个 day delta。
+8. Mac 合并到本机 compact atomic / selection / model_feature_store。
+9. Mac 尝试触发每日统一候选池；候选池失败或为空不覆盖数据主链路状态。
+10. 写出 .run/daily_new_framework/latest.json 供状态检查。
 ```
 
 当前推荐票/每日候选池触发点：
@@ -215,15 +220,55 @@ python3 backend/scripts/run_daily_model_signals.py \
   --date 2026-05-15
 ```
 
-在 `run_postclose_l2_daily.py` 中，Windows 侧先刷新 `selection_feature_daily / selection_signal_daily`，导出当日 selection delta；Mac 合并后再运行 `run_daily_model_signals.py --date`，生成页面使用的每日统一候选池。
+在新框架日跑中，Windows 侧先刷新 `selection_feature_daily / selection_signal_daily`，导出当日 selection delta；Mac 合并后再运行 `run_daily_model_signals.py --date`，生成页面使用的每日统一候选池。
 
 状态检查：
 
 ```bash
-bash ops/check_postclose_l2_status.sh
+bash ops/check_daily_new_framework_status.sh
 ```
 
-每日链路允许把当天小 delta 拉回 Mac；这和历史批量不同。
+旧 `ops/run_postclose_l2.sh` 仍可作为历史 L2/cloud 同步经验参考，但它带有旧 `market_data.db`、cloud merge 和旧 atomic 默认路径，不再作为新框架日跑模板。
+
+每日链路允许把当天 delta 拉回 Mac；这和历史批量不同。
+
+### 2026-05-18 新日跑演练结果
+
+命令：
+
+```bash
+DAILY_WIN_HOST=laqiyuan@192.168.3.108 \
+DAILY_WIN_LAN_HOST=192.168.3.108 \
+DAILY_WIN_ATOMIC_DB='D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db' \
+DAILY_WIN_SELECTION_DB='D:\market-live-terminal\data\selection\selection_research_windows.db' \
+DAILY_WIN_MODEL_FEATURE_DB='D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db' \
+bash ops/run_daily_new_framework.sh --date 20260518
+```
+
+结果：
+
+| 项 | 结果 |
+|---|---:|
+| `atomic_trade_daily` | 3,185 |
+| `atomic_order_daily` | 3,185 |
+| `atomic_book_state_daily` | 3,185 |
+| `atomic_limit_state_daily` | 3,185 |
+| `selection_feature_daily` | 3,185 |
+| `selection_signal_daily` | 3,185 |
+| `model_feature_daily_v1` | 3,185 |
+| `model_feature_intraday_shape_v1` | 3,185 |
+
+增量大小：
+
+| delta | 大小 |
+|---|---:|
+| `atomic_day_delta_20260518.db` | 177MB |
+| `selection_day_delta_20260518.db` | 5.6MB |
+| `model_feature_store_day_delta_20260518.db` | 4.1MB |
+
+同步实际走 `LAN_SCP`。`LAN_HTTP` relay 当晚未就绪，新脚本已改为 HTTP 失败自动回退 SCP。
+
+候选池后置脚本返回 `merged_count=0`，原因是旧 `spark_opportunity_selector` 依赖的 `latest_candidates.csv` 不存在；这不影响 atomic / selection / model_feature_store 主链路验收。
 
 ## 历史批量跑数口径
 
@@ -254,6 +299,45 @@ SSH 不稳定时只重试轮询，不改变执行方案，不改成碎片化手�
 4. 大 DB 留在 Windows；Mac 只拉小 JSON 验收。
 5. 按月验收，不按天回传。
 ```
+
+历史原始包清理边界：
+
+```text
+确认某个月已经完成 atomic / selection / model_feature_store 构建和月度验收后，可以删除 Windows 原始包目录释放空间，例如 D:\MarketData\202604。
+
+不要删除：
+1. Windows 结果库：
+   D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db
+   D:\market-live-terminal\data\selection\selection_research_windows.db
+   D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db
+2. Windows .run 下的 report / state / validation JSON。
+3. Mac 侧 market_data.db 回填备份和本地验收报告。
+```
+
+2026-03、2026-02、2026-01 倒序批跑入口：
+
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal-model-data-audit
+bash ops/run_windows_new_framework_months.sh
+```
+
+默认等价于：
+
+```bash
+python3 backend/scripts/run_windows_new_framework_months.py \
+  --start-month 2026-03 \
+  --end-month 2026-01 \
+  --background
+```
+
+状态查询：
+
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal-model-data-audit
+bash ops/check_windows_new_framework_months_status.sh
+```
+
+该批跑脚本默认只落 Windows，不同步 Mac；按月执行 atomic 后，再刷新 selection 和 model_feature_store，并输出 training validation JSON。
 
 历史批量中的选股/推荐票触发方式：
 

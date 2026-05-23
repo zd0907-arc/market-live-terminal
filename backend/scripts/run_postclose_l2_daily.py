@@ -65,7 +65,7 @@ LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "marke
 LOCAL_ATOMIC_DB = Path(
     os.getenv(
         "LOCAL_ATOMIC_DB",
-        str(LOCAL_DATA_ROOT / "atomic_facts" / "shadow" / "market_atomic_mainboard_compact_current.db"),
+        str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
     )
 )
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))

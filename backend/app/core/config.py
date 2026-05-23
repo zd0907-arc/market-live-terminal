@@ -17,9 +17,10 @@ USER_DB_FILE = os.getenv("USER_DB_PATH", os.path.join(DATA_DIR, "user_data.db"))
 ATOMIC_FACTS_DIR = os.getenv("ATOMIC_FACTS_DIR", os.path.join(DATA_DIR, "atomic_facts"))
 DEFAULT_ATOMIC_MAINBOARD_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic_mainboard_full_reverse.db")
 DEFAULT_ATOMIC_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic.db")
+DEFAULT_ATOMIC_COMPACT_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic_mainboard_compact_current.db")
 ATOMIC_MAINBOARD_DB_PATH = os.getenv("ATOMIC_MAINBOARD_DB_PATH", DEFAULT_ATOMIC_MAINBOARD_DB_FILE)
 ATOMIC_DB_PATH = os.getenv("ATOMIC_DB_PATH", DEFAULT_ATOMIC_DB_FILE)
-ATOMIC_COMPACT_DB_PATH = os.getenv("ATOMIC_COMPACT_DB_PATH", "")
+ATOMIC_COMPACT_DB_PATH = os.getenv("ATOMIC_COMPACT_DB_PATH", DEFAULT_ATOMIC_COMPACT_DB_FILE)
 
 
 def _env_flag(name: str) -> bool:
@@ -37,7 +38,7 @@ def candidate_atomic_db_paths() -> List[str]:
     # 这种情况下如果继续回退到本机正式 atomic 库，会让单元测试或临时服务混入真实数据。
     # 正式本地研究站会显式注入 ATOMIC_*，直接启动且无 DB_PATH 时才使用默认 atomic 路径。
     compact_candidates = []
-    compact_path = os.getenv("ATOMIC_COMPACT_DB_PATH", "").strip()
+    compact_path = ATOMIC_COMPACT_DB_PATH.strip()
     if _env_flag("ENABLE_ATOMIC_COMPACT_READ") and compact_path:
         compact_candidates.append(compact_path)
     if (
