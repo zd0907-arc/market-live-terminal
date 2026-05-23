@@ -1,5 +1,22 @@
 # 实验结论登记表
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-strategy-research-experiment-decision-log
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/strategy-rework/experiment-decision-log.md
+- Status: FROZEN
+
+## 入口提示
+
+默认阅读顺序：
+
+1. `docs/strategy-rework/LONG_MEMORY.md`
+2. `docs/strategy-rework/current-strategy-conclusion.md`
+3. `docs/strategy-rework/current-research-operating-summary.md`
+
+本文档已降级为实验追溯台账。只有在需要确认某个方向是否做过、为什么采纳/否决时再看，不作为当前默认入口。
+
 ## 结论
 
 这里记录哪些实验有效、哪些暂不采用。后续不要反复翻旧 CSV 才知道某个方向有没有做过。
@@ -37,7 +54,7 @@
 | 内容 | 路径 |
 |---|---|
 | 当前结论总文档 | `docs/strategy-rework/current-strategy-conclusion.md` |
-| 项目状态 | `docs/strategy-rework/project-status-20260427.md` |
+| 阶段性项目状态快照 | `docs/strategy-rework/project-status-20260427.md` |
 | 稳健策略实验 | `docs/strategy-rework/strategies/S01-capital-trend-reversal/experiments/EXP-20260426-S01-M05-conservative-combined-risk/` |
 | 组合风险实验 | `docs/strategy-rework/strategies/S04-capital-exit-risk/experiments/EXP-20260426-combined-risk-stack/` |
 | 组合风险扩展验证 | `docs/strategy-rework/strategies/S04-capital-exit-risk/experiments/EXP-20260426-combined-risk-stack-robustness/` |

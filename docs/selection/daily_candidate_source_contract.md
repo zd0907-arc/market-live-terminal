@@ -189,5 +189,5 @@ def generate_daily_candidates(trade_date: str, *, limit: int = 50) -> list[dict]
 ## 11. 治理使用规则
 
 1. 先确认当前任务是治理入口澄清还是业务实现。
-2. 治理入口澄清时，只更新本契约、`selection_research_master.md` 与入口文档。
+2. 治理入口澄清时，只更新本契约、`opportunity_discovery_model_final.md` 与入口文档。
 3. 若涉及候选池合流、页面入口或策略实现，必须另开 change card，不在本契约中直接展开。

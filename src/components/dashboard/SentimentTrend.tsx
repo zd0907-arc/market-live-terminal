@@ -145,6 +145,13 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
         });
     }, [historyData]);
 
+    const liveChartData = useMemo(() => {
+        if (!liveData) return chartData;
+        const liveKey = liveData.timestamp.slice(0, 5);
+        const filtered = chartData.filter((item) => item.timestamp.slice(0, 5) !== liveKey);
+        return [...filtered, liveData].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    }, [chartData, liveData]);
+
     const formatYAxis = (tick: any) => {
         if (tick === undefined || tick === null) return '';
         if (typeof tick !== 'number') return String(tick);
@@ -153,9 +160,9 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
     };
 
     const gradientOffset = () => {
-        if (!chartData || chartData.length === 0) return 0;
-        const max = Math.max(...chartData.map(i => i.cvd));
-        const min = Math.min(...chartData.map(i => i.cvd));
+        if (!liveChartData || liveChartData.length === 0) return 0;
+        const max = Math.max(...liveChartData.map(i => i.cvd));
+        const min = Math.min(...liveChartData.map(i => i.cvd));
         if (max <= 0) return 0;
         if (min >= 0) return 1;
         if (max === min) return 0; // Prevent NaN
@@ -290,7 +297,7 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
                     </div>
 
                     <ResponsiveContainer width="100%" height="85%">
-                        <AreaChart data={chartData} syncId="sentimentId" margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
+                        <AreaChart data={liveChartData} syncId="sentimentId" margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
                             <defs>
                                 <linearGradient id={`splitColor-${symbol}`} x1="0" y1="0" x2="0" y2="1">
                                     <stop offset={off} stopColor="#ef4444" stopOpacity={0.4} />
@@ -311,7 +318,7 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
                             <Line yAxisId="right" type="monotone" dataKey="price" stroke="#facc15" strokeWidth={2} dot={false} connectNulls={true} />
 
                             {/* Render History Signals */}
-                            {chartData.map((entry, index) => {
+                            {liveChartData.map((entry, index) => {
                                 const aggBuy = entry.signals?.some(s => s.type === 'AGGRESSIVE_BUY');
                                 const heavy = entry.signals?.some(s => s.type === 'HEAVY_PRESSURE');
                                 const support = entry.signals?.some(s => s.type === 'BULLISH_SUPPORT');
@@ -331,14 +338,14 @@ const SentimentTrend: React.FC<SentimentTrendProps> = ({ symbol, date }) => {
                         <h4 className="text-xs font-bold text-slate-200">潜在意愿 (OIB)</h4>
                     </div>
                     <ResponsiveContainer width="100%" height="85%">
-                        <BarChart data={chartData} syncId="sentimentId" margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
+                        <BarChart data={liveChartData} syncId="sentimentId" margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.1} stroke="#334155" />
                             <XAxis dataKey="timestamp" style={{ fontSize: '10px' }} tick={{ fill: '#64748b' }} minTickGap={30} />
                             <YAxis tickFormatter={formatYAxis} style={{ fontSize: '10px' }} tick={{ fill: '#64748b' }} />
                             <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} content={() => null} />
                             <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
                             <Bar dataKey="oib" isAnimationActive={false}>
-                                {chartData.map((entry, index) => (
+                                {liveChartData.map((entry, index) => (
                                     <Cell
                                         key={`cell-${index}`}
                                         fill={entry.oib > 0 ? '#ef4444' : '#22c55e'}

@@ -2,18 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, BrainCircuit, FileText, LineChart, RefreshCw } from 'lucide-react';
 
 import MarketTopHeader from '../common/MarketTopHeader';
+import { Metric, SectionCard } from '../common/ResearchCard';
 import { APP_VERSION } from '../../version';
 import { fetchSelectionPpoBacktestReport } from '../../services/selectionService';
 import { PpoBacktestReport } from '../../types';
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
-
-const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/45 p-3">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className="mt-1 text-sm font-semibold text-slate-100">{value}</div>
-  </div>
-);
 
 const ModelTrainingPage: React.FC = () => {
   const [report, setReport] = useState<PpoBacktestReport | null>(null);
@@ -73,14 +67,14 @@ const ModelTrainingPage: React.FC = () => {
           </span>
         </div>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900/75">
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <FileText className="h-4 w-4 text-fuchsia-300" />
-              训练任务清单
-            </div>
-            {loading ? <span className="inline-flex items-center gap-1 text-xs text-slate-500"><RefreshCw className="h-3.5 w-3.5 animate-spin" />加载中</span> : null}
-          </div>
+        <SectionCard
+          title="训练任务清单"
+          icon={<FileText className="h-4 w-4 text-fuchsia-300" />}
+          right={loading ? <span className="inline-flex items-center gap-1 text-xs text-slate-500"><RefreshCw className="h-3.5 w-3.5 animate-spin" />加载中</span> : null}
+          className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/75 shadow-lg"
+          headerClassName="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3"
+          bodyClassName="p-0"
+        >
           <div className="divide-y divide-slate-800">
             <a href="/model-training/ppo-backtest" className="block px-4 py-4 transition hover:bg-slate-950/35">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -102,7 +96,7 @@ const ModelTrainingPage: React.FC = () => {
               </div>
             </a>
           </div>
-        </section>
+        </SectionCard>
       </main>
     </div>
   );

@@ -38,3 +38,10 @@
 | `docs/archive/changes/ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` | 首页去掉旧版入口，只保留新版信息架构 | `CHG` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry` | `ARC-CHG-20260321-fusion-only-remove-legacy-entry.md` |
 
 | `docs/archive/changes/ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md` | 散户一致性观察 V2 当前落地状态、发布与补跑归档 | `CHG` | `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill` | `ARC-CHG-20260324-retail-sentiment-v2-release-and-backfill.md` |
+| `docs/archive/ARC-LEG-20260519-selection-research-cleanup-plan.md` | 选股研究清理与模型落地清单 | `LEG` | `ARC-LEG-20260519-selection-research-cleanup-plan` | `ARC-LEG-20260519-selection-research-cleanup-plan.md` |
+| `docs/archive/ARC-LEG-20260519-selection-cleanup-execution-todo.md` | 选股研究清理执行 TODO（2026-05-16） | `LEG` | `ARC-LEG-20260519-selection-cleanup-execution-todo` | `ARC-LEG-20260519-selection-cleanup-execution-todo.md` |
+| `docs/archive/ARC-LEG-20260519-selection-cleanup-deleted-manifest.md` | 选股研究清理删除清单（2026-05-16） | `LEG` | `ARC-LEG-20260519-selection-cleanup-deleted-manifest` | `ARC-LEG-20260519-selection-cleanup-deleted-manifest.md` |
+| `docs/archive/ARC-LEG-20260519-opportunity-discovery-research-archive-summary.md` | 机会发现模型研究归档摘要（2026-05-16） | `LEG` | `ARC-LEG-20260519-opportunity-discovery-research-archive-summary` | `ARC-LEG-20260519-opportunity-discovery-research-archive-summary.md` |
+| `docs/archive/ARC-LEG-20260519-strategy-research-current-inventory.md` | 当前策略研究目录盘点 | `LEG` | `ARC-LEG-20260519-strategy-research-current-inventory` | `ARC-LEG-20260519-strategy-research-current-inventory.md` |
+| `docs/archive/ARC-LEG-20260519-strategy-research-project-status-20260427.md` | 2026-04-27 选股策略项目状态 | `LEG` | `ARC-LEG-20260519-strategy-research-project-status-20260427` | `ARC-LEG-20260519-strategy-research-project-status-20260427.md` |
+| `docs/archive/ARC-LEG-20260519-strategy-research-experiment-decision-log.md` | 实验结论登记表 | `LEG` | `ARC-LEG-20260519-strategy-research-experiment-decision-log` | `ARC-LEG-20260519-strategy-research-experiment-decision-log.md` |

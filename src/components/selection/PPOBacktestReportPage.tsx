@@ -10,6 +10,7 @@ import { PpoBacktestReport, HistoryMultiframeGranularity, HistoryMultiframeItem 
 import { fetchSelectionPpoBacktestReport, fetchSelectionHistoryMultiframe } from '../../services/selectionService';
 import MarketTopHeader from '../common/MarketTopHeader';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
+import { Metric, SectionCard } from '../common/ResearchCard';
 
 echarts.use([LineChart, ScatterChart, GridComponent, LegendComponent, TooltipComponent, DataZoomComponent, CanvasRenderer]);
 
@@ -22,26 +23,6 @@ const fmtAmt = (value?: number | null) => {
   if (Math.abs(num) >= 1e4) return `${(num / 1e4).toFixed(0)}万`;
   return num.toFixed(0);
 };
-
-const SectionCard: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
-  <section className="rounded-2xl border border-slate-800 bg-slate-900/75 shadow-lg">
-    <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        {icon}
-        <span>{title}</span>
-      </div>
-      {right}
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
-
-const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/45 p-3">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
-);
 
 const getHoldingDays = (entry?: string | null, exit?: string | null) => {
   if (!entry || !exit) return 0;

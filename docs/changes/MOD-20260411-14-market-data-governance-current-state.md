@@ -3,6 +3,7 @@
 > **数据治理主题总入口。**
 > 若要看当前项目主线、当前目录、当前分支纪律与当前版本，请优先看：
 > `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+> 本文是数据治理母卡，不等于当前日常操作手册；正式运行入口以 `docs/04_OPS_AND_DEV.md`、`docs/ops/postclose-l2-runbook.md` 为准。历史脚本族边界见 `docs/ops/atomic-script-families-boundary.md`。
 
 ## 1. 基本信息
 - 标题：数据治理当前真实总方案（持续更新母卡）

@@ -39,6 +39,11 @@
 4. 长期事实变化要记下来，准备回流到核心长记忆；
 5. 不把聊天记录当长期真相。
 
+## 4.1 正式脚本入口约束
+1. 涉及运维、启动、发布、同步、日跑时，默认只把 `docs/04_OPS_AND_DEV.md` 列出的正式脚本白名单当作入口；
+2. `bench / full_reverse / atomic backfill` 相关脚本族默认按历史工具、验证工具、二线工具处理；具体边界看 `docs/ops/atomic-script-families-boundary.md`；
+3. 除非对应 runbook 明确要求，或本轮任务就是专项排查/补数验证，否则不要把这类脚本写成“正式日常操作步骤”。
+
 ## 5. 完成实现后先做什么
 至少完成：
 1. 若本轮是用户可见的明确产品改动，先同步更新版本号（`package.json`、`README.md`、`src/version.ts`、`backend/app/main.py`），并在 release notes 里写清可见变化；

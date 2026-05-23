@@ -19,6 +19,7 @@ import {
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { APP_VERSION } from '../../version';
 import { fetchTrendDashboard, fetchTrendIdeas, TrendDashboardData, TrendIdeaItem } from '../../services/trendResearchService';
+import { Metric, SectionCard } from '../common/ResearchCard';
 
 type Row = Record<string, string>;
 type RubberPriceRow = { date: string; ru_close?: string; nr_close?: string };
@@ -78,26 +79,6 @@ const InfoTip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
       {children}
     </span>
   </span>
-);
-
-const SectionCard: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
-  <section className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 shadow-lg">
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        {icon}
-        <span>{title}</span>
-      </div>
-      {right}
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
-
-const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 break-words text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
 );
 
 const TextList: React.FC<{ rows: string[]; tone: 'green' | 'red' }> = ({ rows, tone }) => {

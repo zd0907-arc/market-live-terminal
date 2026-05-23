@@ -6,6 +6,8 @@ import { DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, M
 import { CanvasRenderer } from 'echarts/renderers';
 import { ArrowLeft, BarChart3, FileText, Target, TrendingUp } from 'lucide-react';
 
+import { Metric, SectionCard } from '../common/ResearchCard';
+
 echarts.use([
   BarChart,
   CandlestickChart,
@@ -120,26 +122,6 @@ const exitText = (reason?: string) => {
   if (reason === 'time_exit') return '到期';
   return reason || '--';
 };
-
-const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/45 px-3 py-2">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
-);
-
-const Section: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
-  <section className="rounded-xl border border-slate-800 bg-slate-900/70 shadow-lg">
-    <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        {icon}
-        <span>{title}</span>
-      </div>
-      {right}
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
 
 const buildEquityOption = (rows: EquityPoint[]) => ({
   backgroundColor: 'transparent',
@@ -428,7 +410,7 @@ const OpportunityTradeReviewPage: React.FC = () => {
       </div>
 
       <main className="mx-auto max-w-[1800px] space-y-4 px-4 py-4 md:px-6">
-        <Section title="账户总览" icon={<BarChart3 className="h-4 w-4 text-cyan-300" />}>
+        <SectionCard title="账户总览" icon={<BarChart3 className="h-4 w-4 text-cyan-300" />}>
           <div className="grid gap-3 md:grid-cols-6">
             <Metric label="期初资金" value={fmtAmt(payload.meta.initial_capital)} />
             <Metric label="期末权益" value={fmtAmt(payload.summary.final_equity)} tone="text-red-200" />
@@ -443,11 +425,11 @@ const OpportunityTradeReviewPage: React.FC = () => {
             <Metric label="平均持仓" value={`${fmtNum(payload.summary.avg_holding_days)} 天`} />
             <Metric label="策略壳" value={payload.meta.description} />
           </div>
-        </Section>
+        </SectionCard>
 
-        <Section title="100万账户绝对金额曲线" icon={<TrendingUp className="h-4 w-4 text-red-300" />}>
+        <SectionCard title="100万账户绝对金额曲线" icon={<TrendingUp className="h-4 w-4 text-red-300" />}>
           <ReactEChartsCore echarts={echarts} option={buildEquityOption(payload.equity_curve || [])} style={{ width: '100%', height: 330 }} />
-        </Section>
+        </SectionCard>
 
         <div className="grid gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
           <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
@@ -469,7 +451,7 @@ const OpportunityTradeReviewPage: React.FC = () => {
 
           {activeTrade ? (
             <div className="space-y-4">
-              <Section title={`${activeTrade.name} ${activeTrade.symbol}`} icon={<TrendingUp className="h-4 w-4 text-amber-300" />} right={
+              <SectionCard title={`${activeTrade.name} ${activeTrade.symbol}`} icon={<TrendingUp className="h-4 w-4 text-amber-300" />} right={
                 <a href={`/?symbol=${activeTrade.symbol}`} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-300 hover:border-slate-500">打开主图</a>
               }>
                 <div className="grid gap-3 md:grid-cols-7">
@@ -495,12 +477,12 @@ const OpportunityTradeReviewPage: React.FC = () => {
                   </div>
                   <ReactEChartsCore echarts={echarts} option={buildTradeKlineOption(activeTrade)} style={{ width: '100%', height: 390 }} />
                 </div>
-              </Section>
+              </SectionCard>
             </div>
           ) : null}
         </div>
 
-        <Section title="交易明细" icon={<FileText className="h-4 w-4 text-sky-300" />}>
+        <SectionCard title="交易明细" icon={<FileText className="h-4 w-4 text-sky-300" />}>
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="text-xs text-slate-500">
@@ -551,7 +533,7 @@ const OpportunityTradeReviewPage: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Section>
+        </SectionCard>
       </main>
     </div>
   );

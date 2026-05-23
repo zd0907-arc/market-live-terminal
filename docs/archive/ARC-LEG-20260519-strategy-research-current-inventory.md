@@ -1,5 +1,12 @@
 # 当前策略研究目录盘点
 
+> Archive-Meta
+- Archive-ID: ARC-LEG-20260519-strategy-research-current-inventory
+- Archive-Type: LEG
+- Archived-At: 2026-05-19
+- Source-Path: docs/strategy-rework/current-inventory.md
+- Status: FROZEN
+
 ## 结论
 
 当前有效资料只看四类：
