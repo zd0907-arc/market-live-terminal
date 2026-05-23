@@ -29,6 +29,7 @@ import {
 import * as StockService from '../../services/stockService';
 import QuoteMetaRow from '../common/QuoteMetaRow';
 import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
+import { Metric, SectionCard } from '../common/ResearchCard';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
 import MarketTopHeader from '../common/MarketTopHeader';
 import { APP_VERSION } from '../../version';
@@ -121,26 +122,6 @@ const tradeDateItemsToMap = (items: SelectionTradeDateItem[]) => {
   });
   return next;
 };
-
-const SectionCard: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
-  <section className="rounded-2xl border border-slate-800 bg-slate-900/70 shadow-lg">
-    <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        {icon}
-        <span>{title}</span>
-      </div>
-      {right}
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
-
-const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
-);
 
 const TradeDatePicker: React.FC<{
   value: string;

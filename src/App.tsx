@@ -720,7 +720,7 @@ const App: React.FC = () => {
         {activeStock && (
           <ViewErrorBoundary title="散户情绪仪表盘">
             <Suspense fallback={sectionLoading}>
-              <SentimentDashboard symbol={activeStock.code} />
+              <SentimentDashboard symbol={activeStock.symbol} />
             </Suspense>
           </ViewErrorBoundary>
         )}

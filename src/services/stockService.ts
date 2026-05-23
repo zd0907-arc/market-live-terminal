@@ -178,7 +178,7 @@ export const fetchQuote = async (symbol: string): Promise<RealTimeQuote> => {
     }
 
     const parts = dataStr.split('~');
-    if (parts.length < 30) {
+    if (parts.length < 38) {
       throw new Error("Invalid data format");
     }
 
