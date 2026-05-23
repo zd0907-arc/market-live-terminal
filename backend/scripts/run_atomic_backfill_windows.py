@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -19,7 +20,13 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.scripts.backfill_atomic_order_from_raw import _apply_support_ratios, _build_order_rows, _replace_rows as replace_order_rows, load_l2_symbol_bundle
+from backend.scripts.backfill_atomic_order_from_raw import (
+    TRADE_USECOLS,
+    _apply_support_ratios,
+    _build_order_rows,
+    _read_csv,
+    _replace_rows as replace_order_rows,
+)
 from backend.scripts.build_book_state_from_raw import build_book_rows, replace_book_rows
 from backend.scripts.build_limit_state_from_atomic import build_limit_state, ensure_default_rules as ensure_limit_rules, ensure_schema as ensure_limit_schema, replace_rows as replace_limit_rows
 from backend.scripts.build_open_auction_summaries import _build_l1_summary_from_frames, _build_l2_summary_from_frames, _build_manifest, _build_phase_l1_summary_from_frames, _build_phase_l2_summary_from_frames, _prepare_order_auction_df, _prepare_quote_auction_df, _prepare_trade_auction_df, _upsert as upsert_auction
@@ -30,6 +37,7 @@ from backend.scripts.run_symbol_atomic_validation import (
     OPEN_AUCTION_SCHEMA,
     WIN_7Z,
     _build_atomic_trade_5m_rows_from_l2,
+    _build_atomic_trade_5m_rows_from_ticks,
     _build_atomic_trade_5m_rows_from_legacy,
     _build_atomic_trade_daily_row,
     _replace_trade_rows,
@@ -37,6 +45,7 @@ from backend.scripts.run_symbol_atomic_validation import (
 from backend.scripts.sandbox_review_etl import normalize_symbol
 from backend.app.core.l2_package_layout import normalize_month_day_root
 from backend.scripts.backfill_atomic_trade_from_raw import normalize_symbol_dir_name
+from backend.scripts.backfill_atomic_order_from_raw import build_standardized_ticks_from_frames, load_l2_symbol_bundle
 
 SHARD_MERGE_TABLES = [
     "atomic_trade_5m",
@@ -81,6 +90,10 @@ def daterange(date_from: str, date_to: str) -> List[str]:
 
 def to_compact(d: str) -> str:
     return d.replace("-", "")
+
+
+def elapsed_seconds(started: float) -> float:
+    return round(time.perf_counter() - started, 2)
 
 
 def run_subprocess(cmd: List[str]) -> None:
@@ -172,6 +185,65 @@ def _write_l2_rows_to_conn(
     }
 
 
+def _write_l2_trade_only_rows_to_conn(
+    conn: sqlite3.Connection,
+    symbol_dir: Path,
+    trade_date: str,
+    large_threshold: float,
+    super_threshold: float,
+) -> Dict[str, object]:
+    trade = _read_csv(symbol_dir / "逐笔成交.csv", usecols=TRADE_USECOLS)
+    symbol = normalize_symbol_dir_name(symbol_dir.name)
+    import pandas as pd
+
+    ticks = pd.DataFrame()
+    time_text = trade["时间"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip().str.zfill(9)
+    hhmmss = time_text.str[:-3].str.zfill(6)
+    ticks["time"] = hhmmss.str[0:2] + ":" + hhmmss.str[2:4] + ":" + hhmmss.str[4:6]
+    session_mask = ((ticks["time"] >= "09:30:00") & (ticks["time"] <= "11:30:00")) | (
+        (ticks["time"] >= "13:00:00") & (ticks["time"] <= "15:00:00")
+    )
+    trade = trade.loc[session_mask].reset_index(drop=True)
+    ticks = ticks.loc[session_mask].reset_index(drop=True)
+    ticks["datetime"] = pd.to_datetime(f"{trade_date} " + ticks["time"], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+    ticks["price"] = pd.to_numeric(trade["成交价格"], errors="coerce") / 10000
+    ticks["volume"] = pd.to_numeric(trade["成交数量"], errors="coerce")
+    ticks["side"] = trade["BS标志"].astype(str).str.strip().str.upper().map({"B": "buy", "S": "sell"}).fillna("neutral")
+    ticks["amount"] = ticks["price"] * ticks["volume"]
+    ticks["buy_order_id"] = 0
+    ticks["sell_order_id"] = 0
+    ticks = ticks.dropna(subset=["datetime", "price", "volume", "amount"])
+    ticks = ticks[(ticks["price"] > 0) & (ticks["volume"] > 0) & (ticks["amount"] > 0)]
+    ticks = ticks.sort_values("datetime").reset_index(drop=True)
+    diagnostics = {
+        "trade_rows": int(len(trade)),
+        "ticks_rows": int(len(ticks)),
+        "trade_date": trade_date,
+        "sample_time_range": [
+            ticks["time"].min() if not ticks.empty else None,
+            ticks["time"].max() if not ticks.empty else None,
+        ],
+    }
+    rows_5m_trade, daily_feature = _build_atomic_trade_5m_rows_from_ticks(
+        ticks=ticks,
+        symbol=symbol,
+        trade_date=trade_date,
+        large_threshold=large_threshold,
+        super_threshold=super_threshold,
+        source_type="trade_only",
+        quality_info="l2_trade_only",
+    )
+    daily_trade = _build_atomic_trade_daily_row(symbol, trade_date, rows_5m_trade, "trade_only", "l2_trade_only", daily_feature)
+    trade_stats = _replace_trade_rows(conn, rows_5m_trade, daily_trade) if daily_trade else {"rows_5m": 0, "rows_daily": 0}
+    return {
+        "symbol": symbol,
+        "rows_5m": len(rows_5m_trade),
+        "order_5m_rows": 0,
+        "book_5m_rows": 0,
+        **trade_stats,
+    }
+
+
 def load_config(path: Path) -> Dict[str, object]:
     data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("workers", 6)
@@ -181,13 +253,18 @@ def load_config(path: Path) -> Dict[str, object]:
     data.setdefault("include_star", False)
     data.setdefault("include_gem", True)
     data.setdefault("main_board_only", False)
+    data.setdefault("l2_trade_only", False)
     data.setdefault("prefetch_next_day_extract", False)
     data.setdefault("stop_on_failure", True)
+    data.setdefault("max_failed_items_per_day", 0)
+    data.setdefault("max_failed_item_ratio_per_day", 0.0)
     data.setdefault("cleanup_extracted", True)
     data.setdefault("symbols", [])
+    data.setdefault("extract_patterns", [])
     data.setdefault("max_items_per_day", 0)
     data.setdefault("reuse_extracted_day_if_exists", False)
     data.setdefault("extractor", "auto")
+    data.setdefault("selection_db", "")
     data.setdefault("state_file", str(path.with_name(path.stem + "_state.json")))
     data.setdefault("report_file", str(path.with_name(path.stem + "_report.json")))
     return data
@@ -236,6 +313,15 @@ def _l2_member_prefix(symbol: str, trade_date: str) -> str:
     return f"{to_compact(trade_date)}\\{symbol[2:]}.{symbol[:2].upper()}\\*"
 
 
+def _l2_member_pattern(pattern: str, trade_date: str) -> str:
+    text = str(pattern or "").strip()
+    if not text:
+        return ""
+    if "\\" in text or "/" in text:
+        return text
+    return f"{to_compact(trade_date)}\\{text}\\*"
+
+
 def extract_archive(archive_path: Path, out_dir: Path, kind: str, trade_date: str, symbols: Sequence[str], extractor: str = "auto") -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     normalized_symbols = [s.lower() for s in symbols if s]
@@ -250,6 +336,27 @@ def extract_archive(archive_path: Path, out_dir: Path, kind: str, trade_date: st
             cmd.extend([_legacy_member_name(s) for s in normalized_symbols])
         else:
             cmd.extend([_l2_member_prefix(s, trade_date) for s in normalized_symbols])
+    cmd.append(f"-o{out_dir}")
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def extract_archive_with_config(
+    archive_path: Path,
+    out_dir: Path,
+    kind: str,
+    trade_date: str,
+    config: Dict[str, object],
+) -> None:
+    patterns = [str(item) for item in config.get("extract_patterns", []) if str(item).strip()]
+    if not patterns:
+        extract_archive(archive_path, out_dir, kind, trade_date, config.get("symbols", []), str(config.get("extractor", "auto")))
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [WIN_7Z, "x", "-y", str(archive_path)]
+    if kind == "legacy":
+        cmd.extend(patterns)
+    else:
+        cmd.extend([item for item in (_l2_member_pattern(pattern, trade_date) for pattern in patterns) if item])
     cmd.append(f"-o{out_dir}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -325,6 +432,7 @@ def _run_process_shard(
     item_paths: Sequence[str],
     large_threshold: float,
     super_threshold: float,
+    l2_trade_only: bool = False,
 ) -> Dict[str, object]:
     shard_db = Path(atomic_db)
     if shard_db.exists():
@@ -332,7 +440,12 @@ def _run_process_shard(
     ensure_atomic_db(shard_db)
     failures: List[Dict[str, str]] = []
     success_count = 0
-    worker_fn = _write_legacy_rows_to_conn if kind == "legacy" else _write_l2_rows_to_conn
+    if kind == "legacy":
+        worker_fn = _write_legacy_rows_to_conn
+    elif l2_trade_only:
+        worker_fn = _write_l2_trade_only_rows_to_conn
+    else:
+        worker_fn = _write_l2_rows_to_conn
     with sqlite3.connect(shard_db) as conn:
         _configure_sqlite_for_shard(conn)
         commit_every = 64
@@ -354,6 +467,24 @@ def _run_process_shard(
         "success_count": success_count,
         "failure_count": len(failures),
         "failures": failures[:10],
+    }
+
+
+def _failure_policy(config: Dict[str, object], item_count: int, failure_count: int) -> Dict[str, object]:
+    max_failed_items = int(config.get("max_failed_items_per_day", 0) or 0)
+    max_failed_ratio = float(config.get("max_failed_item_ratio_per_day", 0.0) or 0.0)
+    ratio = (failure_count / item_count) if item_count > 0 else 0.0
+    checks: List[bool] = []
+    if max_failed_items > 0:
+        checks.append(failure_count <= max_failed_items)
+    if max_failed_ratio > 0:
+        checks.append(ratio <= max_failed_ratio)
+    tolerated = failure_count > 0 and bool(checks) and all(checks)
+    return {
+        "max_failed_items_per_day": max_failed_items,
+        "max_failed_item_ratio_per_day": max_failed_ratio,
+        "failure_ratio": round(ratio, 6),
+        "tolerated": tolerated,
     }
 
 
@@ -399,14 +530,7 @@ def _prefetch_extract_task(task: PendingTask, config: Dict[str, object]) -> None
         f"[atomic-backfill] prefetch_start day={task.trade_date} batch={task.batch.name} archive={task.archive_path}",
         flush=True,
     )
-    extract_archive(
-        task.archive_path,
-        extract_root,
-        task.batch.kind,
-        task.trade_date,
-        config.get("symbols", []),
-        str(config.get("extractor", "auto")),
-    )
+    extract_archive_with_config(task.archive_path, extract_root, task.batch.kind, task.trade_date, config)
     print(f"[atomic-backfill] prefetch_done day={task.trade_date} batch={task.batch.name}", flush=True)
 
 
@@ -418,12 +542,14 @@ def run_day(
     atomic_db: Path,
     next_task: Optional[PendingTask] = None,
 ) -> Tuple[Dict[str, object], Optional[threading.Thread], Optional[str]]:
+    day_started = time.perf_counter()
     extract_root = Path(str(config["extract_root"])) / batch.name / to_compact(trade_date)
     cleanup_extracted = bool(config.get("cleanup_extracted", True))
     include_bj = bool(config.get("include_bj", False))
     include_star = bool(config.get("include_star", False))
     include_gem = bool(config.get("include_gem", True))
     main_board_only = bool(config.get("main_board_only", False))
+    l2_trade_only = bool(config.get("l2_trade_only", False))
     reuse_extracted = bool(config.get("reuse_extracted_day_if_exists", False))
     l2_day_root = extract_root / to_compact(trade_date)
     can_reuse = reuse_extracted and (
@@ -432,10 +558,14 @@ def run_day(
     )
     if can_reuse:
         print(f"[atomic-backfill] day={trade_date} batch={batch.name} kind={batch.kind} reuse_extracted=1 root={extract_root}", flush=True)
+        extract_elapsed = 0.0
     else:
+        extract_started = time.perf_counter()
         print(f"[atomic-backfill] day={trade_date} batch={batch.name} kind={batch.kind} extract_start archive={archive_path}", flush=True)
-        extract_archive(archive_path, extract_root, batch.kind, trade_date, config.get("symbols", []), str(config.get("extractor", "auto")))
+        extract_archive_with_config(archive_path, extract_root, batch.kind, trade_date, config)
+        extract_elapsed = elapsed_seconds(extract_started)
     try:
+        list_started = time.perf_counter()
         if batch.kind == "legacy":
             items = list_legacy_csvs(extract_root, include_bj, include_star, include_gem, main_board_only)
             items = apply_symbol_filter(items, config.get("symbols", []), is_legacy=True)
@@ -445,7 +575,13 @@ def run_day(
         max_items = int(config.get("max_items_per_day", 0) or 0)
         if max_items > 0:
             items = items[:max_items]
-        print(f"[atomic-backfill] day={trade_date} batch={batch.name} extract_done item_count={len(items)} workers={config['workers']}", flush=True)
+        list_elapsed = elapsed_seconds(list_started)
+        print(
+            f"[atomic-backfill] day={trade_date} batch={batch.name} extract_done "
+            f"item_count={len(items)} workers={config['workers']} l2_trade_only={int(l2_trade_only)} "
+            f"extract_sec={extract_elapsed} list_sec={list_elapsed}",
+            flush=True,
+        )
         prefetch_thread: Optional[threading.Thread] = None
         prefetch_key: Optional[str] = None
         if next_task and bool(config.get("prefetch_next_day_extract", False)):
@@ -466,6 +602,7 @@ def run_day(
         shards = [items[i::workers] for i in range(workers)]
         shard_dbs = [shard_root / f"worker_{idx+1}.db" for idx in range(workers) if shards[idx]]
         total_success = 0
+        process_started = time.perf_counter()
         if workers == 1:
             print(f"[atomic-backfill] day={trade_date} batch={batch.name} shard_mode=single", flush=True)
             shard_result = _run_process_shard(
@@ -475,6 +612,7 @@ def run_day(
                 [str(x) for x in shards[0]],
                 float(config["large_threshold"]),
                 float(config["super_threshold"]),
+                l2_trade_only,
             )
             total_success += int(shard_result["success_count"])
             failures.extend(shard_result["failures"])
@@ -495,6 +633,7 @@ def run_day(
                             [str(x) for x in shard],
                             float(config["large_threshold"]),
                             float(config["super_threshold"]),
+                            l2_trade_only,
                         )
                     ] = shard_idx
                     shard_idx += 1
@@ -503,13 +642,24 @@ def run_day(
                     total_success += int(shard_result["success_count"])
                     failures.extend(shard_result["failures"])
                     print(
-                        f"[atomic-backfill] day={trade_date} batch={batch.name} shard_done success={total_success}/{len(items)} failure={len(failures)}",
+                        f"[atomic-backfill] day={trade_date} batch={batch.name} shard_done "
+                        f"success={total_success}/{len(items)} failure={len(failures)} "
+                        f"process_sec={elapsed_seconds(process_started)}",
                         flush=True,
                     )
+        process_elapsed = elapsed_seconds(process_started)
         print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_start shard_db_count={len(shard_dbs)}", flush=True)
+        merge_started = time.perf_counter()
         _merge_shard_tables(atomic_db, shard_dbs)
-        print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_done", flush=True)
-        print(f"[atomic-backfill] day={trade_date} batch={batch.name} worker_done success={total_success} failure={len(failures)}", flush=True)
+        merge_elapsed = elapsed_seconds(merge_started)
+        total_elapsed = elapsed_seconds(day_started)
+        print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_done merge_sec={merge_elapsed}", flush=True)
+        print(
+            f"[atomic-backfill] day={trade_date} batch={batch.name} worker_done "
+            f"success={total_success} failure={len(failures)} total_sec={total_elapsed}",
+            flush=True,
+        )
+        failure_policy = _failure_policy(config, len(items), len(failures))
         report = {
             "batch": batch.name,
             "kind": batch.kind,
@@ -519,8 +669,22 @@ def run_day(
             "success_count": total_success,
             "failure_count": len(failures),
             "failures": failures[:20],
+            "failure_policy": failure_policy,
+            "timing_seconds": {
+                "extract": extract_elapsed,
+                "list_items": list_elapsed,
+                "process_shards": process_elapsed,
+                "merge_shards": merge_elapsed,
+                "total": total_elapsed,
+            },
         }
-        if failures and bool(config.get("stop_on_failure", True)):
+        if failures and failure_policy["tolerated"]:
+            print(
+                f"[atomic-backfill] day={trade_date} batch={batch.name} tolerated_failures="
+                f"{len(failures)} ratio={failure_policy['failure_ratio']}",
+                flush=True,
+            )
+        if failures and bool(config.get("stop_on_failure", True)) and not failure_policy["tolerated"]:
             raise RuntimeError(json.dumps(report, ensure_ascii=False))
         return report, prefetch_thread, prefetch_key
     finally:
@@ -617,7 +781,19 @@ def main() -> None:
 
     with sqlite3.connect(atomic_db) as conn:
         print(f"[atomic-backfill] rebuild_limit_state date_from={min_date} date_to={max_date}", flush=True)
-        rows_5m_limit, daily_rows_limit = build_limit_state(conn, [], min_date, max_date, include_5m=False)
+        selection_db = str(config.get("selection_db") or "").strip()
+        selection_alias = ""
+        if selection_db and Path(selection_db).exists():
+            conn.execute("ATTACH DATABASE ? AS sel", (str(Path(selection_db).resolve()),))
+            selection_alias = "sel"
+        rows_5m_limit, daily_rows_limit = build_limit_state(
+            conn,
+            [],
+            min_date,
+            max_date,
+            include_5m=False,
+            selection_alias=selection_alias,
+        )
         replace_limit_rows(conn, rows_5m_limit, daily_rows_limit, [], min_date, max_date, replace_5m=False)
         conn.commit()
 

@@ -17,15 +17,34 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.app.core.config import DATA_DIR, ROOT_DIR
+from backend.app.core.config import DATA_DIR, ROOT_DIR, candidate_atomic_db_paths
+from backend.app.services import market_heat
 from backend.app.services.market_heat import _symbol_norm, _trade_dates, build_market_heat_snapshot, ensure_market_heat_dir
 from backend.scripts.analyze_hot_sector_granularity import DEFAULT_FINE_RULES, load_fine_sector_themes, load_json
 
 
 DEFAULT_TRADABLE_THEME_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(DATA_DIR, "market_heat", "tradable_theme_map.db")))
-DEFAULT_ATOMIC_DB = Path(os.getenv("MARKET_HEAT_ATOMIC_DB", os.path.join(DATA_DIR, "atomic_facts", "market_atomic_mainboard_full_reverse.db")))
+def resolve_default_atomic_db() -> Path:
+    explicit = os.getenv("MARKET_HEAT_ATOMIC_DB", "").strip()
+    if explicit:
+        return Path(explicit)
+    for path in candidate_atomic_db_paths():
+        candidate = Path(path)
+        if candidate.exists() and candidate.stat().st_size > 0:
+            return candidate
+    compact = Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+    if compact.exists() and compact.stat().st_size > 0:
+        return compact
+    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+
+
+DEFAULT_ATOMIC_DB = resolve_default_atomic_db()
 DEFAULT_OUT_DB = Path(os.getenv("FINE_THEME_HEAT_DB", os.path.join(DATA_DIR, "market_heat", "fine_theme_heat_daily.db")))
 DEFAULT_REPORT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
+
+
+def use_atomic_db(atomic_db: Path) -> None:
+    market_heat.ATOMIC_DB = Path(atomic_db)
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -455,6 +474,8 @@ def main() -> int:
     parser.add_argument("--out-db", type=Path, default=DEFAULT_OUT_DB)
     parser.add_argument("--report", type=Path, default=None)
     args = parser.parse_args()
+
+    use_atomic_db(args.atomic_db)
 
     rules = load_json(args.rules)
     themes, theme_members, _, _ = load_fine_sector_themes(args.theme_db, rules, args.min_members, args.max_members)

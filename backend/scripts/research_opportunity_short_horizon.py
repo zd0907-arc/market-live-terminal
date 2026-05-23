@@ -474,7 +474,7 @@ def train_command(args: argparse.Namespace) -> None:
             continue
         if not feature_cols:
             feature_cols = base.available_feature_columns(data, include_orderbook=False)
-        train = data[pd.to_datetime(data["label_end_date"]) < pd.to_datetime(str(config.validation_start))].copy()
+        train = data[pd.to_datetime(data["label_complete_asof_date"]) < pd.to_datetime(str(config.validation_start))].copy()
         valid = data[data["trade_date"] >= str(config.validation_start)].copy()
         train_filtered = base._apply_historical_entry_filter(train, config)
         valid_filtered = base._apply_historical_entry_filter(valid, config)
