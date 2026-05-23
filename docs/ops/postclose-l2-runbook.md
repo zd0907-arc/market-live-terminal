@@ -19,6 +19,25 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_postclose_l2.sh
 ```
 
+## 2.1.1 指数缓存刷新
+每日盘后模型特征构建前，需要低频刷新本地指数缓存。`backend/scripts/run_postclose_l2_daily.py` 已在 Windows 本地 atomic / selection 刷新后增加非阻塞指数刷新：
+
+```bash
+python3 backend/scripts/sync_model_market_index_daily.py --source baostock --daily --lookback-days 10
+```
+
+产物：
+
+```text
+/Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
+```
+
+`model_feature_store` 日跑只读这个本地 DB，不把外部网络放进强依赖。完整运行卡见：
+
+```text
+docs/selection/model_market_index_daily_runbook.md
+```
+
 ## 2.2 当前同步铁律
 - Windows -> Mac **禁止**走 SSH/scp 直拉。
 - 只允许两条正式路径：

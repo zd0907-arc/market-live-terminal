@@ -85,7 +85,16 @@ def _read_csv(path: Path, usecols: Optional[Sequence[str]] = None) -> pd.DataFra
     if usecols:
         wanted = {str(x).strip() for x in usecols}
         csv_usecols = lambda c: str(c).strip() in wanted
-    df = pd.read_csv(path, encoding='gb18030', low_memory=False, usecols=csv_usecols, engine='c', memory_map=True)
+    read_kwargs = {
+        'low_memory': False,
+        'usecols': csv_usecols,
+        'engine': 'c',
+        'memory_map': True,
+    }
+    try:
+        df = pd.read_csv(path, encoding='gb18030', **read_kwargs)
+    except UnicodeDecodeError:
+        df = pd.read_csv(path, encoding='utf-8-sig', **read_kwargs)
     bad_cols = [c for c in df.columns if str(c).strip() == '' or str(c).startswith('Unnamed')]
     if bad_cols:
         df = df.drop(columns=bad_cols)

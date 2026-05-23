@@ -75,6 +75,7 @@
 
 ## 7. 文档入口
 - 工作台统一候选池入口：`docs/selection/daily_candidate_source_contract.md`
+- 模型市场指数缓存：`docs/selection/model_market_index_daily_runbook.md`
 - 当前真实状态母卡：`docs/changes/MOD-20260404-01-selection-research-current-state.md`
 - 数据底座：`docs/changes/REQ-20260404-01-selection-data-foundation.md`
 - 特征与信号：`docs/changes/REQ-20260404-02-selection-features-and-signals.md`
@@ -101,6 +102,14 @@
 - 当前有效方向：`强者恒强` 样本能把后20日最高涨幅超过20%的命中率从 `18.7%` 提升到 `55.9%`。
 - 交易验证：100万单账户、全仓一笔、资金占用错过新机会、考虑涨停买不到/跌停卖不出和交易成本后，`+10%半仓止盈 + 剩余按回撤/L2/时间退出` 在 2025 年变为 `124.20万`。
 - 对比结论：去掉半仓止盈后只到 `101.89万`；固定持有20日降到 `85.85万`。卖点规则比机械持有更重要。
+
+## 9.1 热度现状（2026-05-23）
+
+- 线上 `fine_dashboard` 仍是 v1 快照层，读的是 `atomic_trade_daily + canonical fine themes` 生成的 `fine_heat_snapshots_*_m5_80.json`，不是直接读 `fine_theme_heat_daily_v2.db`。
+- `fine_theme_heat_daily.db` 仍是 v1 兼容库，部分策略和研究脚本还在把它当 fallback。
+- `fine_theme_heat_daily_v2.db` 才是当前训练、回测和预测的长表主输入。
+- `fine_theme_heat_forecast.db` 是从 v2 训练后的预测输出库，当前主目标是 `future_mainline_extension_5d`。
+- 现在不能把看板层和训练层混成一层，后续如果要统一热度真源，必须显式迁移。
 
 ## 10. 下一步
 1. 优先补齐 `stock_universe_meta` 正式名称映射

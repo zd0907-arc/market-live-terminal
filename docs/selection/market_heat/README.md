@@ -23,6 +23,16 @@
 - 本轮板块审计：`docs/selection/market_heat/theme_taxonomy_audit_2026-05-10.md`
 - 主线看板发布说明：`docs/changes/REL-20260512-v5.1.4-market-heat-mainline-dashboard.md`
 
+## 当前现状（2026-05-23）
+
+当前热度系统分成两层，不是单库直读：
+
+1. 线上 `GET /api/market_heat/fine_dashboard` 仍是 v1 快照层，底层从 `atomic_trade_daily + canonical fine themes` 生成，再落成 `fine_heat_snapshots_*_m5_80.json`。
+2. `fine_theme_heat_daily.db` 还在做兼容和 fallback，部分策略/研究脚本仍直接读它。
+3. `fine_theme_heat_daily_v2.db` 才是当前训练、回测和预测的长表主输入。
+4. `fine_theme_heat_forecast.db` 是从 v2 训练后的预测输出库，目标现在收敛为 `future_mainline_extension_5d`。
+5. 目前看板层还没切到 v2，所以 v1 和 v2 不能当成同一个热度真源处理。
+
 ## 当前页面能力
 
 ### 1. 市场主线情报看板

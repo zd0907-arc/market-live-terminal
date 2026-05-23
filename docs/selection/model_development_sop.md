@@ -255,6 +255,22 @@ model_action_daily
 9. 实现 `generate_daily_candidates` 或 `generate_daily_actions`。
 10. 先标记 `watch_only`，连续模拟盘验证后再升为 `active`。
 
+## 9.1 市场指数环境特征
+
+训练或日更使用 `model_feature_store` 时，必须先确认指数缓存已刷新：
+
+```text
+/Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
+```
+
+当前 P0 指数为 `000852.SH`、`000905.SH`、`000300.SH`、`000001.SH`、`399006.SZ`。其中 `000852.SH` 是必需项，用来生成 `model_market_state_daily_v1 / model_feature_daily_v1` 的 `csi1000_*` 字段。
+
+运行卡：
+
+```text
+docs/selection/model_market_index_daily_runbook.md
+```
+
 ## 10. 发布门槛
 
 模型状态分三档：

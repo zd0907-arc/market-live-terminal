@@ -52,8 +52,16 @@ WIN_OUTPUT_ROOT = os.getenv("L2_WIN_OUTPUT_ROOT", r"D:\market-live-terminal\.run
 WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", r"D:\market-live-terminal\ops\win_prepare_l2_day.bat")
 WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", r"D:\market-live-terminal\ops\win_run_l2_shard.bat")
 WIN_MARKET_DB = os.getenv("L2_WIN_MARKET_DB", r"D:\market-live-terminal\data\market_data.db")
-WIN_ATOMIC_DB = os.getenv("L2_WIN_ATOMIC_DB", r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
+WIN_ATOMIC_DB = os.getenv(
+    "L2_WIN_ATOMIC_DB",
+    r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db",
+)
 WIN_SELECTION_DB = os.getenv("L2_WIN_SELECTION_DB", "")
+WIN_DATA_DIR = os.getenv("L2_WIN_DATA_DIR", rf"{WIN_PROJECT_ROOT}\data")
+WIN_MODEL_INDEX_DB = os.getenv(
+    "L2_WIN_MODEL_INDEX_DB",
+    rf"{WIN_PROJECT_ROOT}\data\selection\model_market_index_daily.db",
+)
 CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal")
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
 LOCAL_DATA_ROOT = Path(
@@ -62,7 +70,9 @@ LOCAL_DATA_ROOT = Path(
     or (str(DEFAULT_MAC_DATA_ROOT) if DEFAULT_MAC_DATA_ROOT.exists() else str(ROOT_DIR / "data"))
 )
 LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
-LOCAL_ATOMIC_DB = Path(os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db")))
+LOCAL_ATOMIC_DB = Path(
+    os.getenv("LOCAL_ATOMIC_DB", str(LOCAL_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"))
+)
 LOCAL_SELECTION_DB = Path(os.getenv("LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 LOCAL_PY_CMD = os.getenv("L2_LOCAL_PY_CMD", "").strip()
 LOCAL_DAILY_SELECTION_PY_CMD = os.getenv("SELECTION_DAILY_PY_CMD", "").strip()
@@ -84,6 +94,7 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/export_atomic_day_delta.py",
     "backend/scripts/export_selection_day_delta.py",
     "backend/scripts/run_selection_research.py",
+    "backend/scripts/sync_model_market_index_daily.py",
     "backend/scripts/postclose_http_relay.py",
 ]
 CLOUD_REQUIRED_SCRIPTS = [
@@ -1137,6 +1148,29 @@ def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_
     }
 
 
+def _try_refresh_windows_index_cache(trade_date: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    _progress(f"[{trade_date}] 开始刷新 Windows 本地指数缓存")
+    cmd = (
+        f'cmd /c "set DATA_DIR={WIN_DATA_DIR}&& '
+        f'set MODEL_INDEX_DB={WIN_MODEL_INDEX_DB}&& '
+        f'cd /d {WIN_PROJECT_ROOT} && '
+        f'{WIN_PY_CMD} backend\\scripts\\sync_model_market_index_daily.py '
+        f'--source baostock --daily --lookback-days 10 --end-date {iso_date}"'
+    )
+    try:
+        result = _ssh(WIN_HOST, cmd)
+        report = _parse_json_output(result.stdout)
+        _progress(
+            f"[{trade_date}] Windows 指数缓存刷新完成："
+            f"end_date={report.get('end_date')} source={report.get('source')}"
+        )
+        return {"status": "success", "report": report}
+    except Exception as exc:
+        _progress(f"[{trade_date}] Windows 指数缓存刷新失败，将沿用本地缓存：{exc}")
+        return {"status": "failed", "error": str(exc)}
+
+
 def _bootstrap_mac_full_sync() -> Dict[str, object]:
     selection_db = _resolve_windows_selection_db()
     if not selection_db:
@@ -1391,6 +1425,7 @@ def run_day(
     cloud_artifacts: List[str] = []
     atomic_sync_report: Optional[Dict[str, object]] = None
     selection_sync_report: Optional[Dict[str, object]] = None
+    index_sync_report: Optional[Dict[str, object]] = None
     try:
         prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
         worker_results = _run_workers(prepared, local_day_root=local_day_root)
@@ -1417,6 +1452,7 @@ def run_day(
                 local_day_root=local_day_root,
                 sync_context=sync_context,
             )
+            index_sync_report = _try_refresh_windows_index_cache(trade_date)
 
         if not skip_cloud_merge:
             cloud_artifacts = [
@@ -1445,6 +1481,7 @@ def run_day(
             "skip_mac_sync": skip_mac_sync,
             "atomic_sync_report": atomic_sync_report,
             "selection_sync_report": selection_sync_report,
+            "index_sync_report": index_sync_report,
             "sync_context": {k: v for k, v in sync_context.items() if k not in {"token", "process"}},
         }
     finally:
