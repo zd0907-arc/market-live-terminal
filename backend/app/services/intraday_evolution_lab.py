@@ -3366,6 +3366,7 @@ def _load_symbol_name_map() -> Dict[str, str]:
                 (os.path.join(root, "user_data.db"), ("watchlist",)),
                 (os.path.join(root, "market_heat", "stock_sector_map.db"), ("stock_sector_memberships",)),
                 (os.path.join(root, "market_heat", "tradable_theme_map.db"), ("clean_stock_sector_memberships", "tradable_theme_memberships")),
+                (os.path.join(root, "market_heat", "fine_theme_heat_daily_v2.db"), ("fine_theme_heat_daily_v2",)),
                 (os.path.join(root, "market_heat", "fine_theme_heat_daily.db"), ("fine_theme_member_daily",)),
                 (os.path.join(root, "market_heat", "hot_theme_low_position_l2_samples.db"), ("samples",)),
                 ("data/market_data.db", ("stock_universe_meta",)),

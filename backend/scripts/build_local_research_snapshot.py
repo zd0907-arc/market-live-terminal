@@ -15,7 +15,6 @@ from backend.app.core.config import candidate_atomic_db_paths
 
 DEFAULT_MAIN_DB = Path(r"D:\market-live-terminal\data\market_data.db")
 DEFAULT_ATOMIC_COMPACT_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db")
-DEFAULT_ATOMIC_LEGACY_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
 DEFAULT_SELECTION_DB = Path(r"D:\market-live-terminal\data\selection\selection_research.db")
 DEFAULT_SELECTION_DB_CANDIDATES = (
     Path(r"D:\market-live-terminal\data\selection\selection_research_windows.db"),
@@ -37,8 +36,6 @@ def _resolve_default_atomic_db() -> Path:
             return path
     if DEFAULT_ATOMIC_COMPACT_DB.exists():
         return DEFAULT_ATOMIC_COMPACT_DB
-    if DEFAULT_ATOMIC_LEGACY_DB.exists():
-        return DEFAULT_ATOMIC_LEGACY_DB
     return DEFAULT_ATOMIC_COMPACT_DB
 
 

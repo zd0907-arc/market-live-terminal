@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 IN_CSV = ROOT / "data/selection/market_heat/backtests/hot_theme_rule_hits_2026_04.csv"
 OUT_HTML = ROOT / "docs/selection/market_heat/backtests/hot_theme_rule_hits_2026_04_charts.html"
 

@@ -188,7 +188,7 @@ def test_candidate_atomic_db_paths_prefers_compact_when_enabled(monkeypatch, tmp
     assert config.candidate_atomic_db_paths()[0] == str(newer_compact)
 
 
-def test_candidate_atomic_db_paths_defaults_to_compact_and_keeps_legacy_fallback(monkeypatch, tmp_path):
+def test_candidate_atomic_db_paths_defaults_to_compact_without_legacy_fallback(monkeypatch, tmp_path):
     monkeypatch.delenv("DB_PATH", raising=False)
     monkeypatch.delenv("ATOMIC_DB_PATH", raising=False)
     monkeypatch.delenv("ATOMIC_MAINBOARD_DB_PATH", raising=False)
@@ -202,7 +202,7 @@ def test_candidate_atomic_db_paths_defaults_to_compact_and_keeps_legacy_fallback
     paths = config.candidate_atomic_db_paths()
 
     assert paths[0] == str(tmp_path / "atomic_facts" / "market_atomic_mainboard_compact_current.db")
-    assert str(tmp_path / "atomic_facts" / "market_atomic_mainboard_full_reverse.db") in paths
+    assert str(tmp_path / "atomic_facts" / "market_atomic_mainboard_full_reverse.db") not in paths
 
 
 def test_history_multiframe_daily_falls_back_to_atomic(monkeypatch, tmp_path):

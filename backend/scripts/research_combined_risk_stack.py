@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 
 EXP_DIR = Path("docs/strategy-rework/strategies/S04-capital-exit-risk/experiments/EXP-20260426-combined-risk-stack")
 V14_TRADES = Path("docs/strategy-rework/strategies/v1-trend-reversal-confirmation/experiments/20260426-v1-4-modes/all_mode_trades.csv")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 
 BUY_COST = 1.0 + 15 / 10000 + (20 / 10000) / 2
 SELL_COST = 1.0 - 15 / 10000 - (20 / 10000) / 2

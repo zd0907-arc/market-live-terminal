@@ -703,7 +703,7 @@ def main() -> int:
     args = parse_args()
     market_root = args.market_data_root
     selection_db = market_root / "selection" / "selection_research.db"
-    atomic_db = market_root / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+    atomic_db = market_root / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 
     financial_rows = fetch_financial_rows(args.report_date, args.page_size, args.max_pages)
     quotes = fetch_quote_rows()

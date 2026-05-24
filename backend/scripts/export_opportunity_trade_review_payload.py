@@ -12,7 +12,7 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 DEFAULT_SELECTION_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db")
 DEFAULT_TRADES = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_trades.csv"
 DEFAULT_SUMMARY = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_summary.csv"

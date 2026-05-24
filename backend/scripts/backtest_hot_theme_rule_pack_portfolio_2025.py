@@ -9,7 +9,7 @@ from pathlib import Path
 from statistics import mean, median
 
 ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 IN_CSV = ROOT / "data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv"
 OUT_MD = ROOT / "docs/selection/market_heat/backtests/hot_theme_rule_pack_portfolio_2025.md"
 OUT_TRADES = ROOT / "data/selection/market_heat/backtests/hot_theme_rule_pack_portfolio_2025_trades.csv"

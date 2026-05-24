@@ -11,7 +11,7 @@ from statistics import mean, median
 
 ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
 HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 DATA_OUT = ROOT / "data/selection/market_heat/backtests"
 DOC_OUT = ROOT / "docs/selection/market_heat/backtests"
 OUT_CSV = DATA_OUT / "hot_theme_big_mover_l2_precondition_events.csv"

@@ -24,7 +24,7 @@ DEFAULT_MODEL_DIR = ROOT / "data/selection/opportunity_discovery/opportunity_dis
 DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
 DEFAULT_ATOMIC_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts/market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = DEFAULT_MARKET_DATA_ROOT / "selection/selection_research.db"
-DEFAULT_HEAT_DB = DEFAULT_MARKET_DATA_ROOT / "market_heat/fine_theme_heat_daily.db"
+DEFAULT_HEAT_DB = DEFAULT_MARKET_DATA_ROOT / "market_heat/fine_theme_heat_daily_v2.db"
 DEFAULT_BUY_RULE = "次日开盘高开不超过6.8%且不接近涨停才买"
 
 

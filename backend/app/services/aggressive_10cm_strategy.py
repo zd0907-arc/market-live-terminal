@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from backend.app.services.fine_theme_heat_db import connect_fine_heat_ro
 from backend.app.services.selection_strategy_v2 import (
     SelectionV2Params,
     _apply_buy_costs,
@@ -23,7 +24,7 @@ from backend.app.services.selection_strategy_v2 import (
 
 STRATEGY_VERSION = "aggressive_10cm_v0_1"
 DEFAULT_SELECTION_DB = "/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db"
-DEFAULT_FINE_HEAT_DB = "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db"
+DEFAULT_FINE_HEAT_DB = "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db"
 
 
 @dataclass(frozen=True)
@@ -60,11 +61,14 @@ def _connect_ro(db_path: str) -> sqlite3.Connection:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        (table,),
-    ).fetchone()
-    return bool(row)
+    for schema_table in ("sqlite_temp_master", "sqlite_master"):
+        row = conn.execute(
+            f"SELECT name FROM {schema_table} WHERE type IN ('table', 'view') AND name=?",
+            (table,),
+        ).fetchone()
+        if row:
+            return True
+    return False
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
@@ -304,7 +308,7 @@ def _load_theme_members(start_date: str, end_date: str, fine_heat_db_path: Optio
     if not path or not os.path.exists(path):
         return pd.DataFrame()
     try:
-        with _connect_ro(path) as conn:
+        with connect_fine_heat_ro(path) as conn:
             if not (_table_exists(conn, "fine_theme_member_daily") and _table_exists(conn, "fine_theme_heat_daily")):
                 return pd.DataFrame()
             df = pd.read_sql_query(

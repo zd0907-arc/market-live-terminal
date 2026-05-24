@@ -7,8 +7,6 @@ USER_DB_PATH_DEFAULT="$ROOT/data/user_data.db"
 FORMAL_DATA_ROOT_DEFAULT="/Users/dong/Desktop/AIGC/market-data"
 ATOMIC_DEFAULT="${ATOMIC_DEFAULT:-$FORMAL_DATA_ROOT_DEFAULT/atomic_facts/market_atomic_mainboard_compact_current.db}"
 ATOMIC_REPO_DEFAULT="$ROOT/data/atomic_facts/market_atomic_mainboard_compact_current.db"
-ATOMIC_LEGACY_DEFAULT="$FORMAL_DATA_ROOT_DEFAULT/atomic_facts/market_atomic_mainboard_full_reverse.db"
-ATOMIC_REPO_LEGACY_DEFAULT="$ROOT/data/atomic_facts/market_atomic_mainboard_full_reverse.db"
 
 export DB_PATH="${DB_PATH:-$DB_PATH_DEFAULT}"
 export USER_DB_PATH="${USER_DB_PATH:-$USER_DB_PATH_DEFAULT}"
@@ -20,10 +18,8 @@ elif [ -f "$ATOMIC_DEFAULT" ]; then
   RESOLVED_ATOMIC="$ATOMIC_DEFAULT"
 elif [ -f "$ATOMIC_REPO_DEFAULT" ]; then
   RESOLVED_ATOMIC="$ATOMIC_REPO_DEFAULT"
-elif [ -f "$ATOMIC_LEGACY_DEFAULT" ]; then
-  RESOLVED_ATOMIC="$ATOMIC_LEGACY_DEFAULT"
 else
-  RESOLVED_ATOMIC="$ATOMIC_REPO_LEGACY_DEFAULT"
+  RESOLVED_ATOMIC="$ATOMIC_REPO_DEFAULT"
 fi
 
 export ATOMIC_MAINBOARD_DB_PATH="$RESOLVED_ATOMIC"
@@ -33,10 +29,6 @@ if [ ! -f "$ATOMIC_DB_PATH" ]; then
   echo "[atomic-backend] 未找到 atomic DB: $ATOMIC_DB_PATH" >&2
   echo "[atomic-backend] 兼容脚本默认优先读 compact_current；也可显式传入任意 atomic db 绝对路径" >&2
   exit 1
-fi
-
-if [ "$ATOMIC_DB_PATH" = "$ATOMIC_LEGACY_DEFAULT" ] || [ "$ATOMIC_DB_PATH" = "$ATOMIC_REPO_LEGACY_DEFAULT" ]; then
-  echo "[atomic-backend] 警告: 当前回落到 legacy full_reverse，仅用于兼容排查，不是正式默认入口" >&2
 fi
 
 cd "$ROOT"
