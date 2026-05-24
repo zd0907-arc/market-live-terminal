@@ -196,7 +196,7 @@ async def fetch_tencent_snapshot(symbol: str):
                     "sell_queue_vol": sell_vol_sum,
                     "turnover_rate": turnover_rate,
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
-                    # Added for SentimentTrend
+                    # Added for sentiment trend chart
                     "bid1_vol": bid1_vol,
                     "ask1_vol": ask1_vol,
                     "cvd": cvd,

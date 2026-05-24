@@ -17,15 +17,30 @@ from backend.app.core.config import DATA_DIR, ROOT_DIR, candidate_atomic_db_path
 MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
 REPO_THEME_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "themes.seed.json"
 THEME_FILE = Path(os.getenv("MARKET_HEAT_THEME_FILE", str(REPO_THEME_FILE if REPO_THEME_FILE.exists() else MARKET_HEAT_DIR / "themes.seed.json")))
+FINE_HEAT_CACHE_SOURCE = "local atomic_trade_daily + canonical fine themes"
+
+
 def _resolve_market_heat_atomic_db() -> Path:
     explicit = os.getenv("MARKET_HEAT_ATOMIC_DB", "").strip()
     if explicit:
         return Path(explicit)
-    for path in candidate_atomic_db_paths():
+    compact_candidates = []
+    compact_env = os.getenv("ATOMIC_COMPACT_DB_PATH", "").strip()
+    if compact_env:
+        compact_candidates.append(compact_env)
+    compact_candidates.append(str(Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"))
+    for path in compact_candidates:
         candidate = Path(path)
         if candidate.exists():
             return candidate
-    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+    if str(os.getenv("MARKET_HEAT_ALLOW_LEGACY_ATOMIC_DB", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        for path in candidate_atomic_db_paths():
+            candidate = Path(path)
+            if candidate.exists():
+                return candidate
+    raise FileNotFoundError(
+        "未找到可用的 market_heat atomic 库：优先使用 compact 库，旧 full_reverse 仅在设置 MARKET_HEAT_ALLOW_LEGACY_ATOMIC_DB=1 或 MARKET_HEAT_ATOMIC_DB 显式指定时允许读取"
+    )
 
 
 ATOMIC_DB = _resolve_market_heat_atomic_db()
@@ -516,20 +531,34 @@ def write_snapshot(snapshot: Dict[str, Any]) -> Tuple[Path, Path]:
     return json_path, md_path
 
 
+def _snapshot_matches_current_sources(snapshot: Dict[str, Any], trade_date: Optional[str] = None) -> bool:
+    meta = snapshot.get("meta") or {}
+    target = trade_date or meta.get("trade_date")
+    if not target:
+        return False
+    if str(meta.get("trade_date") or "") != str(target):
+        return False
+    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+        return False
+    return True
+
+
 def load_snapshot(trade_date: Optional[str] = None, auto_generate: bool = True) -> Dict[str, Any]:
     target = trade_date or latest_trade_date()
     if not target:
         raise RuntimeError("无法确定交易日")
     path = snapshot_path(target, "json")
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if _snapshot_matches_current_sources(payload, target):
+            return payload
     latest_path = MARKET_HEAT_DIR / "latest.json"
     if not trade_date and latest_path.exists():
         payload = json.loads(latest_path.read_text(encoding="utf-8"))
-        if payload.get("meta", {}).get("trade_date") == target:
+        if _snapshot_matches_current_sources(payload, target):
             return payload
     if not auto_generate:
-        raise FileNotFoundError(str(path))
+        raise FileNotFoundError(f"未找到当前来源匹配的快照：{path}")
     snapshot = build_market_heat_snapshot(target)
     write_snapshot(snapshot)
     return snapshot
@@ -572,7 +601,14 @@ def _find_fine_heat_cache(target: Optional[str] = None, allow_stale: bool = Fals
         ),
         reverse=True,
     )
-    return candidates[0][2]
+    cache_path = candidates[0][2]
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    meta = payload.get("meta") or {}
+    if str(meta.get("source") or "") != FINE_HEAT_CACHE_SOURCE:
+        raise FileNotFoundError(f"细颗粒热点缓存来源不匹配：{cache_path}")
+    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+        raise FileNotFoundError(f"细颗粒热点缓存对应的 atomic_db 已变更：{cache_path}")
+    return cache_path
 
 
 def _fine_member_bounds() -> Tuple[int, int]:
@@ -632,8 +668,13 @@ def refresh_fine_heat_snapshot_cache(end_date: Optional[str] = None, days: int =
     cache_path = cache_dir / f"fine_heat_snapshots_{dates[0]}_{dates[-1]}_m{min_count}_{max_count}.json"
     if cache_path.exists() and not force:
         payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        meta = payload.get("meta") or {}
         snapshots = payload.get("snapshots") or {}
-        if all(date in snapshots for date in dates):
+        if (
+            str(meta.get("source") or "") == FINE_HEAT_CACHE_SOURCE
+            and str(meta.get("atomic_db") or "") == str(ATOMIC_DB)
+            and all(date in snapshots for date in dates)
+        ):
             return {
                 "trade_date": target,
                 "start_date": dates[0],
@@ -661,7 +702,8 @@ def refresh_fine_heat_snapshot_cache(end_date: Optional[str] = None, days: int =
             "fine_theme_count": len(themes),
             "min_member_count": min_count,
             "max_member_count": max_count,
-            "source": "local atomic_trade_daily + canonical fine themes",
+            "source": FINE_HEAT_CACHE_SOURCE,
+            "atomic_db": str(ATOMIC_DB),
         },
         "snapshots": snapshots,
     }
@@ -1337,7 +1379,14 @@ def build_fine_market_heat_dashboard(end_date: Optional[str] = None, days: int =
     target = end_date or latest_trade_date()
     cache_path = _find_fine_heat_cache(target)
     payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    meta = payload.get("meta") or {}
+    if str(meta.get("source") or "") != FINE_HEAT_CACHE_SOURCE:
+        raise RuntimeError(f"细颗粒热点缓存来源不匹配：{cache_path}")
+    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+        raise RuntimeError(f"细颗粒热点缓存对应的 atomic_db 已变更：{cache_path}")
     snapshots = payload.get("snapshots") or {}
+    if target and str(target) not in snapshots:
+        raise KeyError(f"细颗粒热点缓存中未包含目标交易日 {target}：{cache_path}")
     all_dates = sorted(str(date) for date in snapshots.keys() if (not target or str(date) <= target))
     if not all_dates:
         raise RuntimeError("细颗粒热点缓存为空")

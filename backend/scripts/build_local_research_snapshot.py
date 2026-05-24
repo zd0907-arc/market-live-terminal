@@ -11,17 +11,38 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from backend.app.core.config import candidate_atomic_db_paths
+
 DEFAULT_MAIN_DB = Path(r"D:\market-live-terminal\data\market_data.db")
-DEFAULT_ATOMIC_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
+DEFAULT_ATOMIC_COMPACT_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db")
+DEFAULT_ATOMIC_LEGACY_DB = Path(r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_full_reverse.db")
 DEFAULT_SELECTION_DB = Path(r"D:\market-live-terminal\data\selection\selection_research.db")
 DEFAULT_SELECTION_DB_CANDIDATES = (
-    DEFAULT_SELECTION_DB,
     Path(r"D:\market-live-terminal\data\selection\selection_research_windows.db"),
+    DEFAULT_SELECTION_DB,
 )
 DEFAULT_OUTPUT_DB = Path(r"D:\market-live-terminal\data\local_research\research_snapshot.db")
 DEFAULT_MANIFEST = Path(r"D:\market-live-terminal\data\local_research\research_snapshot_manifest.json")
 DEFAULT_PREFIXES = ("sh60", "sz00", "sz30")
 SNAPSHOT_SIGNATURE = "local_research_snapshot_v1"
+
+
+def _resolve_default_atomic_db() -> Path:
+    explicit = str(os.getenv("ATOMIC_MAINBOARD_DB_PATH") or os.getenv("ATOMIC_DB_PATH") or "").strip()
+    if explicit:
+        return Path(explicit)
+    for raw in candidate_atomic_db_paths():
+        path = Path(str(raw))
+        if path.exists():
+            return path
+    if DEFAULT_ATOMIC_COMPACT_DB.exists():
+        return DEFAULT_ATOMIC_COMPACT_DB
+    if DEFAULT_ATOMIC_LEGACY_DB.exists():
+        return DEFAULT_ATOMIC_LEGACY_DB
+    return DEFAULT_ATOMIC_COMPACT_DB
+
+
+DEFAULT_ATOMIC_DB = _resolve_default_atomic_db()
 
 
 def _coerce_date(value: str) -> str:
@@ -657,7 +678,12 @@ def build_snapshot(args: argparse.Namespace) -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build a lightweight local research snapshot DB from Windows full data.")
     parser.add_argument("--main-db", type=Path, default=DEFAULT_MAIN_DB)
-    parser.add_argument("--atomic-db", type=Path, default=DEFAULT_ATOMIC_DB)
+    parser.add_argument(
+        "--atomic-db",
+        type=Path,
+        default=DEFAULT_ATOMIC_DB,
+        help="默认优先当前 compact atomic，保留 legacy full_reverse 兼容回退",
+    )
     parser.add_argument("--selection-db", type=Path, default=DEFAULT_SELECTION_DB)
     parser.add_argument("--output-db", type=Path, default=DEFAULT_OUTPUT_DB)
     parser.add_argument("--manifest-json", type=Path, default=DEFAULT_MANIFEST)

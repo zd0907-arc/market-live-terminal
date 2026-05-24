@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.app.core.config import DATA_DIR
+from backend.app.core.config import DATA_DIR, candidate_atomic_db_paths
 from backend.app.services.market_heat import MARKET_HEAT_DIR, _symbol_norm, ensure_market_heat_dir
 
 EASTMONEY_CLIST_URL = "https://79.push2.eastmoney.com/api/qt/clist/get"
@@ -270,10 +270,14 @@ def fetch_stock_plates(symbol: str, use_cache: bool = True) -> List[Dict[str, An
 
 
 def load_stock_universe(limit: int = 0) -> List[str]:
-    candidates = [
-        Path(os.getenv("SELECTION_DB_PATH", os.path.join(DATA_DIR, "selection", "selection_research.db"))),
-        Path(os.getenv("ATOMIC_MAINBOARD_DB_PATH", os.path.join(DATA_DIR, "atomic_facts", "market_atomic_mainboard_full_reverse.db"))),
-    ]
+    candidates = [Path(os.getenv("SELECTION_DB_PATH", os.path.join(DATA_DIR, "selection", "selection_research.db")))]
+    explicit_atomic = str(os.getenv("ATOMIC_MAINBOARD_DB_PATH", "")).strip()
+    if explicit_atomic:
+        candidates.append(Path(explicit_atomic))
+    for raw in candidate_atomic_db_paths():
+        path = Path(str(raw))
+        if path not in candidates:
+            candidates.append(path)
     for db_path in candidates:
         if not db_path.exists():
             continue

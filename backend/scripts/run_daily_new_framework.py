@@ -29,15 +29,14 @@ WIN_HOST = os.getenv("DAILY_WIN_HOST", "").strip()
 WIN_PROJECT_ROOT = os.getenv("DAILY_WIN_PROJECT_ROOT", r"D:\market-live-terminal")
 WIN_PYTHON_EXE = os.getenv("DAILY_WIN_PYTHON_EXE", r"C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe")
 WIN_MARKET_ROOT = os.getenv("DAILY_WIN_MARKET_ROOT", r"D:\MarketData")
-WIN_ATOMIC_DB = os.getenv(
-    "DAILY_WIN_ATOMIC_DB",
-    r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db",
-)
-WIN_SELECTION_DB = os.getenv("DAILY_WIN_SELECTION_DB", r"D:\market-live-terminal\data\selection\selection_research_windows.db")
-WIN_MODEL_FEATURE_DB = os.getenv(
-    "DAILY_WIN_MODEL_FEATURE_DB",
-    r"D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db",
-)
+DEFAULT_WIN_ATOMIC_DB_ALIAS = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db"
+DEFAULT_WIN_ATOMIC_DB_LEGACY = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db"
+DEFAULT_WIN_SELECTION_DB = r"D:\market-live-terminal\data\selection\selection_research_windows.db"
+DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS = r"D:\market-live-terminal\data\selection\model_feature_store.db"
+DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY = r"D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db"
+WIN_ATOMIC_DB = os.getenv("DAILY_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB_ALIAS)
+WIN_SELECTION_DB = os.getenv("DAILY_WIN_SELECTION_DB", DEFAULT_WIN_SELECTION_DB)
+WIN_MODEL_FEATURE_DB = os.getenv("DAILY_WIN_MODEL_FEATURE_DB", DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS)
 WIN_MODEL_INDEX_DB = os.getenv(
     "DAILY_WIN_MODEL_INDEX_DB",
     r"D:\market-live-terminal\data\selection\model_market_index_daily.db",
@@ -79,6 +78,36 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/sql/open_auction_schema.sql",
     "backend/scripts/sql/open_auction_phase_schema.sql",
 ]
+
+
+def _windows_existing_path_candidates(primary: str, *fallbacks: str) -> List[str]:
+    values = [str(item or "").strip() for item in (primary, *fallbacks)]
+    seen = set()
+    ordered: List[str] = []
+    for item in values:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def _resolve_windows_data_path(path_candidates: Sequence[str]) -> str:
+    host = resolve_windows_host()
+    probe = []
+    for candidate in path_candidates:
+        escaped = candidate.replace("\\", "\\\\").replace('"', '\\"')
+        probe.append(
+            f'if (Test-Path -LiteralPath "{escaped}") '
+            f'{{ Write-Output "{escaped}"; exit 0 }}'
+        )
+    script = "$ErrorActionPreference='Stop'; " + " ; ".join(probe) + " ; exit 1"
+    result = _ssh(host, _powershell_encoded(script), check=False)
+    if result.returncode == 0:
+        text = (result.stdout or "").strip().splitlines()
+        if text:
+            return text[-1].strip()
+    return str(path_candidates[0])
 
 
 def _now_text() -> str:
@@ -317,13 +346,13 @@ def _sync_required_windows_scripts() -> None:
         _run(["scp", str(local_path), f"{host}:{_win_scp_path(remote_path)}"])
 
 
-def _write_atomic_config(trade_date: str, local_run_root: Path) -> str:
+def _write_atomic_config(trade_date: str, local_run_root: Path, *, win_atomic_db: str, win_selection_db: str) -> str:
     iso_date = _compact_to_iso(trade_date)
     run_name = f"daily_new_{trade_date}"
     win_run_py = WIN_RUN_ROOT.replace("\\", "/")
     config = {
-        "atomic_db": WIN_ATOMIC_DB.replace("\\", "/"),
-        "selection_db": WIN_SELECTION_DB.replace("\\", "/"),
+        "atomic_db": win_atomic_db.replace("\\", "/"),
+        "selection_db": win_selection_db.replace("\\", "/"),
         "market_root": WIN_MARKET_ROOT.replace("\\", "/"),
         "extract_root": "Z:/atomic_stage",
         "workers": 12,
@@ -357,9 +386,21 @@ def _run_windows_cmd(cmd: str) -> Dict[str, object]:
     return _parse_json_output(result.stdout)
 
 
-def _run_windows_pipeline(trade_date: str, local_run_root: Path) -> Dict[str, object]:
+def _run_windows_pipeline(
+    trade_date: str,
+    local_run_root: Path,
+    *,
+    win_atomic_db: str,
+    win_selection_db: str,
+    win_model_feature_db: str,
+) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
-    remote_config = _write_atomic_config(trade_date, local_run_root)
+    remote_config = _write_atomic_config(
+        trade_date,
+        local_run_root,
+        win_atomic_db=win_atomic_db,
+        win_selection_db=win_selection_db,
+    )
     remote_run_dir = f"{WIN_RUN_ROOT}\\{trade_date}"
     _progress(f"[{trade_date}] Windows atomic 开始")
     atomic_report = _run_windows_cmd(f'"{WIN_PYTHON_EXE}" backend\\scripts\\run_atomic_backfill_windows.py --config "{remote_config}"')
@@ -367,9 +408,9 @@ def _run_windows_pipeline(trade_date: str, local_run_root: Path) -> Dict[str, ob
     _progress(f"[{trade_date}] Windows selection refresh 开始")
     selection_cmd = (
         f'set DB_PATH={WIN_PROJECT_ROOT}\\data\\market_data.db&& '
-        f'set ATOMIC_MAINBOARD_DB_PATH={WIN_ATOMIC_DB}&& '
-        f'set ATOMIC_DB_PATH={WIN_ATOMIC_DB}&& '
-        f'set SELECTION_DB_PATH={WIN_SELECTION_DB}&& '
+        f'set ATOMIC_MAINBOARD_DB_PATH={win_atomic_db}&& '
+        f'set ATOMIC_DB_PATH={win_atomic_db}&& '
+        f'set SELECTION_DB_PATH={win_selection_db}&& '
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\run_selection_research.py refresh '
         f"--start-date {iso_date} --end-date {iso_date} --skip-daily-candidates"
     )
@@ -379,9 +420,9 @@ def _run_windows_pipeline(trade_date: str, local_run_root: Path) -> Dict[str, ob
     feature_cmd = (
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\build_model_feature_store.py '
         f"--date {iso_date} "
-        f'--atomic-db "{WIN_ATOMIC_DB}" '
-        f'--selection-db "{WIN_SELECTION_DB}" '
-        f'--target-db "{WIN_MODEL_FEATURE_DB}" '
+        f'--atomic-db "{win_atomic_db}" '
+        f'--selection-db "{win_selection_db}" '
+        f'--target-db "{win_model_feature_db}" '
         f"--skip-labels"
     )
     feature_report = _run_windows_cmd(feature_cmd)
@@ -392,16 +433,16 @@ def _run_windows_pipeline(trade_date: str, local_run_root: Path) -> Dict[str, ob
     feature_delta = f"{remote_run_dir}\\model_feature_store_day_delta_{trade_date}.db"
     atomic_export = _run_windows_cmd(
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\export_atomic_day_delta.py {trade_date} '
-        f'--source-db "{WIN_ATOMIC_DB}" --output-db "{atomic_delta}"'
+        f'--source-db "{win_atomic_db}" --output-db "{atomic_delta}"'
     )
     selection_export = _run_windows_cmd(
-        f'set SELECTION_DB_PATH={WIN_SELECTION_DB}&& "{WIN_PYTHON_EXE}" '
+        f'set SELECTION_DB_PATH={win_selection_db}&& "{WIN_PYTHON_EXE}" '
         f'backend\\scripts\\export_selection_day_delta.py {trade_date} '
-        f'--source-db "{WIN_SELECTION_DB}" --output-db "{selection_delta}"'
+        f'--source-db "{win_selection_db}" --output-db "{selection_delta}"'
     )
     feature_export = _run_windows_cmd(
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\export_model_feature_store_day_delta.py {trade_date} '
-        f'--source-db "{WIN_MODEL_FEATURE_DB}" --output-db "{feature_delta}"'
+        f'--source-db "{win_model_feature_db}" --output-db "{feature_delta}"'
     )
 
     return {
@@ -529,14 +570,27 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
     local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
     local_run_root.mkdir(parents=True, exist_ok=True)
     host = resolve_windows_host()
+    win_atomic_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+    )
+    win_selection_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(WIN_SELECTION_DB, DEFAULT_WIN_SELECTION_DB)
+    )
+    win_model_feature_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(
+            WIN_MODEL_FEATURE_DB,
+            DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+            DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+        )
+    )
     report: Dict[str, object] = {
         "trade_date": trade_date,
         "generated_at": _now_text(),
         "windows_host": host,
         "windows_paths": {
-            "atomic_db": WIN_ATOMIC_DB,
-            "selection_db": WIN_SELECTION_DB,
-            "model_feature_db": WIN_MODEL_FEATURE_DB,
+            "atomic_db": win_atomic_db,
+            "selection_db": win_selection_db,
+            "model_feature_db": win_model_feature_db,
             "market_root": WIN_MARKET_ROOT,
         },
         "local_paths": {
@@ -553,7 +607,13 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
     _sync_required_windows_scripts()
     sync_context: Optional[Dict[str, object]] = None
     try:
-        windows_report = _run_windows_pipeline(trade_date, local_run_root)
+        windows_report = _run_windows_pipeline(
+            trade_date,
+            local_run_root,
+            win_atomic_db=win_atomic_db,
+            win_selection_db=win_selection_db,
+            win_model_feature_db=win_model_feature_db,
+        )
         report["windows"] = windows_report
         token = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii").rstrip("=")
         if _tcp_reachable(LAN_WINDOWS_HOST, 22, 1.0):

@@ -12,15 +12,23 @@ DATA_ROOT="${LOCAL_DATA_ROOT:-${MARKET_DATA_ROOT:-$DEFAULT_DATA_ROOT}}"
 DB_PATH_DEFAULT="$DATA_ROOT/market_data.db"
 USER_DB_PATH_DEFAULT="$DATA_ROOT/user_data.db"
 SELECTION_DB_DEFAULT="$DATA_ROOT/selection/selection_research.db"
-ATOMIC_DB_DEFAULT="$DATA_ROOT/atomic_facts/market_atomic_mainboard_full_reverse.db"
 ATOMIC_COMPACT_DB_DEFAULT="$DATA_ROOT/atomic_facts/market_atomic_mainboard_compact_current.db"
+ATOMIC_LEGACY_DB_DEFAULT="$DATA_ROOT/atomic_facts/market_atomic_mainboard_full_reverse.db"
+ATOMIC_MAINBOARD_DB_WAS_SET=false
+ATOMIC_DB_WAS_SET=false
+if [ -n "${ATOMIC_MAINBOARD_DB_PATH+x}" ]; then
+  ATOMIC_MAINBOARD_DB_WAS_SET=true
+fi
+if [ -n "${ATOMIC_DB_PATH+x}" ]; then
+  ATOMIC_DB_WAS_SET=true
+fi
 
 export DB_PATH="${DB_PATH:-$DB_PATH_DEFAULT}"
 export USER_DB_PATH="${USER_DB_PATH:-$USER_DB_PATH_DEFAULT}"
 export SELECTION_DB_PATH="${SELECTION_DB_PATH:-$SELECTION_DB_DEFAULT}"
-export ATOMIC_MAINBOARD_DB_PATH="${ATOMIC_MAINBOARD_DB_PATH:-$ATOMIC_DB_DEFAULT}"
-export ATOMIC_DB_PATH="${ATOMIC_DB_PATH:-$ATOMIC_DB_DEFAULT}"
 export ATOMIC_COMPACT_DB_PATH="${ATOMIC_COMPACT_DB_PATH:-$ATOMIC_COMPACT_DB_DEFAULT}"
+export ATOMIC_MAINBOARD_DB_PATH="${ATOMIC_MAINBOARD_DB_PATH:-$ATOMIC_COMPACT_DB_DEFAULT}"
+export ATOMIC_DB_PATH="${ATOMIC_DB_PATH:-$ATOMIC_MAINBOARD_DB_PATH}"
 if [ -z "${ENABLE_ATOMIC_COMPACT_READ+x}" ]; then
   if [ -f "$ATOMIC_COMPACT_DB_PATH" ]; then
     export ENABLE_ATOMIC_COMPACT_READ="true"
@@ -64,9 +72,17 @@ if [ "$COMPACT_READ_ENABLED" = "true" ]; then
   export ATOMIC_MAINBOARD_DB_PATH="$ATOMIC_COMPACT_DB_PATH"
   export ATOMIC_DB_PATH="$ATOMIC_COMPACT_DB_PATH"
 elif [ ! -f "$ATOMIC_MAINBOARD_DB_PATH" ]; then
+  if [ "$ATOMIC_MAINBOARD_DB_WAS_SET" = "false" ] && [ -f "$ATOMIC_LEGACY_DB_DEFAULT" ]; then
+    export ATOMIC_MAINBOARD_DB_PATH="$ATOMIC_LEGACY_DB_DEFAULT"
+    if [ "$ATOMIC_DB_WAS_SET" = "false" ]; then
+      export ATOMIC_DB_PATH="$ATOMIC_LEGACY_DB_DEFAULT"
+    fi
+    echo "[local-research] compact 不存在，回退到 legacy atomic DB: $ATOMIC_MAINBOARD_DB_PATH"
+  else
   echo "[local-research] 未找到 atomic DB: $ATOMIC_MAINBOARD_DB_PATH" >&2
   echo "[local-research] 请先执行: bash ops/bootstrap_mac_full_processed_sync.sh" >&2
   exit 1
+  fi
 fi
 
 mkdir -p "$DATA_ROOT" "$(dirname "$SELECTION_DB_PATH")" "$(dirname "$ATOMIC_MAINBOARD_DB_PATH")"

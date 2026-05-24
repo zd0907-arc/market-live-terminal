@@ -188,6 +188,23 @@ def test_candidate_atomic_db_paths_prefers_compact_when_enabled(monkeypatch, tmp
     assert config.candidate_atomic_db_paths()[0] == str(newer_compact)
 
 
+def test_candidate_atomic_db_paths_defaults_to_compact_and_keeps_legacy_fallback(monkeypatch, tmp_path):
+    monkeypatch.delenv("DB_PATH", raising=False)
+    monkeypatch.delenv("ATOMIC_DB_PATH", raising=False)
+    monkeypatch.delenv("ATOMIC_MAINBOARD_DB_PATH", raising=False)
+    monkeypatch.delenv("ATOMIC_COMPACT_DB_PATH", raising=False)
+    monkeypatch.delenv("ENABLE_ATOMIC_COMPACT_READ", raising=False)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    import backend.app.core.config as config
+
+    importlib.reload(config)
+    paths = config.candidate_atomic_db_paths()
+
+    assert paths[0] == str(tmp_path / "atomic_facts" / "market_atomic_mainboard_compact_current.db")
+    assert str(tmp_path / "atomic_facts" / "market_atomic_mainboard_full_reverse.db") in paths
+
+
 def test_history_multiframe_daily_falls_back_to_atomic(monkeypatch, tmp_path):
     _init_atomic_db(tmp_path)
     _, database, analysis = _reload_runtime_modules(monkeypatch, tmp_path)

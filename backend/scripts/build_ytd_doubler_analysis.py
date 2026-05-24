@@ -10,13 +10,28 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.app.core.config import candidate_atomic_db_paths
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STUDY_CSV = REPO_ROOT / 'logs' / 'ytd_doublers_20260430.study.csv'
 DEFAULT_OUTPUT_DIR = REPO_ROOT / 'data' / 'selection' / 'doubler_analysis'
 DEFAULT_DOCS_DIR = REPO_ROOT / 'docs' / 'selection' / 'doublers' / '2026-ytd' / 'top20'
 DEFAULT_MARKET_DB = Path(os.getenv('DB_PATH', '/Users/dong/Desktop/AIGC/market-data/market_data.db'))
 DEFAULT_SELECTION_DB = Path(os.getenv('SELECTION_DB_PATH', '/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db'))
-DEFAULT_ATOMIC_DB = Path(os.getenv('ATOMIC_MAINBOARD_DB_PATH', '/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db'))
+
+
+def resolve_default_atomic_db() -> Path:
+    explicit = str(os.getenv('ATOMIC_MAINBOARD_DB_PATH') or os.getenv('ATOMIC_DB_PATH') or '').strip()
+    if explicit:
+        return Path(explicit)
+    for raw in candidate_atomic_db_paths():
+        path = Path(str(raw))
+        if path.exists():
+            return path
+    return Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db')
+
+
+DEFAULT_ATOMIC_DB = resolve_default_atomic_db()
 
 SPECIAL_FLAG_KEYWORDS = ('ST', '退')
 STORY_KEYWORDS: "OrderedDict[str, Tuple[str, ...]]" = OrderedDict(

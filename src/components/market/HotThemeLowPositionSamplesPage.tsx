@@ -9,6 +9,7 @@ import {
   LowPositionL2SampleItem,
   LowPositionL2SampleSummary,
 } from '../../services/marketHeatService';
+import { Metric } from '../common/ResearchCard';
 import { APP_VERSION } from '../../version';
 
 const fmt = (value?: number | string | null, digits = 2) => {
@@ -33,13 +34,6 @@ const outcomeClass = (item?: LowPositionL2SampleItem | null) => {
   if (d5 <= -3) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
   return 'border-slate-600 bg-slate-800/60 text-slate-300';
 };
-
-const Metric: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-white' }) => (
-  <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
-);
 
 const SampleCard: React.FC<{
   item: LowPositionL2SampleItem;

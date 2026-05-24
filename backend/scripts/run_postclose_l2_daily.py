@@ -52,10 +52,9 @@ WIN_OUTPUT_ROOT = os.getenv("L2_WIN_OUTPUT_ROOT", r"D:\market-live-terminal\.run
 WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", r"D:\market-live-terminal\ops\win_prepare_l2_day.bat")
 WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", r"D:\market-live-terminal\ops\win_run_l2_shard.bat")
 WIN_MARKET_DB = os.getenv("L2_WIN_MARKET_DB", r"D:\market-live-terminal\data\market_data.db")
-WIN_ATOMIC_DB = os.getenv(
-    "L2_WIN_ATOMIC_DB",
-    r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db",
-)
+DEFAULT_WIN_ATOMIC_DB_ALIAS = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db"
+DEFAULT_WIN_ATOMIC_DB_LEGACY = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db"
+WIN_ATOMIC_DB = os.getenv("L2_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB_ALIAS)
 WIN_SELECTION_DB = os.getenv("L2_WIN_SELECTION_DB", "")
 WIN_DATA_DIR = os.getenv("L2_WIN_DATA_DIR", rf"{WIN_PROJECT_ROOT}\data")
 WIN_MODEL_INDEX_DB = os.getenv(
@@ -357,6 +356,25 @@ def _resolve_windows_selection_db() -> str:
     cmd = f'cmd /c if exist "{preferred}" (echo {preferred}) else if exist "{fallback}" (echo {fallback})'
     result = _ssh(WIN_HOST, cmd)
     return str((result.stdout or "").strip().splitlines()[-1] if (result.stdout or "").strip() else "")
+
+
+def _resolve_windows_atomic_db() -> str:
+    candidates = [WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY]
+    unique: List[str] = []
+    seen = set()
+    for item in candidates:
+        value = str(item or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    for candidate in unique:
+        cmd = f'cmd /c if exist "{candidate}" (echo {candidate})'
+        result = _ssh(WIN_HOST, cmd, check=False)
+        lines = (result.stdout or "").strip().splitlines()
+        if lines:
+            return lines[-1].strip()
+    return unique[0]
 
 
 def _backup_local_file(path: Path) -> None:
@@ -1011,8 +1029,9 @@ def _write_windows_atomic_single_day_config(trade_date: str, local_day_root: Pat
     kind = "l2" if trade_date >= "20260301" else "legacy"
     win_root_py = WIN_PROJECT_ROOT.replace("\\", "/")
     selection_db = _resolve_windows_selection_db()
+    atomic_db = _resolve_windows_atomic_db()
     config = {
-        "atomic_db": WIN_ATOMIC_DB.replace("\\", "/"),
+        "atomic_db": atomic_db.replace("\\", "/"),
         "selection_db": selection_db.replace("\\", "/") if selection_db else "",
         "market_root": WIN_MARKET_ROOT.replace("\\", "/"),
         "extract_root": r"Z:/atomic_stage",
@@ -1071,7 +1090,7 @@ def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path, sync_con
     export_cmd = (
         f'cd /d {WIN_PROJECT_ROOT} && '
         f'{WIN_PY_CMD} backend\\scripts\\export_atomic_day_delta.py {trade_date} '
-        f'--source-db "{WIN_ATOMIC_DB}" --output-db "{remote_delta}"'
+        f'--source-db "{atomic_db}" --output-db "{remote_delta}"'
     )
     export_result = _ssh(WIN_HOST, f'cmd /c "{export_cmd}"')
     export_report = _parse_json_output(export_result.stdout)
@@ -1104,13 +1123,14 @@ def _run_windows_atomic_pipeline(trade_date: str, local_day_root: Path, sync_con
 def _run_windows_selection_pipeline(trade_date: str, local_day_root: Path, sync_context: Dict[str, object]) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     selection_db = _resolve_windows_selection_db()
+    atomic_db = _resolve_windows_atomic_db()
     if not selection_db:
         raise RuntimeError("Windows 未解析到 selection_research DB")
     _progress(f"[{trade_date}] 开始更新 Windows 本地 selection 主库")
     refresh_cmd = (
         f'cmd /c "set DB_PATH={WIN_MARKET_DB}&& '
-        f'set ATOMIC_MAINBOARD_DB_PATH={WIN_ATOMIC_DB}&& '
-        f'set ATOMIC_DB_PATH={WIN_ATOMIC_DB}&& '
+        f'set ATOMIC_MAINBOARD_DB_PATH={atomic_db}&& '
+        f'set ATOMIC_DB_PATH={atomic_db}&& '
         f'set SELECTION_DB_PATH={selection_db}&& '
         f'cd /d {WIN_PROJECT_ROOT} && '
         f'{WIN_PY_CMD} backend\\scripts\\run_selection_research.py refresh --start-date {iso_date} --end-date {iso_date} --skip-daily-candidates"'
@@ -1245,12 +1265,13 @@ def _run_local_selection_pipeline(trade_date: str) -> Dict[str, object]:
 
 def _bootstrap_mac_full_sync() -> Dict[str, object]:
     selection_db = _resolve_windows_selection_db()
+    atomic_db = _resolve_windows_atomic_db()
     if not selection_db:
         raise RuntimeError("Windows 未解析到 selection_research DB")
     sync_context = _resolve_mac_sync_transport("bootstrap")
     mapping = [
         (WIN_MARKET_DB, LOCAL_MARKET_DB),
-        (WIN_ATOMIC_DB, LOCAL_ATOMIC_DB),
+        (atomic_db, LOCAL_ATOMIC_DB),
         (selection_db, LOCAL_SELECTION_DB),
     ]
     copied: List[Dict[str, object]] = []

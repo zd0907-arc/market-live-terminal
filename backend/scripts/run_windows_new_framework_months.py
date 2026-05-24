@@ -17,19 +17,23 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.scripts.run_daily_new_framework import (  # noqa: E402
+    DEFAULT_WIN_ATOMIC_DB_ALIAS,
+    DEFAULT_WIN_ATOMIC_DB_LEGACY,
+    DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+    DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+    DEFAULT_WIN_SELECTION_DB,
     WIN_MARKET_ROOT,
     WIN_PROJECT_ROOT,
     WIN_PYTHON_EXE,
     _decode_maybe_gbk,
     _powershell_encoded,
+    _resolve_windows_data_path,
     _sync_required_windows_scripts,
+    _windows_existing_path_candidates,
     _win_scp_path,
     resolve_windows_host,
 )
 
-DEFAULT_WIN_ATOMIC_DB = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db"
-DEFAULT_WIN_SELECTION_DB = r"D:\market-live-terminal\data\selection\selection_research_windows.db"
-DEFAULT_WIN_MODEL_FEATURE_DB = r"D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db"
 DEFAULT_WIN_RUN_ROOT = r"D:\market-live-terminal\.run\new_framework_month_batch"
 
 
@@ -381,7 +385,23 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
     months = _month_range_desc(args.start_month, args.end_month)
     local_run_root = ROOT_DIR / ".run" / "windows_new_framework_months"
     state_path = local_run_root / "latest.json"
+    resolved_atomic_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+    )
+    resolved_selection_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
+    )
+    resolved_model_feature_db = _resolve_windows_data_path(
+        _windows_existing_path_candidates(
+            args.model_feature_db,
+            DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+            DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+        )
+    )
     if args.background and not args.local_windows:
+        args.atomic_db = resolved_atomic_db
+        args.selection_db = resolved_selection_db
+        args.model_feature_db = resolved_model_feature_db
         return _start_background_on_windows(args)
     host = "local-windows" if args.local_windows else resolve_windows_host()
     state: Dict[str, Any] = {
@@ -393,9 +413,9 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
         "completed_months": [],
         "failed_months": [],
         "paths": {
-            "atomic_db": args.atomic_db,
-            "selection_db": args.selection_db,
-            "model_feature_db": args.model_feature_db,
+            "atomic_db": resolved_atomic_db,
+            "selection_db": resolved_selection_db,
+            "model_feature_db": resolved_model_feature_db,
             "market_root": args.market_root,
             "run_root": args.run_root,
         },
@@ -417,9 +437,9 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
             month_report = _run_month(
                 host=host,
                 month=month,
-                atomic_db=args.atomic_db,
-                selection_db=args.selection_db,
-                model_feature_db=args.model_feature_db,
+                atomic_db=resolved_atomic_db,
+                selection_db=resolved_selection_db,
+                model_feature_db=resolved_model_feature_db,
                 market_root=args.market_root,
                 run_root=args.run_root,
                 workers=args.workers,
@@ -449,9 +469,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Windows 新框架按月倒序批跑：只落 Windows，不同步 Mac")
     parser.add_argument("--start-month", required=True, help="YYYY-MM，倒序起点，如 2026-03")
     parser.add_argument("--end-month", required=True, help="YYYY-MM，倒序终点，如 2026-01")
-    parser.add_argument("--atomic-db", default=os.getenv("MONTH_BATCH_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB))
+    parser.add_argument("--atomic-db", default=os.getenv("MONTH_BATCH_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB_ALIAS))
     parser.add_argument("--selection-db", default=os.getenv("MONTH_BATCH_WIN_SELECTION_DB", DEFAULT_WIN_SELECTION_DB))
-    parser.add_argument("--model-feature-db", default=os.getenv("MONTH_BATCH_WIN_MODEL_FEATURE_DB", DEFAULT_WIN_MODEL_FEATURE_DB))
+    parser.add_argument("--model-feature-db", default=os.getenv("MONTH_BATCH_WIN_MODEL_FEATURE_DB", DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS))
     parser.add_argument("--market-root", default=os.getenv("MONTH_BATCH_WIN_MARKET_ROOT", WIN_MARKET_ROOT))
     parser.add_argument("--run-root", default=os.getenv("MONTH_BATCH_WIN_RUN_ROOT", DEFAULT_WIN_RUN_ROOT))
     parser.add_argument("--workers", type=int, default=int(os.getenv("MONTH_BATCH_WORKERS", "12")))

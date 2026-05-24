@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
+import { Metric } from '../common/ResearchCard';
 import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
 import {
   HistoryMultiframeGranularity,
@@ -40,13 +41,6 @@ const scoreTone = (score?: number | null) => {
   if (value >= 65) return 'text-amber-300';
   return 'text-slate-300';
 };
-
-const MetricCard: React.FC<{ label: string; value: string; tone?: string }> = ({ label, value, tone = 'text-slate-100' }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
-    <div className="text-[11px] text-slate-500">{label}</div>
-    <div className={`mt-0.5 text-sm font-semibold ${tone}`}>{value}</div>
-  </div>
-);
 
 const formatDateInput = (value: Date) => {
   const year = value.getFullYear();
@@ -697,10 +691,10 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
               : activeProfile.breakout_reason_summary || candidate.reason_summary || '当前未生成解释'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <MetricCard label="5日净流入" value={fmtAmt(activeProfile.net_inflow_5d)} />
-            <MetricCard label="10日正流入占比" value={fmtPct((activeProfile.positive_inflow_ratio_10d || 0) * 100, 1)} />
-            <MetricCard label="距前20高点" value={fmtPct(activeProfile.breakout_vs_prev20_high_pct)} />
-            <MetricCard label="L2确认强度" value={fmtNum(activeProfile.l2_vs_l1_strength)} />
+            <Metric label="5日净流入" value={fmtAmt(activeProfile.net_inflow_5d)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="10日正流入占比" value={fmtPct((activeProfile.positive_inflow_ratio_10d || 0) * 100, 1)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="距前20高点" value={fmtPct(activeProfile.breakout_vs_prev20_high_pct)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="L2确认强度" value={fmtNum(activeProfile.l2_vs_l1_strength)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
           </div>
         </section>
 
@@ -715,10 +709,10 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
               : activeProfile.distribution_reason_summary || '当前未见明显出货压力'}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <MetricCard label="出货风险分" value={fmtNum(activeProfile.distribution_score)} tone={scoreTone(activeProfile.distribution_score)} />
-            <MetricCard label="20日涨幅" value={fmtPct(activeProfile.return_20d_pct)} />
-            <MetricCard label="情绪热比" value={fmtNum(activeProfile.sentiment_heat_ratio)} />
-            <MetricCard label="L2事件" value={activeProfile.l2_order_event_available ? '增强可用' : '弱化版'} />
+            <Metric label="出货风险分" value={fmtNum(activeProfile.distribution_score)} tone={scoreTone(activeProfile.distribution_score)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="20日涨幅" value={fmtPct(activeProfile.return_20d_pct)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="情绪热比" value={fmtNum(activeProfile.sentiment_heat_ratio)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            <Metric label="L2事件" value={activeProfile.l2_order_event_available ? '增强可用' : '弱化版'} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
           </div>
         </section>
 

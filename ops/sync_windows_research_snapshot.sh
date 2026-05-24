@@ -38,7 +38,7 @@ echo "[research-sync] upload snapshot builder"
 scp "$ROOT/backend/scripts/build_local_research_snapshot.py" "$WIN_HOST:${REMOTE_SCRIPT}"
 
 if [ -z "$REMOTE_SELECTION_DB" ]; then
-  REMOTE_SELECTION_DB="$(ssh "$WIN_HOST" "${WIN_PY_CMD} -c \"from pathlib import Path; candidates=[Path(r'${WIN_ROOT_PY}/data/selection/selection_research.db'), Path(r'${WIN_ROOT_PY}/data/selection/selection_research_windows.db')]; print(next((str(p) for p in candidates if p.exists()), ''))\"" | tr -d '\r' | tail -n 1)"
+  REMOTE_SELECTION_DB="$(ssh "$WIN_HOST" "${WIN_PY_CMD} -c \"from pathlib import Path; candidates=[Path(r'${WIN_ROOT_PY}/data/selection/selection_research_windows.db'), Path(r'${WIN_ROOT_PY}/data/selection/selection_research.db')]; print(next((str(p) for p in candidates if p.exists()), ''))\"" | tr -d '\r' | tail -n 1)"
 fi
 
 if [ -n "$REMOTE_SELECTION_DB" ]; then

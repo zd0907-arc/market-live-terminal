@@ -4,9 +4,12 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+
+from backend.app.core.config import candidate_atomic_db_paths
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -15,7 +18,20 @@ WATCHLIST_PATH = REPO_ROOT / "data" / "selection" / "research_watchlist" / "watc
 SNAPSHOT_DIR = REPO_ROOT / "data" / "selection" / "research_watchlist" / "snapshots"
 DAILY_DOC_DIR = REPO_ROOT / "docs" / "selection" / "research_watchlist" / "daily"
 SELECTION_DB = MARKET_DATA_ROOT / "selection" / "selection_research.db"
-ATOMIC_DB = MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+
+
+def resolve_atomic_db() -> Path:
+    explicit = str(os.getenv("ATOMIC_MAINBOARD_DB_PATH") or os.getenv("ATOMIC_DB_PATH") or "").strip()
+    if explicit:
+        return Path(explicit)
+    for raw in candidate_atomic_db_paths():
+        path = Path(str(raw))
+        if path.exists():
+            return path
+    return MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+
+
+ATOMIC_DB = resolve_atomic_db()
 
 
 def query_one(db_path: Path, sql: str, params: Iterable[Any] = ()) -> Optional[Dict[str, Any]]:

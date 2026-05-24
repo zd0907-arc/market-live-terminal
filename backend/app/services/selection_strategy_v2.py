@@ -15,7 +15,7 @@ DEFAULT_FORMAL_USER_DB = os.path.join(DEFAULT_MARKET_DATA_ROOT, "user_data.db")
 DEFAULT_FORMAL_ATOMIC_DB = os.path.join(
     DEFAULT_MARKET_DATA_ROOT,
     "atomic_facts",
-    "market_atomic_mainboard_full_reverse.db",
+    "market_atomic_mainboard_compact_current.db",
 )
 STRATEGY_VERSION_V2 = "selection_strategy_v2_lifecycle"
 THEME_KEYWORDS: Dict[str, tuple[str, ...]] = {
