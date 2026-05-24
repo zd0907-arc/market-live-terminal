@@ -815,7 +815,7 @@ def _render_readme(summary_payload: Dict[str, Any]) -> str:
 def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
     db_path = os.getenv(
         "ATOMIC_MAINBOARD_DB_PATH",
-        "/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db",
+        "/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db",
     )
     if not os.path.exists(db_path):
         raise FileNotFoundError(f"atomic db not found: {db_path}")
@@ -827,7 +827,7 @@ def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
         latest_end,
         db_path=db_path,
         selection_db_path="/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db",
-        fine_heat_db_path="/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db",
+        fine_heat_db_path="/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db",
     )
     if metrics.empty:
         raise RuntimeError("prepare_metrics returned empty result")
@@ -859,7 +859,7 @@ def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
         "data_sources": {
             "atomic_db": db_path,
             "selection_db": "/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db",
-            "fine_heat_db": "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db",
+            "fine_heat_db": "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db",
         },
         "windows": [{"start_date": s, "end_date": e} for s, e in WINDOWS],
         "variants": [asdict(v) for v in VARIANTS],

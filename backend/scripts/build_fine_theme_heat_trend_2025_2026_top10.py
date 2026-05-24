@@ -10,7 +10,7 @@ from statistics import mean
 ROOT = Path('/Users/dong/Desktop/AIGC/market-live-terminal')
 HEAT_DB = Path('/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db')
 THEME_DB = Path('/Users/dong/Desktop/AIGC/market-data/market_heat/tradable_theme_map.db')
-ATOMIC_DB = Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db')
+ATOMIC_DB = Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db')
 OUT = ROOT / 'docs/selection/market_heat/fine_theme_heat_trend_2025_2026_top10.html'
 START = '2025-01-02'
 END = '2026-04-30'

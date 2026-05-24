@@ -24,11 +24,13 @@ try:
 except Exception:  # pragma: no cover
     joblib = None
 
+from backend.app.services.fine_theme_heat_db import connect_fine_heat_ro
+
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 DEFAULT_SELECTION_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db")
-DEFAULT_HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db")
+DEFAULT_HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db")
 MODEL_VERSION = "opportunity_discovery_trade_l2_v0_1"
 OUT_DIR = ROOT / "data/selection/opportunity_discovery" / MODEL_VERSION
 
@@ -249,8 +251,14 @@ def _connect_ro(path: Path | str) -> sqlite3.Connection:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
-    return bool(row)
+    for schema_table in ("sqlite_temp_master", "sqlite_master"):
+        row = conn.execute(
+            f"SELECT name FROM {schema_table} WHERE type IN ('table', 'view') AND name=?",
+            (table,),
+        ).fetchone()
+        if row:
+            return True
+    return False
 
 
 def _safe_ratio(num: pd.Series, den: pd.Series) -> pd.Series:
@@ -542,7 +550,7 @@ def load_heat_features(start_date: str, end_date: str, heat_db: Path) -> pd.Data
         GROUP BY lower(m.symbol), m.trade_date
     """
     try:
-        with _connect_ro(heat_db) as conn:
+        with connect_fine_heat_ro(heat_db) as conn:
             if not (_table_exists(conn, "fine_theme_member_daily") and _table_exists(conn, "fine_theme_heat_daily")):
                 return pd.DataFrame()
             df = pd.read_sql_query(sql, conn, params=[start_date, end_date])
@@ -1864,13 +1872,13 @@ def catalog_command(args: argparse.Namespace) -> None:
     for name, db_path, tables in [
         ("atomic", Path(args.atomic_db), ["atomic_trade_daily", "atomic_order_daily", "atomic_book_state_daily", "atomic_limit_state_daily"]),
         ("selection", Path(args.selection_db), ["selection_feature_daily", "selection_signal_daily"]),
-        ("heat", Path(args.heat_db), ["fine_theme_heat_daily", "fine_theme_member_daily", "fine_theme_lifecycle_daily"]),
+        ("heat", Path(args.heat_db), ["fine_theme_heat_daily_v2", "fine_theme_heat_daily", "fine_theme_member_daily", "fine_theme_lifecycle_daily"]),
     ]:
         payload["tables"][name] = {}
         if not db_path.exists():
             payload["tables"][name]["exists"] = False
             continue
-        with _connect_ro(db_path) as conn:
+        with connect_fine_heat_ro(db_path) if name == "heat" else _connect_ro(db_path) as conn:
             for table in tables:
                 if not _table_exists(conn, table):
                     payload["tables"][name][table] = {"exists": False}

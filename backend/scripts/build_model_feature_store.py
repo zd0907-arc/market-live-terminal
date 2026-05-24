@@ -20,8 +20,9 @@ DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
 DEFAULT_TARGET_DB = DATA_ROOT / "selection" / "model_feature_store.db"
 DEFAULT_ATOMIC_DB = DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = DATA_ROOT / "selection" / "selection_research.db"
-DEFAULT_HEAT_DB = DATA_ROOT / "market_heat" / "fine_theme_heat_daily.db"
 DEFAULT_HEAT_V2_DB = DATA_ROOT / "market_heat" / "fine_theme_heat_daily_v2.db"
+DEFAULT_HEAT_DB = DEFAULT_HEAT_V2_DB
+DEFAULT_TRADABLE_THEME_DB = DATA_ROOT / "market_heat" / "tradable_theme_map.db"
 DEFAULT_INDEX_DB = DATA_ROOT / "selection" / "model_market_index_daily.db"
 SCHEMA_SQL = REPO_ROOT / "backend" / "scripts" / "sql" / "model_feature_store_schema.sql"
 SELECTION_FEATURE_VERSION = "selection_features_v1"
@@ -65,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--selection-db", type=Path, default=Path(os.getenv("SELECTION_DB_PATH", DEFAULT_SELECTION_DB)))
     parser.add_argument("--heat-db", type=Path, default=Path(os.getenv("FINE_THEME_HEAT_DB", DEFAULT_HEAT_DB)))
     parser.add_argument("--heat-v2-db", type=Path, default=Path(os.getenv("FINE_THEME_HEAT_V2_DB", DEFAULT_HEAT_V2_DB)))
+    parser.add_argument("--tradable-theme-db", type=Path, default=Path(os.getenv("TRADABLE_THEME_MAP_DB", DEFAULT_TRADABLE_THEME_DB)))
     parser.add_argument("--index-csv", type=Path, help="Optional index daily CSV")
     parser.add_argument("--index-db", type=Path, default=Path(os.getenv("MODEL_INDEX_DB", DEFAULT_INDEX_DB)))
     parser.add_argument("--index-table", default=os.getenv("MODEL_INDEX_TABLE", "model_market_index_daily"))
@@ -518,6 +520,53 @@ def build_temp_heat_tables(conn: sqlite3.Connection, date_from: str, date_to: st
 
     heat_feature_rows = 0
     heat_market_rows = 0
+    if (
+        table_exists(conn, "heat_v2.fine_theme_heat_daily_v2")
+        and table_exists(conn, "theme_map.clean_stock_sector_memberships")
+        and table_exists(conn, "theme_map.clean_sector_boards")
+    ):
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO tmp_heat_feature (
+              symbol, trade_date, best_rank, hot_score, persistence_score, member_count,
+              is_top10, is_new_hot, is_continuing_hot, is_climax_hot, is_fading, l2_main_net_yi
+            )
+            WITH ranked AS (
+              SELECT
+                lower(m.symbol) AS symbol,
+                h.trade_date,
+                h.rank_today AS best_rank,
+                h.hot_score,
+                h.hot_score AS persistence_score,
+                h.member_count,
+                CASE WHEN h.rank_today <= 10 THEN 1 ELSE 0 END AS is_top10,
+                h.first_hot AS is_new_hot,
+                h.mainline_continue AS is_continuing_hot,
+                h.today_strong AS is_climax_hot,
+                h.fading_watch AS is_fading,
+                h.l2_net_inflow_yi AS l2_main_net_yi,
+                ROW_NUMBER() OVER (
+                  PARTITION BY lower(m.symbol), h.trade_date
+                  ORDER BY CASE WHEN h.rank_today IS NULL THEN 999999 ELSE h.rank_today END, h.hot_score DESC
+                ) AS rn
+              FROM heat_v2.fine_theme_heat_daily_v2 AS h
+              JOIN theme_map.clean_stock_sector_memberships AS m
+                ON m.sector_code=h.sector_code AND m.sector_type=h.sector_type
+              JOIN theme_map.clean_sector_boards AS b
+                ON b.sector_code=h.sector_code AND b.sector_type=h.sector_type
+              WHERE h.trade_date BETWEEN ? AND ?
+                AND b.clean_status != 'excluded'
+            )
+            SELECT
+              symbol, trade_date, best_rank, hot_score, persistence_score, member_count,
+              is_top10, is_new_hot, is_continuing_hot, is_climax_hot, is_fading, l2_main_net_yi
+            FROM ranked
+            WHERE rn = 1
+            """,
+            (date_from, date_to),
+        )
+        heat_feature_rows = int(fetch_scalar(conn, "SELECT COUNT(*) FROM tmp_heat_feature") or 0)
+
     if table_exists(conn, "heat.fine_theme_member_daily") and table_exists(conn, "heat.fine_theme_heat_daily"):
         conn.execute(
             """
@@ -1462,6 +1511,8 @@ def source_tables_for(table: str) -> list[str]:
             "atomic_book_state_daily",
             "atomic_limit_state_daily",
             "selection_feature_daily",
+            "fine_theme_heat_daily_v2",
+            "tradable_theme_map",
             "fine_theme_member_daily",
             "fine_theme_heat_daily",
             "model_market_state_daily_v1",
@@ -1504,6 +1555,7 @@ def run_build(args: argparse.Namespace) -> dict[str, Any]:
         attach_ro(conn, "selection", args.selection_db, required=True)
         attach_ro(conn, "heat", args.heat_db, required=False)
         attach_ro(conn, "heat_v2", args.heat_v2_db, required=False)
+        attach_ro(conn, "theme_map", args.tradable_theme_db, required=False)
         date_info = resolve_dates(conn, start_date, end_date, args.warmup_days, args.label_lookahead_days)
         create_temp_date_table(conn, date_info["requested_dates"])
         start_run(conn, args, run_id, date_info)

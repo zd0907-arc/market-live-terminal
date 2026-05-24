@@ -15,7 +15,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db")
+ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
 DOC_DIR = ROOT / "docs/strategy-rework/strategies/aggressive-10cm/experiments/hot-theme-agent"
 DATA_DIR = ROOT / "data/selection/aggressive_10cm/hot_theme_agent"
 SUMMARY_JSON = DATA_DIR / "summary.json"

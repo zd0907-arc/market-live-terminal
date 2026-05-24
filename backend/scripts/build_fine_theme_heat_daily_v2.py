@@ -43,7 +43,7 @@ def resolve_default_atomic_db() -> Path:
     compact = Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
     if compact.exists() and compact.stat().st_size > 0:
         return compact
-    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
+    return Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 
 
 DEFAULT_ATOMIC_DB = resolve_default_atomic_db()

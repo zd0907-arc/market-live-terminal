@@ -20,13 +20,8 @@ from typing import Any, Dict, List, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MARKET_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
-DEFAULT_FORMAL_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_full_reverse.db"
-DEFAULT_COMPACT_DB = (
-    DEFAULT_MARKET_DATA_ROOT
-    / "atomic_facts"
-    / "shadow"
-    / "market_atomic_mainboard_compact_20250102_20260514.db"
-)
+DEFAULT_FORMAL_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+DEFAULT_COMPACT_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 URL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
