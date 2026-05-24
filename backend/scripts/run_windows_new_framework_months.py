@@ -385,25 +385,44 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
     months = _month_range_desc(args.start_month, args.end_month)
     local_run_root = ROOT_DIR / ".run" / "windows_new_framework_months"
     state_path = local_run_root / "latest.json"
-    resolved_atomic_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
-    )
-    resolved_selection_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
-    )
-    resolved_model_feature_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(
-            args.model_feature_db,
-            DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-            DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+    if args.dry_run:
+        host = "local-windows" if args.local_windows else ""
+        resolved_atomic_db = args.atomic_db
+        resolved_selection_db = args.selection_db
+        resolved_model_feature_db = args.model_feature_db
+    elif args.background and not args.local_windows:
+        resolved_atomic_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
         )
-    )
-    if args.background and not args.local_windows:
+        resolved_selection_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
+        )
+        resolved_model_feature_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(
+                args.model_feature_db,
+                DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+            )
+        )
         args.atomic_db = resolved_atomic_db
         args.selection_db = resolved_selection_db
         args.model_feature_db = resolved_model_feature_db
         return _start_background_on_windows(args)
-    host = "local-windows" if args.local_windows else resolve_windows_host()
+    else:
+        host = "local-windows" if args.local_windows else resolve_windows_host()
+        resolved_atomic_db = args.atomic_db if args.local_windows else _resolve_windows_data_path(
+            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+        )
+        resolved_selection_db = args.selection_db if args.local_windows else _resolve_windows_data_path(
+            _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
+        )
+        resolved_model_feature_db = args.model_feature_db if args.local_windows else _resolve_windows_data_path(
+            _windows_existing_path_candidates(
+                args.model_feature_db,
+                DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+            )
+        )
     state: Dict[str, Any] = {
         "status": "running",
         "started_at": _now_text(),

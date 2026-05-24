@@ -569,20 +569,26 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
     trade_date = trade_date.replace("-", "")
     local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
     local_run_root.mkdir(parents=True, exist_ok=True)
-    host = resolve_windows_host()
-    win_atomic_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
-    )
-    win_selection_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(WIN_SELECTION_DB, DEFAULT_WIN_SELECTION_DB)
-    )
-    win_model_feature_db = _resolve_windows_data_path(
-        _windows_existing_path_candidates(
-            WIN_MODEL_FEATURE_DB,
-            DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-            DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+    if dry_run:
+        host = WIN_HOST or (WIN_HOST_CANDIDATES[0] if WIN_HOST_CANDIDATES else "")
+        win_atomic_db = WIN_ATOMIC_DB
+        win_selection_db = WIN_SELECTION_DB
+        win_model_feature_db = WIN_MODEL_FEATURE_DB
+    else:
+        host = resolve_windows_host()
+        win_atomic_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
         )
-    )
+        win_selection_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(WIN_SELECTION_DB, DEFAULT_WIN_SELECTION_DB)
+        )
+        win_model_feature_db = _resolve_windows_data_path(
+            _windows_existing_path_candidates(
+                WIN_MODEL_FEATURE_DB,
+                DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
+                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
+            )
+        )
     report: Dict[str, object] = {
         "trade_date": trade_date,
         "generated_at": _now_text(),

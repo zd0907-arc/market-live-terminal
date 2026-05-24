@@ -33,13 +33,12 @@ def _resolve_market_heat_atomic_db() -> Path:
         candidate = Path(path)
         if candidate.exists():
             return candidate
-    if str(os.getenv("MARKET_HEAT_ALLOW_LEGACY_ATOMIC_DB", "")).strip().lower() in {"1", "true", "yes", "on"}:
-        for path in candidate_atomic_db_paths():
-            candidate = Path(path)
-            if candidate.exists():
-                return candidate
+    for path in candidate_atomic_db_paths():
+        candidate = Path(path)
+        if candidate.exists():
+            return candidate
     raise FileNotFoundError(
-        "未找到可用的 market_heat atomic 库：优先使用 compact 库，旧 full_reverse 仅在设置 MARKET_HEAT_ALLOW_LEGACY_ATOMIC_DB=1 或 MARKET_HEAT_ATOMIC_DB 显式指定时允许读取"
+        "未找到可用的 market_heat atomic 库：优先使用 compact 库，找不到时回退到 candidate_atomic_db_paths 的可用项"
     )
 
 
