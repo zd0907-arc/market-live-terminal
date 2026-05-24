@@ -269,6 +269,7 @@ const SelectionResearchPage: React.FC = () => {
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
+  const [exitWatchlist, setExitWatchlist] = useState<SelectionCandidateItem[]>([]);
   const [selected, setSelected] = useState<SelectionCandidateItem | null>(null);
   const [profile, setProfile] = useState<SelectionProfileData | null>(null);
   const [quote, setQuote] = useState<any | null>(null);
@@ -380,6 +381,7 @@ const SelectionResearchPage: React.FC = () => {
     setError('');
     if (selectedRef.current?.trade_date !== targetDate) {
       setCandidates([]);
+      setExitWatchlist([]);
       setSelected(null);
       setProfile(null);
     }
@@ -387,17 +389,19 @@ const SelectionResearchPage: React.FC = () => {
       const data = await fetchDailySelectionCandidates(targetDate, 80);
       if (requestSeq !== candidatesRequestSeqRef.current || targetDate !== candidateLoadDateRef.current) return;
       const items = data?.items || [];
+      const watchItems = data?.exit_watchlist?.items || [];
       const nextDate = targetDate || data?.trade_date || '';
       setCandidates(items);
+      setExitWatchlist(watchItems);
       if (shouldPrewarm) {
         triggerResearchPrewarm(items, nextDate || targetDate);
       }
       const prevSelected = selectedRef.current;
       const keepSelected = (
         prevSelected?.trade_date === targetDate
-          ? items.find((item) => item.symbol === prevSelected?.symbol && item.trade_date === prevSelected.trade_date)
+          ? [...items, ...watchItems].find((item) => item.symbol === prevSelected?.symbol && item.trade_date === prevSelected.trade_date)
           : null
-      ) || items[0] || null;
+      ) || items[0] || watchItems[0] || null;
       setSelected(keepSelected);
       if (!keepSelected) setProfile(null);
       void hydrateCandidateNames(items);
@@ -616,6 +620,13 @@ const SelectionResearchPage: React.FC = () => {
     }));
   }, [candidates, nameOverrides]);
 
+  const displayExitWatchlist = useMemo(() => {
+    return exitWatchlist.map((item) => ({
+      ...item,
+      displayName: nameOverrides[item.symbol.toLowerCase()] || item.name || item.symbol,
+    }));
+  }, [exitWatchlist, nameOverrides]);
+
   const dailyGroups = useMemo(() => {
     const isWatch = (item: SelectionCandidateItem) => item.entry_allowed === false && (
       item.lifecycle_phase === 'watch' ||
@@ -630,6 +641,13 @@ const SelectionResearchPage: React.FC = () => {
       blocked: displayCandidates.filter((item) => item.entry_allowed === false && !isWatch(item)),
     };
   }, [displayCandidates]);
+
+  const exitGroups = useMemo(() => {
+    return {
+      sell: displayExitWatchlist.filter((item) => item.exit_signal_date),
+      hold: displayExitWatchlist.filter((item) => !item.exit_signal_date),
+    };
+  }, [displayExitWatchlist]);
 
   const selectedDisplayName = selected ? (nameOverrides[selected.symbol.toLowerCase()] || profile?.name || selected.name || selected.symbol) : '';
   const heroPrice = Number(quote?.price ?? profile?.close ?? selected?.close ?? 0);
@@ -835,7 +853,7 @@ const SelectionResearchPage: React.FC = () => {
             volume={quote?.volume}
             amount={quote?.amount}
             turnoverRate={turnoverRate}
-            latestLabel={`最新 ${selected.trade_date}`}
+            latestLabel={`最新 ${latestDataTradeDate || selected.trade_date}`}
             marketCapLabel={fmtMarketCap(profile?.market_cap ?? selected.market_cap)}
             metaRow={
               <QuoteMetaRow
@@ -861,11 +879,13 @@ const SelectionResearchPage: React.FC = () => {
             </div>
             <div>
               {renderCandidateSection('明日可操作', dailyGroups.actionable, 'text-emerald-300')}
+              {renderCandidateSection('次日卖出', exitGroups.sell, 'text-rose-300')}
+              {renderCandidateSection('持仓跟踪', exitGroups.hold, 'text-sky-300')}
               {renderCandidateSection('观察中', dailyGroups.watch, 'text-amber-300')}
               {renderCandidateSection('已拦截 / 风险提示', dailyGroups.blocked, 'text-red-300')}
-              {!loadingCandidates && displayCandidates.length === 0 && (
+              {!loadingCandidates && displayCandidates.length === 0 && displayExitWatchlist.length === 0 && (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
-                  暂无候选；该日期没有模型或策略产出。
+                  {candidateEmptyMessage}
                 </div>
               )}
             </div>
@@ -882,7 +902,7 @@ const SelectionResearchPage: React.FC = () => {
               profile={profile}
               displayName={selectedDisplayName}
               backendStatus={backendStatus}
-              latestTradeDate={health?.latest_signal_date || undefined}
+              latestTradeDate={latestDataTradeDate}
             />
           </div>
         </div>

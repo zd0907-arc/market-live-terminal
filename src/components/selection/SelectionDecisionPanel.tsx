@@ -391,6 +391,8 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const isStableCallback = activeProfile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
   const isTrendContinuation = activeProfile.strategy_internal_id === 'trend_continuation_callback' || candidate.strategy_internal_id === 'trend_continuation_callback';
   const isSparkModel = activeProfile.strategy_internal_id === 'spark_opportunity_selector' || candidate.strategy_internal_id === 'spark_opportunity_selector';
+  const isSparkHoldingTracked = isSparkModel && activeProfile.entry_allowed === false && Boolean(displayedEntryDate);
+  const isSparkExitTracked = isSparkModel && Boolean(activeProfile.trade_plan?.exit_signal_date || activeProfile.exit_signal_date || candidate.exit_signal_date);
   const isProductStrategy = isStableCallback || isTrendContinuation;
   const eventInterpretation = researchContext?.event_interpretation as SelectionEventInterpretation | undefined;
   const decisionBrief = researchContext?.decision_brief;
@@ -533,17 +535,26 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     }
 
     if (isSparkModel) {
+      const isExitTracked = Boolean(activeProfile.exit_signal_date || candidate.exit_signal_date || activeProfile.trade_plan?.exit_signal_date);
+      const isHoldingTracked = !activeProfile.entry_allowed && Boolean(activeProfile.entry_date || candidate.entry_date || activeProfile.trade_plan?.entry_date);
+      const title = isExitTracked ? '次日卖出' : isHoldingTracked ? '继续持有' : activeProfile.entry_allowed === false ? '观察/风险提示' : '模型推荐';
+      const subtitle = isExitTracked
+        ? `${displayedEntryDate || displayedEntrySignalDate || '--'}买入 → ${exitSignalDate || '--'}盘后触发卖点`
+        : isHoldingTracked
+          ? `${displayedEntryDate || displayedEntrySignalDate || '--'}已持有，盘后继续跟踪`
+          : `${displayedEntrySignalDate || '--'}盘后推荐 → ${displayedEntryDate || '待下一交易日'}计划买入`;
       return {
-        title: activeProfile.entry_allowed === false ? '观察/风险提示' : '模型推荐',
-        subtitle: `${displayedEntrySignalDate || '--'}盘后推荐 → ${displayedEntryDate || '待下一交易日'}计划买入`,
-        tone: activeProfile.entry_allowed === false ? 'watch' : 'positive',
+        title,
+        subtitle,
+        tone: isExitTracked ? 'watch' : activeProfile.entry_allowed === false ? 'watch' : 'positive',
         sections: [
           {
             title: '信号链路',
             rows: [
               { label: '推荐日', value: displayedEntrySignalDate || '--', desc: '星火机会模型在该交易日盘后给出候选。' },
               { label: '计划买入', value: displayedEntryDate || '待下一交易日', desc: '默认按下一交易日开盘执行，但需满足高开不超过规则。' },
-              { label: '执行条件', value: activeProfile.exit_plan_summary || candidate.exit_plan_summary || '次日开盘高开不超过6.8%且不接近涨停才买', desc: '这是模型当前的可买性约束，不满足则只观察。' },
+              { label: '卖出信号/卖出', value: [exitSignalDate, exitDate].filter(Boolean).join(' / ') || '待跟踪', desc: '盘后识别卖点，通常在下一交易日执行。' },
+              { label: '当前说明', value: activeProfile.exit_plan_summary || candidate.exit_plan_summary || '次日开盘高开不超过6.8%且不接近涨停才买', desc: '买入态展示可买条件；持仓态展示盘后持有/卖出建议。' },
             ],
           },
         ],
@@ -669,11 +680,25 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">入场结论</div>
-            <div className={`mt-1 text-sm font-semibold ${activeProfile.entry_allowed === false ? 'text-amber-300' : 'text-emerald-300'}`}>
-              {activeProfile.entry_allowed === false ? (isTrendContinuation ? '观察中' : '已拦截') : isProductStrategy ? '可买入' : '允许进场'}
+            <div className={`mt-1 text-sm font-semibold ${activeProfile.entry_allowed === false ? (isSparkHoldingTracked || isSparkExitTracked ? 'text-sky-300' : 'text-amber-300') : 'text-emerald-300'}`}>
+              {activeProfile.entry_allowed === false
+                ? isSparkExitTracked
+                  ? '次日卖出'
+                  : isSparkHoldingTracked
+                    ? '继续持有'
+                    : (isTrendContinuation ? '观察中' : '已拦截')
+                : isProductStrategy ? '可买入' : '允许进场'}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              {(activeProfile.entry_block_reasons || []).length > 0 ? activeProfile.entry_block_reasons?.join('；') : (isProductStrategy || isSparkModel) ? '确认日收盘识别，计划次日开盘买入' : '当前未触发入场拦截'}
+              {(activeProfile.entry_block_reasons || []).length > 0
+                ? activeProfile.entry_block_reasons?.join('；')
+                : isSparkExitTracked
+                  ? '该票已进入星火持仓跟踪池，盘后触发卖点，计划下一交易日执行'
+                  : isSparkHoldingTracked
+                    ? '该票已进入星火持仓跟踪池，当前盘后判断为继续持有'
+                    : (isProductStrategy || isSparkModel)
+                      ? '确认日收盘识别，计划次日开盘买入'
+                      : '当前未触发入场拦截'}
             </div>
           </div>
         </div>

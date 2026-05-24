@@ -400,6 +400,13 @@ export interface SelectionCandidatesResponse {
   strategy: SelectionStrategy;
   rank_mode?: string;
   items: SelectionCandidateItem[];
+  exit_watchlist?: {
+    trade_date: string;
+    policy_id: string;
+    policy_name: string;
+    items: SelectionCandidateItem[];
+    error?: string;
+  };
 }
 
 export interface SelectionProfileSeriesItem {

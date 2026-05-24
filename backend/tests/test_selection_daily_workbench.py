@@ -153,3 +153,78 @@ def test_spark_source_uses_top3_daily_limit(monkeypatch, tmp_path):
     payload = run_daily_selection_sources("2026-05-14", limit=30, source_ids=["spark_opportunity_selector"])
     assert payload["sources"]["spark_opportunity_selector"] == 3
     assert payload["merged_count"] == 3
+
+
+def test_daily_candidates_include_exit_watchlist(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+
+    upsert_strategy_registry(
+        [
+            {
+                "source_id": "spark_opportunity_selector",
+                "source_name": "星火机会模型 1.0",
+                "source_type": "model",
+                "source_version": "1.0",
+                "horizon": "22d",
+                "status": "watch_only",
+            }
+        ]
+    )
+    spark_records = [
+        {
+            "trade_date": "2026-05-14",
+            "symbol": "sh600001",
+            "name": "测试一",
+            "source_id": "spark_opportunity_selector",
+            "source_name": "星火机会模型 1.0",
+            "source_type": "model",
+            "source_version": "1.0",
+            "rank": 1,
+            "score": 88.0,
+            "horizon": "22d",
+            "suggested_action": "candidate_buy",
+            "action_label": "明日可买",
+            "entry_allowed": True,
+            "reason_summary": "模型机会分靠前",
+            "risk_tags": [],
+            "entry_block_reasons": [],
+            "explain_factors": {"model_score": 88.0},
+            "raw_payload": {"entry_signal_date": "2026-05-14"},
+        }
+    ]
+    assert replace_source_candidates("2026-05-14", "spark_opportunity_selector", spark_records) == 1
+    assert rebuild_daily_candidates("2026-05-14") == 1
+
+    import backend.app.services.selection_daily_workbench as workbench
+
+    monkeypatch.setattr(
+        workbench,
+        "get_daily_exit_watchlist",
+        lambda trade_date: {
+            "trade_date": trade_date,
+            "policy_id": "pc_model_th6_stop12",
+            "policy_name": "星火进攻版",
+            "items": [
+                {
+                    "symbol": "sh600001",
+                    "name": "测试一",
+                    "trade_date": trade_date,
+                    "entry_signal_date": "2026-05-14",
+                    "entry_date": "2026-05-15",
+                    "exit_signal_date": trade_date,
+                    "exit_date": "2026-05-15",
+                    "exit_plan_summary": "盘后建议次日卖出",
+                    "entry_allowed": False,
+                    "current_judgement": "次日卖出",
+                }
+            ],
+        },
+    )
+
+    resp = selection_daily_candidates(date="2026-05-14", limit=10)
+    assert resp.code == 200
+    assert resp.data["exit_watchlist"]["policy_id"] == "pc_model_th6_stop12"
+    assert len(resp.data["exit_watchlist"]["items"]) == 1
+    assert resp.data["exit_watchlist"]["items"][0]["exit_signal_date"] == "2026-05-14"

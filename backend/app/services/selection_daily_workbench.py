@@ -19,6 +19,7 @@ from backend.app.services.selection_stable_callback import (
     STRATEGY_VERSION as STABLE_SOURCE_VERSION,
     get_stable_callback_candidates,
 )
+from backend.app.services.spark_opportunity_exit import get_daily_exit_watchlist
 from backend.app.services.selection_trend_continuation import (
     STRATEGY_DISPLAY_NAME as TREND_SOURCE_NAME,
     STRATEGY_INTERNAL_ID as TREND_SOURCE_ID,
@@ -230,7 +231,27 @@ def get_daily_selection_candidates(
     source_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     ensure_daily_source_registry()
-    return query_daily_candidates(trade_date, limit=limit, source_type=source_type)
+    payload = query_daily_candidates(trade_date, limit=limit, source_type=source_type)
+    target_date = str(payload.get("trade_date") or trade_date or "")
+    if not target_date:
+        payload["exit_watchlist"] = {
+            "trade_date": "",
+            "policy_id": "",
+            "policy_name": "",
+            "items": [],
+        }
+        return payload
+    try:
+        payload["exit_watchlist"] = get_daily_exit_watchlist(target_date)
+    except Exception as exc:
+        payload["exit_watchlist"] = {
+            "trade_date": target_date,
+            "policy_id": "pc_model_th6_stop12",
+            "policy_name": "星火进攻版",
+            "items": [],
+            "error": str(exc),
+        }
+    return payload
 
 
 def get_daily_selection_trade_dates(start_date: Optional[str], end_date: Optional[str]) -> Dict[str, Any]:
@@ -240,6 +261,20 @@ def get_daily_selection_trade_dates(start_date: Optional[str], end_date: Optiona
 
 def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
     daily_candidate = query_daily_candidate_profile(symbol, trade_date)
+    exit_watch_item: Optional[Dict[str, Any]] = None
+    if daily_candidate is None:
+        try:
+            exit_watchlist_payload = get_daily_exit_watchlist(trade_date)
+            exit_watch_item = next(
+                (
+                    item
+                    for item in exit_watchlist_payload.get("items") or []
+                    if str(item.get("symbol") or "").lower() == str(symbol or "").lower()
+                ),
+                None,
+            )
+        except Exception:
+            exit_watch_item = None
     try:
         profile = get_profile(symbol, trade_date)
     except Exception:
@@ -253,33 +288,40 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
             "event_timeline": [],
             "trade_plan": {},
         }
-    if daily_candidate:
+    candidate_payload = daily_candidate or exit_watch_item
+    if candidate_payload:
         trade_plan = dict(profile.get("trade_plan") or {})
-        if not trade_plan and daily_candidate.get("entry_signal_date"):
-            trade_plan = {"signal_date": daily_candidate.get("entry_signal_date")}
+        if not trade_plan and candidate_payload.get("entry_signal_date"):
+            trade_plan = {"signal_date": candidate_payload.get("entry_signal_date")}
+        trade_plan.update(candidate_payload.get("trade_plan") or {})
         profile.update(
             {
                 "strategy_display_name": "每日综合候选池",
                 "strategy_internal_id": DAILY_POOL_ID,
-                "daily_candidate": daily_candidate,
-                "daily_source_details": daily_candidate.get("source_details") or [],
-                "source_count": daily_candidate.get("source_count"),
-                "source_ids": daily_candidate.get("source_ids") or [],
-                "entry_allowed": daily_candidate.get("entry_allowed"),
-                "entry_block_reasons": daily_candidate.get("entry_block_reasons") or [],
-                "current_judgement": daily_candidate.get("current_judgement") or profile.get("current_judgement"),
-                "breakout_reason_summary": daily_candidate.get("reason_summary") or profile.get("breakout_reason_summary"),
-                "distribution_reason_summary": "；".join(daily_candidate.get("risk_labels") or []) or profile.get("distribution_reason_summary"),
-                "observe_date": daily_candidate.get("observe_date") or profile.get("observe_date"),
-                "discovery_date": daily_candidate.get("discovery_date") or profile.get("discovery_date"),
-                "launch_start_date": daily_candidate.get("launch_start_date") or profile.get("launch_start_date"),
-                "launch_end_date": daily_candidate.get("launch_end_date") or profile.get("launch_end_date"),
-                "pullback_confirm_date": daily_candidate.get("pullback_confirm_date") or profile.get("pullback_confirm_date"),
-                "entry_signal_date": daily_candidate.get("entry_signal_date") or profile.get("entry_signal_date"),
-                "entry_date": daily_candidate.get("entry_date") or profile.get("entry_date"),
-                "exit_signal_date": daily_candidate.get("exit_signal_date") or profile.get("exit_signal_date"),
-                "exit_date": daily_candidate.get("exit_date") or profile.get("exit_date"),
+                "daily_candidate": candidate_payload,
+                "daily_source_details": candidate_payload.get("source_details") or [],
+                "source_count": candidate_payload.get("source_count"),
+                "source_ids": candidate_payload.get("source_ids") or [],
+                "entry_allowed": candidate_payload.get("entry_allowed"),
+                "entry_block_reasons": candidate_payload.get("entry_block_reasons") or [],
+                "current_judgement": candidate_payload.get("current_judgement") or profile.get("current_judgement"),
+                "breakout_reason_summary": candidate_payload.get("reason_summary") or profile.get("breakout_reason_summary"),
+                "distribution_reason_summary": "；".join(candidate_payload.get("risk_labels") or []) or profile.get("distribution_reason_summary"),
+                "observe_date": candidate_payload.get("observe_date") or profile.get("observe_date"),
+                "discovery_date": candidate_payload.get("discovery_date") or profile.get("discovery_date"),
+                "launch_start_date": candidate_payload.get("launch_start_date") or profile.get("launch_start_date"),
+                "launch_end_date": candidate_payload.get("launch_end_date") or profile.get("launch_end_date"),
+                "pullback_confirm_date": candidate_payload.get("pullback_confirm_date") or profile.get("pullback_confirm_date"),
+                "entry_signal_date": candidate_payload.get("entry_signal_date") or profile.get("entry_signal_date"),
+                "entry_date": candidate_payload.get("entry_date") or profile.get("entry_date"),
+                "exit_signal_date": candidate_payload.get("exit_signal_date") or profile.get("exit_signal_date"),
+                "exit_date": candidate_payload.get("exit_date") or profile.get("exit_date"),
+                "exit_plan_summary": candidate_payload.get("exit_plan_summary") or profile.get("exit_plan_summary"),
                 "trade_plan": trade_plan or profile.get("trade_plan") or {},
             }
         )
+    latest_available_trade_date = profile.get("latest_available_trade_date")
+    if not latest_available_trade_date:
+        latest_available_trade_date = profile.get("trade_date")
+    profile["latest_available_trade_date"] = latest_available_trade_date
     return profile
