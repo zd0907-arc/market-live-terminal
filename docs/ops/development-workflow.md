@@ -39,6 +39,18 @@
 4. 长期事实变化要记下来，准备回流到核心长记忆；
 5. 不把聊天记录当长期真相。
 
+## 4.2 项目治理固定产物
+
+每次治理类任务，优先产出并保留以下四类文档产物：
+
+1. **Code review findings**：记录本轮代码审查发现和修复优先级；
+2. **Health snapshot**：记录当前分支、worktree、版本、文档窗口、pending 和风险；
+3. **Current-state mother card**：记录主题当前真相，并作为后续新 AI 的第一阅读入口；
+4. **Archive summary**：记录已结束主题的压缩结论，替代散落旧过程卡继续充当默认入口。
+
+默认使用顺序：
+`review -> health -> mother card -> archive`。
+
 ## 4.1 正式脚本入口约束
 1. 涉及运维、启动、发布、同步、日跑时，默认只把 `docs/04_OPS_AND_DEV.md` 列出的正式脚本白名单当作入口；
 2. `bench / full_reverse / atomic backfill` 相关脚本族默认按历史工具、验证工具、二线工具处理；具体边界看 `docs/ops/atomic-script-families-boundary.md`；

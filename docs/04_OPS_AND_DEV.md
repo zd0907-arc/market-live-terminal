@@ -12,11 +12,11 @@
 ## 2. 当前总原则
 1. Windows 是数据主站；Mac 不直接跨网络读 Windows sqlite 主库。
 2. Mac 保留一份同步后的正式库，作为本地研究主消费。
-3. Cloud 不承载 full atomic 主库，只保留轻量盯盘链路。
+3. Cloud 不承载 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main` 主链，只保留轻量盯盘链路。
 4. `snapshot` 只作验证/应急，不是正式主方案。
 5. 所有跨机器动作，先过连通性 gate，再执行同步/发布。
 6. Windows -> Mac 正式同步只允许“局域网 HTTP relay / Cloud relay”，禁止再走 SSH/scp 直拉。
-7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者是 `ZhangDataLiveCrawler`，后者是 `ops/run_postclose_l2.sh`。
+7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者是 `ZhangDataLiveCrawler`，后者当前正式主链是 `ops/run_daily_new_framework.sh`；`ops/run_postclose_l2.sh` 仅保留为旧盘后 L2 / cloud 同步兼容链路。
 
 ## 3. 先看哪个操作文档
 | 场景 | 文档 |
@@ -24,7 +24,7 @@
 | Mac 本地研究站启动 / 同步 / smoke | `docs/ops/mac-local-research.md` |
 | Windows 数据主站 / crawler / 远控 | `docs/ops/windows-data-station.md` |
 | Cloud 发版 / 冒烟 / 回滚 | `docs/ops/cloud-release.md` |
-| 盘后 L2 / 原子层 / 日跑总控 | `docs/ops/postclose-l2-runbook.md` |
+| 盘后正式主链 / 兼容旧链路 | `docs/ops/postclose-l2-runbook.md` |
 | 标准开发流程 / 分支收口 / 文档收尾 | `docs/ops/development-workflow.md` |
 | 历史脚本族边界 | `docs/ops/atomic-script-families-boundary.md` |
 
@@ -37,8 +37,10 @@
 | Mac 首次全量同步 | `ops/bootstrap_mac_full_processed_sync.sh` |
 | Mac 本地后端启动 | `ops/start_local_research_station.sh` |
 | Mac 本地前端启动 | `ops/start_local_research_frontend.sh` |
-| 每日盘后总控 | `ops/run_postclose_l2.sh` |
-| 盘后状态查看 | `ops/check_postclose_l2_status.sh` |
+| 每日盘后正式主链 | `ops/run_daily_new_framework.sh` |
+| 兼容旧盘后链路 | `ops/run_postclose_l2.sh` |
+| 旧盘后链路状态查看 | `ops/check_postclose_l2_status.sh` |
+| 新框架月批 / 阶段状态查看 | `ops/check_windows_new_framework_months_status.sh` |
 | Windows 脚本同步 | `sync_to_windows.sh` |
 | 云端发布 | `deploy_to_cloud.sh` |
 | 基线检查 | `scripts/check_baseline.sh` |
@@ -53,6 +55,12 @@ ssh laqiyuan@192.168.3.108 'cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /
 ```
 
 > 当前盘后正式日常指令：
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/run_daily_new_framework.sh
+```
+
+> 兼容旧盘后链路指令（仅历史 L2 / cloud 同步参考）：
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_postclose_l2.sh
@@ -70,7 +78,7 @@ bash ops/run_postclose_l2.sh
 ## 6. 当前工作目录与主线
 - 主目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 主线分支：`main`
-- 当前工作版本：`v5.1.0`
+- 当前工作版本：`v5.2.0`
 - 当前项目真相入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 临时需求分支可使用 `codex/*`，但默认不把额外 worktree 作为主开发入口。
 

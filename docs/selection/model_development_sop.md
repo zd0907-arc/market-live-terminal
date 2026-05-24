@@ -2,6 +2,9 @@
 
 更新时间：2026-05-16
 
+> 提示：这份 SOP 是模型交付规范文档，不是当前项目总入口真相。
+> 其中出现的数据源文件名是模型产物 manifest 的示例写法；当前正式 atomic 默认入口应以 `docs/03_DATA_CONTRACTS.md` 和运行时 resolver 为准。
+
 ## 结论
 
 以后所有选股模型都必须按“每日候选来源契约”交付。模型侧不能只交 `.joblib`、回测 CSV 或 `latest_candidates.csv`。
@@ -23,8 +26,15 @@
 
 | 文档 | 作用 |
 |---|---|
-| `docs/selection/daily_selection_workbench_integration_plan_2026-05-16.md` | 每日选股工作台接入方案 |
+| `docs/archive/selection/daily_selection_workbench_integration_plan_2026-05-16.md` | 每日选股工作台接入方案（已归档） |
 | `docs/selection/daily_candidate_source_contract.md` | 每日候选来源字段契约 |
+
+当前顶层保留的长记忆入口只保留少数几份：
+- `docs/selection/daily_candidate_source_contract.md`
+- `docs/selection/opportunity_discovery_model_final.md`
+- `docs/selection/model_development_sop.md`
+- `docs/selection/model_market_index_daily_runbook.md`
+- `docs/selection/selection_research_history_summary.md`
 
 当前开发目标是：
 
@@ -36,6 +46,8 @@ trade_date -> source adapter -> standard candidate records
 ```
 
 模型侧必须适配这个流程。
+
+`daily_selection_workbench_integration_plan_2026-05-16.md` 属于阶段过程材料，已移入 archive 视角，不再作为顶层日常入口。
 
 ## 2. 当前星火模型还缺什么
 
@@ -155,7 +167,7 @@ data/selection/models/{source_id}/{source_version}/
   "train_end_date": "2026-05-14",
   "label_definition": "D日盘后信号，D+1开盘买入，未来22个交易日最大冲高机会分",
   "data_sources": [
-    "market_atomic_mainboard_full_reverse.db",
+    "market_atomic_mainboard_compact_current.db",
     "selection_research.db",
     "fine_theme_heat_daily.db"
   ],

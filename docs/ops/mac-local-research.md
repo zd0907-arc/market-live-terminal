@@ -23,12 +23,23 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 不要直接手工执行 `python -m backend.app.main`。
 - 原因：正式脚本会注入外置数据根目录 `/Users/dong/Desktop/AIGC/market-data` 的 `DB_PATH / USER_DB_PATH / SELECTION_DB_PATH / ATOMIC_MAINBOARD_DB_PATH`；手工直跑容易退回项目内 `data/`，导致页面读到旧库，出现“历史多维停在旧日期”“盯盘页分时异常”等假故障。
 
+## 2.2 兼容链边界
+- `ops/sync_windows_research_snapshot.sh`
+- `backend/scripts/build_local_research_snapshot.py`
+- `ops/start_local_backend_with_atomic.sh`
+
+这三项只属于旧快照验证、兼容排查或人工应急链，不属于当前正式本地研究入口。
+
+你现在如果只是想正常打开本地研究站、验证页面、继续开发，默认不要走这条链。
+
 ## 3. 当前正式消费对象
 优先使用外置数据根目录：`/Users/dong/Desktop/AIGC/market-data`。启动脚本会自动把它映射成：
 - `DB_PATH=/Users/dong/Desktop/AIGC/market-data/market_data.db`
 - `USER_DB_PATH=/Users/dong/Desktop/AIGC/market-data/user_data.db`
-- `ATOMIC_MAINBOARD_DB_PATH=/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+- `ATOMIC_COMPACT_DB_PATH=/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db`
+- `ATOMIC_MAINBOARD_DB_PATH` 在默认开启 compact 读取时会落到上述 compact 主路径
 - `SELECTION_DB_PATH=/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db`
+- `model_feature_store` 正式主读路径：`/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db`
 
 若外置目录不存在，才回退到项目内 `data/`。
 

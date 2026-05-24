@@ -1,5 +1,9 @@
 # 长期研究跟踪清单
 
+> 提示：这是一条“研究后持续盯盘”的独立产物链，不是当前系统页面主链。
+> 当前它的正式入口就是：`watchlist.json -> build_research_watchlist_snapshot.py -> snapshots/daily markdown`。
+> 它服务研究跟踪，不等于 `/selection-research` 页面主流程，也不应和自动选股候选池混读。
+
 ## 定位
 
 这是“研究后持续盯盘”的轻量机制，不做复杂交易系统。

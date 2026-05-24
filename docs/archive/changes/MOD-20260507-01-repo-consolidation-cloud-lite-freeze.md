@@ -11,7 +11,7 @@
 - 保留本地 `v5.1.0` 市场热点研究入口和低位 L2 样本研究页代码。
 - 保留长期趋势研究档案与存储主线第一批研究文档。
 - 补充轻量配置数据：市场热度 JSON 规则、长期趋势线索 inbox 和 watchlist。
-- `.obsidian/` 与 NotebookLM 临时测试文件只作为本机工具痕迹，不进仓库。
+- `.obsidian/` 与 NotebookLM 相关临时产物已退役，不再作为仓库保留对象。
 
 ## 3. 云端边界
 - 云端目标：`/` 盯盘、`/review` 复盘、必要的 `/api/realtime/*`、`/api/review/*`、watchlist/config/ingest。

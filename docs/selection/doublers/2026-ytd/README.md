@@ -1,5 +1,9 @@
 # 2026 YTD 翻倍股研究母池
 
+> 提示：这是一条“案例库 / 样本研究”产物链，不是当前系统页面主链。
+> 当前它的正式入口就是：`study.csv -> build_ytd_doubler_analysis.py -> manifest + top20 reports`。
+> 它服务样本归纳和案例复用，不等于当前每日选股工作台，也不应被当成实时候选源。
+
 ## 持久化清单
 
 - 全量母池（非 ST/退，78 只）：`/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/doubler_analysis/2026_ytd_doublers_master_manifest.csv`

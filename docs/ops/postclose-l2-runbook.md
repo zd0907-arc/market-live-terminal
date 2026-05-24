@@ -1,29 +1,43 @@
-# 盘后 L2 / 原子层日跑总控
+# 盘后正式主链与兼容旧链路
 
 > 本文只覆盖当前正式日跑；`full_reverse / atomic backfill / bench / snapshot` 脚本族属于历史或专项工具，默认不作为本 runbook 的替代入口。
 > 具体边界见：`docs/ops/atomic-script-families-boundary.md`
 
 ## 1. 当前正式语义
 当前正式日跑主路径是：
-1. Windows 产出原始包与跑数结果
-2. 控制端执行盘后总控
-3. 必要结果同步到 Mac / Cloud
+1. Windows 产出原始包与正式跑数结果
+2. 通过新框架主链刷新 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main`
+3. 必要结果同步到 Mac；轻量盯盘结果同步到 Cloud
+4. `run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
+
+当前要区分两条链：
+
+1. **正式主链**：`ops/run_daily_new_framework.sh`
+2. **兼容旧链路**：`ops/run_postclose_l2.sh`
 
 ## 2. 当前正式入口
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-./ops/run_postclose_l2.sh
-./ops/check_postclose_l2_status.sh
+./ops/run_daily_new_framework.sh
+./ops/check_windows_new_framework_months_status.sh
 ```
 
 ## 2.1 当前正式日常指令
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/run_daily_new_framework.sh
+```
+
+## 2.1.0 兼容旧链路
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_postclose_l2.sh
 ```
 
+如果你只是要正常完成当前盘后正式日跑，不要执行这条旧链路。
+
 ## 2.1.1 指数缓存刷新
-每日盘后模型特征构建前，需要低频刷新本地指数缓存。`backend/scripts/run_postclose_l2_daily.py` 已在 Windows 本地 atomic / selection 刷新后增加非阻塞指数刷新：
+每日盘后模型特征构建前，需要低频刷新本地指数缓存。新框架主链会在 Windows 本地刷新 `atomic_compact_main` 与 `selection_research_main` 后增加非阻塞指数刷新：
 
 ```bash
 python3 backend/scripts/sync_model_market_index_daily.py --source baostock --daily --lookback-days 10
@@ -35,7 +49,7 @@ python3 backend/scripts/sync_model_market_index_daily.py --source baostock --dai
 /Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
 ```
 
-`model_feature_store` 日跑只读这个本地 DB，不把外部网络放进强依赖。完整运行卡见：
+`model_feature_store_main` 日跑只读这个本地 DB，不把外部网络放进强依赖。完整运行卡见：
 
 ```text
 docs/selection/model_market_index_daily_runbook.md
@@ -54,9 +68,16 @@ docs/selection/model_market_index_daily_runbook.md
 ## 2.3 状态检查
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/check_windows_new_framework_months_status.sh
+```
+这个脚本当前更适合看新框架月批 / 阶段状态，不等同于每个交易日的逐日状态面板。
+
+兼容旧链路状态：
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/check_postclose_l2_status.sh
 ```
-该脚本优先读取 `.run/postclose_l2/latest.json`，不要再只看旧的 `postclose_daily_run_*.log` 判断日跑是否失败。
+新框架与旧链路的状态文件不同，不要混用旧 `postclose_daily_run_*.log` 去判断新框架日跑是否失败。
 
 ## 3. 当前目标
 - 日跑稳定
@@ -79,6 +100,11 @@ bash ops/check_postclose_l2_status.sh
 
 ## 5. 相关变更卡
 - `docs/changes/MOD-20260315-02-l2-march-backfill-review-and-postclose-runbook.md`
-- `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
-- `docs/changes/MOD-20260417-01-local-research-current-state.md`
+- `docs/archive/changes/MOD-20260411-14-market-data-governance-current-state.md`
+- `docs/archive/changes/MOD-20260417-01-local-research-current-state.md`
 - `docs/changes/MOD-20260425-04-postclose-l2-command-solidification.md`
+
+## 6. 当前阅读提醒
+
+- 当前正式日跑只看 `ops/run_daily_new_framework.sh`。
+- 旧变更卡只用于追溯，不再作为日常操作起点。

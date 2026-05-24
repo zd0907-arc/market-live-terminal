@@ -13,10 +13,11 @@
 1. **司令部 (Mac 终端)**
    * **职责**：代码库唯一修改地；运行本地前后端；承接复盘、选股、策略研究、文档治理。
    * **本地正式数据**：从 Windows 同步处理后正式库到本机，主路径为：
-     - `data/market_data.db`
-     - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
-     - `data/selection/selection_research.db`
-     - `data/user_data.db`
+     - `market-data/market_data.db`（轻量盯盘消费库）
+     - `market-data/atomic_facts/market_atomic_mainboard_compact_current.db`（盘后明细底座，Mac 主读正式名）
+     - `market-data/selection/selection_research.db`（每日选股研究库，Mac 主读正式名）
+     - `market-data/selection/model_feature_store.db`（模型训练特征库，Mac 主读正式名）
+     - `market-data/user_data.db`
    * **红线**：
      - 不长期跑外采爬虫；
      - 不跨网络直接查询 Windows sqlite 主库；
@@ -25,15 +26,16 @@
 2. **侦察机 / 算力节点 (家庭 Windows - 内网 IP: 100.115.228.56)**
    * **职责**：唯一外采节点与正式跑数工厂。负责：
      - 盘中实时抓取；
-     - 盘后 L2 / atomic / selection 跑数；
+     - 盘后 L2 / 明细底座 / 选股研究 / 模型特征 跑数；
      - 处理后正式库与日增量产出；
      - 向 Cloud 喂轻量盯盘数据、向 Mac 同步研究所需正式库。
    * **路径约定**：统一运行目录 `D:\market-live-terminal`。
    * **产出物**：
      - raw 原始包
      - `market_data.db`
-     - atomic 主库
-     - selection 研究库
+     - `atomic_compact_main`（Windows 当前实际主写物理名仍可能是 `compact_smoke_*`，正式语义不变）
+     - `selection_research_main`（Windows 主写文件名：`data/selection/selection_research_windows.db`）
+     - `model_feature_store_main`（Windows 当前实际主写物理名仍可能是 `model_feature_store_smoke_*`，正式语义不变）
      - Mac 所需日增量 / 全量同步产物
    * **红线**：
      - 不在 Windows 上做 Git 主仓日常开发；
@@ -42,11 +44,15 @@
 
 3. **指挥中心 (腾讯云 Ubuntu - 公网 IP: 111.229.144.202)**
    * **职责**：提供轻量盯盘 / 手机应急查看；接收 Windows 的 ingest；承接前端静态资源和轻量 API。
-   * **数据库**：`data/market_data.db`（轻量盯盘链路所需数据），**不再承担 full atomic / selection 研究主查询职责**。
+   * **数据库**：`data/market_data.db`（轻量盯盘链路所需数据），**不再承担 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main` 的主查询或主存储职责**。
    * **致命红线**：
      - 云端绝对禁止直接向东财 / AkShare 等外部行情源主动外采；
-     - 云端不是 full atomic 中转站；
+     - 云端不是盘后明细底座中转站；
      - 不把研究型重查询默认压到云端。
+
+4. **影子 / 样本对象的边界说明**
+   * `backend/market.db`、`backend/app/market_data.db`、`backend/app/db/market_data.db` 只作为 shadow / sample / 排障对象存在，不承担正式主链职责。
+   * 这类对象的存在只用于排障、样本验证和局部兼容，不代表它们是正式架构中的主存储层。
 
 ## 二、 核心数据流转架构 (Data Flow)
 
@@ -65,11 +71,12 @@
 
 ### 流水线 B：盘后正式跑数与研究库产出
 1. **下载与解压**：人工在 Windows 上下载并解压几十上百 G 的 L2 CSV/ZIP 包到 `D:\MarketData`。
-2. **正式处理**：Windows 运行盘后 L2、atomic、selection 脚本，生成：
+2. **正式处理**：Windows 运行盘后正式主链，生成：
    - 轻量盯盘所需更新；
-   - `market_data.db`
-   - atomic 主库；
-   - selection 研究库；
+   - `market_data.db`（轻量盯盘消费库 / 旧兼容主链对象）
+   - `atomic_compact_main`（盘后明细底座）
+   - `selection_research_main`（每日选股研究库）
+   - `model_feature_store_main`（模型训练特征库）
    - Mac 所需日增量或整库同步产物。
 3. **分发下游**：
    - 轻量结果送 Cloud；
@@ -91,8 +98,8 @@
 
 | 节点 | 当前正式存储 | 用途 |
 |------|------|------|
-| **Windows** | raw 原始包 + `market_data.db` + atomic 主库 + selection 研究库 | 数据真相源 / 跑数主站 |
-| **Mac** | `data/market_data.db` + `data/atomic_facts/...` + `data/selection/selection_research.db` + `data/user_data.db` | 本地研究站主消费 |
+| **Windows** | raw 原始包 + `market_data.db` + `atomic_compact_main` + `selection_research_main` + `model_feature_store_main` | 数据真相源 / 跑数主站 |
+| **Mac** | `market-data/market_data.db` + `market-data/atomic_facts/market_atomic_mainboard_compact_current.db` + `market-data/selection/selection_research.db` + `market-data/selection/model_feature_store.db` + `market-data/user_data.db` | 本地研究站主消费 |
 | **Cloud** | 轻量 `data/market_data.db` | 线上盯盘 / 应急访问 |
 
 ### 数据一致性原则

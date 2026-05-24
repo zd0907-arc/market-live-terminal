@@ -58,13 +58,13 @@
 - 当前 canonical 是：
   - `src/components/sentiment/SentimentDashboard.tsx`
   - `src/components/sentiment/SentimentTrendChart.tsx`
-- 当前 legacy / orphan 是：
+- 当前 legacy / orphan 曾经是：
   - `src/components/dashboard/SentimentDashboard.tsx`
   - `src/components/dashboard/SentimentTrend.tsx`
-- 保留风险：
-  - `dashboard/*` 仍保留旧接口语义和旧集成方式
-  - `src/services/stockService.ts` 里的旧情绪接口还承担兼容读取职责
-- 当前最稳妥的治理结论不是“马上删”，而是先在治理文档里把 canonical 和 legacy 边界钉死，避免后续继续双轨扩散。
+- 现状：
+  - 这两份文件已退役删除
+  - 代码里不再保留第二套正式情绪面板
+  - 相关历史语义只保留在过程文档和 archive 里
 
 ### 7.3 带股票上下文页面骨架统一评估
 - 已评估页面：

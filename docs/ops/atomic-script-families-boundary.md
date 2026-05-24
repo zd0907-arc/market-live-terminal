@@ -17,7 +17,7 @@
 | Mac 首次全量同步 | `ops/bootstrap_mac_full_processed_sync.sh` |
 | Mac 本地后端启动 | `ops/start_local_research_station.sh` |
 | Mac 本地前端启动 | `ops/start_local_research_frontend.sh` |
-| 每日盘后总控 | `ops/run_postclose_l2.sh` |
+| 每日盘后正式主链 | `ops/run_daily_new_framework.sh` |
 | 盘后状态查看 | `ops/check_postclose_l2_status.sh` |
 | Windows 实时 crawler 任务注册 | `ops/win_register_live_crawler_tasks.ps1` |
 
@@ -85,6 +85,7 @@
 
 典型对象：
 - `ops/sync_windows_research_snapshot.sh`
+- `backend/scripts/build_local_research_snapshot.py`
 - `ops/start_local_backend_with_atomic.sh`
 
 语义：
@@ -93,6 +94,20 @@
 当前边界：
 - 不是当前正式默认入口。
 - 只有在明确说明“本轮任务是旧快照验证或兼容排查”时才应使用。
+- 其中 `build_local_research_snapshot.py` 默认也应优先跟随当前 `compact_current` atomic 解析链，而不是再把旧 `full_reverse` 当正式底座理解。
+
+### 3.5 `run_postclose_l2`
+
+典型对象：
+- `ops/run_postclose_l2.sh`
+- `ops/check_postclose_l2_status.sh`
+
+语义：
+- 旧盘后 L2 / cloud 同步兼容链路。
+
+当前边界：
+- 不再作为当前正式日常主链。
+- 只有在兼容旧链路、追溯历史或处理特殊回退任务时才应使用。
 
 ## 4. 允许使用的例外场景
 
@@ -108,6 +123,6 @@
 
 需要追溯历史治理时，再看：
 
-- `docs/changes/MOD-20260411-14-market-data-governance-current-state.md`
+- `docs/archive/changes/MOD-20260411-14-market-data-governance-current-state.md`
 - `docs/changes/STG-20260516-01-atomic-db-governance-compact-rollout-plan.md`
 - `docs/changes/MOD-20260519-02-process-material-risk-grading-batch1.md`

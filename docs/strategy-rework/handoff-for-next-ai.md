@@ -5,6 +5,8 @@
 > 再看当前总入口：`docs/strategy-rework/README.md`、`docs/strategy-rework/current-research-operating-summary.md`。
 > 如需当前策略结论，优先看 `docs/strategy-rework/current-strategy-conclusion.md`；如需阶段承接，补看 `docs/strategy-rework/current-research-operating-summary.md`。
 > 这份文档现在适合用于理解当时 worktree 背景、实验状态和历史交接语境。
+> 文中旧 atomic 路径、旧 worktree、旧实验入口都按历史上下文理解，不应作为现在的正式默认入口。
+> 当前策略研究默认入口只认 `LONG_MEMORY.md`、`current-strategy-conclusion.md`、`current-research-operating-summary.md`。
 
 ## 1. 当前工作区
 
@@ -46,19 +48,25 @@
   - `repair_score`
   - 以及 `launch_attack / washout / panic_distribution / pull_up_distribution` 等意图标签
 
-## 2. 必读文档顺序
+## 2. 当前推荐阅读顺序
 
-1. `docs/strategy-rework/REQ-20260425-selection-strategy-rework.md`
-2. `docs/strategy-rework/project-roadmap.md`
-3. `docs/strategy-rework/data-map-current.md`
-4. `docs/strategy-rework/layer-1-quant-candidate-discovery.md`
-5. `docs/strategy-rework/layer-2-company-event-research.md`
-6. `docs/strategy-rework/layer-3-trading-state-and-backtest.md`
-7. `docs/strategy-rework/cases/litong-electronics-603629.md`
-8. `docs/strategy-rework/notes/20260425-conversation-memory.md`
-9. `docs/strategy-rework/implementation-map-and-tuning.md`
-10. `docs/strategy-rework/frontend-history-range-root-cause.md`
-11. `docs/strategy-rework/cases/litong-v2-tuning-pass-01.md`
+如果你是在当前主线继续判断策略研究该怎么读，先看：
+
+1. `docs/strategy-rework/LONG_MEMORY.md`
+2. `docs/strategy-rework/current-strategy-conclusion.md`
+3. `docs/strategy-rework/current-research-operating-summary.md`
+4. `docs/strategy-rework/strategy-taxonomy.md`
+5. `docs/strategy-rework/data-map-current.md`
+
+只有在你明确要追溯旧阶段实验背景时，再补看：
+
+6. `docs/strategy-rework/REQ-20260425-selection-strategy-rework.md`
+7. `docs/strategy-rework/project-roadmap.md`
+8. `docs/strategy-rework/layer-1-quant-candidate-discovery.md`
+9. `docs/strategy-rework/layer-2-company-event-research.md`
+10. `docs/strategy-rework/layer-3-trading-state-and-backtest.md`
+11. `docs/strategy-rework/cases/litong-electronics-603629.md`
+12. `docs/strategy-rework/notes/20260425-conversation-memory.md`
 
 ## 3. 当前业务代码入口
 
@@ -77,13 +85,15 @@
 
 ```text
 /Users/dong/Desktop/AIGC/market-data/market_data.db
-/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db
+/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db
 /Users/dong/Desktop/AIGC/market-data/selection/selection_research.db
 ```
 
 启动脚本：`ops/start_local_research_station.sh`
 
-注意：repo 内 `data/` 可能是旧数据/残缺数据，开发策略时默认不要误读。
+注意：
+- repo 内 `data/` 可能是旧数据、回退副本或残缺数据，开发策略时默认不要误读
+- 文中出现的旧 `full_reverse`、旧 worktree、旧阶段实验入口都按历史上下文理解
 
 ## 5. 开发原则
 

@@ -1,5 +1,9 @@
 # 市场热点板块口径管理机制
 
+> 提示：这份文档是 `market_heat` 模块自己的口径与维护说明，不是整个项目的总入口。
+> 这里提到的 `build_stock_sector_map.py`、`build_tradable_theme_map.py` 属于模块维护脚本，不属于 `docs/04_OPS_AND_DEV.md` 里的正式日常白名单脚本。
+> 当前页面正式消费链路是 `tradable_theme_map.db + fine_heat_snapshots_* + /api/market_heat/fine_dashboard`；专题趋势页、回测页、案例页都不在这条默认链路里。
+
 ## 结论
 
 热点板块不直接相信任何单一数据源。东财板块继续作为动态概念主源，但热点页和研究只使用经过清洗、去重和 canonical 治理后的主题池。
@@ -103,7 +107,13 @@ canonical 选择原则：
 
 ## 更新方式
 
-不固定周期。需要维护时手动执行：
+不固定周期。只有在下面这些场景才需要手动执行：
+
+1. 东财板块映射明显变了，需要重建原始映射；
+2. 主题清洗规则或 canonical 规则变了，需要重建 `tradable_theme_map.db`；
+3. 页面主题池明显不合理，且判断不是单纯缓存没刷新。
+
+维护命令：
 
 ```bash
 python3 backend/scripts/build_stock_sector_map.py --source stock-plate --types concept,industry --sleep 0.03

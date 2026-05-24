@@ -4,6 +4,8 @@
 - 当前工作版本：`v5.2.0`
 - 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
+- repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；云端生产默认只开放盯盘与复盘。
 - 当前探索中能力：热点板块 / 市场热度研究；本地研究站已升级市场主线情报看板，云端轻量模式仍默认不开放研究页。

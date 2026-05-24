@@ -1,5 +1,9 @@
 # 现有选股策略字段与数据源盘点
 
+> 提示：这份文档是策略重构阶段的数据盘点，不是当前项目唯一真相。
+> 当前正式入口先看：`docs/01_SYSTEM_ARCHITECTURE.md`、`docs/03_DATA_CONTRACTS.md`、`docs/04_OPS_AND_DEV.md`。
+> 文中提到的旧 atomic 路径、阶段性表覆盖范围，应按当时盘点快照理解，不默认代表现在的正式读法。
+
 ## 1. 当前代码入口
 
 - 策略计算：`backend/app/services/selection_research.py`
@@ -10,7 +14,7 @@
 
 ## 2. 正式本地数据路径
 
-正式本地研究站由 `ops/start_local_research_station.sh` 指向：
+当时盘点时，本地研究站指向的是下列路径：
 
 ```text
 /Users/dong/Desktop/AIGC/market-data/market_data.db
@@ -18,7 +22,7 @@
 /Users/dong/Desktop/AIGC/market-data/selection/selection_research.db
 ```
 
-注意：项目内 `data/` 有旧/残缺数据，策略重构与回测默认应使用 `/Users/dong/Desktop/AIGC/market-data`。
+注意：这段是阶段性盘点快照。当前正式 atomic 默认入口已切到 compact 体系；这里保留旧路径只是为了说明当时实验上下文。
 
 ## 3. 当前特征表
 

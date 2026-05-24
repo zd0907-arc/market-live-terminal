@@ -3,7 +3,7 @@
 ## 1. 作用
 Windows 是当前数据主站，负责：
 - 原始包保存
-- 正式 L2 / 原子层 / 选股研究跑数
+- 正式 L2 / 盘后明细底座 / 选股研究 / 模型特征 跑数
 - 实时 crawler
 - 向 Mac / Cloud 输出处理结果
 
@@ -12,7 +12,7 @@ Windows 是当前数据主站，负责：
 - 实时 crawler 启动：`start_live_crawler.bat`
 - crawler 主脚本：`backend\scripts\live_crawler_win.py`
 - crawler 计划任务：`ZhangDataLiveCrawler`
-- 日包/跑数相关输出：由盘后总控与 Windows 跑数脚本维护
+- 日包/跑数相关输出：正式主链由 `ops/run_daily_new_framework.sh` 维护；`ops/run_postclose_l2.sh` 只按旧 L2 / cloud 同步兼容链路理解，不再当默认日常入口
 
 ## 2.1 实时 crawler 正式语义
 - Windows 是唯一生产实时外采节点。
@@ -32,13 +32,16 @@ ssh -o ConnectTimeout=8 laqiyuan@100.115.228.56 "echo ok"
 ## 4. 当前正式关注点
 1. `ZhangDataLiveCrawler` 只能有一个有效 Python 进程。排障时不要只看 schtasks Running，必须同时看进程和日志。
 2. 盘后 L2 / atomic 的日跑稳定性。
-3. 处理后结果向 Mac / Cloud 的同步质量。
+3. `atomic_compact_main`、`selection_research_main`、`model_feature_store_main` 三条正式主链向 Mac 的同步质量。
 4. 实时 crawler 与每日盘后总控是两条不同链路，不能混用排障结论。
 
 ## 5. 当前相关脚本
 - `sync_to_windows.sh`
 - `start_live_crawler.bat`
 - `ops/win_register_live_crawler_tasks.ps1`
+- `ops/run_daily_new_framework.sh`
+- `ops/check_windows_new_framework_months_status.sh`
+- `ops/run_postclose_l2.sh`（仅旧 L2 / cloud 同步兼容排查）
 - `check_windows_review_v2_progress.py`（仅排查用途）
 
 ## 6. 风险边界

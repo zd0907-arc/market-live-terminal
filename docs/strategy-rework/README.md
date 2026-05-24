@@ -2,6 +2,8 @@
 
 > 说明：这里是“策略研究专题入口”，不是整个项目当前真相，也不代表全项目唯一先读入口。
 > 正式进入项目时，先读项目总入口与当前真相页；确认主线后，再回到这里看策略研究材料。
+> 当前默认只看三件事：`LONG_MEMORY.md`、`current-strategy-conclusion.md`、`current-research-operating-summary.md`。
+> 旧 worktree、旧 atomic 路径、旧实验入口都按历史上下文理解，不要当成现在的默认入口。
 
 ## 当前结论
 
@@ -42,6 +44,14 @@ current-research-operating-summary.md # 当前研究运营摘要
 archive-index.md                    # 旧资料归档索引
 ```
 
+如果不是明确在做“旧阶段策略重构追溯”，默认不要先读：
+
+```text
+handoff-for-next-ai.md
+REQ-20260425-selection-strategy-rework.md
+project-roadmap.md
+```
+
 对话和产品展示优先使用中文名：
 
 ```text
@@ -65,7 +75,7 @@ archive-index.md                    # 旧资料归档索引
 | `_shared/data-sources.md` | 共用数据源说明 |
 | `_shared/sample-definition.md` | 共用样本定义 |
 | `data-map-current.md` | 当前字段和业务含义 |
-| `handoff-for-next-ai.md` | 给其他 AI 的交接背景 |
+| `handoff-for-next-ai.md` | 仅在需要理解旧 worktree / 历史实验背景时再看 |
 | `current-research-operating-summary.md` | 当前研究运营摘要 |
 | `review-page-user-story.md` | 复盘页面用户 Story 与优化空间 |
 

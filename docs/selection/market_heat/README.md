@@ -1,8 +1,18 @@
 # 小主题热点研究总览
 
+> 提示：这份文档是热点研究模块说明，不是当前项目的总入口真相。
+> 当前正式运行入口先看：`docs/04_OPS_AND_DEV.md`、`docs/01_SYSTEM_ARCHITECTURE.md`、`docs/03_DATA_CONTRACTS.md`。
+> 文中若出现旧库名或阶段性脚本，按研究/兼容口径理解，不等于当前默认正式入口。
+
 ## 当前结论
 
 热点数据有用，但不能直接当买点。当前页面已经收口为“市场主线情报看板”，旧版近 3 个月趋势、最近每日热门板块、热点排行和旧详情区已移除。
+
+当前模块只需要先分清 3 层：
+
+1. 页面正式消费链路：`tradable_theme_map.db + fine_heat_snapshots_* + /api/market_heat/fine_dashboard`
+2. 研究/训练底座：`stock_sector_map.db`、`fine_theme_heat_daily.db`、`fine_theme_heat_daily_v2.db`
+3. 专题/案例材料：`backtests/`、趋势 HTML、阶段基线报告
 
 当前最有价值的用法有两类：
 
@@ -16,7 +26,7 @@
 - 细颗粒主题统一训练表：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db`
 - 板块热度预测库：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_forecast.db`
 - 当前预测模型：`/Users/dong/Desktop/AIGC/market-data/market_heat/models/fine_theme_heat_forecast_latest.joblib`
-- 个股 L1/L2 底座：`/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db`
+- 个股 L1/L2 底座：当前正式默认应理解为 `market_atomic_mainboard_compact_current.db`；旧 `market_atomic_mainboard_full_reverse.db` 只作为历史兼容名保留
 - 当前细颗粒看板缓存：`/Users/dong/Desktop/AIGC/market-data/market_heat/cache/fine_heat_snapshots_*_m5_80.json`
 - 热点大涨样本：`/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv`
 - 板块口径管理：`docs/selection/market_heat/theme_taxonomy_management.md`
@@ -217,3 +227,4 @@ python3 backend/scripts/train_fine_theme_heat_forecast_model.py --prediction-dat
 - 强者恒强规则可以作为“追强候选池”，但不是稳定自动交易系统。
 - 买入后必须按交易规则执行，尤其是第一止盈和回撤退出。
 - 后续需要继续测多仓位版本、不同市场阶段、不同板块生命周期。
+- 若要回看热点研究历史，只看 `docs/selection/selection_research_history_summary.md`，不要把旧阶段卡当当前入口。

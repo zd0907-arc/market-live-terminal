@@ -1,5 +1,100 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-24 23:45 | Codex
+- Task ID: `MOD-20260524-13-governance-phase-summaries-and-active-wip-map`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已删除 `notebooklm-sync/` 整个目录，并把外部知识库同步源正式退役；同时新增治理阶段摘要入口 `docs/changes/README_STAGE_SUMMARY.md`、阶段摘要文档 `MOD-20260524-13` 和九项 ACTIVE 盘点 `MOD-20260524-14`，把当前治理主线压成短入口。
+- 验证: `npm run build` 通过；`rg` 仅在两份旧 history 文件里还看到 NotebookLM 退役语义残留，不再有 `notebooklm-sync/` 目录本体。
+- 风险: `docs/changes` 与 `docs/selection` 仍保留大量历史过程文档，后续应继续按阶段摘要和主入口缩减，而不是恢复 NotebookLM 同步区。
+- 链接: `docs/changes/README_STAGE_SUMMARY.md`, `docs/changes/MOD-20260524-13-governance-phase-summaries-and-active-wip-map.md`, `docs/changes/MOD-20260524-14-active-pending-nine-item-audit.md`, `docs/selection/selection_research_history_summary.md`
+
+## 2026-05-24 23:05 | Codex
+- Task ID: `MOD-20260520-04-code-governance-plan`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`
+- 结论: 代码治理第一批已经收尾到可交接状态。`src/components/selection/SelectionDecisionPanel.tsx` 的局部 `MetricCard` 已统一到共享 `ResearchCard.Metric`；`src/components/dashboard/SentimentDashboard.tsx` 与 `src/components/dashboard/SentimentTrend.tsx` 已删除，情绪模块只保留 `src/components/sentiment/*` 作为 canonical；`backend/app/services/market.py` 里与旧趋势页有关的注释也已改成中性表述，避免继续指向已退役实现。
+- 验证: `npm run build` 通过。
+- 风险: 当前仓库仍有大量已完成的治理改动未提交，`docs/changes/MOD-20260520-04-code-governance-plan.md` 还需要继续按后续批次回写；下一步若继续做，应先按文档里的“代码治理前置条件”推进，不要跨主题拼单。
+- 链接: `src/components/selection/SelectionDecisionPanel.tsx`, `src/components/dashboard/SentimentDashboard.tsx`, `src/components/dashboard/SentimentTrend.tsx`, `backend/app/services/market.py`, `docs/changes/MOD-20260520-04-code-governance-plan.md`
+
+## 2026-05-24 22:35 | Codex
+- Task ID: `MOD-20260520-04-code-governance-plan`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`
+- 结论: 已完成情绪模块单轨收口。`src/components/dashboard/SentimentDashboard.tsx` 与 `src/components/dashboard/SentimentTrend.tsx` 已删除，`src/components/sentiment/SentimentDashboard.tsx` 成为唯一 canonical 情绪面板；`src/App.tsx` 仍只指向 `components/sentiment/SentimentDashboard`。本轮没有改情绪业务逻辑，只是清掉了旧双轨实现。
+- 验证: `npm run build` 通过；仓库内已无对 `src/components/dashboard/SentimentDashboard` / `SentimentTrend` 的代码引用。
+- 风险: 下一步若要继续收口，优先看情绪页内部是否还存在局部可抽共享壳，而不是再恢复旧 dashboard 文件。
+- 链接: `src/components/sentiment/SentimentDashboard.tsx`, `src/components/dashboard/SentimentDashboard.tsx`, `src/components/dashboard/SentimentTrend.tsx`, `docs/changes/MOD-20260520-04-code-governance-plan.md`
+
+## 2026-05-24 22:10 | Codex
+- Task ID: `MOD-20260520-04-code-governance-plan`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`
+- 结论: 已把代码治理前置包补完整，并开始第一批代码治理。文档层已把 `backend/market.db` / `backend/app/market_data.db` / `backend/app/db/market_data.db` 明确成 shadow/sample/排障对象；`docs/04_OPS_AND_DEV.md` 与 `docs/ops/atomic-script-families-boundary.md` 统一成 `run_daily_new_framework.sh` 才是正式盘后主链，`run_postclose_l2.sh` 仅保留旧盘后兼容语义。代码层已完成一处最小收口：`src/components/selection/SelectionDecisionPanel.tsx` 的局部 `MetricCard` 改用共享 `ResearchCard.Metric`，减少了一个局部重复壳。
+- 验证: `npm run build` 通过。
+- 风险: 旧 `src/components/dashboard/SentimentDashboard.tsx` / `SentimentTrend.tsx` 仍保留为 legacy 兼容实现，下一步应优先确认是否还需要继续收口它们的入口引用，而不是直接删文件。
+- 链接: `docs/changes/MOD-20260520-04-code-governance-plan.md`, `docs/ops/atomic-script-families-boundary.md`, `src/components/selection/SelectionDecisionPanel.tsx`
+
+## 2026-05-24 21:05 | Codex
+- Task ID: `MOD-20260524-12-formal-alias-and-shadow-sample-migration-plan`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已把“正式别名与 shadow/sample 目录迁移”单独立成新治理卡，并把它挂进 `07_PENDING_TODO`。当前只做规划收口，不做物理迁移；Windows 正式主链的 `compact_smoke_*` / `model_feature_store_smoke_*` 以及后端 `shadow/sample` 对象，后续会按别名、目录、回写三步继续收紧。
+- 风险: 这轮还没有改任何物理文件名，也没有迁移动作；只是把下一步的顺序固定下来。
+- 链接: `docs/changes/MOD-20260524-12-formal-alias-and-shadow-sample-migration-plan.md`, `docs/07_PENDING_TODO.md`, `docs/changes/MOD-20260524-11-shadow-db-and-mainchain-physical-name-governance.md`
+
+## 2026-05-24 20:45 | Codex
+- Task ID: `MOD-20260524-11-shadow-db-and-mainchain-physical-name-governance`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成一轮 `backend shadow / sample db` 与主链物理名治理。`backend/market.db`、`backend/app/db/market_data.db`、`backend/app/market_data.db` 已被明确区分为空壳或样本对象，不再按正式运行库理解；同时把 `selection_research_windows.db`、`compact_smoke_*`、`model_feature_store_smoke_*` 明确为“正式语义已固定，但物理名仍保留历史痕迹”的主链对象。同步新增治理卡，后续若继续做，会优先考虑 shadow/sample 目录迁移规划和主链正式别名规划，而不是直接删库或先做代码治理。
+- 风险: 这轮仍没有做物理迁移，也没有改运行脚本里的实际文件名；只是把“谁是正式角色、谁只是 shadow/sample”先写死在文档里。
+- 链接: `docs/changes/MOD-20260524-11-shadow-db-and-mainchain-physical-name-governance.md`, `docs/changes/MOD-20260524-05-business-view-governance-execution-checklist.md`, `docs/changes/MOD-20260524-03-canonical-data-artifacts-manifest.md`, `docs/01_SYSTEM_ARCHITECTURE.md`, `docs/03_DATA_CONTRACTS.md`, `docs/contracts/storage.md`
+
+## 2026-05-24 20:15 | Codex
+- Task ID: `MOD-20260524-10-high-value-entry-and-storage-naming-alignment`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成一轮“高收益入口与存储命名收口”。当前已统一 `README / AI_QUICK_START / 04_OPS_AND_DEV` 的版本口径到 `v5.2.0`，并继续把 Mac 外置正式数据根目录 `/Users/dong/Desktop/AIGC/market-data` 与 repo 内 `data/` 的回退/兼容角色写清。同步把 `postclose-l2`、Windows 主站、`strategy-rework` 旧交接入口再降一级，避免后续 AI 又把旧兼容链或旧阶段材料当成当前默认入口。治理总框架和 `07_PENDING_TODO` 也已按这轮重评结果改成“先补最后一批高收益入口/命名收口，再决定是否进入代码治理”。
+- 风险: 这轮仍然没有物理迁移任何数据库或历史产物，也没有给 `selection_research_windows.db / compact_smoke_* / model_feature_store_smoke_* / backend shadow db` 做真正命名调整；只是把默认认知先固定住。
+- 链接: `docs/changes/MOD-20260524-10-high-value-entry-and-storage-naming-alignment.md`, `README.md`, `docs/AI_QUICK_START.md`, `docs/03_DATA_CONTRACTS.md`, `docs/contracts/storage.md`, `docs/ops/postclose-l2-runbook.md`, `docs/ops/windows-data-station.md`, `docs/strategy-rework/README.md`, `docs/strategy-rework/handoff-for-next-ai.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-05-24 19:40 | Codex
+- Task ID: `MOD-20260524-09-snapshot-sync-local-compatibility-boundary-governance`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 `snapshot / sync / local compatibility` 第一批边界治理。当前已明确：Mac 正式本地研究入口仍然是 `bootstrap_mac_full_processed_sync -> start_local_research_station -> start_local_research_frontend`；`ops/sync_windows_research_snapshot.sh`、`backend/scripts/build_local_research_snapshot.py`、`ops/start_local_backend_with_atomic.sh` 都只是兼容/验证/排查链，不属于正式默认入口。同步把 `build_local_research_snapshot.py` 的默认 atomic 改成优先跟随全局 resolver 和 `compact_current`，不再把旧 `full_reverse` 当默认底座。
+- 风险: 本轮没有删除 `snapshot` 相关运行产物，也没有改 Windows->Mac 正式同步实现；只是把边界和默认口径收紧。旧快照链仍然能用，但应该只在明确兼容任务里手工调用。
+- 链接: `docs/changes/MOD-20260524-09-snapshot-sync-local-compatibility-boundary-governance.md`, `backend/scripts/build_local_research_snapshot.py`, `docs/ops/mac-local-research.md`, `docs/ops/atomic-script-families-boundary.md`, `docs/AI_QUICK_START.md`
+
+## 2026-05-24 19:10 | Codex
+- Task ID: `MOD-20260524-08-selection-watchlist-and-doubler-boundary-governance`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 `selection/watchlist/doubler` 第一批边界治理。当前已明确：`watchlist` 是“研究后持续盯盘”的独立产物链，正式入口是 `watchlist.json -> build_research_watchlist_snapshot.py -> snapshots/daily markdown`；`doubler` 是“案例库 / 样本研究”的独立产物链，正式入口是 `study.csv -> build_ytd_doubler_analysis.py -> manifest + top20 reports`。两者都不是当前 `/selection-research` 页面主流程，也不是每日选股工作台主链。同步把两个仍在用的维护脚本默认 atomic 改成跟随全局 resolver，不再私自兜底到旧 `full_reverse`。
+- 风险: 这批没有去动 `top20/*.md`、每日盯盘日记、案例库正文；它们仍然会存在，但现在已经被明确成产物材料而不是系统入口。
+- 链接: `docs/changes/MOD-20260524-08-selection-watchlist-and-doubler-boundary-governance.md`, `backend/scripts/build_research_watchlist_snapshot.py`, `backend/scripts/build_ytd_doubler_analysis.py`, `docs/selection/research_watchlist/README.md`, `docs/selection/doublers/2026-ytd/README.md`
+
+## 2026-05-24 18:45 | Codex
+- Task ID: `MOD-20260524-07-market-heat-module-boundary-governance`
+- CAP: `CAP-MARKET-HEAT`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成 `market_heat` 模块第一批边界治理。当前已明确三层结构：页面正式消费链路是 `tradable_theme_map.db + fine_heat_snapshots_* + /api/market_heat/fine_dashboard`；`build_stock_sector_map.py / build_tradable_theme_map.py / build_fine_theme_heat_daily*.py` 属于研究/训练底座维护脚本；趋势 HTML、回测、案例和阶段卡都属于专题/历史材料。同步把 `docs/selection/market_heat/README.md`、`theme_taxonomy_management.md` 的入口口径收紧，并把 `build_stock_sector_map.py` 的 atomic 默认候选改成跟随全局 resolver，不再自己单独兜底到旧 `full_reverse`。
+- 风险: `market_heat` 下仍有大量 `analyze_* / backtest_* / build_*trend*` 脚本没有继续分批治理；但这批大多不在正式页面链路里，当前优先级低于系统其他高混淆区域。
+- 链接: `docs/changes/MOD-20260524-07-market-heat-module-boundary-governance.md`, `backend/scripts/build_stock_sector_map.py`, `docs/selection/market_heat/README.md`, `docs/selection/market_heat/theme_taxonomy_management.md`
+
+## 2026-05-24 18:10 | Codex
+- Task ID: `MOD-20260524-06-active-atomic-entry-classification-and-downgrade`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成第三批“只修活跃入口，不全仓替换”的 atomic 治理。根据分类，本轮真正影响当前页面/工作台的剩余活跃命中只有 `backend/app/services/spark_opportunity_selector.py` 与 `backend/app/services/selection_strategy_v2.py`，两者默认 atomic 已从旧 `market_atomic_mainboard_full_reverse.db` 改到 `market_atomic_mainboard_compact_current.db`。同时把 `ops/start_local_backend_with_atomic.sh` 明确成兼容脚本：默认优先 compact，回落 legacy 时打印警告。另补了几份高风险研究/交接文档的顶部降级提示，避免后续 AI 把阶段快照误读成当前真相。
+- 风险: 仓库里仍有大量研究脚本、专题页构建脚本和历史案例材料直接写死 `full_reverse`；当前是有意识地保留，不做全量替换。这些对象后续应按模块逐批处理，而不是做字符串级“大扫除”。
+- 链接: `backend/app/services/spark_opportunity_selector.py`, `backend/app/services/selection_strategy_v2.py`, `ops/start_local_backend_with_atomic.sh`, `docs/changes/MOD-20260524-06-active-atomic-entry-classification-and-downgrade.md`
+
+## 2026-05-24 17:05 | Codex
+- Task ID: `MOD-20260524-05-business-view-governance-execution-checklist`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成第二批代码级入口治理，只改了 `ops/start_local_research_station.sh` 与 `backend/app/core/config.py`。当前默认 atomic 入口已切到 compact：`backend/app/core/config.py` 的 `DEFAULT_ATOMIC_MAINBOARD_DB_FILE` 改为 `market_atomic_mainboard_compact_current.db`，`candidate_atomic_db_paths()` 默认以 compact 为正式底座，同时保留 `full_reverse` 作为兼容回退；`ops/start_local_research_station.sh` 也改为默认注入 compact，只有在 compact 不存在且用户未显式指定 atomic 路径时，才自动回退到 legacy `full_reverse`。这一步没有改候选顺序、没有动 `DB_PATH` 隔离逻辑，也没有改其他业务脚本。
+- 风险: 仓库里仍有不少研究脚本和专题脚本直接硬编码 `market_atomic_mainboard_full_reverse.db`；它们不走 `candidate_atomic_db_paths()`，所以还不算完成全仓治理。另一个现实限制是本机没有项目 pytest 环境，没法直接跑现成 pytest；本轮用静态编译 + Python 断言脚本 + 启动脚本双场景模拟完成了行为验证。
+- 链接: `backend/app/core/config.py`, `ops/start_local_research_station.sh`, `backend/tests/test_atomic_history_multiframe_fallback.py`
+
+## 2026-05-24 16:40 | Codex
+- Task ID: `MOD-20260524-05-business-view-governance-execution-checklist`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已完成第一批命名收口的文档回写。核心文档和直接入口文档已统一三条正式主链口径：`selection_research_main` 为每日选股研究主链，Windows 主写 `selection_research_windows.db`、Mac 主读 `selection_research.db`；`atomic_compact_main` 为盘后明细底座，不再把 `full_reverse` 讲成当前正式底座；`model_feature_store_main` 被明确为正式主链之一。运维入口同时改为：`ops/run_daily_new_framework.sh` 是当前盘后正式主链，`ops/run_postclose_l2.sh` 仅保留为兼容旧链路。
+- 风险: 这一步只改文档口径，没有改脚本默认变量；像 `ops/start_local_research_station.sh`、`backend/app/core/config.py` 里仍保留 `full_reverse` 兼容路径，属于后续代码治理范围。
+- 链接: `docs/01_SYSTEM_ARCHITECTURE.md`, `docs/03_DATA_CONTRACTS.md`, `docs/contracts/storage.md`, `docs/04_OPS_AND_DEV.md`, `docs/ops/mac-local-research.md`, `docs/ops/windows-data-station.md`, `docs/ops/postclose-l2-runbook.md`, `docs/AI_QUICK_START.md`
+
 ## 2026-05-20 12:30 | Codex
 - Task ID: `MOD-20260520-04-code-governance-plan`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`

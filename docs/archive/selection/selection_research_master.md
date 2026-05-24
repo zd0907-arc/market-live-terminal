@@ -2,6 +2,7 @@
 
 > 说明：这里是“选股研究历史总册”，不是当前默认入口。
 > 当前默认入口先看 `docs/selection/daily_candidate_source_contract.md` 和 `docs/selection/opportunity_discovery_model_final.md`。
+> 历史压缩摘要先看 `docs/selection/selection_research_history_summary.md`。
 > 本页只保留旧阶段脉络，不再作为当前决策入口。
 > 本主题下顶层 `final / plan / cleanup` 一类文件大多属于过程材料或收口材料，默认不要把它们当成全项目总入口。
 
