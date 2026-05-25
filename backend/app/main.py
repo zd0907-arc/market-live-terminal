@@ -119,11 +119,12 @@ async def shutdown_event():
 
 @app.get("/")
 def health_check():
+    port = os.getenv("PORT", "8000")
     return {
         "status": "running", 
         "service": "ZhangData Backend v5", 
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "docs": "http://127.0.0.1:8000/docs"
+        "docs": f"http://127.0.0.1:{port}/docs"
     }
 
 if __name__ == "__main__":
