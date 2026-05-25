@@ -33,6 +33,11 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 PORT=8001 bash ops/start_local_research_station.sh
 ```
 
+补充：
+- 这个脚本现在自带“同仓库重复实例保护”；
+- 再次执行同一命令时，会先停止旧的本地后端实例，再启动新的实例；
+- 不会再默默叠出多个 `backend.app.main` 进程把业务接口拖到超时。
+
 ### 4) 启动本地研究站前端
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
@@ -97,3 +102,4 @@ npm run check:baseline
 - `WRITE_API_TOKEN` 仅允许保留在服务端环境变量中；前端静态资源不得携带该值。
 - 当前仍使用 CDN Tailwind；后续将迁移到本地构建链路。
 - 后端测试与本地研究站请优先使用 `backend/requirements.txt` 对应环境，不要只装根目录精简依赖。
+- 若页面出现“`服务: 正常` 但历史多维 / 散户一致性观察一直转圈或超时”，先检查是否误起了多个本地后端：`ps aux | rg 'backend\\.app\\.main'`。正常应只保留 1 个实例。

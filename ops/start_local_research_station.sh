@@ -2,6 +2,55 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+RESTART_IF_RUNNING="${RESTART_IF_RUNNING:-true}"
+
+is_truthy() {
+  local value
+  value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [ "$value" = "1" ] || [ "$value" = "true" ] || [ "$value" = "yes" ] || [ "$value" = "on" ]
+}
+
+repo_backend_pids() {
+  local pids pid cwd
+  pids="$(pgrep -f "backend\\.app\\.main" 2>/dev/null || true)"
+  for pid in $pids; do
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)"
+    if [ "$cwd" = "$ROOT" ]; then
+      echo "$pid"
+    fi
+  done
+}
+
+wait_for_repo_backends_exit() {
+  local attempts="$1"
+  local interval="$2"
+  local i remaining
+  i=0
+  while [ "$i" -lt "$attempts" ]; do
+    remaining="$(repo_backend_pids)"
+    if [ -z "$remaining" ]; then
+      return 0
+    fi
+    sleep "$interval"
+    i=$((i + 1))
+  done
+  return 1
+}
+
+stop_repo_backends() {
+  local force="${1:-false}"
+  local pids pid
+  pids="$(repo_backend_pids)"
+  [ -n "$pids" ] || return 0
+  for pid in $pids; do
+    if [ "$force" = "true" ]; then
+      kill -9 "$pid" 2>/dev/null || true
+    else
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
 DEFAULT_MARKET_DATA_ROOT="/Users/dong/Desktop/AIGC/market-data"
 if [ -d "$DEFAULT_MARKET_DATA_ROOT" ]; then
   DEFAULT_DATA_ROOT="$DEFAULT_MARKET_DATA_ROOT"
@@ -71,6 +120,35 @@ fi
 
 mkdir -p "$DATA_ROOT" "$(dirname "$SELECTION_DB_PATH")" "$(dirname "$ATOMIC_MAINBOARD_DB_PATH")"
 
+EXISTING_BACKEND_PIDS="$(repo_backend_pids)"
+if [ -n "$EXISTING_BACKEND_PIDS" ]; then
+  echo "[local-research] 检测到同仓库已有后端实例: $(printf '%s' "$EXISTING_BACKEND_PIDS" | tr '\n' ' ')" >&2
+  if is_truthy "$RESTART_IF_RUNNING"; then
+    echo "[local-research] 将先停止旧实例，再启动新实例。" >&2
+    stop_repo_backends false
+    if ! wait_for_repo_backends_exit 10 0.5; then
+      echo "[local-research] 旧实例未在预期时间内退出，执行强制停止。" >&2
+      stop_repo_backends true
+      if ! wait_for_repo_backends_exit 6 0.5; then
+        echo "[local-research] 无法清理旧实例，请先手工检查 backend.app.main 进程。" >&2
+        exit 1
+      fi
+    fi
+  else
+    echo "[local-research] 已拒绝重复启动。若要自动重启，请显式设置 RESTART_IF_RUNNING=true。" >&2
+    exit 1
+  fi
+fi
+
+PORT_CONFLICT_PIDS="$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)"
+if [ -n "$PORT_CONFLICT_PIDS" ]; then
+  echo "[local-research] 端口 $PORT 已被其他进程占用，拒绝继续启动：" >&2
+  for pid in $PORT_CONFLICT_PIDS; do
+    ps -p "$pid" -o pid=,command= >&2 || true
+  done
+  exit 1
+fi
+
 cd "$ROOT"
 echo "[local-research] DB_PATH=$DB_PATH"
 echo "[local-research] USER_DB_PATH=$USER_DB_PATH"
@@ -98,4 +176,4 @@ if [ -z "$PYTHON_BIN" ]; then
   done
 fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-"$PYTHON_BIN" -m backend.app.main
+exec "$PYTHON_BIN" -m backend.app.main

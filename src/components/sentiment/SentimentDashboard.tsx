@@ -17,8 +17,6 @@ interface SentimentDashboardProps {
     symbol: string;
 }
 
-const AUTO_RECRAWL_MS = 30 * 60 * 1000;
-const autoCrawlDedup = new Map<string, number>();
 const TRADING_SLOTS = ['盘前', '09:30', '10:00', '10:30', '11:00', '午间', '13:00', '13:30', '14:00', '14:30', '盘后'];
 const SLOT_ORDER = new Map(TRADING_SLOTS.map((slot, index) => [slot, index]));
 
@@ -249,28 +247,21 @@ const SentimentDashboard: React.FC<SentimentDashboardProps> = ({ symbol }) => {
         [sort, symbol, timeWindow]
     );
 
-    const runAutoCrawl = useCallback(
-        async (reason: 'open' | 'stay' | 'manual') => {
-            if (!symbol || crawlingRef.current) return;
-            const dedupKey = `${symbol}:${reason}`;
-            const now = Date.now();
-            const lastRun = autoCrawlDedup.get(dedupKey) || 0;
-            if (reason !== 'stay' && now - lastRun < 8000) return;
-            autoCrawlDedup.set(dedupKey, now);
-            crawlingRef.current = true;
-            setCrawling(true);
-            try {
-                await sentimentService.crawl(symbol);
-                await fetchAll({ silent: true });
-            } catch (err) {
-                console.error(`sentiment crawl failed [${reason}]`, err);
-            } finally {
-                crawlingRef.current = false;
-                setCrawling(false);
-            }
-        },
-        [fetchAll, symbol]
-    );
+    const handleManualCrawl = useCallback(async () => {
+        if (!symbol || crawlingRef.current) return;
+        crawlingRef.current = true;
+        setCrawling(true);
+        setActionMessage(null);
+        try {
+            await sentimentService.crawl(symbol);
+            await fetchAll({ silent: true });
+        } catch (err) {
+            console.error('sentiment crawl failed [manual]', err);
+        } finally {
+            crawlingRef.current = false;
+            setCrawling(false);
+        }
+    }, [fetchAll, symbol]);
 
     const handleGenerateSummary = useCallback(async () => {
         const tradeDate = overview?.trade_dates?.[overview.trade_dates.length - 1];
@@ -309,19 +300,6 @@ const SentimentDashboard: React.FC<SentimentDashboardProps> = ({ symbol }) => {
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
-
-    useEffect(() => {
-        if (!symbol) return;
-        runAutoCrawl('open');
-    }, [runAutoCrawl, symbol]);
-
-    useEffect(() => {
-        if (!symbol) return;
-        const timer = window.setInterval(() => {
-            runAutoCrawl('stay');
-        }, AUTO_RECRAWL_MS);
-        return () => window.clearInterval(timer);
-    }, [runAutoCrawl, symbol]);
 
     const feedItems: SentimentFeedItemV2[] = feed?.items || [];
     const displayTrend = useMemo(() => {
@@ -466,7 +444,7 @@ const SentimentDashboard: React.FC<SentimentDashboardProps> = ({ symbol }) => {
                     </button>
                     <button
                         type="button"
-                        onClick={() => runAutoCrawl('manual')}
+                        onClick={handleManualCrawl}
                         disabled={crawling}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-200 transition hover:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >

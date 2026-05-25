@@ -108,6 +108,10 @@ PORT=8001 bash ops/start_local_research_station.sh
 BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
+补充约束：
+- 不要手工并行启动多个 `backend.app.main`；
+- 现在 `ops/start_local_research_station.sh` 已内置同仓库重复实例保护，重复执行会自动替换旧实例，不会继续叠后端进程。
+
 ## 当前同步约定
 - `snapshot` 已降级为过渡验证工具，不是正式主方案；
 - `ops/sync_windows_research_snapshot.sh`、`backend/scripts/build_local_research_snapshot.py`、`ops/start_local_backend_with_atomic.sh` 只按兼容/验证工具理解；

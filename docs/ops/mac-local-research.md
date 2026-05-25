@@ -23,7 +23,21 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 不要直接手工执行 `python -m backend.app.main`。
 - 原因：正式脚本会注入外置数据根目录 `/Users/dong/Desktop/AIGC/market-data` 的 `DB_PATH / USER_DB_PATH / SELECTION_DB_PATH / ATOMIC_MAINBOARD_DB_PATH`；手工直跑容易退回项目内 `data/`，导致页面读到旧库，出现“历史多维停在旧日期”“盯盘页分时异常”等假故障。
 
-## 2.2 兼容链边界
+## 2.2 重复实例防线
+- `ops/start_local_research_station.sh` 已内置同仓库重复实例保护；再次执行时会先停掉旧实例，再启动新实例。
+- 不要在多个终端重复 `nohup bash ops/start_local_research_station.sh`，也不要手工并行拉起多个 `python -m backend.app.main`。
+- 重复实例的典型症状不是 `/api/health` 直接挂，而是：
+  - `服务: 正常` 仍显示正常；
+  - `历史多维`、`散户一致性观察`、`history/multiframe`、`sentiment/*` 这类业务接口开始一直转圈或超时；
+  - 前端可能进一步出现动态模块加载失败、页面长期卡住。
+- 快速排查：
+  - `ps aux | rg 'backend\\.app\\.main'`：正常应只看到 1 个 Python 实例；
+  - `lsof -nP -iTCP:8001 -sTCP:LISTEN`：正常应只看到 1 个监听进程。
+- 快速恢复：
+  - 直接重新执行 `PORT=8001 bash ops/start_local_research_station.sh`；
+  - 脚本会自动清理同仓库旧实例并拉起干净的新实例。
+
+## 2.3 兼容链边界
 - `ops/sync_windows_research_snapshot.sh`
 - `backend/scripts/build_local_research_snapshot.py`
 - `ops/start_local_backend_with_atomic.sh`

@@ -1,5 +1,18 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-26 02:05 | Codex
+- Task ID: `MOD-20260526-02-retail-sentiment-page-no-auto-crawl`
+- CAP: `CAP-RETAIL-SENTIMENT`
+- 结论: 已收掉首页 `散户一致性观察` 的自动补抓触发。此前页面打开后会自动调用 `POST /api/sentiment/crawl/{symbol}`，这条链路会同步执行股吧翻页、详情抓取、回复抓取与落库，导致本地后端出现“健康检查正常，但 history / sentiment 业务接口持续转圈或超时”的卡死现象。当前已改为页面默认只读本地库缓存，补抓仅保留手动按钮触发，并已将该红线回写核心文档。
+- 链接: `src/components/sentiment/SentimentDashboard.tsx`, `docs/domain/retail-sentiment.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-05-26 01:45 | Codex
+- Task ID: `MOD-20260526-01-local-research-backend-singleton-guard`
+- CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`
+- 结论: 已定位并修复 Mac 本地研究站一次真实运行态事故：同仓库下同时存在多个 `backend.app.main` 高 CPU 进程，导致 `/api/health` 仍能响应，但 `history/multiframe`、`sentiment/*` 等业务接口超时，前端表现为历史多维 / 散户一致性观察长期转圈或动态模块加载失败。当前已为 `ops/start_local_research_station.sh` 增加重复实例保护，重复执行会先清理旧实例再启动新实例；并已把症状、排查与恢复动作回写 `README`、`docs/ops/mac-local-research.md`、`docs/04_OPS_AND_DEV.md`、`docs/AI_QUICK_START.md`。
+- 风险: 本轮只收口 Mac 本地研究站后端重复实例，不等于所有历史脚本族都具备单实例治理；后续仍需继续观察几天自然运行，确认不再复发。
+- 链接: `ops/start_local_research_station.sh`, `docs/ops/mac-local-research.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`, `README.md`
+
 ## 2026-05-24 23:45 | Codex
 - Task ID: `MOD-20260524-13-governance-phase-summaries-and-active-wip-map`
 - CAP: `CAP-REALTIME-FLOW`, `CAP-SELECTION-RESEARCH`, `CAP-MARKET-HEAT`, `CAP-WIN-PIPELINE`, `CAP-L2-HISTORY-FOUNDATION`
