@@ -15,6 +15,7 @@ ACTION_PRIORITY = {
     "watch": 2,
     "blocked": 1,
 }
+MAX_TRADE_DATE_WINDOW_DAYS = 540
 
 
 def _json_dump(value: Any) -> str:
@@ -673,11 +674,36 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
             """,
             (start_date, start_date, end_date, end_date),
         ).fetchall()
+        run_rows = conn.execute(
+            """
+            SELECT
+                trade_date,
+                COUNT(*) AS run_count,
+                SUM(CASE WHEN run_status='success' THEN 1 ELSE 0 END) AS success_count,
+                SUM(CASE WHEN run_status='failed' THEN 1 ELSE 0 END) AS failed_count,
+                SUM(candidate_count) AS run_candidate_count,
+                MAX(finished_at) AS last_finished_at
+            FROM selection_strategy_runs
+            WHERE (? IS NULL OR trade_date >= ?)
+              AND (? IS NULL OR trade_date <= ?)
+            GROUP BY trade_date
+            """,
+            (start_date, start_date, end_date, end_date),
+        ).fetchall()
     finally:
         conn.close()
 
     feature_dates = {str(row["trade_date"]): int(row["row_count"] or 0) for row in feature_rows}
     signal_counts = {str(row["trade_date"]): int(row["signal_count"] or 0) for row in candidate_rows}
+    run_counts = {str(row["trade_date"]): int(row["run_count"] or 0) for row in run_rows}
+    success_counts = {str(row["trade_date"]): int(row["success_count"] or 0) for row in run_rows}
+    failed_counts = {str(row["trade_date"]): int(row["failed_count"] or 0) for row in run_rows}
+    run_candidate_counts = {str(row["trade_date"]): int(row["run_candidate_count"] or 0) for row in run_rows}
+    last_finished_by_date = {
+        str(row["trade_date"]): str(row["last_finished_at"] or "")
+        for row in run_rows
+        if row["last_finished_at"]
+    }
     resolved_start = start_date or (str(bounds["min_date"]) if bounds and bounds["min_date"] else None)
     resolved_end = end_date or (str(bounds["max_date"]) if bounds and bounds["max_date"] else None)
     if not resolved_start or not resolved_end:
@@ -689,12 +715,20 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
 
     start_dt = datetime.strptime(resolved_start, "%Y-%m-%d")
     end_dt = datetime.strptime(resolved_end, "%Y-%m-%d")
-    max_days = min((end_dt - start_dt).days, 540)
+    total_days = (end_dt - start_dt).days
+    truncated = total_days > MAX_TRADE_DATE_WINDOW_DAYS
+    if truncated:
+        start_dt = end_dt - timedelta(days=MAX_TRADE_DATE_WINDOW_DAYS)
+        resolved_start = start_dt.strftime("%Y-%m-%d")
     items: List[Dict[str, Any]] = []
-    for offset in range(max_days + 1):
+    for offset in range((end_dt - start_dt).days + 1):
         day = (start_dt + timedelta(days=offset)).strftime("%Y-%m-%d")
-        has_feature = feature_dates.get(day, 0) > 0
+        feature_count = feature_dates.get(day, 0)
+        has_feature = feature_count > 0
         signal_count = signal_counts.get(day, 0)
+        run_count = run_counts.get(day, 0)
+        success_count = success_counts.get(day, 0)
+        failed_count = failed_counts.get(day, 0)
         is_trade_day = has_feature or datetime.strptime(day, "%Y-%m-%d").weekday() < 5
         selectable = bool(has_feature)
         if not is_trade_day:
@@ -710,14 +744,27 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
                 "date": day,
                 "is_trade_day": is_trade_day,
                 "signal_count": signal_count,
+                "candidate_count": signal_count,
+                "feature_count": feature_count,
+                "has_feature": has_feature,
+                "has_candidates": signal_count > 0,
+                "can_generate": has_feature and signal_count <= 0,
+                "has_run": run_count > 0,
+                "run_count": run_count,
+                "successful_run_count": success_count,
+                "failed_run_count": failed_count,
+                "run_candidate_count": run_candidate_counts.get(day, 0),
+                "last_run_finished_at": last_finished_by_date.get(day) or None,
                 "selectable": selectable,
                 "disabled_reason": disabled_reason,
             }
         )
     return {
         "start_date": resolved_start,
-        "end_date": (start_dt + timedelta(days=max_days)).strftime("%Y-%m-%d"),
+        "end_date": end_dt.strftime("%Y-%m-%d"),
         "strategy": "daily_candidate_pool",
+        "truncated": truncated,
+        "window_days": (end_dt - start_dt).days + 1,
         "items": items,
     }
 

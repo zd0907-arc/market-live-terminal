@@ -305,6 +305,17 @@ export interface SelectionTradeDateItem {
   date: string;
   is_trade_day: boolean;
   signal_count: number;
+  candidate_count?: number;
+  feature_count?: number;
+  has_feature?: boolean;
+  has_candidates?: boolean;
+  can_generate?: boolean;
+  has_run?: boolean;
+  run_count?: number;
+  successful_run_count?: number;
+  failed_run_count?: number;
+  run_candidate_count?: number;
+  last_run_finished_at?: string | null;
   selectable: boolean;
   disabled_reason?: string | null;
 }
@@ -313,6 +324,8 @@ export interface SelectionTradeDatesData {
   start_date?: string | null;
   end_date?: string | null;
   strategy?: string;
+  truncated?: boolean;
+  window_days?: number;
   items: SelectionTradeDateItem[];
 }
 

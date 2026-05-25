@@ -119,7 +119,72 @@ def test_daily_trade_dates_are_selectable_with_features_even_without_candidates(
     assert resp.data["items"][0]["date"] == "2026-05-15"
     assert resp.data["items"][0]["selectable"] is True
     assert resp.data["items"][0]["signal_count"] == 0
+    assert resp.data["items"][0]["has_feature"] is True
+    assert resp.data["items"][0]["has_candidates"] is False
+    assert resp.data["items"][0]["can_generate"] is True
     assert resp.data["items"][0]["disabled_reason"] == "当天无候选"
+
+
+def test_daily_trade_dates_truncates_to_recent_window(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+    selection_db_module.ensure_selection_schema()
+
+    conn = selection_db_module.get_selection_connection()
+    try:
+        with conn:
+            for date_text in ("2024-09-02", "2026-02-24", "2026-05-20", "2026-05-22"):
+                conn.execute(
+                    """
+                    INSERT INTO selection_feature_daily (
+                        symbol, trade_date, feature_version, source_snapshot, close, name
+                    ) VALUES (?, ?, 'test', '{}', 10.0, '测试')
+                    """,
+                    (f"sh{date_text.replace('-', '')[-6:]}", date_text),
+                )
+    finally:
+        conn.close()
+
+    resp = selection_daily_trade_dates(start_date="2024-09-02", end_date="2026-05-22")
+    assert resp.code == 200
+    assert resp.data["truncated"] is True
+    assert resp.data["end_date"] == "2026-05-22"
+    dates = {item["date"]: item for item in resp.data["items"]}
+    assert "2026-05-20" in dates
+    assert "2026-05-22" in dates
+    assert "2024-09-02" not in dates
+    assert dates["2026-05-20"]["selectable"] is True
+
+
+def test_daily_trade_dates_marks_zero_result_runs(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+    selection_db_module.ensure_selection_schema()
+
+    conn = selection_db_module.get_selection_connection()
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO selection_feature_daily (
+                    symbol, trade_date, feature_version, source_snapshot, close, name
+                ) VALUES ('sh600000', '2026-05-18', 'test', '{}', 10.0, '浦发银行')
+                """
+            )
+    finally:
+        conn.close()
+
+    assert replace_source_candidates("2026-05-18", "spark_opportunity_selector", []) == 0
+    resp = selection_daily_trade_dates(start_date="2026-05-18", end_date="2026-05-18")
+    assert resp.code == 200
+    item = resp.data["items"][0]
+    assert item["has_run"] is True
+    assert item["run_count"] == 1
+    assert item["successful_run_count"] == 1
+    assert item["run_candidate_count"] == 0
+    assert item["has_candidates"] is False
 
 
 def test_spark_source_uses_top3_daily_limit(monkeypatch, tmp_path):

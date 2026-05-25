@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-import math
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from backend.app.services.selection_strategy_v2 import SelectionV2Params, compute_v2_metrics, load_atomic_daily_window
+from backend.scripts.research_trend_continuation_strategy import build_candidates, fnum, future_days_after_entry
+from backend.scripts.research_trend_continuation_buy_points import add_confirmations
+from backend.scripts.run_strategy_v1_2_exit_grid import V12ExitParams, simulate_trade_v1_2
+from backend.scripts.run_strategy_v1_trend_reversal import add_ma
+
 STRATEGY_INTERNAL_ID = "trend_continuation_callback"
 STRATEGY_DISPLAY_NAME = "趋势中继高质量回踩"
 STRATEGY_VERSION = "S02-current-candidate-20260427"
-EXPERIMENT_DIR = Path(__file__).resolve().parents[3] / "docs" / "strategy-rework" / "strategies" / "S02-capital-breakout-continuation" / "experiments" / "EXP-20260427-trend-continuation-current-candidate"
-OBSERVATION_CSV = EXPERIMENT_DIR / "observation_pool.csv"
-BUY_SIGNALS_CSV = EXPERIMENT_DIR / "current_buy_signals.csv"
-TRADES_CSV = EXPERIMENT_DIR / "mature_trades.csv"
+MAX_LOOKBACK_DAYS = 200
+MIN_FUTURE_DAYS = 10
 
 
 def _clean_value(value: Any) -> Any:
@@ -24,11 +26,7 @@ def _clean_value(value: Any) -> Any:
             return None
     except Exception:
         pass
-    if isinstance(value, float):
-        if math.isnan(value) or math.isinf(value):
-            return None
-        return round(value, 6)
-    return value
+    return round(float(value), 6) if isinstance(value, float) and pd.notna(value) else value
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -61,38 +59,41 @@ def _date(value: Any) -> Optional[str]:
     return text[:10] if text else None
 
 
-@lru_cache(maxsize=1)
-def _load_observation() -> pd.DataFrame:
-    if not OBSERVATION_CSV.exists():
-        raise FileNotFoundError(f"trend observation csv not found: {OBSERVATION_CSV}")
-    df = pd.read_csv(OBSERVATION_CSV)
-    if "signal_date" in df.columns:
-        df["signal_date"] = df["signal_date"].map(_date)
-    return df
+def _load_metrics(end_date: str, start_date: Optional[str] = None) -> pd.DataFrame:
+    start = start_date or (pd.Timestamp(end_date) - pd.Timedelta(days=MAX_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    raw = load_atomic_daily_window(start, end_date)
+    metrics = add_ma(compute_v2_metrics(raw))
+    return metrics.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
 
 
-@lru_cache(maxsize=1)
-def _load_buy_signals() -> pd.DataFrame:
-    if not BUY_SIGNALS_CSV.exists():
+@lru_cache(maxsize=32)
+def _cached_metrics(end_date: str, start_date: Optional[str] = None) -> pd.DataFrame:
+    return _load_metrics(end_date, start_date)
+
+
+def _select_trade_date(trade_date: Optional[str], metrics: pd.DataFrame) -> str:
+    dates = sorted(metrics["trade_date"].dropna().astype(str).unique().tolist())
+    if not dates:
+        return str(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
+    if trade_date in dates:
+        return str(trade_date)
+    if trade_date:
+        return str(trade_date)
+    return dates[-1]
+
+
+def _build_candidates_for_date(metrics: pd.DataFrame, target_date: str, limit: int = 20) -> pd.DataFrame:
+    if metrics.empty:
         return pd.DataFrame()
-    df = pd.read_csv(BUY_SIGNALS_CSV)
-    for col in ["signal_date", "observe_date", "entry_signal_date", "confirm_date"]:
-        if col in df.columns:
-            df[col] = df[col].map(_date)
-    return df
-
-
-@lru_cache(maxsize=1)
-def _load_trades() -> pd.DataFrame:
-    if not TRADES_CSV.exists():
+    candidates, by_symbol = build_candidates(metrics, target_date, target_date, top_n=max(1, int(limit) * 4), min_score=58.0)
+    if candidates.empty:
         return pd.DataFrame()
-    df = pd.read_csv(TRADES_CSV)
-    for col in ["signal_date", "observe_date", "entry_signal_date", "confirm_date", "entry_date", "exit_signal_date", "exit_date"]:
-        if col in df.columns:
-            df[col] = df[col].map(_date)
-    if "is_mature_trade" in df.columns:
-        df["is_mature_trade"] = df["is_mature_trade"].astype(bool)
-    return df
+    confirmed = add_confirmations(candidates, by_symbol, window=8, mode="callback_only", cooldown=5)
+    if confirmed.empty:
+        return pd.DataFrame()
+    confirmed = confirmed.sort_values(["rank", "score", "symbol"], ascending=[True, False, True]).drop_duplicates(subset=["symbol"], keep="first")
+    confirmed = confirmed.sort_values(["rank", "score", "symbol"], ascending=[True, False, True]).head(max(1, int(limit)))
+    return confirmed.reset_index(drop=True)
 
 
 def _row_to_candidate(row: pd.Series, rank: int, status: str) -> Dict[str, Any]:
@@ -100,11 +101,7 @@ def _row_to_candidate(row: pd.Series, rank: int, status: str) -> Dict[str, Any]:
     symbol = str(row.get("symbol") or "").lower()
     trade_date = _date(row.get("entry_signal_date")) if is_buy else _date(row.get("signal_date"))
     action_label = "可买入" if is_buy else "观察中"
-    reason = (
-        "严格高质量回踩确认；确认日主动买入和主力净流入为正"
-        if is_buy
-        else "进入趋势中继观察池；等待严格回踩和真承接确认"
-    )
+    reason = "严格高质量回踩确认；确认日主动买入和主力净流入为正" if is_buy else "进入趋势中继观察池；等待严格回踩和真承接确认"
     return {
         "rank": rank,
         "symbol": symbol,
@@ -158,71 +155,71 @@ def _row_to_candidate(row: pd.Series, rank: int, status: str) -> Dict[str, Any]:
     }
 
 
-def _select_date(trade_date: Optional[str]) -> str:
-    obs = _load_observation()
-    buys = _load_buy_signals()
-    dates = set(obs.get("signal_date", pd.Series(dtype=str)).dropna().astype(str).tolist())
-    if not buys.empty:
-        dates |= set(buys.get("entry_signal_date", pd.Series(dtype=str)).dropna().astype(str).tolist())
-    sorted_dates = sorted(dates)
-    if not sorted_dates:
-        return str(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
-    if trade_date in dates:
-        return str(trade_date)
+def _find_row(symbol: str, trade_date: Optional[str]) -> tuple[Optional[pd.Series], str]:
+    target = str(symbol).lower()
+    metrics = _cached_metrics(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
+    if metrics.empty:
+        return None, "observe"
+    candidates, _ = build_candidates(metrics, metrics.trade_date.min(), metrics.trade_date.max(), top_n=20, min_score=58.0)
+    if candidates.empty:
+        return None, "observe"
+    confirmed = add_confirmations(candidates, {s: g.sort_values("trade_date").reset_index(drop=True) for s, g in metrics.groupby("symbol", sort=False)}, window=8, mode="callback_only", cooldown=5)
+    if confirmed.empty:
+        return None, "observe"
+    subset = confirmed[confirmed["symbol"].astype(str).str.lower() == target].copy()
+    if subset.empty:
+        return None, "observe"
     if trade_date:
-        return str(trade_date)
-    return sorted_dates[-1]
+        exact = subset[(subset["entry_signal_date"] == trade_date) | (subset["observe_date"] == trade_date)]
+        if not exact.empty:
+            return exact.iloc[0], "buy_signal"
+        earlier = subset[subset["entry_signal_date"] <= trade_date].sort_values("entry_signal_date")
+        if not earlier.empty:
+            return earlier.iloc[-1], "buy_signal"
+    row = subset.sort_values("entry_signal_date").iloc[-1]
+    return row, "buy_signal"
 
 
 def get_trend_continuation_trade_dates(start_date: Optional[str], end_date: Optional[str]) -> Dict[str, Any]:
-    obs = _load_observation()
-    buys = _load_buy_signals()
-    dates = set(obs.get("signal_date", pd.Series(dtype=str)).dropna().astype(str).tolist())
-    if not buys.empty:
-        dates |= set(buys.get("entry_signal_date", pd.Series(dtype=str)).dropna().astype(str).tolist())
-    min_date = start_date or (min(dates) if dates else None) or "2026-03-01"
-    max_date = end_date or (max(dates) if dates else None) or "2026-04-24"
-    obs_counts = obs.groupby("signal_date").size().to_dict() if not obs.empty else {}
-    buy_counts = buys.groupby("entry_signal_date").size().to_dict() if not buys.empty else {}
+    metrics = _cached_metrics(end_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
+    if metrics.empty:
+        return {"start_date": start_date or "", "end_date": end_date or "", "strategy": STRATEGY_INTERNAL_ID, "items": []}
+    resolved_start = start_date or metrics["trade_date"].min()
+    resolved_end = end_date or metrics["trade_date"].max()
+    if resolved_start > resolved_end:
+        resolved_start, resolved_end = resolved_end, resolved_start
+    days = pd.date_range(resolved_start, resolved_end, freq="D").strftime("%Y-%m-%d").tolist()
+    available_dates = set(metrics["trade_date"].astype(str).unique().tolist())
     items: List[Dict[str, Any]] = []
-    for date in pd.date_range(min_date, max_date).strftime("%Y-%m-%d"):
-        is_trade_day = pd.Timestamp(date).weekday() < 5
-        signal_count = int(obs_counts.get(date, 0)) + int(buy_counts.get(date, 0))
-        selectable = is_trade_day and signal_count > 0
-        items.append({
-            "date": date,
-            "is_trade_day": is_trade_day,
-            "signal_count": signal_count,
-            "selectable": selectable,
-            "disabled_reason": None if selectable else ("当天无趋势中继候选" if is_trade_day else "休市/无原始数据"),
-        })
-    return {"start_date": min_date, "end_date": max_date, "strategy": STRATEGY_INTERNAL_ID, "items": items}
+    for date in days:
+        is_trade_day = date in available_dates
+        day_items = _build_candidates_for_date(metrics, date, limit=20) if is_trade_day else pd.DataFrame()
+        signal_count = int(len(day_items))
+        selectable = is_trade_day
+        disabled_reason = None if selectable else "休市/无原始数据"
+        if is_trade_day and signal_count <= 0:
+            disabled_reason = "当天无趋势中继候选"
+        items.append({"date": date, "is_trade_day": is_trade_day, "signal_count": signal_count, "selectable": selectable, "disabled_reason": disabled_reason})
+    return {"start_date": resolved_start, "end_date": resolved_end, "strategy": STRATEGY_INTERNAL_ID, "items": items}
 
 
 def get_trend_continuation_candidates(trade_date: Optional[str], limit: int = 20) -> Dict[str, Any]:
-    target = _select_date(trade_date)
-    obs = _load_observation()
-    buys = _load_buy_signals()
-    trade_rows = _load_trades()
-    buy_day = buys[buys["entry_signal_date"] == target].copy() if not buys.empty else pd.DataFrame()
-    if not trade_rows.empty and not buy_day.empty:
-        buy_day = buy_day.merge(
-            trade_rows[["symbol", "entry_signal_date", "entry_date", "exit_signal_date", "exit_date", "net_return_pct", "exit_reason"]],
-            on=["symbol", "entry_signal_date"], how="left", suffixes=("", "_trade")
-        )
-    obs_day = obs[obs["signal_date"] == target].copy() if not obs.empty else pd.DataFrame()
-    buy_symbols = set(buy_day["symbol"].astype(str).str.lower().tolist()) if not buy_day.empty else set()
-    if not obs_day.empty:
-        obs_day = obs_day[~obs_day["symbol"].astype(str).str.lower().isin(buy_symbols)]
+    metrics = _cached_metrics(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
+    target = _select_trade_date(trade_date, metrics)
+    day = _build_candidates_for_date(metrics, target, limit=limit)
+    if day.empty:
+        return {
+            "trade_date": target,
+            "strategy": STRATEGY_INTERNAL_ID,
+            "strategy_display_name": STRATEGY_DISPLAY_NAME,
+            "strategy_internal_id": STRATEGY_INTERNAL_ID,
+            "strategy_version": STRATEGY_VERSION,
+            "rank_mode": "trend_continuation_quality_callback_rank",
+            "items": [],
+        }
     items: List[Dict[str, Any]] = []
-    if not buy_day.empty:
-        buy_day = buy_day.sort_values(["rank", "score", "symbol"], ascending=[True, False, True])
-        for _, row in buy_day.iterrows():
-            items.append(_row_to_candidate(row, len(items) + 1, "buy_signal"))
-    if not obs_day.empty and len(items) < limit:
-        obs_day = obs_day.sort_values(["rank", "score", "symbol"], ascending=[True, False, True]).head(max(0, int(limit) - len(items)))
-        for _, row in obs_day.iterrows():
-            items.append(_row_to_candidate(row, len(items) + 1, "observe"))
+    for idx, (_, row) in enumerate(day.iterrows(), start=1):
+        items.append(_row_to_candidate(row, idx, "buy_signal"))
     return {
         "trade_date": target,
         "strategy": STRATEGY_INTERNAL_ID,
@@ -234,56 +231,18 @@ def get_trend_continuation_candidates(trade_date: Optional[str], limit: int = 20
     }
 
 
-def _find_row(symbol: str, trade_date: Optional[str]) -> tuple[Optional[pd.Series], str]:
-    normalized = str(symbol).lower()
-    trades = _load_trades()
-    buys = _load_buy_signals()
-    obs = _load_observation()
-    if not trades.empty:
-        subset = trades[trades["symbol"].astype(str).str.lower() == normalized].copy()
-        if trade_date:
-            exact = subset[(subset["entry_signal_date"] == trade_date) | (subset["observe_date"] == trade_date)]
-            if not exact.empty:
-                return exact.iloc[0], "buy_signal"
-            earlier = subset[subset["entry_signal_date"] <= trade_date].sort_values("entry_signal_date")
-            if not earlier.empty:
-                return earlier.iloc[-1], "buy_signal"
-        if not subset.empty:
-            return subset.sort_values("entry_signal_date").iloc[-1], "buy_signal"
-    if not buys.empty:
-        subset = buys[buys["symbol"].astype(str).str.lower() == normalized].copy()
-        if trade_date:
-            exact = subset[(subset["entry_signal_date"] == trade_date) | (subset["observe_date"] == trade_date)]
-            if not exact.empty:
-                return exact.iloc[0], "buy_signal"
-            earlier = subset[subset["entry_signal_date"] <= trade_date].sort_values("entry_signal_date")
-            if not earlier.empty:
-                return earlier.iloc[-1], "buy_signal"
-        if not subset.empty:
-            return subset.sort_values("entry_signal_date").iloc[-1], "buy_signal"
-    subset = obs[obs["symbol"].astype(str).str.lower() == normalized].copy()
-    if trade_date:
-        exact = subset[subset["signal_date"] == trade_date]
-        if not exact.empty:
-            return exact.iloc[0], "observe"
-        earlier = subset[subset["signal_date"] <= trade_date].sort_values("signal_date")
-        if not earlier.empty:
-            return earlier.iloc[-1], "observe"
-    if not subset.empty:
-        return subset.sort_values("signal_date").iloc[-1], "observe"
-    return None, "observe"
-
-
 def get_trend_continuation_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, Any]:
     row, status = _find_row(symbol, trade_date)
+    target = trade_date or pd.Timestamp.today().strftime("%Y-%m-%d")
     if row is None:
-        target = trade_date or pd.Timestamp.today().strftime("%Y-%m-%d")
         return {"symbol": symbol.lower(), "trade_date": target, "name": symbol.lower(), "strategy_display_name": STRATEGY_DISPLAY_NAME, "strategy_internal_id": STRATEGY_INTERNAL_ID, "current_judgement": "暂无趋势中继画像", "entry_allowed": False, "entry_block_reasons": ["无候选信号"], "research": {}}
     candidate = _row_to_candidate(row, _int(row.get("rank")), status)
+    latest_metrics = _cached_metrics(pd.Timestamp.today().strftime("%Y-%m-%d"))
+    latest_available_trade_date = str(latest_metrics["trade_date"].max()) if not latest_metrics.empty else candidate["trade_date"]
     return {
         "symbol": candidate["symbol"],
         "trade_date": candidate["trade_date"],
-        "latest_available_trade_date": candidate.get("exit_date") or candidate["trade_date"],
+        "latest_available_trade_date": latest_available_trade_date,
         "requested_trade_date": trade_date or candidate["trade_date"],
         "profile_date_fallback_used": bool(trade_date and trade_date != candidate["trade_date"]),
         "name": candidate["symbol"],
@@ -348,56 +307,74 @@ def get_trend_continuation_profile(symbol: str, trade_date: Optional[str]) -> Di
     }
 
 
-def _summarize(rows: pd.DataFrame) -> Dict[str, Any]:
-    if rows.empty:
-        return {"trade_count": 0, "win_rate": 0.0, "avg_return_pct": 0.0, "median_return_pct": 0.0, "max_loss_pct": 0.0, "avg_holding_days": 0.0, "big_loss_count": 0}
-    returns = pd.to_numeric(rows["net_return_pct"], errors="coerce").fillna(0.0)
-    holding = pd.to_numeric(rows["holding_days"], errors="coerce").fillna(0.0)
-    return {
-        "trade_count": int(len(rows)),
-        "win_rate": round(float((returns > 0).mean() * 100.0), 2),
-        "avg_return_pct": round(float(returns.mean()), 2),
-        "median_return_pct": round(float(returns.median()), 2),
-        "max_return_pct": round(float(returns.max()), 2),
-        "max_loss_pct": round(float(returns.min()), 2),
-        "avg_holding_days": round(float(holding.mean()), 2),
-        "big_loss_count": int((returns <= -8.0).sum()),
-    }
-
-
 def evaluate_trend_continuation_range(start_date: str, end_date: str, top_n: int = 20) -> Dict[str, Any]:
-    df = _load_trades().copy()
-    if df.empty:
-        filtered = df
-    else:
-        filtered = df[(df["entry_signal_date"] >= start_date) & (df["entry_signal_date"] <= end_date)]
-        if "is_mature_trade" in filtered.columns:
-            filtered = filtered[filtered["is_mature_trade"] == True]
-        filtered = filtered.sort_values(["entry_signal_date", "rank", "symbol"], ascending=[True, True, True])
+    metrics = _cached_metrics(end_date)
+    if metrics.empty:
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "strategy_version": STRATEGY_VERSION,
+            "strategy_display_name": STRATEGY_DISPLAY_NAME,
+            "strategy_internal_id": STRATEGY_INTERNAL_ID,
+            "rank_mode": "trend_continuation_quality_callback_rank",
+            "top_n": int(top_n),
+            "summary": {"trade_count": 0, "win_rate": 0.0, "avg_return_pct": 0.0, "median_return_pct": 0.0, "max_loss_pct": 0.0, "avg_holding_days": 0.0, "big_loss_count": 0},
+            "daily_results": [],
+            "trades": [],
+        }
+    candidates, by_symbol = build_candidates(metrics, start_date, end_date, top_n=max(1, int(top_n) * 4), min_score=58.0)
+    confirmed = add_confirmations(candidates, by_symbol, window=8, mode="callback_only", cooldown=5)
+    exit_params = V12ExitParams(stop_loss_pct=-8.0, super_peak_drawdown_pct=0.20, super_decline_days=3)
+    trade_cost_params = SelectionV2Params()
     trades: List[Dict[str, Any]] = []
-    for idx, (_, row) in enumerate(filtered.iterrows(), start=1):
-        trades.append({
-            "id": idx,
-            "symbol": str(row.get("symbol") or "").lower(),
-            "rank": _int(row.get("rank")),
-            "signal_date": _date(row.get("entry_signal_date")),
-            "entry_signal_date": _date(row.get("entry_signal_date")),
-            "entry_date": _date(row.get("entry_date")),
-            "exit_signal_date": _date(row.get("exit_signal_date")),
-            "exit_date": _date(row.get("exit_date")),
-            "entry_price": _clean_value(row.get("entry_price")),
-            "exit_price": _clean_value(row.get("exit_price")),
-            "return_pct": _clean_value(row.get("return_pct")),
-            "net_return_pct": _clean_value(row.get("net_return_pct")),
-            "max_drawdown_pct": _clean_value(row.get("max_drawdown_pct")),
-            "holding_days": _int(row.get("holding_days")),
-            "exit_reason": _clean_value(row.get("exit_reason")),
-            "selection_rank_score": _clean_value(row.get("score")),
-            "risk_count": 0,
-            "risk_labels": [],
-            "lifecycle_phase_label": "回踩确认",
-            "action_label": "可买入",
-        })
+    if not confirmed.empty:
+        for _, rec in confirmed.iterrows():
+            g = by_symbol[str(rec.symbol)]
+            trade = simulate_trade_v1_2(g, str(rec.entry_signal_date), exit_params, trade_cost_params)
+            if not trade or trade.get("skipped"):
+                continue
+            fdays = future_days_after_entry(g, str(trade["entry_date"]))
+            trades.append({
+                "id": len(trades) + 1,
+                "symbol": str(rec.get("symbol") or "").lower(),
+                "rank": _int(rec.get("rank")),
+                "signal_date": _date(rec.get("entry_signal_date")),
+                "entry_signal_date": _date(rec.get("entry_signal_date")),
+                "entry_date": _date(trade.get("entry_date")),
+                "exit_signal_date": _date(trade.get("exit_signal_date")),
+                "exit_date": _date(trade.get("exit_date")),
+                "entry_price": _clean_value(trade.get("entry_price")),
+                "exit_price": _clean_value(trade.get("exit_price")),
+                "return_pct": _clean_value(trade.get("return_pct")),
+                "net_return_pct": _clean_value(trade.get("net_return_pct")),
+                "max_drawdown_pct": _clean_value(trade.get("max_drawdown_pct")),
+                "holding_days": _int(trade.get("holding_days")),
+                "exit_reason": _clean_value(trade.get("exit_reason")),
+                "selection_rank_score": _clean_value(rec.get("score")),
+                "risk_count": 0,
+                "risk_labels": [],
+                "lifecycle_phase_label": "回踩确认",
+                "action_label": "可买入",
+                "future_days_available": fdays,
+                "is_mature_trade": fdays >= MIN_FUTURE_DAYS,
+            })
+    trades_df = pd.DataFrame(trades)
+    if not trades_df.empty:
+        trades_df = trades_df[(trades_df["entry_signal_date"] >= start_date) & (trades_df["entry_signal_date"] <= end_date)].copy()
+        trades_df = trades_df.sort_values(["entry_signal_date", "rank", "symbol"], ascending=[True, True, True])
+    valid = trades_df[trades_df.get("net_return_pct").notna()] if not trades_df.empty else pd.DataFrame()
+    returns = pd.to_numeric(valid.get("net_return_pct"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    holding = pd.to_numeric(valid.get("holding_days"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    summary = {
+        "trade_count": int(len(valid)),
+        "win_rate": round(float((returns > 0).mean() * 100.0), 2) if not returns.empty else 0.0,
+        "avg_return_pct": round(float(returns.mean()), 2) if not returns.empty else 0.0,
+        "median_return_pct": round(float(returns.median()), 2) if not returns.empty else 0.0,
+        "max_return_pct": round(float(returns.max()), 2) if not returns.empty else 0.0,
+        "max_loss_pct": round(float(returns.min()), 2) if not returns.empty else 0.0,
+        "avg_holding_days": round(float(holding.mean()), 2) if not holding.empty else 0.0,
+        "big_loss_count": int((returns <= -8.0).sum()) if not returns.empty else 0,
+    }
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -406,7 +383,7 @@ def evaluate_trend_continuation_range(start_date: str, end_date: str, top_n: int
         "strategy_internal_id": STRATEGY_INTERNAL_ID,
         "rank_mode": "trend_continuation_quality_callback_rank",
         "top_n": int(top_n),
-        "summary": _summarize(filtered),
+        "summary": summary,
         "daily_results": [],
         "trades": trades,
     }

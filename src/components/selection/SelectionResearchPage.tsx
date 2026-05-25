@@ -52,6 +52,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   trend_continuation_callback: '趋势中继高质量回踩',
   v2: '旧策略对照',
 };
+type CandidateEmptyState = 'idle' | 'not_run' | 'completed_empty' | 'failed';
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
 const fmtNum = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -92,6 +93,11 @@ const isDateWithin = (value: string, minDate?: string, maxDate?: string) => {
   return true;
 };
 
+const maxDateText = (...values: Array<string | null | undefined>) => {
+  const valid = values.map((item) => String(item || '').slice(0, 10)).filter(Boolean);
+  return valid.sort().pop() || '';
+};
+
 const fmtMarketCap = (value?: number | null) => {
   if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) return '--';
   return `${(Number(value) / 1e8).toFixed(2)}亿`;
@@ -104,6 +110,17 @@ const mergeTradeDateItems = (datasets: Array<SelectionTradeDatesData | null | un
     byDate[item.date] = {
       ...item,
       signal_count: (prev?.signal_count || 0) + (item.signal_count || 0),
+      candidate_count: (prev?.candidate_count || 0) + (item.candidate_count || 0),
+      feature_count: Math.max(prev?.feature_count || 0, item.feature_count || 0),
+      has_feature: Boolean(prev?.has_feature || item.has_feature),
+      has_candidates: Boolean(prev?.has_candidates || item.has_candidates),
+      can_generate: Boolean(prev?.can_generate || item.can_generate),
+      has_run: Boolean(prev?.has_run || item.has_run),
+      run_count: (prev?.run_count || 0) + (item.run_count || 0),
+      successful_run_count: (prev?.successful_run_count || 0) + (item.successful_run_count || 0),
+      failed_run_count: (prev?.failed_run_count || 0) + (item.failed_run_count || 0),
+      run_candidate_count: (prev?.run_candidate_count || 0) + (item.run_candidate_count || 0),
+      last_run_finished_at: item.last_run_finished_at || prev?.last_run_finished_at,
       selectable: Boolean(prev?.selectable || item.selectable),
       disabled_reason: prev?.selectable || item.selectable ? null : item.disabled_reason,
     };
@@ -111,9 +128,28 @@ const mergeTradeDateItems = (datasets: Array<SelectionTradeDatesData | null | un
   return { items: Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)) };
 };
 
+const candidateEmptyStateForMeta = (meta?: SelectionTradeDateItem): CandidateEmptyState => {
+  if (!meta) return 'idle';
+  if (meta.has_candidates || (meta.candidate_count || meta.signal_count || 0) > 0) return 'idle';
+  if (meta.has_run) return (meta.successful_run_count || 0) > 0 ? 'completed_empty' : 'failed';
+  if (meta.can_generate || meta.has_feature) return 'not_run';
+  return 'idle';
+};
+
 const latestSelectableDate = (items: SelectionTradeDateItem[]) => (
   items.filter((item) => item.selectable).map((item) => item.date).sort().pop() || ''
 );
+
+const findShiftedDate = (dates: string[], current: string, direction: -1 | 1) => {
+  const sorted = [...dates].sort();
+  if (!sorted.length || !current) return '';
+  const exactIndex = sorted.indexOf(current);
+  if (exactIndex >= 0) return sorted[exactIndex + direction] || '';
+  if (direction < 0) {
+    return [...sorted].reverse().find((date) => date < current) || '';
+  }
+  return sorted.find((date) => date > current) || '';
+};
 
 const tradeDateItemsToMap = (items: SelectionTradeDateItem[]) => {
   const next: Record<string, SelectionTradeDateItem> = {};
@@ -159,6 +195,7 @@ const TradeDatePicker: React.FC<{
   const monthStart = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
   const firstWeekday = monthStart.getDay();
   const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
+  const hasDateMetadata = Object.keys(dateMetaByDate).length > 0;
   const cells = [
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
@@ -171,7 +208,7 @@ const TradeDatePicker: React.FC<{
   const pickDate = (day: number) => {
     const dateText = formatDateOnly(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day));
     const meta = dateMetaByDate[dateText];
-    if (!isDateWithin(dateText, minDate, maxDate) || meta?.selectable === false) return;
+    if (!isDateWithin(dateText, minDate, maxDate) || (hasDateMetadata ? meta?.selectable !== true : meta?.selectable === false)) return;
     onChange(dateText);
     setOpen(false);
   };
@@ -224,17 +261,24 @@ const TradeDatePicker: React.FC<{
               if (!day) return <div key={`blank-${index}`} className="h-8" />;
               const dateText = formatDateOnly(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), day));
               const meta = dateMetaByDate[dateText];
-              const disabled = !isDateWithin(dateText, minDate, maxDate) || meta?.selectable === false;
+              const disabled = !isDateWithin(dateText, minDate, maxDate) || (hasDateMetadata ? meta?.selectable !== true : meta?.selectable === false);
               const isClosed = meta?.is_trade_day === false;
               const noScoreData = meta?.is_trade_day === true && meta?.selectable === false;
               const active = value === dateText;
+              const title = meta?.has_candidates
+                ? `${meta.candidate_count || meta.signal_count || 0} 个候选`
+                : meta?.has_run
+                  ? '已跑完，这天没有可推荐的股票'
+                  : meta?.can_generate
+                    ? '有评分数据，可运行当日候选'
+                    : meta?.disabled_reason;
               return (
                 <button
                   key={dateText}
                   type="button"
                   onClick={() => pickDate(day)}
                   disabled={disabled}
-                  title={meta?.disabled_reason || (meta?.signal_count ? `${meta.signal_count} 个候选信号` : undefined)}
+                  title={title}
                   className={`relative h-8 rounded-lg text-xs font-medium transition-colors ${
                     active
                       ? 'bg-sky-600 text-white'
@@ -247,12 +291,13 @@ const TradeDatePicker: React.FC<{
                 >
                   {day}
                   {!disabled && meta?.signal_count ? <span className="absolute bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-emerald-400/80" /> : null}
+                  {!disabled && !meta?.signal_count && meta?.can_generate ? <span className="absolute bottom-0.5 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-amber-400/80" /> : null}
                 </button>
               );
             })}
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-3 text-[11px]">
-            <span className="text-slate-500">亮点=有主策略候选，灰色/删除线=不可选</span>
+            <span className="text-slate-500">绿点=有候选，黄点=可运行，灰色=不可选</span>
             <button type="button" onClick={jumpLatest} className="rounded-lg border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800">
               最新
             </button>
@@ -282,6 +327,7 @@ const SelectionResearchPage: React.FC = () => {
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
   const [tradeDateMetaByDate, setTradeDateMetaByDate] = useState<Record<string, SelectionTradeDateItem>>({});
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [candidateEmptyStateByDate, setCandidateEmptyStateByDate] = useState<Record<string, CandidateEmptyState>>({});
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [runningBacktest, setRunningBacktest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -296,6 +342,8 @@ const SelectionResearchPage: React.FC = () => {
   const backendHealthFailureCountRef = useRef(0);
   const dateInitializedRef = useRef(false);
   const prewarmNextLoadRef = useRef(false);
+  const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
+  const datePickerMax = String(health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || health?.latest_signal_date || '');
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -349,20 +397,61 @@ const SelectionResearchPage: React.FC = () => {
     return fetchDailySelectionTradeDates(minDate, maxDate);
   };
 
-  const shiftSelectableDate = (direction: -1 | 1) => {
-    const dates = Object.values(tradeDateMetaByDate)
+  const reloadSelectableDates = async (minDate = datePickerMin, maxDate = datePickerMax): Promise<Record<string, SelectionTradeDateItem>> => {
+    if (!minDate || !maxDate) return tradeDateMetaByDate;
+    const data = await loadSelectableDates(minDate, maxDate);
+    const next = tradeDateItemsToMap(data?.items || []);
+    setTradeDateMetaByDate(next);
+    return next;
+  };
+
+  const ensureDailyCandidates = async (dateText: string) => {
+    const meta = tradeDateMetaByDate[dateText];
+    if (!dateText) return { generated: false, mergedCount: 0, meta };
+    const result = await refreshDailySelectionCandidates(dateText, 80);
+    if (!result) {
+      setCandidateEmptyStateByDate((prev) => ({ ...prev, [dateText]: 'failed' }));
+      throw new Error('daily-refresh failed');
+    }
+    const mergedCount = Number(result?.merged_count ?? 0);
+    setCandidateEmptyStateByDate((prev) => ({
+      ...prev,
+      [dateText]: mergedCount > 0 ? 'idle' : 'completed_empty',
+    }));
+    const nextMetaByDate = await reloadSelectableDates();
+    return {
+      generated: true,
+      mergedCount,
+      meta: nextMetaByDate[dateText],
+    };
+  };
+
+  const selectableDates = useMemo(() => (
+    Object.values(tradeDateMetaByDate)
       .filter((item) => item.selectable)
       .map((item) => item.date)
-      .sort();
-    if (!dates.length) return;
-    const current = pendingTradeDate || tradeDate;
-    let index = dates.indexOf(current);
-    if (index < 0) index = direction > 0 ? -1 : dates.length;
-    const next = dates[index + direction];
+      .sort()
+  ), [tradeDateMetaByDate]);
+
+  const currentDateText = pendingTradeDate || tradeDate;
+  const prevSelectableDate = useMemo(
+    () => findShiftedDate(selectableDates, currentDateText, -1),
+    [currentDateText, selectableDates],
+  );
+  const nextSelectableDate = useMemo(
+    () => findShiftedDate(selectableDates, currentDateText, 1),
+    [currentDateText, selectableDates],
+  );
+  const canShiftPrev = Boolean(prevSelectableDate);
+  const canShiftNext = Boolean(nextSelectableDate);
+
+  const shiftSelectableDate = (direction: -1 | 1) => {
+    const next = direction < 0 ? prevSelectableDate : nextSelectableDate;
     if (next) {
       lastLoadedKeyRef.current = '';
       setPendingTradeDate(next);
       setTradeDate(next);
+      void ensureDailyCandidates(next).then(() => loadCandidates(next, true, true));
     }
   };
 
@@ -393,6 +482,11 @@ const SelectionResearchPage: React.FC = () => {
       const nextDate = targetDate || data?.trade_date || '';
       setCandidates(items);
       setExitWatchlist(watchItems);
+      setCandidateEmptyStateByDate((prev) => {
+        if (items.length > 0) return { ...prev, [targetDate]: 'idle' };
+        const nextState = prev[targetDate] || candidateEmptyStateForMeta(tradeDateMetaByDate[targetDate]);
+        return { ...prev, [targetDate]: nextState };
+      });
       if (shouldPrewarm) {
         triggerResearchPrewarm(items, nextDate || targetDate);
       }
@@ -457,6 +551,18 @@ const SelectionResearchPage: React.FC = () => {
 
   const handleApplyTradeDate = async () => {
     if (!pendingTradeDate) return;
+    setLoadingCandidates(true);
+    setError('');
+    try {
+      await ensureDailyCandidates(pendingTradeDate);
+    } catch (e) {
+      setError('候选生成失败，请检查写权限或后端日志');
+      setCandidates([]);
+      setSelected(null);
+      setProfile(null);
+      setLoadingCandidates(false);
+      return;
+    }
     if (pendingTradeDate === tradeDate) {
       await loadCandidates(pendingTradeDate, true, true);
       return;
@@ -649,6 +755,26 @@ const SelectionResearchPage: React.FC = () => {
     };
   }, [displayExitWatchlist]);
 
+  const candidateListDate = tradeDate || pendingTradeDate;
+  const candidateDateMeta = candidateListDate ? tradeDateMetaByDate[candidateListDate] : undefined;
+  const candidateEmptyState = candidateListDate
+    ? candidateEmptyStateByDate[candidateListDate] || candidateEmptyStateForMeta(candidateDateMeta)
+    : 'idle';
+  const candidateEmptyMessage = (() => {
+    if (candidateEmptyState === 'completed_empty') return '已跑完，今天没有可推荐的股票。';
+    if (candidateEmptyState === 'failed') return '这天候选生成失败，请检查写权限或后端日志。';
+    if (candidateEmptyState === 'not_run') return '这天还没有运行当日候选，点击“查看候选”后会执行模型和策略。';
+    return '暂无候选；该日期没有模型或策略产出。';
+  })();
+
+  const latestSelectableTradeDate = useMemo(() => {
+    return Object.values(tradeDateMetaByDate)
+      .filter((item) => item.selectable)
+      .map((item) => item.date)
+      .sort()
+      .pop() || '';
+  }, [tradeDateMetaByDate]);
+  const latestDataTradeDate = maxDateText(datePickerMax, health?.latest_signal_date, latestSelectableTradeDate) || undefined;
   const selectedDisplayName = selected ? (nameOverrides[selected.symbol.toLowerCase()] || profile?.name || selected.name || selected.symbol) : '';
   const heroPrice = Number(quote?.price ?? profile?.close ?? selected?.close ?? 0);
   const previousClose = Number(quote?.lastClose ?? profile?.prev_close ?? profile?.close ?? selected?.close ?? 0);
@@ -659,15 +785,6 @@ const SelectionResearchPage: React.FC = () => {
   const profileMatchesSelected = Boolean(
     selected && profile && String(profile.symbol || '').toLowerCase() === String(selected.symbol || '').toLowerCase(),
   );
-  const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
-  const datePickerMax = String(health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || health?.latest_signal_date || '');
-  const latestSelectableTradeDate = useMemo(() => {
-    return Object.values(tradeDateMetaByDate)
-      .filter((item) => item.selectable)
-      .map((item) => item.date)
-      .sort()
-      .pop() || '';
-  }, [tradeDateMetaByDate]);
 
   useEffect(() => {
     if (!datePickerMin || !datePickerMax) return;
@@ -792,7 +909,7 @@ const SelectionResearchPage: React.FC = () => {
           <button
             type="button"
             onClick={() => shiftSelectableDate(-1)}
-            disabled={!pendingTradeDate}
+            disabled={!canShiftPrev}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="前一个可选日期"
             title="前一个可选日期"
@@ -810,7 +927,7 @@ const SelectionResearchPage: React.FC = () => {
           <button
             type="button"
             onClick={() => shiftSelectableDate(1)}
-            disabled={!pendingTradeDate}
+            disabled={!canShiftNext}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="后一个可选日期"
             title="后一个可选日期"

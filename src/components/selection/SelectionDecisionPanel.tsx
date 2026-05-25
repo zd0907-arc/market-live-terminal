@@ -253,8 +253,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     latestTradeDate,
     profile?.latest_available_trade_date,
     profile?.trade_date,
-    candidate?.trade_date,
-  ) || formatDateInput(new Date());
+  ) || candidate?.trade_date || formatDateInput(new Date());
   const signalAnchorDate = minDateText(
     candidate?.observe_date,
     profile?.observe_date,
