@@ -337,32 +337,28 @@ def validate_required_tables(conn: sqlite3.Connection, feature_version: str) -> 
     return details, ok
 
 
-def choose_baseline_dates(conn: sqlite3.Connection) -> tuple[str, list[str]]:
+def choose_baseline_dates(conn: sqlite3.Connection, feature_version: str) -> tuple[str, list[str]]:
+    if table_exists(conn, "model_feature_daily_v1") and "trade_date" in table_columns(conn, "model_feature_daily_v1"):
+        columns = table_columns(conn, "model_feature_daily_v1")
+        if "feature_version" in columns:
+            dates = distinct_dates(conn, "model_feature_daily_v1", "trade_date", "feature_version = ?", (feature_version,))
+        else:
+            dates = distinct_dates(conn, "model_feature_daily_v1", "trade_date")
+        if dates:
+            return "model_feature_daily_v1", dates
+
     candidates: list[tuple[str, list[str]]] = []
-    for table in [
-        "model_market_state_daily_v1",
-        "model_feature_daily_v1",
-        "model_feature_intraday_shape_v1",
-        "model_label_forward_return_v1",
-    ]:
+    for table in ["model_market_state_daily_v1", "model_feature_intraday_shape_v1"]:
         if table_exists(conn, table) and "trade_date" in table_columns(conn, table):
             dates = distinct_dates(conn, table, "trade_date")
             candidates.append((table, dates))
-    if table_exists(conn, "model_market_index_daily") and "trade_date" in table_columns(conn, "model_market_index_daily"):
-        csi_dates = distinct_dates(conn, "model_market_index_daily", "trade_date", "index_code = ?", ("000852.SH",))
-        all_index_dates = distinct_dates(conn, "model_market_index_daily", "trade_date")
-        if csi_dates:
-            candidates.append(("model_market_index_daily[000852.SH]", csi_dates))
-        elif all_index_dates:
-            candidates.append(("model_market_index_daily", all_index_dates))
     if not candidates:
         return "none", []
-    baseline_source, baseline_dates = max(candidates, key=lambda item: len(item[1]))
-    return baseline_source, baseline_dates
+    return max(candidates, key=lambda item: len(item[1]))
 
 
-def validate_date_coverage(conn: sqlite3.Connection) -> tuple[dict[str, Any], bool]:
-    baseline_source, baseline_dates = choose_baseline_dates(conn)
+def validate_date_coverage(conn: sqlite3.Connection, feature_version: str) -> tuple[dict[str, Any], bool]:
+    baseline_source, baseline_dates = choose_baseline_dates(conn, feature_version)
     baseline_set = set(baseline_dates)
     missing_by_table: dict[str, Any] = {}
     allowed_missing_by_table: dict[str, Any] = {}
@@ -392,9 +388,19 @@ def validate_date_coverage(conn: sqlite3.Connection) -> tuple[dict[str, Any], bo
                 label = f"{table}[000852.SH]"
             else:
                 dates = distinct_dates(conn, table, "trade_date")
+        elif "feature_version" in columns:
+            dates = distinct_dates(conn, table, "trade_date", "feature_version = ?", (feature_version,))
         else:
             dates = distinct_dates(conn, table, "trade_date")
         table_distinct_date_counts[label] = len(dates)
+        if table == "model_label_forward_return_v1":
+            label_missing = sorted(set(baseline_dates) - set(dates))
+            allowed_missing_by_table[label] = {
+                "missing_trade_dates_count": len(label_missing),
+                "missing_trade_dates_sample": label_missing[:50],
+                "allowed_missing_reason": "forward labels are unavailable for the latest unlabelable tail dates",
+            }
+            continue
         if not baseline_dates:
             missing = []
         else:
@@ -892,6 +898,7 @@ def validate_limit_state_sanity(conn: sqlite3.Connection) -> tuple[dict[str, Any
         SELECT
           trade_date,
           COUNT(*) AS rows,
+          SUM(CASE WHEN prev_close > 0 THEN 1 ELSE 0 END) AS prev_close_valid_count,
           SUM(CASE WHEN COALESCE(touch_limit_up, 0) = 1 THEN 1 ELSE 0 END) AS touch_limit_up_count,
           SUM(CASE WHEN COALESCE(is_limit_up_close, 0) = 1 THEN 1 ELSE 0 END) AS is_limit_up_close_count
         FROM {table}
@@ -921,11 +928,21 @@ def validate_limit_state_sanity(conn: sqlite3.Connection) -> tuple[dict[str, Any
         LIMIT 100
         """
     ).fetchall()
-    zero_touch_days = [dict(row) for row in daily_rows if int(row["touch_limit_up_count"] or 0) == 0]
+    zero_touch_days = [
+        dict(row)
+        for row in daily_rows
+        if int(row["prev_close_valid_count"] or 0) > 0 and int(row["touch_limit_up_count"] or 0) == 0
+    ]
+    prev_close_unavailable_days = [
+        dict(row)
+        for row in daily_rows
+        if int(row["prev_close_valid_count"] or 0) == 0 and int(row["touch_limit_up_count"] or 0) == 0
+    ]
     details = {
         "table": table,
         "daily_summary": [dict(row) for row in daily_rows],
         "zero_touch_limit_up_days": zero_touch_days,
+        "prev_close_unavailable_zero_touch_days": prev_close_unavailable_days,
         "high_ge_9p8_touch_eq_0_samples": [dict(row) for row in high_mismatch],
         "close_ge_9p8_close_eq_0_samples": [dict(row) for row in close_mismatch],
     }
@@ -1017,7 +1034,7 @@ def build_payload(args: argparse.Namespace) -> dict[str, Any]:
     try:
         with connect_ro(db_path) as conn:
             required_table_details, required_table_ok = validate_required_tables(conn, args.feature_version)
-            date_coverage_details, date_coverage_ok = validate_date_coverage(conn)
+            date_coverage_details, date_coverage_ok = validate_date_coverage(conn, args.feature_version)
             manifest_summary = summarize_manifest(conn)
             csi1000_details, csi1000_ok = validate_csi1000_integrity(conn, args.feature_version)
             order_book_details, order_book_ok = validate_order_book_coverage(conn, args.feature_version)
