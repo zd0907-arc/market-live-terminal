@@ -107,7 +107,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # Allow testing against local dev server by default, or cloud via env var.
 # Strip whitespace to avoid Windows `set VAR=... &&` tail-space pollution.
-CLOUD_URL = os.getenv("CLOUD_API_URL", "http://127.0.0.1:8000").strip().rstrip("/")
+CLOUD_URL = os.getenv("CLOUD_API_URL", "http://127.0.0.1:8001").strip().rstrip("/")
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "").strip()
 
 # 1. 业务逻辑复用的极简阈值判断 (用于 30m K线前摄计算)

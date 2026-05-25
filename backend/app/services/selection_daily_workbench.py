@@ -39,6 +39,11 @@ SOURCE_DAILY_LIMITS = {
 }
 TREND_OBSERVATION_MIN_SCORE = 70.0
 TREND_OBSERVATION_LIMIT = 5
+SOURCE_STATUS_LABELS = {
+    SPARK_SOURCE_ID: "星火模型",
+    STABLE_SOURCE_ID: "资金流回调稳健",
+    TREND_SOURCE_ID: "趋势中继高质量回踩",
+}
 
 
 def source_registry_records() -> List[Dict[str, Any]]:
@@ -178,10 +183,7 @@ def _generate_trend_candidates(trade_date: str, limit: int) -> List[Dict[str, An
 
 
 def _generate_spark_candidates(trade_date: str, limit: int) -> List[Dict[str, Any]]:
-    try:
-        return spark_opportunity_selector.generate_daily_candidates(trade_date, limit=limit)
-    except Exception:
-        return spark_opportunity_selector.generate_candidates_from_latest_csv(trade_date=trade_date, limit=limit)
+    return spark_opportunity_selector.generate_daily_candidates(trade_date, limit=limit)
 
 
 def source_daily_limit(source_id: str, fallback: int = 50) -> int:
@@ -209,6 +211,7 @@ def run_daily_selection_sources(
     ensure_daily_source_registry()
     source_counts: Dict[str, int] = {}
     errors: Dict[str, str] = {}
+    source_runs: List[Dict[str, Any]] = []
     for source_id in target_sources:
         try:
             records = generate_source_candidates(
@@ -218,9 +221,26 @@ def run_daily_selection_sources(
             )
             count = replace_source_candidates(trade_date, source_id, records)
             source_counts[source_id] = count
+            source_runs.append(
+                {
+                    "source_id": source_id,
+                    "label": SOURCE_STATUS_LABELS.get(source_id, source_id),
+                    "status": "success",
+                    "candidate_count": count,
+                }
+            )
         except Exception as exc:
             errors[source_id] = str(exc)
             record_source_run_error(trade_date, source_id, str(exc))
+            source_runs.append(
+                {
+                    "source_id": source_id,
+                    "label": SOURCE_STATUS_LABELS.get(source_id, source_id),
+                    "status": "failed",
+                    "candidate_count": 0,
+                    "error": str(exc),
+                }
+            )
     merged_count = rebuild_daily_candidates(trade_date)
     exit_watchlist_count = 0
     if include_exit_watchlist:
@@ -232,6 +252,7 @@ def run_daily_selection_sources(
     return {
         "trade_date": trade_date,
         "sources": source_counts,
+        "source_runs": source_runs,
         "errors": errors,
         "merged_count": merged_count,
         "exit_watchlist_count": exit_watchlist_count,
@@ -256,6 +277,7 @@ def get_daily_selection_candidates(
             "items": [],
             "skipped": True,
         }
+        payload["source_runs"] = _build_daily_source_runs(target_date)
         return payload
     if not target_date:
         payload["exit_watchlist"] = {
@@ -264,6 +286,7 @@ def get_daily_selection_candidates(
             "policy_name": "",
             "items": [],
         }
+        payload["source_runs"] = []
         return payload
     try:
         payload["exit_watchlist"] = query_daily_exit_watchlist(target_date)
@@ -275,7 +298,53 @@ def get_daily_selection_candidates(
             "items": [],
             "error": str(exc),
         }
+    payload["source_runs"] = _build_daily_source_runs(target_date)
     return payload
+
+
+def _build_daily_source_runs(trade_date: str) -> List[Dict[str, Any]]:
+    if not trade_date:
+        return []
+    from backend.app.db.selection_db import get_selection_connection
+
+    conn = get_selection_connection()
+    try:
+        rows = conn.execute(
+            """
+            WITH latest AS (
+                SELECT
+                    source_id,
+                    run_status,
+                    candidate_count,
+                    error_message,
+                    finished_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY source_id
+                        ORDER BY COALESCE(finished_at, started_at) DESC, id DESC
+                    ) AS rn
+                FROM selection_strategy_runs
+                WHERE trade_date = ?
+            )
+            SELECT source_id, run_status, candidate_count, error_message, finished_at
+            FROM latest
+            WHERE rn = 1
+            ORDER BY source_id
+            """,
+            (trade_date,),
+        ).fetchall()
+        return [
+            {
+                "source_id": str(row["source_id"]),
+                "label": SOURCE_STATUS_LABELS.get(str(row["source_id"]), str(row["source_id"])),
+                "status": "failed" if str(row["run_status"]) == "failed" else "success",
+                "candidate_count": int(row["candidate_count"] or 0),
+                "error": str(row["error_message"] or "") or None,
+                "finished_at": str(row["finished_at"] or "") or None,
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
 
 
 def get_daily_selection_trade_dates(start_date: Optional[str], end_date: Optional[str]) -> Dict[str, Any]:

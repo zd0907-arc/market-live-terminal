@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BarChart3, Calendar, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react';
 
 import {
   SelectionBacktestDetail,
@@ -315,6 +315,14 @@ const SelectionResearchPage: React.FC = () => {
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
   const [exitWatchlist, setExitWatchlist] = useState<SelectionCandidateItem[]>([]);
+  const [sourceRuns, setSourceRuns] = useState<Array<{
+    source_id: string;
+    label: string;
+    status: 'success' | 'failed';
+    candidate_count: number;
+    error?: string | null;
+    finished_at?: string | null;
+  }>>([]);
   const [selected, setSelected] = useState<SelectionCandidateItem | null>(null);
   const [profile, setProfile] = useState<SelectionProfileData | null>(null);
   const [quote, setQuote] = useState<any | null>(null);
@@ -491,6 +499,7 @@ const SelectionResearchPage: React.FC = () => {
     if (selectedRef.current?.trade_date !== targetDate) {
       setCandidates([]);
       setExitWatchlist([]);
+      setSourceRuns([]);
       setSelected(null);
       setProfile(null);
     }
@@ -499,9 +508,11 @@ const SelectionResearchPage: React.FC = () => {
       if (requestSeq !== candidatesRequestSeqRef.current || targetDate !== candidateLoadDateRef.current) return;
       const items = data?.items || [];
       const watchItems = data?.exit_watchlist?.items || [];
+      const runs = data?.source_runs || [];
       const nextDate = targetDate || data?.trade_date || '';
       setCandidates(items);
       setExitWatchlist(watchItems);
+      setSourceRuns(runs);
       setCandidateEmptyStateByDate((prev) => {
         if (items.length > 0) return { ...prev, [targetDate]: 'idle' };
         const nextState = prev[targetDate] || candidateEmptyStateForMeta(tradeDateMetaByDate[targetDate]);
@@ -1033,6 +1044,31 @@ const SelectionResearchPage: React.FC = () => {
                 <div className="flex items-center gap-2 text-lg font-bold text-white">
                   <TrendingUp className="h-5 w-5 text-amber-400" />
                   每日综合候选
+                  {sourceRuns.length > 0 ? (
+                    <div className="group relative">
+                      <button
+                        type="button"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-950/80 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-100"
+                        aria-label="查看当日策略状态"
+                      >
+                        <AlertCircle className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="pointer-events-none absolute left-0 top-full z-20 hidden pt-2 group-hover:block">
+                        <div className="w-72 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-[11px] leading-5 text-slate-200 shadow-2xl">
+                          <div className="space-y-1.5">
+                            {sourceRuns.map((item) => (
+                              <div key={item.source_id} className="flex items-start justify-between gap-3">
+                                <span className="text-slate-300">{item.label}</span>
+                                <span className={item.status === 'failed' ? 'text-rose-300' : 'text-slate-400'}>
+                                  {item.status === 'failed' ? '失败' : `成功 ${item.candidate_count} 条`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <span className="text-xs font-medium text-slate-500">{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}</span>
                 </div>
               </div>

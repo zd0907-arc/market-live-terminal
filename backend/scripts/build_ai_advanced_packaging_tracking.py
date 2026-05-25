@@ -143,7 +143,7 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 def try_load_fine_dashboard_from_api(days: int = 63, pool_size: int = 50) -> dict[str, Any]:
     query = urllib.parse.urlencode({"days": days, "pool_size": pool_size})
-    url = f"http://127.0.0.1:8000/api/market_heat/fine_dashboard?{query}"
+    url = f"http://127.0.0.1:8001/api/market_heat/fine_dashboard?{query}"
     req = urllib.request.Request(url, headers={"User-Agent": "trend-research-builder/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=1.5) as resp:

@@ -413,6 +413,14 @@ export interface SelectionCandidatesResponse {
   strategy: SelectionStrategy;
   rank_mode?: string;
   items: SelectionCandidateItem[];
+  source_runs?: Array<{
+    source_id: string;
+    label: string;
+    status: 'success' | 'failed';
+    candidate_count: number;
+    error?: string | null;
+    finished_at?: string | null;
+  }>;
   exit_watchlist?: {
     trade_date: string;
     policy_id: string;
