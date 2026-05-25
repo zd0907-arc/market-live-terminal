@@ -495,7 +495,7 @@ const SelectionResearchPage: React.FC = () => {
       setProfile(null);
     }
     try {
-      const data = await fetchDailySelectionCandidates(targetDate, 80);
+      const data = await fetchDailySelectionCandidates(targetDate, 80, undefined, true);
       if (requestSeq !== candidatesRequestSeqRef.current || targetDate !== candidateLoadDateRef.current) return;
       const items = data?.items || [];
       const watchItems = data?.exit_watchlist?.items || [];
@@ -540,7 +540,7 @@ const SelectionResearchPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadHealth();
+    void loadHealth();
     loadBacktests();
     let cancelled = false;
     const check = () => {
@@ -562,6 +562,30 @@ const SelectionResearchPage: React.FC = () => {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    const fallbackMin = '2025-01-01';
+    const fallbackMax = formatDateOnly(new Date());
+    if (dateInitializedRef.current || Object.keys(tradeDateMetaByDate).length > 0) return;
+    let cancelled = false;
+    fetchDailySelectionTradeDates(fallbackMin, fallbackMax)
+      .then((data) => {
+        if (cancelled || !data?.items?.length) return;
+        const next = tradeDateItemsToMap(data.items || []);
+        setTradeDateMetaByDate((prev) => (Object.keys(prev).length ? prev : next));
+        const latestSelectable = latestSelectableDate(data.items || []);
+        if (latestSelectable && !dateInitializedRef.current) {
+          dateInitializedRef.current = true;
+          lastLoadedKeyRef.current = '';
+          setTradeDate(latestSelectable);
+          setPendingTradeDate(latestSelectable);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tradeDateMetaByDate]);
 
   useEffect(() => {
     if (!tradeDate) return;

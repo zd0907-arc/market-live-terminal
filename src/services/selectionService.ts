@@ -55,12 +55,14 @@ export const fetchSelectionCandidates = async (
 export const fetchDailySelectionCandidates = async (
   date?: string,
   limit = 50,
-  sourceType?: string
+  sourceType?: string,
+  includeExitWatchlist = false,
 ): Promise<SelectionCandidatesResponse | null> => {
   try {
     const params = new URLSearchParams({ limit: String(limit) });
     if (date) params.set('date', date);
     if (sourceType) params.set('source_type', sourceType);
+    if (includeExitWatchlist) params.set('include_exit_watchlist', 'true');
     const res = await fetch(`${API_BASE_URL}/selection/daily-candidates?${params.toString()}`);
     return await parseApiData<SelectionCandidatesResponse>(res);
   } catch (e) {

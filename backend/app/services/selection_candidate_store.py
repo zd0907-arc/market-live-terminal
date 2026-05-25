@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.app.db.selection_db import ensure_selection_schema, get_selection_connection
+from backend.app.db.selection_db import query_exit_watchlist_rows, replace_exit_watchlist_rows
 from backend.app.services.spark_opportunity_selector import SOURCE_ID as SPARK_SOURCE_ID
 
 ACTION_PRIORITY = {
@@ -16,6 +17,7 @@ ACTION_PRIORITY = {
     "blocked": 1,
 }
 MAX_TRADE_DATE_WINDOW_DAYS = 540
+DEFAULT_EXIT_POLICY_ID = "pc_model_th6_stop12"
 
 
 def _json_dump(value: Any) -> str:
@@ -94,6 +96,52 @@ def _dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _exit_watch_row_to_candidate(row: Any) -> Dict[str, Any]:
+    raw_payload = _json_load(row["raw_payload_json"], {})
+    return {
+        "rank": int(row["rank"] or 0),
+        "symbol": str(row["symbol"]),
+        "name": str(row["name"] or row["symbol"]),
+        "trade_date": str(row["trade_date"]),
+        "score": _safe_float(row["score"]),
+        "signal": int(row["signal"] or 0),
+        "signal_label": str(row["signal_label"] or ""),
+        "current_judgement": str(row["current_judgement"] or ""),
+        "reason_summary": str(row["reason_summary"] or ""),
+        "risk_level": str(row["risk_level"] or ""),
+        "stealth_score": 0.0,
+        "breakout_score": 0.0,
+        "distribution_score": 0.0,
+        "strategy_display_name": "星火进攻版持仓跟踪",
+        "strategy_internal_id": str(row["source_id"] or ""),
+        "feature_version": "spark_opportunity_exit_watchlist",
+        "strategy_version": str(row["policy_id"] or ""),
+        "candidate_types": ["spark_exit_watch"],
+        "entry_allowed": bool(row["entry_allowed"]),
+        "entry_block_reasons": [],
+        "selection_rank_score": _safe_float(row["score"]),
+        "source_score": _safe_float(row["score"]),
+        "selection_rank_mode": "spark_exit_watch",
+        "lifecycle_phase": str(row["lifecycle_phase"] or ""),
+        "lifecycle_phase_label": str(row["lifecycle_phase_label"] or ""),
+        "action_label": str(row["action_label"] or ""),
+        "entry_signal_date": str(row["entry_signal_date"] or "") or None,
+        "entry_date": str(row["entry_date"] or "") or None,
+        "exit_signal_date": str(row["exit_signal_date"] or "") or None,
+        "exit_date": str(row["exit_date"] or "") or None,
+        "exit_plan_summary": str(row["exit_plan_summary"] or ""),
+        "source_count": 1,
+        "source_ids": _json_load(row["source_ids_json"], []),
+        "source_types": _json_load(row["source_types_json"], []),
+        "primary_source_id": str(row["source_id"] or ""),
+        "primary_source_name": str(row["source_name"] or ""),
+        "primary_source_type": str(row["source_type"] or ""),
+        "source_details": _json_load(row["source_details_json"], []),
+        "trade_plan": _json_load(row["trade_plan_json"], {}),
+        "raw_payload": raw_payload,
+    }
+
+
 def _next_trade_date_from_selection(trade_date: str) -> Optional[str]:
     conn = get_selection_connection()
     try:
@@ -108,6 +156,36 @@ def _next_trade_date_from_selection(trade_date: str) -> Optional[str]:
         return str(row["next_date"]) if row and row["next_date"] else None
     except sqlite3.Error:
         return None
+    finally:
+        conn.close()
+
+
+def _next_trade_dates_from_selection(trade_dates: Sequence[str]) -> Dict[str, Optional[str]]:
+    normalized = sorted({str(item) for item in trade_dates if item})
+    if not normalized:
+        return {}
+    ensure_selection_schema()
+    conn = get_selection_connection()
+    try:
+        placeholders = ",".join("?" for _ in normalized)
+        rows = conn.execute(
+            f"""
+            SELECT base.trade_date AS trade_date, MIN(next.trade_date) AS next_date
+            FROM (
+                SELECT DISTINCT trade_date
+                FROM selection_feature_daily
+                WHERE trade_date IN ({placeholders})
+            ) AS base
+            LEFT JOIN selection_feature_daily AS next
+              ON next.trade_date > base.trade_date
+            GROUP BY base.trade_date
+            """,
+            normalized,
+        ).fetchall()
+        return {
+            str(row["trade_date"]): (str(row["next_date"]) if row["next_date"] else None)
+            for row in rows
+        }
     finally:
         conn.close()
 
@@ -532,7 +610,7 @@ def rebuild_daily_candidates(trade_date: str) -> int:
         conn.close()
 
 
-def _daily_row_to_candidate(row: Any) -> Dict[str, Any]:
+def _daily_row_to_candidate(row: Any, next_trade_date_by_date: Optional[Dict[str, Optional[str]]] = None) -> Dict[str, Any]:
     source_details = _json_load(row["source_details_json"], [])
     explain_factors: Dict[str, Any] = {}
     raw_payload: Dict[str, Any] = {}
@@ -543,7 +621,13 @@ def _daily_row_to_candidate(row: Any) -> Dict[str, Any]:
     primary_source_id = str(row["primary_source_id"] or "")
     is_entry_allowed = bool(row["entry_allowed"])
     entry_signal_date = raw_payload.get("entry_signal_date") or (trade_date if primary_source_id == SPARK_SOURCE_ID else None)
-    entry_date = raw_payload.get("entry_date") or (_next_trade_date_from_selection(trade_date) if is_entry_allowed else None)
+    fallback_entry_date = None
+    if is_entry_allowed:
+        if next_trade_date_by_date is not None:
+            fallback_entry_date = next_trade_date_by_date.get(trade_date)
+        else:
+            fallback_entry_date = _next_trade_date_from_selection(trade_date)
+    entry_date = raw_payload.get("entry_date") or fallback_entry_date
     return {
         "rank": int(row["combined_rank"] or 0),
         "symbol": str(row["symbol"]),
@@ -630,13 +714,14 @@ def query_daily_candidates(trade_date: Optional[str] = None, *, limit: int = 50,
             """,
             params,
         ).fetchall()
+        next_trade_date_by_date = _next_trade_dates_from_selection([str(row["trade_date"]) for row in rows])
         return {
             "trade_date": target,
             "strategy": "daily_candidate_pool",
             "strategy_display_name": "每日综合候选池",
             "strategy_internal_id": "daily_candidate_pool",
             "rank_mode": "daily_candidate_pool",
-            "items": [_daily_row_to_candidate(row) for row in rows],
+            "items": [_daily_row_to_candidate(row, next_trade_date_by_date) for row in rows],
         }
     finally:
         conn.close()
@@ -785,6 +870,28 @@ def query_daily_candidate_profile(symbol: str, trade_date: str) -> Optional[Dict
         ).fetchone()
         if not row:
             return None
-        return _daily_row_to_candidate(row)
+        next_trade_date_by_date = _next_trade_dates_from_selection([trade_date])
+        return _daily_row_to_candidate(row, next_trade_date_by_date)
     finally:
         conn.close()
+
+
+def replace_daily_exit_watchlist(trade_date: str, payload: Dict[str, Any]) -> int:
+    items = list(payload.get("items") or [])
+    policy_id = str(payload.get("policy_id") or DEFAULT_EXIT_POLICY_ID)
+    rows = []
+    for item in items:
+        row = dict(item)
+        row["policy_name"] = str(payload.get("policy_name") or row.get("policy_name") or "")
+        rows.append(row)
+    return replace_exit_watchlist_rows(trade_date, policy_id, rows)
+
+
+def query_daily_exit_watchlist(trade_date: str, policy_id: str = DEFAULT_EXIT_POLICY_ID) -> Dict[str, Any]:
+    rows = query_exit_watchlist_rows(trade_date, policy_id=policy_id)
+    return {
+        "trade_date": str(trade_date),
+        "policy_id": str(policy_id),
+        "policy_name": str(rows[0]["policy_name"]) if rows else "星火进攻版",
+        "items": [_exit_watch_row_to_candidate(row) for row in rows],
+    }

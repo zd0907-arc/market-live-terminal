@@ -6,6 +6,7 @@ from backend.app.services.selection_candidate_store import (
     upsert_strategy_registry,
 )
 from backend.app.services.selection_daily_workbench import run_daily_selection_sources
+from backend.app.services.selection_candidate_store import query_daily_exit_watchlist
 
 
 def test_daily_candidate_pool_merges_sources(monkeypatch, tmp_path):
@@ -220,6 +221,56 @@ def test_spark_source_uses_top3_daily_limit(monkeypatch, tmp_path):
     assert payload["merged_count"] == 3
 
 
+def test_rule_strategy_candidates_use_requested_trade_date(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+
+    import backend.app.services.selection_daily_workbench as workbench
+
+    monkeypatch.setattr(
+        workbench,
+        "get_stable_callback_candidates",
+        lambda trade_date, limit=10: {
+            "trade_date": trade_date,
+            "items": [
+                {
+                    "trade_date": "",
+                    "symbol": "sz002361",
+                    "name": "神剑股份",
+                    "score": 97.49,
+                    "entry_allowed": True,
+                    "action_label": "可买入",
+                    "reason_summary": "no_launch；风险标签 0 个",
+                    "discovery_date": trade_date,
+                }
+            ],
+        },
+    )
+
+    payload = run_daily_selection_sources("2026-05-25", source_ids=["stable_capital_callback"])
+    assert payload["errors"] == {}
+    assert payload["sources"]["stable_capital_callback"] == 1
+    assert payload["merged_count"] == 1
+
+    conn = selection_db_module.get_selection_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT trade_date, symbol, source_id
+            FROM selection_candidate_sources
+            WHERE source_id='stable_capital_callback'
+            """
+        ).fetchone()
+    finally:
+        conn.close()
+    assert dict(row) == {
+        "trade_date": "2026-05-25",
+        "symbol": "sz002361",
+        "source_id": "stable_capital_callback",
+    }
+
+
 def test_daily_candidates_include_exit_watchlist(monkeypatch, tmp_path):
     selection_db_path = tmp_path / "selection_research.db"
     monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
@@ -288,8 +339,81 @@ def test_daily_candidates_include_exit_watchlist(monkeypatch, tmp_path):
         },
     )
 
-    resp = selection_daily_candidates(date="2026-05-14", limit=10)
+    resp = selection_daily_candidates(date="2026-05-14", limit=10, include_exit_watchlist=True)
     assert resp.code == 200
     assert resp.data["exit_watchlist"]["policy_id"] == "pc_model_th6_stop12"
     assert len(resp.data["exit_watchlist"]["items"]) == 1
     assert resp.data["exit_watchlist"]["items"][0]["exit_signal_date"] == "2026-05-14"
+
+
+def test_daily_candidates_skip_exit_watchlist_by_default(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+
+    import backend.app.services.selection_daily_workbench as workbench
+
+    monkeypatch.setattr(
+        workbench,
+        "get_daily_exit_watchlist",
+        lambda trade_date: (_ for _ in ()).throw(AssertionError("exit watchlist should be opt-in")),
+    )
+
+    resp = selection_daily_candidates(date="2026-05-14", limit=10)
+    assert resp.code == 200
+    assert resp.data["items"] == []
+    assert resp.data["exit_watchlist"]["skipped"] is True
+
+
+def test_run_daily_sources_persists_exit_watchlist(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+
+    import backend.app.services.selection_daily_workbench as workbench
+
+    monkeypatch.setattr(workbench, "generate_source_candidates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        workbench,
+        "get_daily_exit_watchlist",
+        lambda trade_date, use_cache=False: {
+            "trade_date": trade_date,
+            "policy_id": "pc_model_th6_stop12",
+            "policy_name": "星火进攻版",
+            "items": [
+                {
+                    "symbol": "sh600001",
+                    "name": "测试一",
+                    "trade_date": trade_date,
+                    "rank": 1,
+                    "score": 88.0,
+                    "signal": 1,
+                    "signal_label": "spark_exit_sell_next_open",
+                    "current_judgement": "次日卖出",
+                    "reason_summary": "盘后建议次日卖出",
+                    "risk_level": "high",
+                    "action_label": "次日卖出",
+                    "lifecycle_phase": "sell",
+                    "lifecycle_phase_label": "次日卖出",
+                    "entry_signal_date": "2026-05-14",
+                    "entry_date": "2026-05-15",
+                    "exit_signal_date": trade_date,
+                    "exit_date": "2026-05-15",
+                    "exit_plan_summary": "盘后建议次日卖出",
+                    "entry_allowed": False,
+                    "source_ids": ["spark_opportunity_selector"],
+                    "source_types": ["model"],
+                    "source_details": [{"source_id": "spark_opportunity_selector", "score": 88.0}],
+                    "primary_source_id": "spark_opportunity_selector",
+                    "primary_source_name": "星火机会模型 1.0",
+                    "primary_source_type": "model",
+                }
+            ],
+        },
+    )
+
+    payload = run_daily_selection_sources("2026-05-14", source_ids=["spark_opportunity_selector"])
+    assert payload["exit_watchlist_count"] == 1
+    watchlist = query_daily_exit_watchlist("2026-05-14")
+    assert len(watchlist["items"]) == 1
+    assert watchlist["items"][0]["exit_signal_date"] == "2026-05-14"

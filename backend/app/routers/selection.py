@@ -122,10 +122,20 @@ def selection_daily_candidates(
     date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新统一候选日"),
     limit: int = Query(50, ge=1, le=500),
     source_type: str = Query(None, description="可选：model / rule_strategy"),
+    include_exit_watchlist: bool = Query(False, description="是否同步计算星火退出观察池"),
 ):
     try:
         normalized_source_type = source_type if isinstance(source_type, str) and source_type else None
-        return APIResponse(code=200, data=get_daily_selection_candidates(date, limit=limit, source_type=normalized_source_type))
+        normalized_include_exit_watchlist = include_exit_watchlist is True
+        return APIResponse(
+            code=200,
+            data=get_daily_selection_candidates(
+                date,
+                limit=limit,
+                source_type=normalized_source_type,
+                include_exit_watchlist=normalized_include_exit_watchlist,
+            ),
+        )
     except Exception as exc:
         return APIResponse(code=500, message=f"每日选股候选查询失败: {exc}", data=None)
 

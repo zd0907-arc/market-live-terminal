@@ -278,6 +278,43 @@ def ensure_selection_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_selection_candidate_daily_date
             ON selection_candidate_daily(trade_date, suggested_action, combined_rank);
+
+            CREATE TABLE IF NOT EXISTS selection_exit_watchlist_daily (
+                trade_date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                policy_id TEXT NOT NULL,
+                policy_name TEXT,
+                source_id TEXT,
+                source_name TEXT,
+                source_type TEXT,
+                rank INTEGER NOT NULL DEFAULT 0,
+                score REAL NOT NULL DEFAULT 0,
+                signal INTEGER NOT NULL DEFAULT 0,
+                signal_label TEXT,
+                current_judgement TEXT,
+                reason_summary TEXT,
+                risk_level TEXT,
+                action_label TEXT,
+                lifecycle_phase TEXT,
+                lifecycle_phase_label TEXT,
+                entry_allowed INTEGER NOT NULL DEFAULT 0,
+                entry_signal_date TEXT,
+                entry_date TEXT,
+                exit_signal_date TEXT,
+                exit_date TEXT,
+                exit_plan_summary TEXT,
+                trade_plan_json TEXT,
+                source_ids_json TEXT,
+                source_types_json TEXT,
+                source_details_json TEXT,
+                raw_payload_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(trade_date, symbol, policy_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_selection_exit_watchlist_daily_date
+            ON selection_exit_watchlist_daily(trade_date, signal DESC, rank ASC, symbol ASC);
             """
         )
         _ensure_column(conn, "selection_backtest_trades", "fixed_exit_return_pct", "REAL")
@@ -447,6 +484,93 @@ def fail_backtest_run(run_id: int, error_message: str) -> None:
                 "UPDATE selection_backtest_runs SET status='failed', summary_json=?, finished_at=CURRENT_TIMESTAMP WHERE id=?",
                 (error_message, int(run_id)),
             )
+    finally:
+        conn.close()
+
+
+def replace_exit_watchlist_rows(trade_date: str, policy_id: str, rows: Sequence[Dict[str, object]]) -> int:
+    ensure_selection_schema()
+    conn = get_selection_connection()
+    try:
+        with conn:
+            conn.execute(
+                "DELETE FROM selection_exit_watchlist_daily WHERE trade_date=? AND policy_id=?",
+                (str(trade_date), str(policy_id)),
+            )
+            if rows:
+                conn.executemany(
+                    """
+                    INSERT OR REPLACE INTO selection_exit_watchlist_daily (
+                        trade_date, symbol, name, policy_id, policy_name, source_id, source_name, source_type,
+                        rank, score, signal, signal_label, current_judgement, reason_summary, risk_level,
+                        action_label, lifecycle_phase, lifecycle_phase_label, entry_allowed,
+                        entry_signal_date, entry_date, exit_signal_date, exit_date, exit_plan_summary,
+                        trade_plan_json, source_ids_json, source_types_json, source_details_json, raw_payload_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    [
+                        (
+                            str(trade_date),
+                            str(item.get("symbol") or "").lower(),
+                            str(item.get("name") or item.get("symbol") or "").strip(),
+                            str(policy_id),
+                            str(item.get("policy_name") or ""),
+                            str(item.get("primary_source_id") or item.get("strategy_internal_id") or ""),
+                            str(item.get("primary_source_name") or item.get("strategy_display_name") or ""),
+                            str(item.get("primary_source_type") or "model"),
+                            int(item.get("rank") or 0),
+                            float(item.get("score") or 0.0),
+                            int(item.get("signal") or 0),
+                            str(item.get("signal_label") or ""),
+                            str(item.get("current_judgement") or ""),
+                            str(item.get("reason_summary") or ""),
+                            str(item.get("risk_level") or ""),
+                            str(item.get("action_label") or ""),
+                            str(item.get("lifecycle_phase") or ""),
+                            str(item.get("lifecycle_phase_label") or ""),
+                            1 if bool(item.get("entry_allowed")) else 0,
+                            str(item.get("entry_signal_date") or ""),
+                            str(item.get("entry_date") or ""),
+                            str(item.get("exit_signal_date") or ""),
+                            str(item.get("exit_date") or ""),
+                            str(item.get("exit_plan_summary") or ""),
+                            json.dumps(item.get("trade_plan") or {}, ensure_ascii=False, separators=(",", ":")),
+                            json.dumps(item.get("source_ids") or [], ensure_ascii=False, separators=(",", ":")),
+                            json.dumps(item.get("source_types") or [], ensure_ascii=False, separators=(",", ":")),
+                            json.dumps(item.get("source_details") or [], ensure_ascii=False, separators=(",", ":")),
+                            json.dumps(item, ensure_ascii=False, separators=(",", ":")),
+                        )
+                        for item in rows
+                    ],
+                )
+        return len(rows)
+    finally:
+        conn.close()
+
+
+def query_exit_watchlist_rows(trade_date: str, policy_id: Optional[str] = None) -> List[sqlite3.Row]:
+    ensure_selection_schema()
+    conn = get_selection_connection()
+    try:
+        if policy_id:
+            return conn.execute(
+                """
+                SELECT *
+                FROM selection_exit_watchlist_daily
+                WHERE trade_date=? AND policy_id=?
+                ORDER BY signal DESC, rank ASC, symbol ASC
+                """,
+                (str(trade_date), str(policy_id)),
+            ).fetchall()
+        return conn.execute(
+            """
+            SELECT *
+            FROM selection_exit_watchlist_daily
+            WHERE trade_date=?
+            ORDER BY signal DESC, rank ASC, symbol ASC
+            """,
+            (str(trade_date),),
+        ).fetchall()
     finally:
         conn.close()
 

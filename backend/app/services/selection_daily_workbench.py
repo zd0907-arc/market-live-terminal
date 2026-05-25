@@ -4,11 +4,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.app.services import spark_opportunity_selector
 from backend.app.services.selection_candidate_store import (
+    query_daily_exit_watchlist,
     query_daily_candidate_profile,
     query_daily_candidates,
     query_daily_trade_dates,
     rebuild_daily_candidates,
     record_source_run_error,
+    replace_daily_exit_watchlist,
     replace_source_candidates,
     upsert_strategy_registry,
 )
@@ -86,6 +88,7 @@ def _standard_action_from_strategy_candidate(item: Dict[str, Any]) -> tuple[str,
 def _strategy_candidate_to_standard(
     item: Dict[str, Any],
     *,
+    trade_date: str,
     source_id: str,
     source_name: str,
     source_version: str,
@@ -110,7 +113,7 @@ def _strategy_candidate_to_standard(
     ]
     explain_factors = {key: item.get(key) for key in explain_keys if item.get(key) is not None}
     return {
-        "trade_date": str(item.get("trade_date") or ""),
+        "trade_date": str(trade_date),
         "symbol": str(item.get("symbol") or "").lower(),
         "name": str(item.get("name") or item.get("symbol") or "").lower(),
         "source_id": source_id,
@@ -140,6 +143,7 @@ def _generate_stable_candidates(trade_date: str, limit: int) -> List[Dict[str, A
     return [
         _strategy_candidate_to_standard(
             item,
+            trade_date=trade_date,
             source_id=STABLE_SOURCE_ID,
             source_name=STABLE_SOURCE_NAME,
             source_version=STABLE_SOURCE_VERSION,
@@ -154,6 +158,7 @@ def _generate_trend_candidates(trade_date: str, limit: int) -> List[Dict[str, An
     candidates = [
         _strategy_candidate_to_standard(
             item,
+            trade_date=trade_date,
             source_id=TREND_SOURCE_ID,
             source_name=TREND_SOURCE_NAME,
             source_version=TREND_SOURCE_VERSION,
@@ -198,6 +203,7 @@ def run_daily_selection_sources(
     *,
     limit: int = 50,
     source_ids: Optional[Sequence[str]] = None,
+    include_exit_watchlist: bool = True,
 ) -> Dict[str, Any]:
     target_sources = list(source_ids or ACTIVE_SOURCE_IDS)
     ensure_daily_source_registry()
@@ -216,11 +222,19 @@ def run_daily_selection_sources(
             errors[source_id] = str(exc)
             record_source_run_error(trade_date, source_id, str(exc))
     merged_count = rebuild_daily_candidates(trade_date)
+    exit_watchlist_count = 0
+    if include_exit_watchlist:
+        try:
+            exit_watchlist_payload = get_daily_exit_watchlist(trade_date, use_cache=False)
+            exit_watchlist_count = replace_daily_exit_watchlist(trade_date, exit_watchlist_payload)
+        except Exception as exc:
+            errors["sentinel_postclose_exit"] = str(exc)
     return {
         "trade_date": trade_date,
         "sources": source_counts,
         "errors": errors,
         "merged_count": merged_count,
+        "exit_watchlist_count": exit_watchlist_count,
     }
 
 
@@ -229,10 +243,20 @@ def get_daily_selection_candidates(
     *,
     limit: int = 50,
     source_type: Optional[str] = None,
+    include_exit_watchlist: bool = False,
 ) -> Dict[str, Any]:
     ensure_daily_source_registry()
     payload = query_daily_candidates(trade_date, limit=limit, source_type=source_type)
     target_date = str(payload.get("trade_date") or trade_date or "")
+    if not include_exit_watchlist:
+        payload["exit_watchlist"] = {
+            "trade_date": target_date,
+            "policy_id": "pc_model_th6_stop12",
+            "policy_name": "星火进攻版",
+            "items": [],
+            "skipped": True,
+        }
+        return payload
     if not target_date:
         payload["exit_watchlist"] = {
             "trade_date": "",
@@ -242,7 +266,7 @@ def get_daily_selection_candidates(
         }
         return payload
     try:
-        payload["exit_watchlist"] = get_daily_exit_watchlist(target_date)
+        payload["exit_watchlist"] = query_daily_exit_watchlist(target_date)
     except Exception as exc:
         payload["exit_watchlist"] = {
             "trade_date": target_date,
@@ -264,7 +288,7 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
     exit_watch_item: Optional[Dict[str, Any]] = None
     if daily_candidate is None:
         try:
-            exit_watchlist_payload = get_daily_exit_watchlist(trade_date)
+            exit_watchlist_payload = query_daily_exit_watchlist(trade_date)
             exit_watch_item = next(
                 (
                     item
