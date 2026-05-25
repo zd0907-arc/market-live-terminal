@@ -242,6 +242,7 @@ const RealtimeView: React.FC<RealtimeViewProps> = ({ activeStock, configVersion,
 
         return () => {
             isMounted = false;
+            isFetchingRef.current = false;
             // 心跳随组件卸载自动停止
             if (heartbeatInterval) clearInterval(heartbeatInterval);
             if (intervalId) clearInterval(intervalId);
