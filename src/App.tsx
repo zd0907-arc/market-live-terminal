@@ -200,8 +200,9 @@ const App: React.FC = () => {
   const [isWatchlisted, setIsWatchlisted] = useState(false);
 
   // System Status
-  const [backendStatus, setBackendStatus] = useState<boolean>(false);
+  const [backendStatus, setBackendStatus] = useState<boolean>(true);
   const [configVersion, setConfigVersion] = useState(0);
+  const backendHealthFailureCountRef = React.useRef(0);
 
   // Focus Mode (盯盘)
   const [focusMode, setFocusMode] = useState<'normal' | 'focus'>('normal');
@@ -265,13 +266,26 @@ const App: React.FC = () => {
 
   // Backend Health Check
   useEffect(() => {
+    let cancelled = false;
     const check = async () => {
       const isHealthy = await StockService.checkBackendHealth();
-      setBackendStatus(isHealthy);
+      if (cancelled) return;
+      if (isHealthy) {
+        backendHealthFailureCountRef.current = 0;
+        setBackendStatus(true);
+        return;
+      }
+      backendHealthFailureCountRef.current += 1;
+      if (backendHealthFailureCountRef.current >= 3) {
+        setBackendStatus(false);
+      }
     };
     check();
-    const interval = setInterval(check, 5000);
-    return () => clearInterval(interval);
+    const interval = window.setInterval(check, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   // Idle Timer & Auto-Cancel Focus Mode
