@@ -3,6 +3,7 @@
 // 生产环境：使用相对路径 /api (由 Nginx 代理)
 
 export const API_BASE_URL = import.meta.env.PROD ? '/api' : '/api';
+export const DEV_BACKEND_DIRECT_URL = import.meta.env.PROD ? '' : 'http://127.0.0.1:8001';
 
 export const getWriteHeaders = (withJson: boolean = false): Record<string, string> => {
   const headers: Record<string, string> = {};

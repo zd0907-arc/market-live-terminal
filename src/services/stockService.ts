@@ -14,7 +14,7 @@ import {
   ReviewPoolItem,
   ReviewBar,
 } from '../types';
-import { API_BASE_URL, getWriteHeaders } from '../config';
+import { API_BASE_URL, DEV_BACKEND_DIRECT_URL, getWriteHeaders } from '../config';
 
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 10000): Promise<Response> => {
   const controller = new AbortController();
@@ -95,12 +95,14 @@ const jsonp = (url: string, callbackName: string, timeout = 5000): Promise<any> 
 // 健康检查
 // ==========================================
 export const checkBackendHealth = async (): Promise<boolean> => {
+  const healthUrl = DEV_BACKEND_DIRECT_URL
+    ? `${DEV_BACKEND_DIRECT_URL}/api/health`
+    : `${API_BASE_URL}/health`;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒超时
 
-    // 使用新的 /api/health 接口
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await fetch(healthUrl, {
       method: 'GET',
       signal: controller.signal
     });
