@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：选股工作台日期切换与当日候选生成修复
-- 状态：DRAFT
+- 状态：RELEASED_PENDING_SMOKE
 - 负责人：Codex
 - 关联 Task ID：REQ-20260524-15-selection-workbench-date-and-candidate-rebuild
 - 关联 CAP：CAP-SELECTION-RESEARCH
@@ -29,8 +29,8 @@
 ## 4. 执行步骤（按顺序）
 1. 复核现有文档、前后端代码和数据库覆盖。
 2. 修复日期接口和前端日期交互。
-3. 运行最近窗口候选回填 smoke。
-4. 验证页面与接口行为。
+3. 接通目标日期无候选时的当日候选生成流程。
+4. 发布到 `main`，等待人工页面验收。
 
 ## 5. 验收标准（Given/When/Then，绝对时间）
 - Given `2026-05-24` 本地研究站读取 `/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db`
@@ -49,13 +49,13 @@
   - 后端 `/api/selection/daily-trade-dates` 大范围查询改为保留最近 540 天窗口，返回 `truncated/window_days` 以及候选、评分、运行状态元数据。
   - 前端日期选择只允许选择后端明确可选的日期；绿点表示已有候选，黄点表示有评分底座可运行。
   - 前端“查看候选”和左右切换会在需要时先尝试运行当日候选；已跑完但 0 条结果时，候选菜单显示“已跑完，今天没有可推荐的股票。”。
+  - 右侧详情的“最新”锚点恢复为最近可用交易日，不再错误回退到当前回顾日期本身。
 - 验证结果：
-  - `python3 -m pytest backend/tests/test_selection_daily_workbench.py`：5 passed。
-  - `npm run build`：通过。
-  - 隔离后端 `8011` 实测：底层评分覆盖 `2024-09-02 ~ 2026-05-22`；候选池覆盖 `2026-03-02 ~ 2026-05-22` 共 53 个日期；全历史日期接口返回最近窗口 `2024-11-28 ~ 2026-05-22`，不再截断到 2026-02。
-  - 隔离前端 `3012` 实测：默认进入 `2026-05-22` 并显示 3 条候选；选择 `2026-05-19` 显示“已跑完，今天没有可推荐的股票。”。
+  - 代码已在 `main`，提交为 `771519d Fix selection workbench date switching and candidate rebuild flow`。
+  - 本次文档治理未运行测试或页面冒烟；按你的要求，功能验证保留给你在本地页面手动确认。
 - 遗留问题：
   - 当前两个规则策略仍依赖 4 月实验产物，5 月候选主要来自 `spark_opportunity_selector`，这次未重写策略数据源。
+  - `/Users/dong/Desktop/AIGC/market-live-terminal-selection-fixes` 这个独立 worktree 里还留有未提交草稿，不属于当前 `main` 已发布状态。
 
 ## 8. 归档信息
 - 归档时间：
