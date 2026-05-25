@@ -52,7 +52,48 @@ LOCAL_ATOMIC_DB = Path(
 )
 LOCAL_SELECTION_DB = Path(os.getenv("DAILY_LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 LOCAL_MODEL_FEATURE_DB = Path(os.getenv("DAILY_LOCAL_MODEL_FEATURE_DB", str(LOCAL_DATA_ROOT / "selection" / "model_feature_store.db")))
-LOCAL_PYTHON = os.getenv("DAILY_LOCAL_PYTHON", sys.executable)
+
+
+def _python_has_module(python_cmd: str, module: str) -> bool:
+    if not python_cmd:
+        return False
+    result = subprocess.run(
+        [python_cmd, "-c", f"import {module}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _python_has_modules(python_cmd: str, modules: Sequence[str]) -> bool:
+    return all(_python_has_module(python_cmd, module) for module in modules)
+
+
+def _resolve_local_python() -> str:
+    explicit = os.getenv("DAILY_LOCAL_PYTHON", "").strip()
+    if explicit:
+        return explicit
+    required = ("pandas", "sklearn", "joblib")
+    candidates = [
+        str(ROOT_DIR / ".venv" / "bin" / "python"),
+        "/usr/bin/python3",
+        "/opt/homebrew/bin/python3",
+        shutil.which("python3") or "",
+        sys.executable,
+    ]
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and Path(text).exists() and _python_has_modules(text, required):
+            return text
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text and Path(text).exists():
+            return text
+    return sys.executable
+
+
+LOCAL_PYTHON = _resolve_local_python()
 
 LAN_WINDOWS_HOST = os.getenv("DAILY_WIN_LAN_HOST", "192.168.3.108")
 LAN_SYNC_PORT = int(os.getenv("DAILY_LAN_SYNC_PORT", "18767"))
@@ -603,6 +644,7 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             "atomic_db": str(LOCAL_ATOMIC_DB),
             "selection_db": str(LOCAL_SELECTION_DB),
             "model_feature_db": str(LOCAL_MODEL_FEATURE_DB),
+            "python": LOCAL_PYTHON,
         },
     }
     if dry_run:

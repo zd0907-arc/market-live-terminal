@@ -37,6 +37,12 @@ def _ensure_table_from_delta(conn: sqlite3.Connection, table: str) -> None:
         conn.execute(str(row[0]))
 
 
+def _common_columns(conn: sqlite3.Connection, table: str) -> List[str]:
+    target_columns = _table_columns(conn, table)
+    delta_columns = set(_table_columns(conn, table, "delta"))
+    return [column for column in target_columns if column in delta_columns]
+
+
 def merge_model_feature_store_day_delta(trade_date: str, delta_db: str, target_db: str) -> Dict[str, object]:
     normalized_date = _normalize_trade_date(trade_date)
     delta_path = Path(delta_db)
@@ -56,7 +62,7 @@ def merge_model_feature_store_day_delta(trade_date: str, delta_db: str, target_d
                 counts[table] = 0
                 continue
             _ensure_table_from_delta(conn, table)
-            columns = _table_columns(conn, table)
+            columns = _common_columns(conn, table)
             if not columns:
                 counts[table] = 0
                 continue

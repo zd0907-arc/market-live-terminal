@@ -32,6 +32,7 @@ fi
 export ENABLE_CLOUD_COLLECTOR="${ENABLE_CLOUD_COLLECTOR:-false}"
 export ENABLE_BACKGROUND_RUNTIME="${ENABLE_BACKGROUND_RUNTIME:-false}"
 export SELECTION_AUTO_REFRESH_ON_READ="${SELECTION_AUTO_REFRESH_ON_READ:-false}"
+export PORT="${PORT:-8001}"
 
 COMPACT_READ_FLAG="$(printf '%s' "$ENABLE_ATOMIC_COMPACT_READ" | tr '[:upper:]' '[:lower:]')"
 COMPACT_READ_ENABLED=false
@@ -81,6 +82,7 @@ if [ -n "$ATOMIC_COMPACT_DB_PATH" ]; then
   echo "[local-research] ATOMIC_COMPACT_DB_PATH=$ATOMIC_COMPACT_DB_PATH"
 fi
 echo "[local-research] ENABLE_BACKGROUND_RUNTIME=$ENABLE_BACKGROUND_RUNTIME"
+echo "[local-research] PORT=$PORT"
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [ -z "$PYTHON_BIN" ]; then
   for candidate in "$ROOT/.venv/bin/python" "/usr/bin/python3" "python3" "/Users/dong/.browser-use-env/bin/python3"; do

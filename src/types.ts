@@ -418,6 +418,7 @@ export interface SelectionCandidatesResponse {
     policy_id: string;
     policy_name: string;
     items: SelectionCandidateItem[];
+    skipped?: boolean;
     error?: string;
   };
 }

@@ -2,6 +2,7 @@ import backend.app.db.selection_db as selection_db_module
 from backend.app.routers.selection import selection_daily_candidates, selection_daily_trade_dates
 from backend.app.services.selection_candidate_store import (
     rebuild_daily_candidates,
+    replace_daily_exit_watchlist,
     replace_source_candidates,
     upsert_strategy_registry,
 )
@@ -313,23 +314,20 @@ def test_daily_candidates_include_exit_watchlist(monkeypatch, tmp_path):
     assert replace_source_candidates("2026-05-14", "spark_opportunity_selector", spark_records) == 1
     assert rebuild_daily_candidates("2026-05-14") == 1
 
-    import backend.app.services.selection_daily_workbench as workbench
-
-    monkeypatch.setattr(
-        workbench,
-        "get_daily_exit_watchlist",
-        lambda trade_date: {
-            "trade_date": trade_date,
+    assert replace_daily_exit_watchlist(
+        "2026-05-14",
+        {
+            "trade_date": "2026-05-14",
             "policy_id": "pc_model_th6_stop12",
             "policy_name": "星火进攻版",
             "items": [
                 {
                     "symbol": "sh600001",
                     "name": "测试一",
-                    "trade_date": trade_date,
+                    "trade_date": "2026-05-14",
                     "entry_signal_date": "2026-05-14",
                     "entry_date": "2026-05-15",
-                    "exit_signal_date": trade_date,
+                    "exit_signal_date": "2026-05-14",
                     "exit_date": "2026-05-15",
                     "exit_plan_summary": "盘后建议次日卖出",
                     "entry_allowed": False,
@@ -337,7 +335,7 @@ def test_daily_candidates_include_exit_watchlist(monkeypatch, tmp_path):
                 }
             ],
         },
-    )
+    ) == 1
 
     resp = selection_daily_candidates(date="2026-05-14", limit=10, include_exit_watchlist=True)
     assert resp.code == 200
