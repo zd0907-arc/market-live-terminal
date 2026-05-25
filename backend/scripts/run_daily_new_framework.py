@@ -120,6 +120,25 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/sql/open_auction_phase_schema.sql",
 ]
 
+REQUIRED_LOCAL_VERIFY_KEYS = [
+    "atomic_trade_daily",
+    "atomic_order_daily",
+    "atomic_book_state_daily",
+    "atomic_limit_state_daily",
+    "selection_feature_daily",
+    "selection_signal_daily",
+    "model_feature_daily_v1",
+    "model_feature_intraday_shape_v1",
+]
+
+REQUIRED_SELECTION_SOURCE_IDS = [
+    "spark_opportunity_selector",
+    "stable_capital_callback",
+    "trend_continuation_callback",
+]
+
+DEFAULT_AUTO_DETECT_LIMIT = int(os.getenv("DAILY_AUTO_DETECT_LIMIT", "20"))
+
 
 def _windows_existing_path_candidates(primary: str, *fallbacks: str) -> List[str]:
     values = [str(item or "").strip() for item in (primary, *fallbacks)]
@@ -159,10 +178,15 @@ def _progress(message: str) -> None:
     print(f"[daily-new] [{_now_text()}] {message}", flush=True)
 
 
-def _compact_to_iso(trade_date: str) -> str:
+def _compact_date(trade_date: str) -> str:
     text = str(trade_date or "").replace("-", "").strip()
     if len(text) != 8 or not text.isdigit():
         raise ValueError(f"非法 trade_date: {trade_date}")
+    return text
+
+
+def _compact_to_iso(trade_date: str) -> str:
+    text = _compact_date(trade_date)
     return f"{text[:4]}-{text[4:6]}-{text[6:]}"
 
 
@@ -199,8 +223,45 @@ def _powershell_encoded(script: str) -> str:
     return f"powershell -NoProfile -EncodedCommand {encoded}"
 
 
+def _powershell_single_quoted(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _run_windows_powershell(script: str, *, check: bool = True) -> subprocess.CompletedProcess:
     return _ssh(resolve_windows_host(), _powershell_encoded(script), check=check)
+
+
+def _list_windows_market_package_dates(max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT) -> List[str]:
+    safe_limit = max(1, int(max_candidates or DEFAULT_AUTO_DETECT_LIMIT))
+    root = str(PureWindowsPath(WIN_MARKET_ROOT)).replace("/", "\\")
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$root = {_powershell_single_quoted(root)}
+if (-not (Test-Path -LiteralPath $root)) {{
+  throw "Windows market root not found: $root"
+}}
+Get-ChildItem -LiteralPath $root -Recurse -File |
+  Where-Object {{ ($_.Extension -in '.7z', '.zip') -and ($_.BaseName -match '^\\d{{8}}$') }} |
+  Sort-Object BaseName -Descending |
+  Select-Object -First {safe_limit} |
+  ForEach-Object {{ $_.BaseName }}
+"""
+    result = _run_windows_powershell(script)
+    dates: List[str] = []
+    seen = set()
+    for line in (result.stdout or "").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            trade_date = _compact_date(text)
+        except ValueError:
+            continue
+        if trade_date in seen:
+            continue
+        seen.add(trade_date)
+        dates.append(trade_date)
+    return sorted(dates)
 
 
 def _host_endpoint(host: str) -> str:
@@ -580,11 +641,14 @@ def _query_count(db_path: Path, table: str, date_col: str, trade_date: str) -> i
     if not db_path.exists():
         return 0
     iso_date = _compact_to_iso(trade_date)
-    with sqlite3.connect(db_path) as conn:
-        return int(conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {date_col}=?", (iso_date,)).fetchone()[0] or 0)
+    try:
+        with sqlite3.connect(db_path) as conn:
+            return int(conn.execute(f"SELECT COUNT(*) FROM {table} WHERE {date_col}=?", (iso_date,)).fetchone()[0] or 0)
+    except sqlite3.Error:
+        return 0
 
 
-def _verify_local(trade_date: str) -> Dict[str, int]:
+def _verify_local(trade_date: str) -> Dict[str, object]:
     return {
         "atomic_trade_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_trade_daily", "trade_date", trade_date),
         "atomic_order_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_order_daily", "trade_date", trade_date),
@@ -594,6 +658,102 @@ def _verify_local(trade_date: str) -> Dict[str, int]:
         "selection_signal_daily": _query_count(LOCAL_SELECTION_DB, "selection_signal_daily", "trade_date", trade_date),
         "model_feature_daily_v1": _query_count(LOCAL_MODEL_FEATURE_DB, "model_feature_daily_v1", "trade_date", trade_date),
         "model_feature_intraday_shape_v1": _query_count(LOCAL_MODEL_FEATURE_DB, "model_feature_intraday_shape_v1", "trade_date", trade_date),
+    }
+
+
+def _verify_selection_strategy_runs(trade_date: str) -> Dict[str, object]:
+    if not LOCAL_SELECTION_DB.exists():
+        return {
+            "required_source_ids": REQUIRED_SELECTION_SOURCE_IDS,
+            "successful_source_ids": [],
+            "missing_source_ids": REQUIRED_SELECTION_SOURCE_IDS,
+            "total_candidate_count": 0,
+        }
+    iso_date = _compact_to_iso(trade_date)
+    placeholders = ",".join("?" for _ in REQUIRED_SELECTION_SOURCE_IDS)
+    with sqlite3.connect(LOCAL_SELECTION_DB) as conn:
+        try:
+            rows = conn.execute(
+                f"""
+                SELECT source_id, MAX(finished_at) AS last_finished_at, SUM(candidate_count) AS candidate_count
+                FROM selection_strategy_runs
+                WHERE trade_date=?
+                  AND run_status='success'
+                  AND source_id IN ({placeholders})
+                GROUP BY source_id
+                """,
+                [iso_date, *REQUIRED_SELECTION_SOURCE_IDS],
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+    successful_source_ids = sorted(str(row[0]) for row in rows)
+    successful = set(successful_source_ids)
+    candidate_counts = {str(row[0]): int(row[2] or 0) for row in rows}
+    missing_source_ids = [source_id for source_id in REQUIRED_SELECTION_SOURCE_IDS if source_id not in successful]
+    return {
+        "required_source_ids": REQUIRED_SELECTION_SOURCE_IDS,
+        "successful_source_ids": successful_source_ids,
+        "missing_source_ids": missing_source_ids,
+        "candidate_counts": candidate_counts,
+        "total_candidate_count": sum(candidate_counts.values()),
+    }
+
+
+def _verify_full_local(trade_date: str) -> Dict[str, object]:
+    verify = _verify_local(trade_date)
+    verify["selection_strategy_runs"] = _verify_selection_strategy_runs(trade_date)
+    return verify
+
+
+def _is_local_complete(verify: Dict[str, object]) -> bool:
+    strategy_runs = verify.get("selection_strategy_runs") if isinstance(verify, dict) else None
+    return (
+        all(int((verify or {}).get(key) or 0) > 0 for key in REQUIRED_LOCAL_VERIFY_KEYS)
+        and isinstance(strategy_runs, dict)
+        and not strategy_runs.get("missing_source_ids")
+    )
+
+
+def resolve_auto_trade_dates(max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT) -> Dict[str, object]:
+    package_dates = _list_windows_market_package_dates(max_candidates)
+    if not package_dates:
+        return {
+            "status": "no_package_dates",
+            "package_dates": [],
+            "missing_dates": [],
+            "latest_complete_date": None,
+        }
+
+    checks: List[Dict[str, object]] = []
+    latest_complete_date: Optional[str] = None
+    for trade_date in package_dates:
+        verify = _verify_full_local(trade_date)
+        complete = _is_local_complete(verify)
+        checks.append({"trade_date": trade_date, "complete": complete, "local_verify": verify})
+        if complete:
+            latest_complete_date = trade_date if latest_complete_date is None else max(latest_complete_date, trade_date)
+
+    missing_dates = [str(item["trade_date"]) for item in checks if not item["complete"]]
+    selected_dates = [
+        trade_date
+        for trade_date in missing_dates
+        if latest_complete_date is None or trade_date > latest_complete_date
+    ]
+    historical_missing_dates = [
+        trade_date
+        for trade_date in missing_dates
+        if latest_complete_date is not None and trade_date <= latest_complete_date
+    ]
+
+    return {
+        "status": "missing" if selected_dates else "complete",
+        "package_dates": package_dates,
+        "missing_dates": missing_dates,
+        "selected_dates": sorted(selected_dates),
+        "historical_missing_dates": sorted(historical_missing_dates),
+        "latest_package_date": max(package_dates),
+        "latest_complete_date": latest_complete_date,
+        "checks": checks,
     }
 
 
@@ -607,7 +767,7 @@ def _write_report(trade_date: str, report: Dict[str, object]) -> None:
 
 
 def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool = False) -> Dict[str, object]:
-    trade_date = trade_date.replace("-", "")
+    trade_date = _compact_date(trade_date)
     local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
     local_run_root.mkdir(parents=True, exist_ok=True)
     if dry_run:
@@ -685,18 +845,8 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
         report["local_merges"] = _merge_local_deltas(trade_date, local_deltas)
         if not skip_candidates:
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
-        report["local_verify"] = _verify_local(trade_date)
-        required = [
-            "atomic_trade_daily",
-            "atomic_order_daily",
-            "atomic_book_state_daily",
-            "atomic_limit_state_daily",
-            "selection_feature_daily",
-            "selection_signal_daily",
-            "model_feature_daily_v1",
-            "model_feature_intraday_shape_v1",
-        ]
-        ok = all(int((report["local_verify"] or {}).get(key) or 0) > 0 for key in required)
+        report["local_verify"] = _verify_full_local(trade_date)
+        ok = _is_local_complete(report["local_verify"] or {})
         report["status"] = "pass" if ok else "fail"
     except Exception as exc:
         report["status"] = "fail"
@@ -708,15 +858,75 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
     return report
 
 
+def run_auto_daily(
+    *,
+    dry_run: bool = False,
+    skip_candidates: bool = False,
+    max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT,
+) -> Dict[str, object]:
+    auto_detect = resolve_auto_trade_dates(max_candidates)
+    selected_dates = list(auto_detect.get("selected_dates") or [])
+    if not selected_dates:
+        message = (
+            "Windows 未检测到可用日包"
+            if auto_detect.get("status") == "no_package_dates"
+            else "Windows 已有日包在 Mac 本地都已完整，无需补跑"
+        )
+        report: Dict[str, object] = {
+            "status": "noop",
+            "generated_at": _now_text(),
+            "auto_detect": auto_detect,
+            "message": message,
+        }
+        _write_report("auto", report)
+        return report
+
+    reports: List[Dict[str, object]] = []
+    for trade_date in selected_dates:
+        _progress(f"自动检测到未完整日期: {trade_date}")
+        report = run_daily(trade_date, dry_run=dry_run, skip_candidates=skip_candidates)
+        report["auto_detect"] = {
+            "status": auto_detect.get("status"),
+            "selected_dates": selected_dates,
+            "package_dates": auto_detect.get("package_dates"),
+        }
+        reports.append(report)
+        if report.get("status") not in {"pass", "dry_run"}:
+            break
+
+    if len(reports) == 1:
+        return reports[0]
+    if dry_run and all(item.get("status") == "dry_run" for item in reports):
+        combined_status = "dry_run"
+    else:
+        combined_status = "pass" if all(item.get("status") == "pass" for item in reports) else "fail"
+    combined: Dict[str, object] = {
+        "status": combined_status,
+        "generated_at": _now_text(),
+        "auto_detect": auto_detect,
+        "reports": reports,
+    }
+    _write_report("auto", combined)
+    return combined
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="新框架每日盘后跑数：Windows 跑，Mac 拉当天 delta 合并")
-    parser.add_argument("--date", required=True, help="YYYYMMDD or YYYY-MM-DD")
+    parser.add_argument("--date", help="YYYYMMDD or YYYY-MM-DD；不传则自动检测 Windows 有包但 Mac 未完整的日期")
+    parser.add_argument("--auto-detect-limit", type=int, default=DEFAULT_AUTO_DETECT_LIMIT, help="自动检测时最多检查最近多少个 Windows 日包")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-candidates", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     try:
-        report = run_daily(args.date, dry_run=args.dry_run, skip_candidates=args.skip_candidates)
+        if args.date:
+            report = run_daily(args.date, dry_run=args.dry_run, skip_candidates=args.skip_candidates)
+        else:
+            report = run_auto_daily(
+                dry_run=args.dry_run,
+                skip_candidates=args.skip_candidates,
+                max_candidates=args.auto_detect_limit,
+            )
     except Exception as exc:
         if args.json:
             print(json.dumps({"status": "fail", "error": str(exc)}, ensure_ascii=False, indent=2))
