@@ -57,8 +57,10 @@ ssh laqiyuan@192.168.3.108 'cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /
 > 当前盘后正式日常指令：
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_daily_new_framework.sh
+bash ops/run_daily_new_framework.sh --json
 ```
+
+> 这条指令默认不需要指定日期：脚本会自动扫描 Windows `D:\MarketData` 日包，选择“最新完整日之后”Mac 尚未完整的日期补跑；完整性同时检查 atomic、selection、model_feature_store 落表，以及选股工作台活跃模型/策略是否已有 success 运行记录。
 
 > 兼容旧盘后链路指令（仅历史 L2 / cloud 同步参考）：
 ```bash

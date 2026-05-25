@@ -18,14 +18,28 @@
 ## 2. 当前正式入口
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-./ops/run_daily_new_framework.sh
+./ops/run_daily_new_framework.sh --json
 ./ops/check_windows_new_framework_months_status.sh
 ```
 
 ## 2.1 当前正式日常指令
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_daily_new_framework.sh
+bash ops/run_daily_new_framework.sh --json
+```
+
+默认不传 `--date`。脚本会扫描 Windows `D:\MarketData` 下最近日包，和 Mac 正式库对比：
+- `atomic_trade_daily`、`atomic_order_daily`、`atomic_book_state_daily`、`atomic_limit_state_daily`
+- `selection_feature_daily`、`selection_signal_daily`
+- `model_feature_daily_v1`、`model_feature_intraday_shape_v1`
+- `selection_strategy_runs` 中当天活跃来源的 success 记录
+
+只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
+
+需要人工指定日期排障时才使用：
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/run_daily_new_framework.sh --date 20260525 --json
 ```
 
 ## 2.1.0 兼容旧链路
@@ -63,7 +77,7 @@ docs/selection/model_market_index_daily_runbook.md
 - 脚本当前已内置：
   - 局域网优先
   - 局域网失败自动回退云中转
-  - 若某交易日已经完整成功，后续再次触发时优先复用成功结果，不重复全链路重跑
+  - 若某交易日已经完整成功，后续再次触发时不会被自动选中重复全链路重跑
 
 ## 2.3 状态检查
 ```bash

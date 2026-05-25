@@ -200,6 +200,13 @@
 - 风险: “结果库覆盖到 2026-05-15” 不能等同于 “5 月 raw L2 每天都已零失败跑完”；`2026-04` 在 compact 结果库里已覆盖，但本地镜像不足以单独证明某条 4 月批次的原始执行进度。
 - 链接: `docs/changes/MOD-20260518-01-compact-training-readiness-and-project-health.md`, `docs/07_PENDING_TODO.md`
 
+## 2026-05-26 00:35 | Codex
+- Task ID: `MOD-20260526-01-postclose-auto-date-detection`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把每日盘后正式入口收口为 `bash ops/run_daily_new_framework.sh --json`：默认自动检测 Windows 日包与 Mac 本地完整性，只补最新完整日之后的缺失日期；完成标准纳入 atomic、selection、model_feature_store 落表和选股工作台活跃模型/策略 success 记录。
+- 验证: 自动模式 dry-run 与正式 no-op 验证通过；新增自动日期检测测试通过。
+- 链接: `docs/ops/postclose-l2-runbook.md`, `docs/domain/data-pipeline.md`
+
 ## 2026-05-16 21:35 | Codex
 - Task ID: `MOD-20260516-01-project-governance-phase1`
 - CAP: `N/A`

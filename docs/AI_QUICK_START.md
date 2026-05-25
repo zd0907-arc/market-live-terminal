@@ -92,8 +92,10 @@ npm run check:baseline
 ## 每天盘后要跑的指令
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_daily_new_framework.sh
+bash ops/run_daily_new_framework.sh --json
 ```
+
+默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、model feature store，以及选股工作台活跃模型/策略产出。
 
 ## 本地研究站最小启动顺序
 ```bash
@@ -111,7 +113,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `ops/sync_windows_research_snapshot.sh`、`backend/scripts/build_local_research_snapshot.py`、`ops/start_local_backend_with_atomic.sh` 只按兼容/验证工具理解；
 - 当前正式方案是：
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
-  - 后续每天执行 `./ops/run_daily_new_framework.sh` 做正式主链增量日跑；
+  - 后续每天执行 `./ops/run_daily_new_framework.sh --json` 做正式主链增量日跑，日期由脚本自动检测；
   - 查询新框架月批或阶段状态时用 `./ops/check_windows_new_framework_months_status.sh`；
   - `./ops/run_postclose_l2.sh` 只保留为旧盘后 L2 / cloud 同步兼容链路；
   - Windows -> Mac 数据同步只允许两条路径：

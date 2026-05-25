@@ -42,6 +42,14 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 默认访问：`http://localhost:3001`  
 默认本地后端：`http://127.0.0.1:8001`
 
+### 5) 每日盘后正式跑数
+```bash
+cd /Users/dong/Desktop/AIGC/market-live-terminal
+bash ops/run_daily_new_framework.sh --json
+```
+
+不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
+
 ## 关键文档
 - 架构：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
 - 业务能力地图：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`

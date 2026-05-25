@@ -40,6 +40,7 @@
 - repo 内 `data/selection/selection_research.db`、`data/market_data.db` 不应再被理解成默认正式研究主库
 - `selection_research_windows.db`、`compact_smoke_*`、`model_feature_store_smoke_*` 这些 Windows 物理名承担正式语义，但后续治理口径统一按 `selection_research_main`、`atomic_compact_main`、`model_feature_store_main` 解释
 - `backend/market.db`、`backend/app/market_data.db`、`backend/app/db/market_data.db` 只按 shadow / sample / 排障对象理解，不进入正式契约层
+- 每日盘后完成标准不只看基础数据落表，还要求 `selection_strategy_runs` 里当天活跃选股来源完成 success 记录；当前活跃来源为 `spark_opportunity_selector`、`stable_capital_callback`、`trend_continuation_callback`
 
 ## 5. 当前正式 API 组
 | 组别 | 典型接口 |
