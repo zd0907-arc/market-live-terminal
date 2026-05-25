@@ -408,6 +408,15 @@ const SelectionResearchPage: React.FC = () => {
   const ensureDailyCandidates = async (dateText: string) => {
     const meta = tradeDateMetaByDate[dateText];
     if (!dateText) return { generated: false, mergedCount: 0, meta };
+    if (!meta) {
+      const nextMetaByDate = await reloadSelectableDates();
+      const nextMeta = nextMetaByDate[dateText];
+      if (!nextMeta || nextMeta.has_candidates || !nextMeta.can_generate || nextMeta.has_run) {
+        return { generated: false, mergedCount: nextMeta?.candidate_count || 0, meta: nextMeta };
+      }
+    } else if (meta.has_candidates || !meta.can_generate || meta.has_run) {
+      return { generated: false, mergedCount: meta?.candidate_count || 0, meta };
+    }
     const result = await refreshDailySelectionCandidates(dateText, 80);
     if (!result) {
       setCandidateEmptyStateByDate((prev) => ({ ...prev, [dateText]: 'failed' }));
@@ -445,13 +454,24 @@ const SelectionResearchPage: React.FC = () => {
   const canShiftPrev = Boolean(prevSelectableDate);
   const canShiftNext = Boolean(nextSelectableDate);
 
-  const shiftSelectableDate = (direction: -1 | 1) => {
+  const shiftSelectableDate = async (direction: -1 | 1) => {
     const next = direction < 0 ? prevSelectableDate : nextSelectableDate;
     if (next) {
       lastLoadedKeyRef.current = '';
+      setLoadingCandidates(true);
+      setError('');
+      try {
+        await ensureDailyCandidates(next);
+      } catch (e) {
+        setError('候选生成失败，请检查写权限或后端日志');
+        setCandidates([]);
+        setSelected(null);
+        setProfile(null);
+        setLoadingCandidates(false);
+        return;
+      }
       setPendingTradeDate(next);
       setTradeDate(next);
-      void ensureDailyCandidates(next).then(() => loadCandidates(next, true, true));
     }
   };
 
