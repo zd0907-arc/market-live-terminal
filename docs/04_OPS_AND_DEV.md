@@ -60,7 +60,9 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_daily_new_framework.sh --json
 ```
 
-> 这条指令默认不需要指定日期：脚本会自动扫描 Windows `D:\MarketData` 日包，选择“最新完整日之后”Mac 尚未完整的日期补跑；完整性同时检查 atomic、selection、model_feature_store 落表，以及选股工作台活跃模型/策略是否已有 success 运行记录。
+> 这条指令默认不需要指定日期：脚本会自动扫描 Windows `D:\MarketData` 日包，选择“最新完整日之后”Mac 尚未完整的日期补跑；完整性同时检查 atomic、selection、model_feature_store 落表、市场环境指数、热点结果、热点页面缓存，以及选股工作台活跃模型/策略是否已有 success 运行记录。
+> 
+> 每日主链内置顺序：Windows atomic 与指数刷新并行；atomic 完成后并行跑 selection refresh 与热点计算；随后构建模型特征、导出增量、同步回 Mac，并在 Mac 本地生成选股工作台候选。
 
 > 兼容旧盘后链路指令（仅历史 L2 / cloud 同步参考）：
 ```bash

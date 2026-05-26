@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -11,9 +12,10 @@ import sqlite3
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 import urllib.request
 
@@ -41,6 +43,10 @@ WIN_MODEL_INDEX_DB = os.getenv(
     "DAILY_WIN_MODEL_INDEX_DB",
     r"D:\market-live-terminal\data\selection\model_market_index_daily.db",
 )
+WIN_DATA_DIR = os.getenv("DAILY_WIN_DATA_DIR", rf"{WIN_PROJECT_ROOT}\data")
+WIN_MARKET_HEAT_DIR = os.getenv("DAILY_WIN_MARKET_HEAT_DIR", rf"{WIN_PROJECT_ROOT}\data\market_heat")
+WIN_HEAT_V2_DB = os.getenv("DAILY_WIN_HEAT_V2_DB", rf"{WIN_MARKET_HEAT_DIR}\fine_theme_heat_daily_v2.db")
+WIN_TRADABLE_THEME_DB = os.getenv("DAILY_WIN_TRADABLE_THEME_DB", rf"{WIN_MARKET_HEAT_DIR}\tradable_theme_map.db")
 WIN_RUN_ROOT = os.getenv("DAILY_WIN_RUN_ROOT", r"D:\market-live-terminal\.run\daily_new_framework")
 
 LOCAL_DATA_ROOT = Path(os.getenv("LOCAL_PROCESSED_DATA_ROOT") or os.getenv("MARKET_DATA_ROOT") or str(DEFAULT_MAC_DATA_ROOT))
@@ -52,6 +58,12 @@ LOCAL_ATOMIC_DB = Path(
 )
 LOCAL_SELECTION_DB = Path(os.getenv("DAILY_LOCAL_SELECTION_DB", str(LOCAL_DATA_ROOT / "selection" / "selection_research.db")))
 LOCAL_MODEL_FEATURE_DB = Path(os.getenv("DAILY_LOCAL_MODEL_FEATURE_DB", str(LOCAL_DATA_ROOT / "selection" / "model_feature_store.db")))
+LOCAL_MODEL_INDEX_DB = Path(os.getenv("DAILY_LOCAL_MODEL_INDEX_DB", str(LOCAL_DATA_ROOT / "selection" / "model_market_index_daily.db")))
+LOCAL_MARKET_HEAT_DIR = Path(os.getenv("DAILY_LOCAL_MARKET_HEAT_DIR", str(LOCAL_DATA_ROOT / "market_heat")))
+LOCAL_HEAT_V2_DB = Path(os.getenv("DAILY_LOCAL_HEAT_V2_DB", str(LOCAL_MARKET_HEAT_DIR / "fine_theme_heat_daily_v2.db")))
+
+DAILY_INDEX_LOOKBACK_DAYS = int(os.getenv("DAILY_INDEX_LOOKBACK_DAYS", "10"))
+DAILY_HEAT_LOOKBACK_DAYS = int(os.getenv("DAILY_HEAT_LOOKBACK_DAYS", "63"))
 
 
 def _python_has_module(python_cmd: str, module: str) -> bool:
@@ -106,6 +118,15 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/build_limit_state_from_atomic.py",
     "backend/scripts/build_model_feature_store.py",
     "backend/scripts/sync_model_market_index_daily.py",
+    "backend/scripts/build_fine_theme_heat_daily_v2.py",
+    "backend/scripts/refresh_market_heat_cache.py",
+    "backend/scripts/build_fine_theme_heat_daily.py",
+    "backend/scripts/analyze_hot_sector_granularity.py",
+    "backend/scripts/analyze_hot_theme_winner_lead_lag.py",
+    "backend/app/services/market_heat.py",
+    "data/market_heat/fine_hotspot_rules.json",
+    "data/market_heat/theme_canonical_rules.json",
+    "data/market_heat/themes.seed.json",
     "backend/scripts/validate_model_feature_store.py",
     "backend/scripts/export_atomic_day_delta.py",
     "backend/scripts/export_selection_day_delta.py",
@@ -125,6 +146,8 @@ REQUIRED_LOCAL_VERIFY_KEYS = [
     "atomic_order_daily",
     "atomic_book_state_daily",
     "atomic_limit_state_daily",
+    "model_market_index_daily",
+    "model_market_state_daily_v1",
     "selection_feature_daily",
     "selection_signal_daily",
     "model_feature_daily_v1",
@@ -340,6 +363,14 @@ Write-Output "$($item.Length)|$($item.FullName)"
     return int(size_text), full_path
 
 
+def _remote_file_size(remote_path: str) -> Optional[int]:
+    try:
+        size, _resolved = _remote_file_stat(remote_path)
+        return size
+    except Exception:
+        return None
+
+
 def _windows_relative_under_project(remote_path: str) -> str:
     remote = str(PureWindowsPath(remote_path)).replace("/", "\\")
     project = str(PureWindowsPath(WIN_PROJECT_ROOT)).replace("/", "\\").rstrip("\\")
@@ -448,6 +479,45 @@ def _sync_required_windows_scripts() -> None:
         _run(["scp", str(local_path), f"{host}:{_win_scp_path(remote_path)}"])
 
 
+def _upload_windows_file(local_path: Path, remote_path: str) -> Dict[str, object]:
+    if not local_path.exists():
+        raise FileNotFoundError(f"本地文件不存在，无法同步到 Windows: {local_path}")
+    host = resolve_windows_host()
+    remote_dir = str(PureWindowsPath(remote_path).parent).replace("/", "\\")
+    _ssh(host, f'cmd /c if not exist "{remote_dir}" mkdir "{remote_dir}"', check=False)
+    _run(["scp", str(local_path), f"{host}:{_win_scp_path(remote_path)}"])
+    remote_size, resolved_remote = _remote_file_stat(remote_path)
+    local_size = local_path.stat().st_size
+    if remote_size != local_size:
+        raise RuntimeError(f"Windows 同步后文件大小不一致: local={local_size} remote={remote_size} path={remote_path}")
+    return {
+        "local": str(local_path),
+        "remote": resolved_remote,
+        "bytes": remote_size,
+    }
+
+
+def _ensure_windows_heat_reference_inputs() -> Dict[str, object]:
+    results: Dict[str, object] = {}
+    local_theme_map = LOCAL_MARKET_HEAT_DIR / "tradable_theme_map.db"
+    local_size = local_theme_map.stat().st_size if local_theme_map.exists() else 0
+    remote_size = _remote_file_size(WIN_TRADABLE_THEME_DB)
+    needs_sync = (not local_theme_map.exists()) or local_size <= 0
+    if needs_sync:
+        raise FileNotFoundError(f"Mac 正式热点主题映射库不存在或为空: {local_theme_map}")
+    if remote_size != local_size:
+        _progress("[heat-ref] Windows 热点主题映射库缺失或版本不一致，开始同步")
+        results["tradable_theme_map"] = _upload_windows_file(local_theme_map, WIN_TRADABLE_THEME_DB)
+    else:
+        results["tradable_theme_map"] = {
+            "local": str(local_theme_map),
+            "remote": WIN_TRADABLE_THEME_DB,
+            "bytes": local_size,
+            "synced": False,
+        }
+    return results
+
+
 def _write_atomic_config(trade_date: str, local_run_root: Path, *, win_atomic_db: str, win_selection_db: str) -> str:
     iso_date = _compact_to_iso(trade_date)
     run_name = f"daily_new_{trade_date}"
@@ -488,6 +558,72 @@ def _run_windows_cmd(cmd: str) -> Dict[str, object]:
     return _parse_json_output(result.stdout)
 
 
+def _windows_env_prefix(values: Dict[str, str]) -> str:
+    return " ".join(f"set {key}={value}&&" for key, value in values.items())
+
+
+def _windows_data_env(
+    *,
+    win_atomic_db: Optional[str] = None,
+    win_selection_db: Optional[str] = None,
+    win_model_index_db: Optional[str] = None,
+) -> Dict[str, str]:
+    env = {
+        "DATA_DIR": WIN_DATA_DIR,
+        "MARKET_HEAT_DIR": WIN_MARKET_HEAT_DIR,
+        "FINE_THEME_HEAT_V2_DB": WIN_HEAT_V2_DB,
+        "FINE_THEME_HEAT_DB": WIN_HEAT_V2_DB,
+        "TRADABLE_THEME_MAP_DB": WIN_TRADABLE_THEME_DB,
+        "ENABLE_ATOMIC_COMPACT_READ": "true",
+    }
+    if win_atomic_db:
+        env["ATOMIC_MAINBOARD_DB_PATH"] = win_atomic_db
+        env["ATOMIC_DB_PATH"] = win_atomic_db
+        env["ATOMIC_COMPACT_DB_PATH"] = win_atomic_db
+        env["MARKET_HEAT_ATOMIC_DB"] = win_atomic_db
+    if win_selection_db:
+        env["SELECTION_DB_PATH"] = win_selection_db
+    if win_model_index_db:
+        env["MODEL_INDEX_DB"] = win_model_index_db
+    return env
+
+
+def _run_windows_index_refresh(trade_date: str, *, win_model_index_db: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    _progress(f"[{trade_date}] Windows 指数刷新开始")
+    cmd = (
+        f"{_windows_env_prefix(_windows_data_env(win_model_index_db=win_model_index_db))} "
+        f'"{WIN_PYTHON_EXE}" backend\\scripts\\sync_model_market_index_daily.py '
+        f'--out-db "{win_model_index_db}" '
+        f"--source baostock --daily --lookback-days {DAILY_INDEX_LOOKBACK_DAYS} --sleep 1.2 --end-date {iso_date}"
+    )
+    report = _run_windows_cmd(cmd)
+    _progress(f"[{trade_date}] Windows 指数刷新完成")
+    return report
+
+
+def _run_windows_heat_refresh(trade_date: str, *, win_atomic_db: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    env_prefix = _windows_env_prefix(_windows_data_env(win_atomic_db=win_atomic_db))
+    _progress(f"[{trade_date}] Windows 热点长表计算开始")
+    heat_v2_report = _run_windows_cmd(
+        f"{env_prefix} "
+        f'"{WIN_PYTHON_EXE}" backend\\scripts\\build_fine_theme_heat_daily_v2.py '
+        f"--end-date {iso_date} --days {DAILY_HEAT_LOOKBACK_DAYS}"
+    )
+    _progress(f"[{trade_date}] Windows 热点页面缓存刷新开始")
+    cache_report = _run_windows_cmd(
+        f"{env_prefix} "
+        f'"{WIN_PYTHON_EXE}" backend\\scripts\\refresh_market_heat_cache.py '
+        f"--end-date {iso_date} --days {DAILY_HEAT_LOOKBACK_DAYS}"
+    )
+    _progress(f"[{trade_date}] Windows 热点计算完成")
+    return {
+        "fine_theme_heat_v2": heat_v2_report,
+        "fine_heat_cache": cache_report,
+    }
+
+
 def _run_windows_pipeline(
     trade_date: str,
     local_run_root: Path,
@@ -495,6 +631,7 @@ def _run_windows_pipeline(
     win_atomic_db: str,
     win_selection_db: str,
     win_model_feature_db: str,
+    win_model_index_db: str,
 ) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     remote_config = _write_atomic_config(
@@ -504,27 +641,49 @@ def _run_windows_pipeline(
         win_selection_db=win_selection_db,
     )
     remote_run_dir = f"{WIN_RUN_ROOT}\\{trade_date}"
-    _progress(f"[{trade_date}] Windows atomic 开始")
-    atomic_report = _run_windows_cmd(f'"{WIN_PYTHON_EXE}" backend\\scripts\\run_atomic_backfill_windows.py --config "{remote_config}"')
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        atomic_future = executor.submit(
+            _run_windows_cmd,
+            f'"{WIN_PYTHON_EXE}" backend\\scripts\\run_atomic_backfill_windows.py --config "{remote_config}"',
+        )
+        index_future = executor.submit(
+            _run_windows_index_refresh,
+            trade_date,
+            win_model_index_db=win_model_index_db,
+        )
+        _progress(f"[{trade_date}] Windows atomic 开始")
+        atomic_report = atomic_future.result()
+        index_report = index_future.result()
 
     _progress(f"[{trade_date}] Windows selection refresh 开始")
+    selection_env = _windows_data_env(
+        win_atomic_db=win_atomic_db,
+        win_selection_db=win_selection_db,
+        win_model_index_db=win_model_index_db,
+    )
     selection_cmd = (
+        f"{_windows_env_prefix(selection_env)} "
         f'set DB_PATH={WIN_PROJECT_ROOT}\\data\\market_data.db&& '
-        f'set ATOMIC_MAINBOARD_DB_PATH={win_atomic_db}&& '
-        f'set ATOMIC_DB_PATH={win_atomic_db}&& '
-        f'set SELECTION_DB_PATH={win_selection_db}&& '
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\run_selection_research.py refresh '
         f"--start-date {iso_date} --end-date {iso_date} --skip-daily-candidates"
     )
-    selection_report = _run_windows_cmd(selection_cmd)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        selection_future = executor.submit(_run_windows_cmd, selection_cmd)
+        heat_future = executor.submit(_run_windows_heat_refresh, trade_date, win_atomic_db=win_atomic_db)
+        selection_report = selection_future.result()
+        heat_report = heat_future.result()
 
     _progress(f"[{trade_date}] Windows model_feature_store build 开始")
     feature_cmd = (
+        f"{_windows_env_prefix(selection_env)} "
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\build_model_feature_store.py '
         f"--date {iso_date} "
         f'--atomic-db "{win_atomic_db}" '
         f'--selection-db "{win_selection_db}" '
         f'--target-db "{win_model_feature_db}" '
+        f'--index-db "{win_model_index_db}" '
+        f'--heat-v2-db "{WIN_HEAT_V2_DB}" '
+        f'--tradable-theme-db "{WIN_TRADABLE_THEME_DB}" '
         f"--skip-labels"
     )
     feature_report = _run_windows_cmd(feature_cmd)
@@ -549,6 +708,8 @@ def _run_windows_pipeline(
 
     return {
         "atomic_report": atomic_report,
+        "index_report": index_report,
+        "heat_report": heat_report,
         "selection_report": selection_report,
         "feature_report": feature_report,
         "exports": {
@@ -560,6 +721,11 @@ def _run_windows_pipeline(
             "atomic": atomic_delta,
             "selection": selection_delta,
             "model_feature_store": feature_delta,
+        },
+        "remote_artifacts": {
+            "model_market_index": win_model_index_db,
+            "fine_theme_heat_v2": WIN_HEAT_V2_DB,
+            "fine_heat_cache": ((heat_report.get("fine_heat_cache") or {}).get("cache_path") if isinstance(heat_report.get("fine_heat_cache"), dict) else None),
         },
     }
 
@@ -609,11 +775,13 @@ def _merge_local_deltas(trade_date: str, local_paths: Dict[str, str]) -> Dict[st
 def _run_local_daily_candidates(trade_date: str) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     env = os.environ.copy()
+    env["DATA_DIR"] = str(LOCAL_DATA_ROOT)
     env["SELECTION_DB_PATH"] = str(LOCAL_SELECTION_DB)
     env["ATOMIC_MAINBOARD_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["ATOMIC_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["ATOMIC_COMPACT_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["ENABLE_ATOMIC_COMPACT_READ"] = "true"
+    env["SPARK_OPPORTUNITY_HEAT_DB"] = str(LOCAL_HEAT_V2_DB)
     result = subprocess.run(
         [
             LOCAL_PYTHON,
@@ -648,15 +816,107 @@ def _query_count(db_path: Path, table: str, date_col: str, trade_date: str) -> i
         return 0
 
 
+def _query_sum(db_path: Path, table: str, column: str, date_col: str, trade_date: str) -> int:
+    if not db_path.exists():
+        return 0
+    iso_date = _compact_to_iso(trade_date)
+    try:
+        with sqlite3.connect(db_path) as conn:
+            return int(
+                conn.execute(
+                    f"SELECT COALESCE(SUM(COALESCE({column}, 0)), 0) FROM {table} WHERE {date_col}=?",
+                    (iso_date,),
+                ).fetchone()[0]
+                or 0
+            )
+    except sqlite3.Error:
+        return 0
+
+
+def _latest_trade_date_in_table(db_path: Path, table: str, date_col: str) -> Optional[str]:
+    if not db_path.exists():
+        return None
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(f"SELECT MAX({date_col}) FROM {table}").fetchone()
+            value = row[0] if row else None
+            return str(value) if value else None
+    except sqlite3.Error:
+        return None
+
+
+def _query_index_verify(trade_date: str) -> Dict[str, object]:
+    if not LOCAL_MODEL_INDEX_DB.exists():
+        return {"trade_date": _compact_to_iso(trade_date), "row_count": 0, "index_code_count": 0}
+    iso_date = _compact_to_iso(trade_date)
+    try:
+        with sqlite3.connect(LOCAL_MODEL_INDEX_DB) as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS row_count, COUNT(DISTINCT index_code) AS index_code_count
+                FROM model_market_index_daily
+                WHERE trade_date=?
+                """,
+                (iso_date,),
+            ).fetchone()
+            return {
+                "trade_date": iso_date,
+                "row_count": int(row[0] or 0) if row else 0,
+                "index_code_count": int(row[1] or 0) if row else 0,
+            }
+    except sqlite3.Error:
+        return {"trade_date": iso_date, "row_count": 0, "index_code_count": 0}
+
+
+def _query_heat_verify(trade_date: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    heat_row_count = 0
+    if LOCAL_HEAT_V2_DB.exists():
+        try:
+            with sqlite3.connect(LOCAL_HEAT_V2_DB) as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM fine_theme_heat_daily_v2 WHERE trade_date=?",
+                    (iso_date,),
+                ).fetchone()
+                heat_row_count = int(row[0] or 0) if row else 0
+        except sqlite3.Error:
+            heat_row_count = 0
+
+    cache_dir = LOCAL_MARKET_HEAT_DIR / "cache"
+    cache_covering: List[str] = []
+    latest_cache_end: Optional[str] = None
+    if cache_dir.exists():
+        pattern = re.compile(r"fine_heat_snapshots_(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})_m\d+_\d+\.json$")
+        for path in cache_dir.glob("fine_heat_snapshots_*_m*_*.json"):
+            match = pattern.match(path.name)
+            if not match:
+                continue
+            start_date, end_date = match.groups()
+            latest_cache_end = max(latest_cache_end, end_date) if latest_cache_end else end_date
+            if start_date <= iso_date <= end_date:
+                cache_covering.append(path.name)
+    return {
+        "trade_date": iso_date,
+        "heat_row_count": heat_row_count,
+        "cache_covering_count": len(cache_covering),
+        "cache_files": sorted(cache_covering)[-3:],
+        "latest_cache_end_date": latest_cache_end,
+    }
+
+
 def _verify_local(trade_date: str) -> Dict[str, object]:
     return {
         "atomic_trade_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_trade_daily", "trade_date", trade_date),
         "atomic_order_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_order_daily", "trade_date", trade_date),
         "atomic_book_state_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_book_state_daily", "trade_date", trade_date),
         "atomic_limit_state_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_limit_state_daily", "trade_date", trade_date),
+        "model_market_index_daily": _query_count(LOCAL_MODEL_FEATURE_DB, "model_market_index_daily", "trade_date", trade_date),
+        "model_market_state_daily_v1": _query_count(LOCAL_MODEL_FEATURE_DB, "model_market_state_daily_v1", "trade_date", trade_date),
+        "model_market_state_has_index_data": _query_sum(LOCAL_MODEL_FEATURE_DB, "model_market_state_daily_v1", "has_index_data", "trade_date", trade_date),
         "selection_feature_daily": _query_count(LOCAL_SELECTION_DB, "selection_feature_daily", "trade_date", trade_date),
         "selection_signal_daily": _query_count(LOCAL_SELECTION_DB, "selection_signal_daily", "trade_date", trade_date),
         "model_feature_daily_v1": _query_count(LOCAL_MODEL_FEATURE_DB, "model_feature_daily_v1", "trade_date", trade_date),
+        "model_feature_has_heat": _query_sum(LOCAL_MODEL_FEATURE_DB, "model_feature_daily_v1", "has_heat", "trade_date", trade_date),
         "model_feature_intraday_shape_v1": _query_count(LOCAL_MODEL_FEATURE_DB, "model_feature_intraday_shape_v1", "trade_date", trade_date),
     }
 
@@ -702,15 +962,26 @@ def _verify_selection_strategy_runs(trade_date: str) -> Dict[str, object]:
 def _verify_full_local(trade_date: str) -> Dict[str, object]:
     verify = _verify_local(trade_date)
     verify["selection_strategy_runs"] = _verify_selection_strategy_runs(trade_date)
+    verify["market_index_daily"] = _query_index_verify(trade_date)
+    verify["market_heat"] = _query_heat_verify(trade_date)
     return verify
 
 
 def _is_local_complete(verify: Dict[str, object]) -> bool:
     strategy_runs = verify.get("selection_strategy_runs") if isinstance(verify, dict) else None
+    index_verify = verify.get("market_index_daily") if isinstance(verify, dict) else None
+    heat_verify = verify.get("market_heat") if isinstance(verify, dict) else None
     return (
         all(int((verify or {}).get(key) or 0) > 0 for key in REQUIRED_LOCAL_VERIFY_KEYS)
         and isinstance(strategy_runs, dict)
         and not strategy_runs.get("missing_source_ids")
+        and isinstance(index_verify, dict)
+        and int(index_verify.get("index_code_count") or 0) > 0
+        and isinstance(heat_verify, dict)
+        and int(heat_verify.get("heat_row_count") or 0) > 0
+        and int(heat_verify.get("cache_covering_count") or 0) > 0
+        and int((verify or {}).get("model_market_state_has_index_data") or 0) > 0
+        and int((verify or {}).get("model_feature_has_heat") or 0) > 0
     )
 
 
@@ -775,6 +1046,7 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
         win_atomic_db = WIN_ATOMIC_DB
         win_selection_db = WIN_SELECTION_DB
         win_model_feature_db = WIN_MODEL_FEATURE_DB
+        win_model_index_db = WIN_MODEL_INDEX_DB
     else:
         host = resolve_windows_host()
         win_atomic_db = _resolve_windows_data_path(
@@ -790,6 +1062,7 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
                 DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
             )
         )
+        win_model_index_db = WIN_MODEL_INDEX_DB
     report: Dict[str, object] = {
         "trade_date": trade_date,
         "generated_at": _now_text(),
@@ -798,12 +1071,18 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             "atomic_db": win_atomic_db,
             "selection_db": win_selection_db,
             "model_feature_db": win_model_feature_db,
+            "model_index_db": win_model_index_db,
+            "fine_theme_heat_v2_db": WIN_HEAT_V2_DB,
+            "market_heat_dir": WIN_MARKET_HEAT_DIR,
             "market_root": WIN_MARKET_ROOT,
         },
         "local_paths": {
             "atomic_db": str(LOCAL_ATOMIC_DB),
             "selection_db": str(LOCAL_SELECTION_DB),
             "model_feature_db": str(LOCAL_MODEL_FEATURE_DB),
+            "model_index_db": str(LOCAL_MODEL_INDEX_DB),
+            "fine_theme_heat_v2_db": str(LOCAL_HEAT_V2_DB),
+            "market_heat_dir": str(LOCAL_MARKET_HEAT_DIR),
             "python": LOCAL_PYTHON,
         },
     }
@@ -813,6 +1092,7 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
         return report
 
     _sync_required_windows_scripts()
+    report["windows_reference_inputs"] = _ensure_windows_heat_reference_inputs()
     sync_context: Optional[Dict[str, object]] = None
     try:
         windows_report = _run_windows_pipeline(
@@ -821,6 +1101,7 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             win_atomic_db=win_atomic_db,
             win_selection_db=win_selection_db,
             win_model_feature_db=win_model_feature_db,
+            win_model_index_db=win_model_index_db,
         )
         report["windows"] = windows_report
         token = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii").rstrip("=")
@@ -842,6 +1123,20 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             local_deltas[key] = str(local_path)
         report["sync_results"] = sync_results
         report["local_deltas"] = local_deltas
+        artifact_targets = {
+            "model_market_index": LOCAL_MODEL_INDEX_DB,
+            "fine_theme_heat_v2": LOCAL_HEAT_V2_DB,
+        }
+        heat_cache_path = ((windows_report.get("remote_artifacts") or {}).get("fine_heat_cache") if isinstance(windows_report.get("remote_artifacts"), dict) else None)
+        if heat_cache_path:
+            artifact_targets["fine_heat_cache"] = LOCAL_MARKET_HEAT_DIR / "cache" / PureWindowsPath(str(heat_cache_path)).name
+        artifact_sync_results: Dict[str, object] = {}
+        for key, local_path in artifact_targets.items():
+            remote_path = (windows_report.get("remote_artifacts") or {}).get(key) if isinstance(windows_report.get("remote_artifacts"), dict) else None
+            if not remote_path:
+                continue
+            artifact_sync_results[key] = _download_windows_file(str(remote_path), Path(local_path), sync_context)
+        report["artifact_sync_results"] = artifact_sync_results
         report["local_merges"] = _merge_local_deltas(trade_date, local_deltas)
         if not skip_candidates:
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)

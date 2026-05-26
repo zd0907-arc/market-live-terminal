@@ -30,8 +30,11 @@ bash ops/run_daily_new_framework.sh --json
 
 默认不传 `--date`。脚本会扫描 Windows `D:\MarketData` 下最近日包，和 Mac 正式库对比：
 - `atomic_trade_daily`、`atomic_order_daily`、`atomic_book_state_daily`、`atomic_limit_state_daily`
+- 模型特征里的市场环境字段已经带上当日指数数据
 - `selection_feature_daily`、`selection_signal_daily`
 - `model_feature_daily_v1`、`model_feature_intraday_shape_v1`
+- 选股模型依赖的当日热点结果已经生成
+- 热点页面依赖的当日热点缓存已经同步回 Mac
 - `selection_strategy_runs` 中当天活跃来源的 success 记录
 
 只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
@@ -50,20 +53,46 @@ bash ops/run_postclose_l2.sh
 
 如果你只是要正常完成当前盘后正式日跑，不要执行这条旧链路。
 
-## 2.1.1 指数缓存刷新
-每日盘后模型特征构建前，需要低频刷新本地指数缓存。新框架主链会在 Windows 本地刷新 `atomic_compact_main` 与 `selection_research_main` 后增加非阻塞指数刷新：
+## 2.1.1 每日主链现在包含什么
+当前正式主链已经把下面几类依赖一起收进来：
+- 当日原子行情与委托/盘口底座
+- 选股工作台基础特征
+- 外部指数拉取，补齐模型的市场环境输入
+- 当日热点主线/热点池结果重算
+- 热点页面缓存刷新，并把结果同步回 Mac
+- 模型特征构建
+- 选股工作台当日模型/策略候选输出
+
+其中指数刷新会和 Windows atomic 并行，热点计算会在 atomic 完成后执行，再进入模型特征构建。
+
+## 2.1.2 指数刷新
+每日盘后模型特征构建前，需要低频刷新市场环境指数。正式主链会自动执行：
 
 ```bash
 python3 backend/scripts/sync_model_market_index_daily.py --source baostock --daily --lookback-days 10
 ```
 
-产物：
+业务含义：
+- 把中证1000、沪深300、中证500、上证指数、创业板指补进本地指数库
+- 让模型知道当天整体市场是偏强、偏弱，还是站上关键均线
 
-```text
-/Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db
+## 2.1.3 热点计算
+每日主链现在会自动重算当天热点结果，并同步两类产物：
+- 给模型/策略使用的热点长表
+- 给热点页面直接读取的热点缓存
+
+对应脚本：
+
+```bash
+python3 backend/scripts/build_fine_theme_heat_daily_v2.py --end-date 2026-05-26 --days 63
+python3 backend/scripts/refresh_market_heat_cache.py --end-date 2026-05-26 --days 63
 ```
 
-`model_feature_store_main` 日跑只读这个本地 DB，不把外部网络放进强依赖。完整运行卡见：
+业务含义：
+- 用当天收盘后的行情，重新计算当天哪些主线最强、哪些细分方向在升温或退潮
+- 让热点页面和依赖热点的选股模型都看到同一天结果
+
+指数运行卡见：
 
 ```text
 docs/selection/model_market_index_daily_runbook.md

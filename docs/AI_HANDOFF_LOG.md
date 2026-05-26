@@ -1,5 +1,12 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-26 22:35 | Codex
+- Task ID: `MOD-20260526-04-daily-postclose-index-and-heat-mainline`
+- CAP: `CAP-WIN-PIPELINE`, `CAP-MARKET-HEAT`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把每日正式跑数主链升级为“指数 + 热点 + 页面缓存 + 选股输出”一体化日跑，并完成 `2026-05-26` 真实验证通过。当前 `ops/run_daily_new_framework.sh --json` 会在 Windows 侧并行刷新市场环境指数与 atomic，随后并行跑选股基础刷新与热点重算，再构建模型特征、同步回 Mac、生成选股工作台候选。真实验收结果：`2026-05-26` 当天市场环境指数 5/5 到位，热点结果 633 条到位，热点页面缓存覆盖到 `2026-05-26`，选股工作台三类来源均有 success 记录；此前 `index_daily_missing` 与 `heat_feature_missing` 两个降级告警已消失。
+- 风险: 当前 Windows 正式链仍在使用带 `smoke` 字样的物理库名；另外自动检测仍会把 `2025-12` 那批历史缺口记为 `historical_missing_dates`，但不会自动补跑。它们属于后续治理项，不影响当前日常主链成功。
+- 链接: `backend/scripts/run_daily_new_framework.py`, `backend/scripts/refresh_market_heat_cache.py`, `backend/scripts/sync_model_market_index_daily.py`, `docs/ops/postclose-l2-runbook.md`, `docs/04_OPS_AND_DEV.md`, `.run/daily_new_framework/20260526/report.json`
+
 ## 2026-05-26 02:40 | Codex
 - Task ID: `MOD-20260526-03-homepage-postclose-previous-trade-day-fallback`
 - CAP: `CAP-MKT-TIME`, `CAP-REALTIME-FLOW`

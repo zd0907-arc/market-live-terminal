@@ -37,7 +37,7 @@
    - 热点板块暂时只作为研究解释、风险提示和独立追强候选池，不并入正式买入信号
 3. 所有具体需求过程，一律进入 `docs/changes/`，不再堆到本页。
 4. 项目治理默认按四个固定产物推进：`review findings`、`health snapshot`、`current-state mother card`、`archive summary`。
-5. 每日盘后正式跑数入口是 `ops/run_daily_new_framework.sh`；默认不传日期，由脚本自动检测 Windows 日包与 Mac 本地完整性，并把选股工作台的模型/策略跑数纳入完成标准。
+5. 每日盘后正式跑数入口是 `ops/run_daily_new_framework.sh`；默认不传日期，由脚本自动检测 Windows 日包与 Mac 本地完整性，并把市场环境指数、热点结果、热点页面缓存，以及选股工作台的模型/策略跑数一起纳入完成标准。
 
 ## 5. 相关入口
 - 变更流程：`docs/06_CHANGE_MANAGEMENT.md`

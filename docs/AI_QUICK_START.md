@@ -95,7 +95,7 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_daily_new_framework.sh --json
 ```
 
-默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、model feature store，以及选股工作台活跃模型/策略产出。
+默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、市场环境指数、热点长表、热点页面缓存、model feature store，以及选股工作台活跃模型/策略产出。
 
 ## 本地研究站最小启动顺序
 ```bash

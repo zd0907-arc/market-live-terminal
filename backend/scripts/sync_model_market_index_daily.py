@@ -268,15 +268,15 @@ def fetch_eastmoney(indexes: Iterable[IndexMeta], start_date: str, end_date: str
             },
         )
         last_error: Exception | None = None
-        for attempt in range(1, 5):
+        for attempt in range(1, 9):
             try:
-                payload = json.loads(urlopen(request, timeout=30).read().decode("utf-8"))
+                payload = json.loads(urlopen(request, timeout=45).read().decode("utf-8"))
                 break
             except (RemoteDisconnected, TimeoutError, URLError) as exc:
                 last_error = exc
-                if attempt == 4:
+                if attempt == 8:
                     raise RuntimeError(f"eastmoney fetch failed {meta.index_code}: {last_error}") from exc
-                time.sleep(0.8 * attempt)
+                time.sleep(max(sleep_seconds, 0.8) * attempt)
         else:
             raise RuntimeError(f"eastmoney fetch failed {meta.index_code}: {last_error}")
         data = payload.get("data") or {}
@@ -424,7 +424,7 @@ def main() -> None:
             {
                 "run_id": run_id,
                 "out_db": str(args.out_db),
-                "source": args.source,
+                "source": actual_source,
                 "start_date": start_date,
                 "end_date": end_date,
                 "index_codes": index_codes,

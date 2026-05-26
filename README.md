@@ -53,7 +53,7 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 bash ops/run_daily_new_framework.sh --json
 ```
 
-不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
+不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；完整性包含市场环境指数、热点结果、热点页面缓存和选股工作台模型/策略输出。已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
 
 ## 关键文档
 - 架构：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`

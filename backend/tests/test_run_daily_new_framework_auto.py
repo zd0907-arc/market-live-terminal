@@ -46,9 +46,40 @@ def _create_selection_db(path, trade_date, source_ids=()):
 
 def _create_model_feature_db(path, trade_date):
     with sqlite3.connect(path) as conn:
-        for table in ("model_feature_daily_v1", "model_feature_intraday_shape_v1"):
-            conn.execute(f"CREATE TABLE {table} (trade_date TEXT NOT NULL)")
-            conn.execute(f"INSERT INTO {table} (trade_date) VALUES (?)", (trade_date,))
+        conn.execute(
+            """
+            CREATE TABLE model_market_index_daily (
+                trade_date TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("INSERT INTO model_market_index_daily (trade_date) VALUES (?)", (trade_date,))
+        conn.execute(
+            """
+            CREATE TABLE model_market_state_daily_v1 (
+                trade_date TEXT NOT NULL,
+                has_index_data INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO model_market_state_daily_v1 (trade_date, has_index_data) VALUES (?, 1)",
+            (trade_date,),
+        )
+        conn.execute(
+            """
+            CREATE TABLE model_feature_daily_v1 (
+                trade_date TEXT NOT NULL,
+                has_heat INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO model_feature_daily_v1 (trade_date, has_heat) VALUES (?, 1)",
+            (trade_date,),
+        )
+        conn.execute("CREATE TABLE model_feature_intraday_shape_v1 (trade_date TEXT NOT NULL)")
+        conn.execute("INSERT INTO model_feature_intraday_shape_v1 (trade_date) VALUES (?)", (trade_date,))
         conn.commit()
 
 
@@ -56,6 +87,49 @@ def _wire_local_dbs(monkeypatch, tmp_path):
     monkeypatch.setattr(daily, "LOCAL_ATOMIC_DB", tmp_path / "atomic.db")
     monkeypatch.setattr(daily, "LOCAL_SELECTION_DB", tmp_path / "selection.db")
     monkeypatch.setattr(daily, "LOCAL_MODEL_FEATURE_DB", tmp_path / "model_feature.db")
+    monkeypatch.setattr(daily, "LOCAL_MODEL_INDEX_DB", tmp_path / "model_index.db")
+    monkeypatch.setattr(daily, "LOCAL_MARKET_HEAT_DIR", tmp_path / "market_heat")
+    monkeypatch.setattr(daily, "LOCAL_HEAT_V2_DB", tmp_path / "market_heat" / "fine_theme_heat_daily_v2.db")
+
+
+def _create_model_index_db(path, trade_date):
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE model_market_index_daily (
+                index_code TEXT NOT NULL,
+                trade_date TEXT NOT NULL
+            )
+            """
+        )
+        for index_code in ("000852.SH", "000905.SH", "000300.SH", "000001.SH", "399006.SZ"):
+            conn.execute(
+                "INSERT INTO model_market_index_daily (index_code, trade_date) VALUES (?, ?)",
+                (index_code, trade_date),
+            )
+        conn.commit()
+
+
+def _create_market_heat_artifacts(root, trade_date):
+    market_heat_dir = root / "market_heat"
+    cache_dir = market_heat_dir / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(market_heat_dir / "fine_theme_heat_daily_v2.db") as conn:
+        conn.execute(
+            """
+            CREATE TABLE fine_theme_heat_daily_v2 (
+                trade_date TEXT NOT NULL,
+                theme_id TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO fine_theme_heat_daily_v2 (trade_date, theme_id) VALUES (?, 'theme.a')",
+            (trade_date,),
+        )
+        conn.commit()
+    cache_path = cache_dir / f"fine_heat_snapshots_{trade_date}_{trade_date}_m5_80.json"
+    cache_path.write_text('{"meta":{"end_date":"' + trade_date + '"},"snapshots":{}}', encoding="utf-8")
 
 
 def test_auto_detect_marks_date_missing_when_strategy_runs_are_absent(monkeypatch, tmp_path):
@@ -64,6 +138,8 @@ def test_auto_detect_marks_date_missing_when_strategy_runs_are_absent(monkeypatc
     _create_atomic_db(daily.LOCAL_ATOMIC_DB, trade_date)
     _create_selection_db(daily.LOCAL_SELECTION_DB, trade_date, source_ids=())
     _create_model_feature_db(daily.LOCAL_MODEL_FEATURE_DB, trade_date)
+    _create_model_index_db(daily.LOCAL_MODEL_INDEX_DB, trade_date)
+    _create_market_heat_artifacts(tmp_path, trade_date)
     monkeypatch.setattr(daily, "_list_windows_market_package_dates", lambda max_candidates: ["20260525"])
 
     report = daily.resolve_auto_trade_dates()
@@ -81,6 +157,8 @@ def test_auto_detect_does_not_select_historical_missing_dates(monkeypatch, tmp_p
     _create_atomic_db(daily.LOCAL_ATOMIC_DB, complete_date)
     _create_selection_db(daily.LOCAL_SELECTION_DB, complete_date, source_ids=daily.REQUIRED_SELECTION_SOURCE_IDS)
     _create_model_feature_db(daily.LOCAL_MODEL_FEATURE_DB, complete_date)
+    _create_model_index_db(daily.LOCAL_MODEL_INDEX_DB, complete_date)
+    _create_market_heat_artifacts(tmp_path, complete_date)
     monkeypatch.setattr(daily, "_list_windows_market_package_dates", lambda max_candidates: ["20251231", "20260525"])
 
     report = daily.resolve_auto_trade_dates()
@@ -97,6 +175,8 @@ def test_auto_detect_noops_when_data_and_strategy_runs_are_complete(monkeypatch,
     _create_atomic_db(daily.LOCAL_ATOMIC_DB, trade_date)
     _create_selection_db(daily.LOCAL_SELECTION_DB, trade_date, source_ids=daily.REQUIRED_SELECTION_SOURCE_IDS)
     _create_model_feature_db(daily.LOCAL_MODEL_FEATURE_DB, trade_date)
+    _create_model_index_db(daily.LOCAL_MODEL_INDEX_DB, trade_date)
+    _create_market_heat_artifacts(tmp_path, trade_date)
     monkeypatch.setattr(daily, "_list_windows_market_package_dates", lambda max_candidates: ["20260525"])
 
     report = daily.resolve_auto_trade_dates()
@@ -104,3 +184,19 @@ def test_auto_detect_noops_when_data_and_strategy_runs_are_complete(monkeypatch,
     assert report["status"] == "complete"
     assert report["selected_dates"] == []
     assert report["latest_complete_date"] == "20260525"
+
+
+def test_auto_detect_marks_date_missing_when_heat_or_index_artifacts_absent(monkeypatch, tmp_path):
+    trade_date = "2026-05-25"
+    _wire_local_dbs(monkeypatch, tmp_path)
+    _create_atomic_db(daily.LOCAL_ATOMIC_DB, trade_date)
+    _create_selection_db(daily.LOCAL_SELECTION_DB, trade_date, source_ids=daily.REQUIRED_SELECTION_SOURCE_IDS)
+    _create_model_feature_db(daily.LOCAL_MODEL_FEATURE_DB, trade_date)
+    monkeypatch.setattr(daily, "_list_windows_market_package_dates", lambda max_candidates: ["20260525"])
+
+    report = daily.resolve_auto_trade_dates()
+
+    assert report["status"] == "missing"
+    verify = report["checks"][0]["local_verify"]
+    assert verify["market_index_daily"]["index_code_count"] == 0
+    assert verify["market_heat"]["heat_row_count"] == 0
