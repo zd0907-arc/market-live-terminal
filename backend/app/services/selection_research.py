@@ -149,13 +149,18 @@ def _available_selection_history_bounds(conn: sqlite3.Connection) -> Tuple[Optio
     return (min(mins) if mins else None, max(maxs) if maxs else None)
 
 
-def _load_atomic_local_history_fallback(start_date: str, end_date: str) -> pd.DataFrame:
+def _load_atomic_local_history_fallback(start_date: str, end_date: str, symbol: Optional[str] = None) -> pd.DataFrame:
     atomic_conn = _atomic_connection()
     if atomic_conn is None:
         return pd.DataFrame()
+    params: List[object] = [start_date, end_date]
+    symbol_filter = ""
+    if symbol:
+        symbol_filter = " AND lower(symbol)=lower(?)"
+        params.append(str(symbol))
     try:
         return pd.read_sql_query(
-            """
+            f"""
             SELECT symbol, trade_date,
                    l1_main_net_amount AS net_inflow,
                    l1_main_buy_amount AS main_buy_amount,
@@ -164,9 +169,10 @@ def _load_atomic_local_history_fallback(start_date: str, end_date: str) -> pd.Da
                    'atomic_trade_daily_fallback_v1' AS config_signature
             FROM atomic_trade_daily
             WHERE trade_date >= ? AND trade_date <= ?
+              {symbol_filter}
             """,
             atomic_conn,
-            params=(start_date, end_date),
+            params=tuple(params),
         )
     except Exception:
         return pd.DataFrame()
@@ -239,19 +245,25 @@ def _symbol_in_selection_universe(symbol: Optional[str]) -> bool:
     return any(text.startswith(prefix) for prefix in DEFAULT_SELECTION_UNIVERSE_PREFIXES)
 
 
-def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
+def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str, symbol: Optional[str] = None) -> pd.DataFrame:
     signature = _dominant_signature(conn)
+    params: List[object] = [start_date, end_date]
+    symbol_filter = ""
+    if symbol:
+        symbol_filter = " AND lower(symbol)=lower(?)"
+        params.append(str(symbol))
     old_df = pd.read_sql_query(
-        """
+        f"""
         SELECT symbol, date AS trade_date, net_inflow, main_buy_amount, main_sell_amount,
                close, activity_ratio, config_signature
         FROM local_history
         WHERE date >= ? AND date <= ?
+          {symbol_filter}
         """,
         conn,
-        params=(start_date, end_date),
+        params=tuple(params),
     )
-    atomic_df = _load_atomic_local_history_fallback(start_date, end_date)
+    atomic_df = _load_atomic_local_history_fallback(start_date, end_date, symbol=symbol)
     frames = [frame for frame in [atomic_df, old_df] if frame is not None and not frame.empty]
     if not frames:
         return pd.DataFrame()
@@ -267,11 +279,16 @@ def _load_local_history(conn: sqlite3.Connection, start_date: str, end_date: str
     return df
 
 
-def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
+def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str, symbol: Optional[str] = None) -> pd.DataFrame:
     old_df = pd.DataFrame()
+    params: List[object] = [start_date, end_date]
+    symbol_filter = ""
+    if symbol:
+        symbol_filter = " AND lower(symbol)=lower(?)"
+        params.append(str(symbol))
     try:
         old_df = pd.read_sql_query(
-            """
+            f"""
             SELECT symbol, date AS trade_date,
                    l1_main_net, l2_main_net,
                    l1_activity_ratio, l2_activity_ratio,
@@ -279,9 +296,10 @@ def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> 
                    l1_sell_ratio, l2_sell_ratio
             FROM history_daily_l2
             WHERE date >= ? AND date <= ?
+              {symbol_filter}
             """,
             conn,
-            params=(start_date, end_date),
+            params=tuple(params),
         )
     except Exception:
         old_df = pd.DataFrame()
@@ -289,9 +307,14 @@ def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> 
     atomic_conn = _atomic_connection()
     if atomic_conn is None:
         return old_df
+    atomic_params: List[object] = [start_date, end_date]
+    atomic_symbol_filter = ""
+    if symbol:
+        atomic_symbol_filter = " AND lower(symbol)=lower(?)"
+        atomic_params.append(str(symbol))
     try:
         atomic_df = pd.read_sql_query(
-            """
+            f"""
             SELECT symbol, trade_date,
                    l1_main_net_amount AS l1_main_net,
                    l2_main_net_amount AS l2_main_net,
@@ -300,9 +323,10 @@ def _load_l2_daily(conn: sqlite3.Connection, start_date: str, end_date: str) -> 
                    l1_sell_ratio, l2_sell_ratio
             FROM atomic_trade_daily
             WHERE trade_date >= ? AND trade_date <= ?
+              {atomic_symbol_filter}
             """,
             atomic_conn,
-            params=(start_date, end_date),
+            params=tuple(atomic_params),
         )
     except Exception:
         atomic_df = pd.DataFrame()
@@ -369,17 +393,23 @@ def _load_l2_5m_daily(conn: sqlite3.Connection, start_date: str, end_date: str) 
     return _merge_symbol_trade_date_frames(old_df, atomic_df)
 
 
-def _load_sentiment_events(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
+def _load_sentiment_events(conn: sqlite3.Connection, start_date: str, end_date: str, symbol: Optional[str] = None) -> pd.DataFrame:
+    params: List[object] = [start_date, end_date]
+    symbol_filter = ""
+    if symbol:
+        symbol_filter = " AND lower(symbol)=lower(?)"
+        params.append(str(symbol))
     try:
         return pd.read_sql_query(
-            """
+            f"""
             SELECT symbol, substr(pub_time, 1, 10) AS trade_date, COUNT(*) AS event_count
             FROM sentiment_events
             WHERE substr(pub_time, 1, 10) >= ? AND substr(pub_time, 1, 10) <= ?
+              {symbol_filter}
             GROUP BY symbol, substr(pub_time, 1, 10)
             """,
             conn,
-            params=(start_date, end_date),
+            params=tuple(params),
         )
     except Exception:
         return pd.DataFrame()
@@ -1004,24 +1034,20 @@ def get_candidates(trade_date: Optional[str], strategy: str = "breakout", limit:
 def _query_recent_profile_series(symbol: str, trade_date: str, days: int = 60) -> List[Dict[str, object]]:
     with _main_connection() as conn:
         start_date = (pd.Timestamp(trade_date) - pd.Timedelta(days=days * 2)).strftime("%Y-%m-%d")
-        daily = _load_local_history(conn, start_date, trade_date)
-        if not daily.empty:
-            daily = daily[daily["symbol"] == symbol].copy()
-        l2_daily = _load_l2_daily(conn, start_date, trade_date)
-        sentiment = _load_sentiment_events(conn, start_date, trade_date)
+        daily = _load_local_history(conn, start_date, trade_date, symbol=symbol)
+        l2_daily = _load_l2_daily(conn, start_date, trade_date, symbol=symbol)
+        sentiment = _load_sentiment_events(conn, start_date, trade_date, symbol=symbol)
 
     if daily.empty:
         return []
     daily["trade_date"] = pd.to_datetime(daily["trade_date"])
     if not l2_daily.empty:
-        l2_daily = l2_daily[l2_daily["symbol"] == symbol].copy()
         l2_daily["trade_date"] = pd.to_datetime(l2_daily["trade_date"])
         daily = daily.merge(l2_daily[["trade_date", "l1_main_net", "l2_main_net"]], on="trade_date", how="left")
     else:
         daily["l1_main_net"] = pd.NA
         daily["l2_main_net"] = pd.NA
     if not sentiment.empty:
-        sentiment = sentiment[sentiment["symbol"] == symbol].copy()
         sentiment["trade_date"] = pd.to_datetime(sentiment["trade_date"])
         daily = daily.merge(sentiment[["trade_date", "event_count"]], on="trade_date", how="left")
     else:
@@ -1220,23 +1246,14 @@ def get_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, object]:
     effective_trade_date = target_date
     fallback_used = False
 
-    if row is None and latest_signal_date and target_date > latest_signal_date:
-        row = query_feature_profile_on_or_before(normalized_symbol, latest_signal_date)
+    if row is None:
+        row = query_feature_profile_on_or_before(normalized_symbol, target_date)
         if row is not None:
             effective_trade_date = str(row["trade_date"])
-            fallback_used = True
+            fallback_used = effective_trade_date != target_date
 
     if row is None:
-        refresh_end_date = latest_signal_date if latest_signal_date and target_date > latest_signal_date else target_date
-        refresh_selection_research(start_date=_history_padding_start(refresh_end_date, 120), end_date=refresh_end_date)
-        row = query_feature_profile(normalized_symbol, target_date)
-        if row is None:
-            row = query_feature_profile_on_or_before(normalized_symbol, target_date)
-            if row is not None:
-                effective_trade_date = str(row["trade_date"])
-                fallback_used = effective_trade_date != target_date
-        if row is None:
-            raise ValueError(f"选股画像不存在: {normalized_symbol} @ {target_date}")
+        raise ValueError(f"选股画像不存在: {normalized_symbol} @ {target_date}")
 
     payload = {key: row[key] for key in row.keys()}
     payload["name"] = _clean_name(payload.get("name"), normalized_symbol)
@@ -1253,6 +1270,7 @@ def get_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, object]:
     payload["event_timeline"] = _query_recent_event_timeline(normalized_symbol, effective_trade_date)
     payload["trade_plan"] = _query_trade_plan(normalized_symbol, effective_trade_date)
     payload["trade_date"] = effective_trade_date
+    payload["latest_available_trade_date"] = latest_signal_date or effective_trade_date
     payload["requested_trade_date"] = target_date
     payload["profile_date_fallback_used"] = fallback_used
     return payload

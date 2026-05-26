@@ -751,11 +751,10 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
         ).fetchall()
         feature_rows = conn.execute(
             """
-            SELECT trade_date, COUNT(*) AS row_count
+            SELECT DISTINCT trade_date
             FROM selection_feature_daily
             WHERE (? IS NULL OR trade_date >= ?)
               AND (? IS NULL OR trade_date <= ?)
-            GROUP BY trade_date
             """,
             (start_date, start_date, end_date, end_date),
         ).fetchall()
@@ -778,7 +777,7 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
     finally:
         conn.close()
 
-    feature_dates = {str(row["trade_date"]): int(row["row_count"] or 0) for row in feature_rows}
+    feature_dates = {str(row["trade_date"]): 1 for row in feature_rows}
     signal_counts = {str(row["trade_date"]): int(row["signal_count"] or 0) for row in candidate_rows}
     run_counts = {str(row["trade_date"]): int(row["run_count"] or 0) for row in run_rows}
     success_counts = {str(row["trade_date"]): int(row["success_count"] or 0) for row in run_rows}

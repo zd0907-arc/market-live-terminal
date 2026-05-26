@@ -140,7 +140,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const [researchContext, setResearchContext] = useState<SelectionResearchContextData | null>(null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [preparingContext, setPreparingContext] = useState(false);
-  const researchRequestSeqRef = useRef(0);
 
   const activeStock = useMemo<SearchResult | null>(() => {
     if (!candidate) return null;
@@ -153,94 +152,40 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     };
   }, [candidate, displayName]);
 
+  const contextTradeDate = candidate?.trade_date || profile?.requested_trade_date || profile?.trade_date;
+  const contextStrategy = normalizeStrategy(candidate?.strategy_internal_id || profile?.strategy_internal_id);
+
   useEffect(() => {
     if (!candidate) {
-      researchRequestSeqRef.current += 1;
       setEventFeed([]);
       setEventCoverage(null);
       setResearchContext(null);
       return;
     }
-    let cancelled = false;
-    const requestSeq = researchRequestSeqRef.current + 1;
-    researchRequestSeqRef.current = requestSeq;
     setEventFeed([]);
     setEventCoverage(null);
     setResearchContext(null);
-    setLoadingEvents(true);
-    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
-    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
-    fetchSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
-      eventLimit: 24,
-      eventDays: 365,
-      seriesDays: 60,
-    })
-      .then((context) => {
-        if (cancelled || requestSeq !== researchRequestSeqRef.current) return;
-        setResearchContext(context);
-        setEventFeed(context?.stock_event_feed?.items || []);
-        setEventCoverage(context?.stock_event_coverage || null);
-      })
-      .finally(() => {
-        if (!cancelled && requestSeq === researchRequestSeqRef.current) setLoadingEvents(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
-
-  useEffect(() => {
-    if (!candidate || !profile) return;
-    let cancelled = false;
-    let count = 0;
-    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
-    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
-    const timer = window.setInterval(async () => {
-      count += 1;
-      const context = await fetchSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
-        eventLimit: 24,
-        eventDays: 365,
-        seriesDays: 60,
-      });
-      if (cancelled || !context) return;
-      setResearchContext((prev) => {
-        const prevGenerated = String(prev?.decision_brief?.generated_at || '');
-        const nextGenerated = String(context.decision_brief?.generated_at || '');
-        if (!prev || nextGenerated > prevGenerated || prev?.decision_brief?.source !== 'llm_decision_brief_v1') {
-          return context;
-        }
-        return prev;
-      });
-      setEventFeed(context.stock_event_feed?.items || []);
-      setEventCoverage(context.stock_event_coverage || null);
-      if (context.decision_brief?.source === 'llm_decision_brief_v1' && count >= 2) {
-        window.clearInterval(timer);
-      }
-      if (count >= 24) window.clearInterval(timer);
-    }, 10000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id, profile?.strategy_internal_id, profile?.trade_date, profile?.requested_trade_date]);
+    setLoadingEvents(false);
+  }, [candidate?.symbol, candidate?.trade_date, candidate?.strategy_internal_id]);
 
   const handlePrepareContext = async () => {
     if (!candidate) return;
-    const strategy = normalizeStrategy(profile?.strategy_internal_id || candidate.strategy_internal_id);
-    const contextDate = candidate.trade_date || profile?.requested_trade_date || profile?.trade_date;
     setPreparingContext(true);
-    const result = await prepareSelectionResearchContext(candidate.symbol.toLowerCase(), contextDate, strategy, {
-      useLlm: true,
-      eventLimit: 50,
-      newsDays: 45,
-      seriesDays: 60,
-    });
-    if (result?.context) {
-      setResearchContext(result.context);
-      setEventFeed(result.context.stock_event_feed?.items || []);
-      setEventCoverage(result.context.stock_event_coverage || null);
+    try {
+      const result = await prepareSelectionResearchContext(candidate.symbol.toLowerCase(), contextTradeDate, contextStrategy, {
+        useLlm: true,
+        eventLimit: 50,
+        newsDays: 45,
+        seriesDays: 60,
+      });
+      if (result?.context) {
+        setResearchContext(result.context);
+        setEventFeed(result.context.stock_event_feed?.items || []);
+        setEventCoverage(result.context.stock_event_coverage || null);
+      }
+    } finally {
+      setPreparingContext(false);
     }
-    setPreparingContext(false);
   };
 
   useEffect(() => {

@@ -73,6 +73,7 @@ bash ops/run_postclose_l2.sh
 > 本地研究站后端不要手工 `python -m backend.app.main` 直跑；必须走 `ops/start_local_research_station.sh`，否则会绕过外置库路径注入，读错本地数据库。
 > 同时不要并行拉起多个本地后端；当前正式脚本已内置“同仓库重复实例保护”，重复执行会先停止旧实例再启动新实例。
 > 页面侧也不要把远端抓数挂到初始化或轮询上。尤其 `散户一致性观察` 这类链路，页面默认只能读本地库；补抓必须是显式手动动作或盘后任务，否则很容易把本地单实例后端拖到业务接口超时。
+> 选股/研究页同样遵守这个原则：读接口只负责展示当前本地已有结果；不能在初始化时默默重跑，也不要默认走云端兜底。未跑、无结果、失败必须直接给出明确空态，重跑只允许通过显式按钮或每日任务。
 
 
 ## 5. 强制 gate
@@ -85,7 +86,7 @@ bash ops/run_postclose_l2.sh
 ## 6. 当前工作目录与主线
 - 主目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 主线分支：`main`
-- 当前工作版本：`v5.2.0`
+- 当前工作版本：`v5.2.1`
 - 当前项目真相入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 临时需求分支可使用 `codex/*`，但默认不把额外 worktree 作为主开发入口。
 

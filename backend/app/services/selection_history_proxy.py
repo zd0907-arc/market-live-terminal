@@ -7,6 +7,7 @@ from backend.app.routers.analysis import _build_multiframe_rows
 
 SELECTION_CLOUD_API_BASE = os.getenv("SELECTION_CLOUD_API_BASE", "http://111.229.144.202/api").rstrip("/")
 SELECTION_CLOUD_TIMEOUT = float(os.getenv("SELECTION_CLOUD_TIMEOUT", "8"))
+SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK = os.getenv("SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _has_meaningful_rows(rows: List[Dict[str, object]]) -> bool:
@@ -90,6 +91,17 @@ def get_selection_multiframe_rows(
             "end_date": end_date,
             "days": max(1, int(days)),
             "data_origin": "local",
+            "items": local_rows,
+        }
+
+    if not SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK:
+        return {
+            "symbol": symbol,
+            "granularity": granularity,
+            "start_date": start_date,
+            "end_date": end_date,
+            "days": max(1, int(days)),
+            "data_origin": "none",
             "items": local_rows,
         }
 

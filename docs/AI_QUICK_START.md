@@ -3,7 +3,7 @@
 ## 当前真相
 - 当前稳定基线目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前主线分支：`main`
-- 当前工作版本：`v5.2.0`
+- 当前工作版本：`v5.2.1`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
@@ -132,5 +132,5 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ## 当前回退入口
 - 老阶段回退：`stage-pre-selection-v4.2.32`
 - 选股进行中阶段回退：`stage-selection-in-progress-v4.3.2`
-- 当前工作版本：`v5.2.0`
+- 当前工作版本：`v5.2.1`
 - 运行架构回看：`docs/archive/changes/MOD-20260417-01-local-research-current-state.md`

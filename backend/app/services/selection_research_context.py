@@ -2116,13 +2116,9 @@ def get_selection_research_context(
     source_audit = _query_source_audit(stock_event_coverage, stock_event_feed, profile_error)
     sentiment_snapshot = _query_sentiment_snapshot(normalized, cutoff_date)
     company_profile = _load_company_profile(normalized)
-    if not company_profile.get("available"):
-        company_profile = fetch_and_cache_company_profile(normalized)
     if company_profile.get("company_name"):
         company = str(company_profile.get("short_name") or company_profile.get("company_name") or company)
     financial_snapshot = _load_financial_snapshot(normalized, cutoff_date)
-    if not financial_snapshot.get("available"):
-        financial_snapshot = fetch_and_cache_financial_snapshot(normalized, cutoff_date)
     company_card = _query_company_research_card(
         normalized,
         cutoff_date,

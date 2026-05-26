@@ -462,25 +462,13 @@ const SelectionResearchPage: React.FC = () => {
   const canShiftPrev = Boolean(prevSelectableDate);
   const canShiftNext = Boolean(nextSelectableDate);
 
-  const shiftSelectableDate = async (direction: -1 | 1) => {
+  const shiftSelectableDate = (direction: -1 | 1) => {
     const next = direction < 0 ? prevSelectableDate : nextSelectableDate;
-    if (next) {
-      lastLoadedKeyRef.current = '';
-      setLoadingCandidates(true);
-      setError('');
-      try {
-        await ensureDailyCandidates(next);
-      } catch (e) {
-        setError('候选生成失败，请检查写权限或后端日志');
-        setCandidates([]);
-        setSelected(null);
-        setProfile(null);
-        setLoadingCandidates(false);
-        return;
-      }
-      setPendingTradeDate(next);
-      setTradeDate(next);
-    }
+    if (!next) return;
+    lastLoadedKeyRef.current = '';
+    setError('');
+    setPendingTradeDate(next);
+    setTradeDate(next);
   };
 
   const loadCandidates = async (dateArg = tradeDate, force = false, prewarm = false) => {
@@ -573,30 +561,6 @@ const SelectionResearchPage: React.FC = () => {
       window.clearInterval(timer);
     };
   }, []);
-
-  useEffect(() => {
-    const fallbackMin = '2025-01-01';
-    const fallbackMax = formatDateOnly(new Date());
-    if (dateInitializedRef.current || Object.keys(tradeDateMetaByDate).length > 0) return;
-    let cancelled = false;
-    fetchDailySelectionTradeDates(fallbackMin, fallbackMax)
-      .then((data) => {
-        if (cancelled || !data?.items?.length) return;
-        const next = tradeDateItemsToMap(data.items || []);
-        setTradeDateMetaByDate((prev) => (Object.keys(prev).length ? prev : next));
-        const latestSelectable = latestSelectableDate(data.items || []);
-        if (latestSelectable && !dateInitializedRef.current) {
-          dateInitializedRef.current = true;
-          lastLoadedKeyRef.current = '';
-          setTradeDate(latestSelectable);
-          setPendingTradeDate(latestSelectable);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [tradeDateMetaByDate]);
 
   useEffect(() => {
     if (!tradeDate) return;
