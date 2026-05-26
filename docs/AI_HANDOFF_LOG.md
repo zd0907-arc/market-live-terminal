@@ -1,5 +1,11 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-26 02:40 | Codex
+- Task ID: `MOD-20260526-03-homepage-postclose-previous-trade-day-fallback`
+- CAP: `CAP-MKT-TIME`, `CAP-REALTIME-FLOW`
+- 结论: 已补回首页分时默认日期链路的缺口。此前 `MarketClock` 在交易日盘后会默认把首页主力动态请求打到“今天”，但当某只股票当天分时尚未入库时，`/api/realtime/dashboard` 不会自动回退到上一交易日，导致首次打开或刷新首页时直接空白。当前已改为：用户未手动选日期时，盘后先尝试今天；如果今天没有可展示分时，再自动回退上一交易日，并把 `default_display_scope/default_display_date/view_mode` 一并回写给前端。
+- 链接: `backend/app/routers/market.py`, `backend/tests/test_realtime_dashboard_router.py`, `docs/contracts/market-realtime.md`
+
 ## 2026-05-26 02:05 | Codex
 - Task ID: `MOD-20260526-02-retail-sentiment-page-no-auto-crawl`
 - CAP: `CAP-RETAIL-SENTIMENT`

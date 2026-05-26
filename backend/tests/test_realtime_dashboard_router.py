@@ -320,6 +320,58 @@ def test_realtime_dashboard_post_close_defaults_to_today_review_not_realtime(mon
     assert called["realtime"] == 0
 
 
+def test_realtime_dashboard_post_close_falls_back_to_previous_trade_day_when_today_missing(monkeypatch):
+    monkeypatch.setattr("backend.app.routers.market.MOCK_DATA_DATE", None)
+    monkeypatch.setattr(
+        "backend.app.routers.market.MarketClock.get_market_context",
+        lambda: {
+            "natural_today": "2026-03-18",
+            "is_trade_day": True,
+            "market_status": "post_close",
+            "market_status_label": "盘后复盘",
+            "default_display_date": "2026-03-18",
+            "default_display_scope": "today",
+            "default_display_scope_label": "默认展示今日收盘后数据",
+            "should_use_realtime_path": False,
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.routers.market.TradeCalendar.get_last_trading_day",
+        lambda _base: "2026-03-17",
+    )
+
+    calls = {"history": [], "history_l2": [], "realtime": []}
+
+    def fake_history(symbol, date_str):
+        calls["history"].append(date_str)
+        if date_str == "2026-03-18":
+            return None
+        return {"chart_data": [{"time": "09:30"}], "cumulative_data": [], "latest_ticks": [], "source": "history_1m"}
+
+    def fake_history_l2(symbol, date_str):
+        calls["history_l2"].append(date_str)
+        return None
+
+    def fake_realtime(symbol, date_str):
+        calls["realtime"].append(date_str)
+        return {"chart_data": [], "cumulative_data": [], "latest_ticks": []}
+
+    monkeypatch.setattr("backend.app.services.analysis.get_history_1m_dashboard", fake_history)
+    monkeypatch.setattr("backend.app.services.analysis.get_history_l2_dashboard", fake_history_l2)
+    monkeypatch.setattr("backend.app.services.analysis.calculate_realtime_aggregation", fake_realtime)
+    monkeypatch.setattr("backend.app.services.analysis.get_sentiment_fallback_dashboard", lambda symbol, date_str: None)
+    monkeypatch.setattr("backend.app.routers.market._hydrate_today_ticks_on_demand", lambda symbol, date_str: asyncio.sleep(0, result=False))
+
+    resp = asyncio.run(get_realtime_dashboard(symbol="sz300017", date=None))
+
+    assert resp.code == 200
+    assert resp.data["display_date"] == "2026-03-17"
+    assert resp.data["default_display_date"] == "2026-03-17"
+    assert resp.data["default_display_scope"] == "previous_trade_day"
+    assert resp.data["view_mode"] == "previous_trade_day"
+    assert calls["history"] == ["2026-03-18", "2026-03-17"]
+
+
 def test_intraday_fusion_returns_intraday_l1_only_preview(monkeypatch):
     monkeypatch.setattr(
         "backend.app.routers.market.MOCK_DATA_DATE",

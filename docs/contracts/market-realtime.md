@@ -27,6 +27,7 @@
 4. 无数据必须显式返回，不允许静默假空数组冒充成功态。
 5. 生产实时写入只允许 Windows crawler 调用 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`；Cloud 自身默认不外采。
 6. Mac 本地按需 hydrate 只服务本机开发/研究，不代表生产 ingest。
+7. 首页 `realtime/dashboard` 在交易日盘后的默认语义是“优先看今天”；但如果该股票今天分时尚未就绪，且用户没有手动指定日期，必须自动回退到上一交易日，不能把首页留在空白态。
 
 ## 3. 实时相关表
 - `trade_ticks`：逐笔数据；ingest 按 `symbol + date` 覆盖写，避免重复累加。

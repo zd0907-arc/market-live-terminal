@@ -240,6 +240,36 @@ def _should_hydrate_default_previous_trade_day(
     return str(market_context.get("default_display_scope") or "") == "previous_trade_day"
 
 
+def _should_auto_fallback_post_close_previous_trade_day(
+    query_date: str,
+    natural_today: str,
+    market_context: dict,
+    *,
+    requested_date_explicitly: bool,
+) -> bool:
+    if requested_date_explicitly:
+        return False
+    if query_date != natural_today:
+        return False
+    return str(market_context.get("market_status") or "") == "post_close"
+
+
+def _previous_trade_day_before(natural_today: str) -> Optional[str]:
+    try:
+        base = datetime.strptime(natural_today, "%Y-%m-%d") - timedelta(days=1)
+    except Exception:
+        return None
+    return TradeCalendar.get_last_trading_day(base)
+
+
+def _build_previous_trade_day_review_context(market_context: dict, previous_trade_date: str) -> dict:
+    next_context = dict(market_context)
+    next_context["default_display_date"] = previous_trade_date
+    next_context["default_display_scope"] = "previous_trade_day"
+    next_context["default_display_scope_label"] = "默认展示上一交易日复盘数据"
+    return next_context
+
+
 async def _rehydrate_today_if_stale(
     symbol: str,
     query_date: str,
@@ -322,6 +352,73 @@ async def _hydrate_today_ticks_on_demand(symbol: str, date_str: str) -> bool:
     return await _hydrate_ticks_on_demand(symbol, date_str)
 
 
+async def _load_historical_dashboard_payload(
+    symbol: str,
+    query_date: str,
+    natural_today: str,
+    market_context: dict,
+    *,
+    requested_date_explicitly: bool,
+):
+    from backend.app.services.analysis import (
+        get_history_1m_dashboard,
+        get_history_l2_dashboard,
+        calculate_realtime_aggregation,
+        get_sentiment_fallback_dashboard,
+    )
+
+    data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+    if _is_today_payload_stale(data, market_context, query_date, natural_today):
+        fallback = calculate_realtime_aggregation(symbol, query_date)
+        if _has_dashboard_payload(fallback):
+            data = fallback
+        if _is_today_payload_stale(data, market_context, query_date, natural_today):
+            hydrated = await _rehydrate_today_if_stale(
+                symbol,
+                query_date,
+                natural_today,
+                market_context,
+                force=_needs_postclose_forced_retry(market_context),
+                max_attempts=2 if _needs_postclose_forced_retry(market_context) else 1,
+            )
+            if hydrated:
+                data = calculate_realtime_aggregation(symbol, query_date)
+    if data is None:
+        data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
+    if data is None:
+        fallback = calculate_realtime_aggregation(symbol, query_date)
+        if _has_dashboard_payload(fallback):
+            data = fallback
+    if data is None and query_date == natural_today:
+        hydrated = await _hydrate_today_ticks_on_demand(symbol, natural_today)
+        if hydrated:
+            data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+            if data is None:
+                fallback = calculate_realtime_aggregation(symbol, query_date)
+                if _has_dashboard_payload(fallback):
+                    data = fallback
+    if data is None and _should_hydrate_default_previous_trade_day(
+        query_date,
+        natural_today,
+        market_context,
+        requested_date_explicitly=requested_date_explicitly,
+    ):
+        hydrated = await _hydrate_ticks_on_demand(symbol, query_date)
+        if hydrated:
+            data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
+            if data is None:
+                data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
+            if data is None:
+                fallback = calculate_realtime_aggregation(symbol, query_date)
+                if _has_dashboard_payload(fallback):
+                    data = fallback
+    if data is None and query_date == natural_today:
+        fallback = get_sentiment_fallback_dashboard(symbol, query_date)
+        if fallback is not None:
+            data = fallback
+    return data
+
+
 def _build_view_mode(query_date: str, market_context: dict) -> tuple[str, str]:
     natural_today = str(market_context["natural_today"])
     default_display_date = str(market_context["default_display_date"])
@@ -400,6 +497,7 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
     else:
         market_context = MarketClock.get_market_context()
 
+    effective_market_context = dict(market_context)
     today_str = str(market_context["default_display_date"])
     natural_today_str = str(market_context["natural_today"])
     requested_date_explicitly = date is not None
@@ -437,65 +535,39 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
             if fallback is not None:
                 data = fallback
     else:
-        # 历史/回溯日期：
-        # 1) 优先读预聚合 history_1m；
-        # 2) 若 history_1m 缺失，则尝试正式 L2 历史 5m；
-        # 3) 若仍缺失，但 trade_ticks 已存在，则回退用该日 ticks 现场聚合。
-        from backend.app.services.analysis import (
-            get_history_1m_dashboard,
-            get_history_l2_dashboard,
-            calculate_realtime_aggregation,
-            get_sentiment_fallback_dashboard,
-        )
-        data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
-        if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
-            fallback = calculate_realtime_aggregation(symbol, query_date)
-            if _has_dashboard_payload(fallback):
-                data = fallback
-            if _is_today_payload_stale(data, market_context, query_date, natural_today_str):
-                hydrated = await _rehydrate_today_if_stale(
-                    symbol,
-                    query_date,
-                    natural_today_str,
-                    market_context,
-                    force=_needs_postclose_forced_retry(market_context),
-                    max_attempts=2 if _needs_postclose_forced_retry(market_context) else 1,
-                )
-                if hydrated:
-                    data = calculate_realtime_aggregation(symbol, query_date)
-        if data is None:
-            data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
-        if data is None:
-            fallback = calculate_realtime_aggregation(symbol, query_date)
-            if _has_dashboard_payload(fallback):
-                data = fallback
-        if data is None and query_date == natural_today_str:
-            hydrated = await _hydrate_today_ticks_on_demand(symbol, natural_today_str)
-            if hydrated:
-                data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
-                if data is None:
-                    fallback = calculate_realtime_aggregation(symbol, query_date)
-                    if _has_dashboard_payload(fallback):
-                        data = fallback
-        if data is None and _should_hydrate_default_previous_trade_day(
+        data = await _load_historical_dashboard_payload(
+            symbol,
             query_date,
             natural_today_str,
-            market_context,
+            effective_market_context,
             requested_date_explicitly=requested_date_explicitly,
+        )
+        if (
+            not _has_dashboard_payload(data)
+            and _should_auto_fallback_post_close_previous_trade_day(
+                query_date,
+                natural_today_str,
+                market_context,
+                requested_date_explicitly=requested_date_explicitly,
+            )
         ):
-            hydrated = await _hydrate_ticks_on_demand(symbol, query_date)
-            if hydrated:
-                data = await asyncio.to_thread(get_history_1m_dashboard, symbol, query_date)
-                if data is None:
-                    data = await asyncio.to_thread(get_history_l2_dashboard, symbol, query_date)
-                if data is None:
-                    fallback = calculate_realtime_aggregation(symbol, query_date)
-                    if _has_dashboard_payload(fallback):
-                        data = fallback
-        if data is None and query_date == natural_today_str:
-            fallback = get_sentiment_fallback_dashboard(symbol, query_date)
-            if fallback is not None:
-                data = fallback
+            previous_trade_date = _previous_trade_day_before(natural_today_str)
+            if previous_trade_date and previous_trade_date != query_date:
+                fallback_context = _build_previous_trade_day_review_context(
+                    market_context,
+                    previous_trade_date,
+                )
+                fallback_data = await _load_historical_dashboard_payload(
+                    symbol,
+                    previous_trade_date,
+                    natural_today_str,
+                    fallback_context,
+                    requested_date_explicitly=False,
+                )
+                if _has_dashboard_payload(fallback_data):
+                    data = fallback_data
+                    query_date = previous_trade_date
+                    effective_market_context = fallback_context
         if data is None:
             return APIResponse(code=404, message="No pre-aggregated intraday data for this date", data=None)
     
@@ -503,15 +575,15 @@ async def get_realtime_dashboard(symbol: str, date: str = Query(None)):
     if data:
         data['display_date'] = query_date
         data['natural_today'] = natural_today_str
-        data['market_status'] = market_context['market_status']
-        data['market_status_label'] = market_context['market_status_label']
-        data['default_display_date'] = today_str
-        data['default_display_scope'] = market_context['default_display_scope']
-        data['default_display_scope_label'] = market_context['default_display_scope_label']
-        view_mode, view_mode_label = _build_view_mode(query_date, market_context)
+        data['market_status'] = effective_market_context['market_status']
+        data['market_status_label'] = effective_market_context['market_status_label']
+        data['default_display_date'] = str(effective_market_context['default_display_date'])
+        data['default_display_scope'] = effective_market_context['default_display_scope']
+        data['default_display_scope_label'] = effective_market_context['default_display_scope_label']
+        view_mode, view_mode_label = _build_view_mode(query_date, effective_market_context)
         data['view_mode'] = view_mode
         data['view_mode_label'] = view_mode_label
-        data['is_realtime_session'] = bool(market_context.get('should_use_realtime_path'))
+        data['is_realtime_session'] = bool(effective_market_context.get('should_use_realtime_path'))
     
     return APIResponse(code=200, data=data)
 
