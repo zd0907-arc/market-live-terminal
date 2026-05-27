@@ -358,7 +358,13 @@ const SelectionResearchPage: React.FC = () => {
   }, [selected]);
 
   const hydrateCandidateNames = async (items: SelectionCandidateItem[]) => {
-    const targets = items.filter((item) => !item.name || item.name === item.symbol);
+    const seen = new Set<string>();
+    const targets = items.filter((item) => {
+      const symbol = String(item.symbol || '').toLowerCase();
+      if (!symbol || seen.has(symbol)) return false;
+      seen.add(symbol);
+      return !item.name || item.name === item.symbol;
+    });
     if (!targets.length) return;
     const results = await Promise.allSettled(targets.map((item) => StockService.fetchQuote(item.symbol.toLowerCase())));
     const next: Record<string, string> = {};
@@ -517,7 +523,7 @@ const SelectionResearchPage: React.FC = () => {
       ) || items[0] || watchItems[0] || null;
       setSelected(keepSelected);
       if (!keepSelected) setProfile(null);
-      void hydrateCandidateNames(items);
+      void hydrateCandidateNames([...items, ...watchItems]);
     } catch (e) {
       if (requestSeq === candidatesRequestSeqRef.current) {
         lastLoadedKeyRef.current = '';

@@ -15,6 +15,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 - 工作台统一候选池入口：`Selection Research` 工作台。
 - `机会发现模型` / `spark_opportunity_selector` 是盘后模型候选源，接入工作台统一候选池和模拟盘。
 - 日常入口应先从统一候选池进入，再决定是否查看热点、复盘、长期趋势等子专题解释。
+- 合并候选时，模型源优先级应高于策略源；单日数量上限按来源单独配置，不做全局统一配额。
 
 ## 3. 候选源边界
 

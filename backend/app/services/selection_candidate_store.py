@@ -16,6 +16,11 @@ ACTION_PRIORITY = {
     "watch": 2,
     "blocked": 1,
 }
+SOURCE_PRIORITY = {
+    SPARK_SOURCE_ID: 0,
+    "stable_capital_callback": 1,
+    "trend_continuation_callback": 2,
+}
 MAX_TRADE_DATE_WINDOW_DAYS = 540
 DEFAULT_EXIT_POLICY_ID = "pc_model_th6_stop12"
 
@@ -80,6 +85,10 @@ def _clean_symbol(value: Any) -> str:
 def _clean_text(value: Any, default: str = "") -> str:
     text = str(value or "").strip()
     return text if text else default
+
+
+def _source_priority(source_id: Any) -> int:
+    return int(SOURCE_PRIORITY.get(str(source_id or ""), 99))
 
 
 def _list(value: Any) -> List[Any]:
@@ -512,6 +521,7 @@ def rebuild_daily_candidates(trade_date: str) -> int:
                 symbol_rows,
                 key=lambda item: (
                     -ACTION_PRIORITY.get(item["suggested_action"], 0),
+                    _source_priority(item["source_id"]),
                     item["rank"],
                     -item["score"],
                     item["source_id"],
@@ -559,6 +569,7 @@ def rebuild_daily_candidates(trade_date: str) -> int:
         merged.sort(
             key=lambda item: (
                 -ACTION_PRIORITY.get(item["suggested_action"], 0),
+                _source_priority(item["primary_source_id"]),
                 -item["combined_score"],
                 item["symbol"],
             )

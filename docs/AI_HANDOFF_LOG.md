@@ -1,5 +1,12 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-05-28 01:45 | Codex
+- Task ID: `MOD-20260527-01-selection-v522-spark-priority-and-may-exit-backfill`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 `v5.2.2` 选股工作台收口。`每日综合候选` 现按“动作优先级 -> 来源优先级 -> 综合分”排序，星火模型排在策略前；`stable_capital_callback` 单日上限从 `10` 收紧到 `3`；右侧 `持仓跟踪 / 次日卖出` 已补名称拉取；并新增 `backend/scripts/backfill_spark_exit_watchlist_month.py`，已将 `2026-05` 星火持仓/卖出回补到 15 个实际交易日。额外查明 `2026-05-25` 之前不是前端漏显，而是库里当时真被写成 `spark=0`；按当前正式数据重跑后，这一天已修正为 `spark=3`。
+- 风险: 当前仓库还存在并行开发中的 Spark pattern prototype 改动与未跟踪 `docs/portfolio-ops/` 目录，本次提交不混入这些内容。
+- 链接: `backend/app/services/selection_candidate_store.py`, `backend/app/services/selection_daily_workbench.py`, `src/components/selection/SelectionResearchPage.tsx`, `backend/scripts/backfill_spark_exit_watchlist_month.py`, `docs/changes/MOD-20260527-01-selection-v522-spark-priority-and-may-exit-backfill.md`
+
 ## 2026-05-26 22:35 | Codex
 - Task ID: `MOD-20260526-04-daily-postclose-index-and-heat-mainline`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-MARKET-HEAT`, `CAP-SELECTION-RESEARCH`

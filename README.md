@@ -1,7 +1,7 @@
-# ZhangData 金融实时终端（v5.2.1）
+# ZhangData 金融实时终端（v5.2.2）
 
 ## 项目定位
-- 当前工作版本：`v5.2.1`
+- 当前工作版本：`v5.2.2`
 - 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
