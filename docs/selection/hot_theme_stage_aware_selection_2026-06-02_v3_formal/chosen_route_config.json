@@ -1,0 +1,13 @@
+{
+  "top_n": 12,
+  "min_route_score": 0.5,
+  "min_breadth": 0.1,
+  "max_leader_conc": 30.0,
+  "max_gt7_ratio": 0.18,
+  "require_preheat": true,
+  "route_id": "tn12_s0.50_b0.10_c30_g0.18_preheat",
+  "selector_score": 43.347537,
+  "score_min": 40.8626,
+  "score_median": 44.9009,
+  "score_mean": 47.229833
+}

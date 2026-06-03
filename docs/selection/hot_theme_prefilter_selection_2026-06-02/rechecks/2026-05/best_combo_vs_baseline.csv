@@ -1,0 +1,9 @@
+metric,metric_label,all_market,new_or_accel_or_mainline,delta_prefilter_minus_baseline
+day1_no_red_rate,当天从未翻红比例,0.0,0.0,0.0
+day2_still_loss_rate,次日仍亏比例,0.4706,0.5294,0.0588
+deep_pain_rate,明显难受比例,0.6471,0.8235,0.1764
+day1_avg_mfe_pct,当天平均最高冲高,6.1875,4.8193,-1.3682
+day2_avg_close_return_pct,次日平均收益,2.5298,-0.1771,-2.7069
+hit3_rate,当天冲到3%比例,0.8235,0.7647,-0.0588
+hit5_rate,当天冲到5%比例,0.5882,0.2941,-0.2941
+avg_filter_universe,日均候选池,2285.0,190.88,-2094.12

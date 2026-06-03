@@ -1,0 +1,28 @@
+{
+  "internal_2025": {
+    "label": "internal_2025",
+    "samples": 2754,
+    "positive_rate": 0.255265,
+    "roc_auc": 0.566778,
+    "pr_auc": 0.309631,
+    "precision_at_5": 0.32,
+    "lift_at_5": 1.254,
+    "precision_at_10": 0.288333,
+    "lift_at_10": 1.13,
+    "precision_at_20": 0.31,
+    "lift_at_20": 1.214
+  },
+  "final_2026": {
+    "label": "final_2026",
+    "samples": 2077,
+    "positive_rate": 0.304285,
+    "roc_auc": 0.562593,
+    "pr_auc": 0.355344,
+    "precision_at_5": 0.381538,
+    "lift_at_5": 1.254,
+    "precision_at_10": 0.376538,
+    "lift_at_10": 1.237,
+    "precision_at_20": 0.342117,
+    "lift_at_20": 1.124
+  }
+}
