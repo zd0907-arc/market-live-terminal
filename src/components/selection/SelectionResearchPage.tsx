@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react';
 
 import {
   SelectionBacktestDetail,
@@ -33,6 +33,7 @@ import { Metric, SectionCard } from '../common/ResearchCard';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
 import MarketTopHeader from '../common/MarketTopHeader';
 import { APP_VERSION } from '../../version';
+import { SPARK_PATTERN_RESEARCH_PAGES } from './sparkPatternResearchRegistry';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
 const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
@@ -339,6 +340,7 @@ const SelectionResearchPage: React.FC = () => {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [runningBacktest, setRunningBacktest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [researchMenuOpen, setResearchMenuOpen] = useState(false);
   const [backtestStartDate, setBacktestStartDate] = useState('2026-03-02');
   const [backtestEndDate, setBacktestEndDate] = useState('2026-04-24');
   const [error, setError] = useState('');
@@ -350,6 +352,7 @@ const SelectionResearchPage: React.FC = () => {
   const backendHealthFailureCountRef = useRef(0);
   const dateInitializedRef = useRef(false);
   const prewarmNextLoadRef = useRef(false);
+  const researchMenuRef = useRef<HTMLDivElement | null>(null);
   const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
   const datePickerMax = String(health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || health?.latest_signal_date || '');
 
@@ -839,6 +842,22 @@ const SelectionResearchPage: React.FC = () => {
     };
   }, [datePickerMax, datePickerMin]);
 
+  useEffect(() => {
+    if (!researchMenuOpen) return undefined;
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (researchMenuRef.current && target && !researchMenuRef.current.contains(target)) {
+        setResearchMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [researchMenuOpen]);
+
   const renderCandidateItem = (item: SelectionCandidateItem & { displayName?: string }, sectionRank: number) => {
     const strategyId = item.strategy_internal_id || item.primary_source_id || 'daily_candidate_pool';
     const active = selected?.symbol === item.symbol && selected?.trade_date === item.trade_date;
@@ -977,6 +996,38 @@ const SelectionResearchPage: React.FC = () => {
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? '刷新中' : '刷新当日候选'}
           </button>
+          <div ref={researchMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setResearchMenuOpen((prev) => !prev)}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500"
+            >
+              <BarChart3 className="h-4 w-4" />
+              研究入口
+              <ChevronDown className={`h-4 w-4 transition ${researchMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {researchMenuOpen ? (
+              <div className="absolute right-0 top-full z-[120] mt-2 w-[420px] overflow-hidden rounded-xl border border-slate-600 bg-[#020617] p-2 shadow-[0_24px_60px_rgba(2,6,23,0.82)]">
+                {SPARK_PATTERN_RESEARCH_PAGES.map((item) => (
+                  item.enabled ? (
+                    <a
+                      key={item.id}
+                      href={item.href}
+                      className="block rounded-lg px-3 py-3 transition hover:bg-slate-900"
+                    >
+                      <div className="text-sm font-medium text-white">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-400">{item.description}</div>
+                    </a>
+                  ) : (
+                    <div key={item.id} className="rounded-lg px-3 py-3 opacity-60">
+                      <div className="text-sm font-medium text-slate-300">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">{item.description}</div>
+                    </div>
+                  )
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

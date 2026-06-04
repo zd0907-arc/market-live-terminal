@@ -1,5 +1,13 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-05 00:55 | Codex
+- Task ID: `MOD-20260605-02-spark-pattern-research-ui-closure`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已完成 `spark-ui` worktree 收口确认。这条线的实际产物不是训练模型，而是选股研究工作台里的“研究入口 + 星火形态研究页”前端。当前已确认：`/selection-research` 顶部 `研究入口` 下拉菜单可展开 3 个独立研究页入口；`/selection-spark-pattern-research/1-0` 可正常打开，`Top1 / Top3` 切换、按股票完整图卡、信号日 / 次日买入日 / 22 日硬退出日标记均可见。对应静态 payload 与 `backend/scripts/export_spark_pattern_research_payloads.py` 也已纳入正式保留范围。
+- 验证: `npm run build` 通过；浏览器实开验收通过 `/selection-research` 与 `/selection-spark-pattern-research/1-0`。
+- 风险: 这次收口只代表研究页前端完成，不代表新增训练链路或模型结论更新。`selection-spark-pattern-prototype` 仍保留为历史样式参考页，不是主入口。
+- 链接: `docs/selection/spark_pattern_research_ui_closure_2026-06-05.md`, `src/components/selection/SelectionResearchPage.tsx`, `src/components/selection/SparkPatternResearchPage.tsx`, `backend/scripts/export_spark_pattern_research_payloads.py`
+
 ## 2026-05-28 01:45 | Codex
 - Task ID: `MOD-20260527-01-selection-v522-spark-priority-and-may-exit-backfill`
 - CAP: `CAP-SELECTION-RESEARCH`

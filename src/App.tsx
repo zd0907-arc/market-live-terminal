@@ -17,6 +17,8 @@ const SelectionResearchPage = lazy(() => import('./components/selection/Selectio
 const PPOBacktestReportPage = lazy(() => import('./components/selection/PPOBacktestReportPage'));
 const ModelTrainingPage = lazy(() => import('./components/model/ModelTrainingPage'));
 const OpportunityTradeReviewPage = lazy(() => import('./components/selection/OpportunityTradeReviewPage'));
+const SparkPatternPrototypePage = lazy(() => import('./components/selection/SparkPatternPrototypePage'));
+const SparkPatternResearchPage = lazy(() => import('./components/selection/SparkPatternResearchPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
@@ -151,6 +153,26 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">机会发现交易复盘加载中...</div>}>
         <OpportunityTradeReviewPage />
+      </Suspense>
+    );
+  }
+
+  const isSparkPatternPrototypeRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-spark-pattern-prototype');
+  if (isSparkPatternPrototypeRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="星火形态样式版" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">星火形态样式版加载中...</div>}>
+        <SparkPatternPrototypePage />
+      </Suspense>
+    );
+  }
+
+  const isSparkPatternResearchRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-spark-pattern-research');
+  if (isSparkPatternResearchRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="星火形态研究页" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">星火形态研究页加载中...</div>}>
+        <SparkPatternResearchPage />
       </Suspense>
     );
   }
