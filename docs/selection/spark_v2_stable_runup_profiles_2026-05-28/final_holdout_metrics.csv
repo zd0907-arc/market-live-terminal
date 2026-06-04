@@ -1,0 +1,5 @@
+profile,variant_id,source_type,days,picks,avg_mfe_22d_pct,median_mfe_22d_pct,q25_mfe_22d_pct,never_up_rate,hit5_rate,hit10_rate,hit15_rate,hit20_rate,no_runup_lt5_rate,painful_no_runup_rate,selector_score
+stable_selected,stable_003_hit20_full,stable,64,64,17.2552,12.0093,3.6873,0.0156,0.7031,0.5312,0.3594,0.2656,0.2969,0.2656,242.0661
+offensive_reference,pure_001_rank_full,offensive,64,64,24.6967,19.9347,7.1717,0.0,0.8438,0.6875,0.5781,0.5,0.1562,0.125,132.3273
+gate_switch_stable_on_weak,gate_switch_stable_on_weak,gate,64,64,22.2344,15.64,6.6802,0.0,0.8438,0.6719,0.5156,0.4062,0.1562,0.125,
+gate_skip_weak,gate_skip_weak,gate,53,53,24.3633,19.1375,7.1522,0.0,0.8491,0.6792,0.566,0.4717,0.1509,0.1132,

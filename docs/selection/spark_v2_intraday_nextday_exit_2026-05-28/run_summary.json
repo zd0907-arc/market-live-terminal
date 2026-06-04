@@ -1,0 +1,15 @@
+{
+  "report_dir": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_stable_runup_profiles_2026-05-28",
+  "atomic_db": "/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db",
+  "profiles": [
+    "stable",
+    "offensive"
+  ],
+  "policies": [
+    "day2_tp2_sl4",
+    "day2_tp3_sl5",
+    "day2_tp4_sl5",
+    "day2_tp5_sl6",
+    "day2_close_only"
+  ]
+}

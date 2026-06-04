@@ -1,0 +1,7 @@
+profile,hold_days,slot_count,trade_count,avg_trade_return_pct,median_trade_return_pct,win_rate,loss_rate,hit3_rate,hit5_rate,delayed_exit_rate,account_executed_trades,account_skipped_no_slot,account_total_return_pct,account_max_drawdown_pct,account_final_equity
+stable,1,1,62,-0.423,-0.4988,0.4194,0.5806,0.129,0.0806,0.0,62,0,-26.2753,-44.0858,737246.6
+stable,2,2,61,-0.1141,0.1011,0.5246,0.4754,0.2131,0.1148,0.0,61,0,-5.6298,-24.8987,943701.68
+stable,3,3,60,-0.7919,-0.7067,0.3833,0.6167,0.2333,0.1167,0.0,60,0,-16.0578,-26.0687,839421.8
+offensive,1,1,63,-0.328,0.0141,0.5079,0.4921,0.1587,0.0794,0.0,63,0,-22.2323,-39.669,777676.54
+offensive,2,2,62,0.3019,0.6453,0.5645,0.4355,0.2742,0.1129,0.0,62,0,5.4062,-20.9394,1054061.93
+offensive,3,3,61,0.74,1.0287,0.623,0.377,0.3443,0.2459,0.0,61,0,12.3708,-13.8566,1123707.87

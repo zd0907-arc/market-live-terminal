@@ -1,0 +1,83 @@
+{
+  "scope": "spark_v2_selection_high_hit_final_holdout",
+  "config": {
+    "feature_db": "/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db",
+    "source_dir": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_2026-05-27",
+    "out_dir": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_final_2026-05-27",
+    "holdout_start": "2026-01-05",
+    "holdout_end": "2026-04-13",
+    "observation_start": "2026-04-14",
+    "observation_end": "2026-05-25",
+    "calendar_end_date": "2026-05-25",
+    "initial_capital": 1000000.0,
+    "top_k": 3
+  },
+  "source": {
+    "internal_search_dir": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_2026-05-27",
+    "candidate_count": 2,
+    "rule": "only eligible_for_final_holdout packages are opened in 2026 final holdout"
+  },
+  "watch_only_count": 1,
+  "leaderboard": [
+    {
+      "model_id": "highhit_001_hit10_all",
+      "target": "hit10",
+      "feature_count": 96,
+      "policy_id": "highhit_two_slot_tp15_stop8",
+      "policy_description": "双仓风险预算，单票 50%，15% 止盈，8% 硬止损，最多 22 日",
+      "holdout_signal_days": 64,
+      "holdout_top1_hit10_rate": 0.5625,
+      "holdout_top1_hit15_rate": 0.4219,
+      "holdout_top1_hit20_rate": 0.3125,
+      "holdout_top1_avg_mfe_22d_pct": 17.1174,
+      "holdout_top1_median_mfe_22d_pct": 12.0341,
+      "holdout_top1_buyable_rate": 1.0,
+      "holdout_top3_pick_hit15_rate": 0.3594,
+      "holdout_top3_any_hit15_rate": 0.7188,
+      "holdout_return_pct": 48.0373,
+      "holdout_max_drawdown_pct": -13.6455,
+      "holdout_worst_month_return_pct": 0.0,
+      "holdout_trades": 19,
+      "holdout_top1_positive_pnl_share": 0.1058,
+      "observation_signal_days": 27,
+      "final_status": "watch_only",
+      "decision_reasons": [],
+      "final_score": 109.0031
+    },
+    {
+      "model_id": "highhit_002_hit15_all",
+      "target": "hit15",
+      "feature_count": 96,
+      "policy_id": "highhit_full_tp10_stop8",
+      "policy_description": "单仓满仓，10% 止盈，8% 硬止损，最多 22 日",
+      "holdout_signal_days": 64,
+      "holdout_top1_hit10_rate": 0.5781,
+      "holdout_top1_hit15_rate": 0.4062,
+      "holdout_top1_hit20_rate": 0.2344,
+      "holdout_top1_avg_mfe_22d_pct": 15.3197,
+      "holdout_top1_median_mfe_22d_pct": 12.678,
+      "holdout_top1_buyable_rate": 1.0,
+      "holdout_top3_pick_hit15_rate": 0.3542,
+      "holdout_top3_any_hit15_rate": 0.7188,
+      "holdout_return_pct": -13.6204,
+      "holdout_max_drawdown_pct": -28.258,
+      "holdout_worst_month_return_pct": -14.4622,
+      "holdout_trades": 14,
+      "holdout_top1_positive_pnl_share": 0.1802,
+      "observation_signal_days": 27,
+      "final_status": "research_only",
+      "decision_reasons": [
+        "holdout_account_return_not_positive",
+        "holdout_drawdown_below_threshold",
+        "holdout_worst_month_below_threshold"
+      ],
+      "final_score": 54.6049
+    }
+  ],
+  "files": {
+    "final_leaderboard": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_final_2026-05-27/final_leaderboard.csv",
+    "final_report": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_final_2026-05-27/final_holdout_report.md",
+    "candidate_model_packages": "/Users/dong/Desktop/AIGC/market-live-terminal-spark-v2-training/docs/selection/spark_v2_selection_high_hit_final_2026-05-27/candidate_model_packages"
+  },
+  "repro_command": "python3 backend/scripts/finalize_spark_v2_selection_high_hit_candidates.py"
+}

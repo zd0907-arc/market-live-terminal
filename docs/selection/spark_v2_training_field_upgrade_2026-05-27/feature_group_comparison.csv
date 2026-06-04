@@ -1,0 +1,8 @@
+feature_group,candidate_count,best_model_id,best_business_name,best_selector_score,best_final_top1_avg_mfe_22d_pct,best_final_top1_hit15_rate,best_final_top1_painful_no_runup_rate
+v2_full,7,tfu_048_v2_full_tail_rank,v2 全量特征：每日排序 + 大涨强化,54.1168,18.556,0.4219,0.2344
+spark10_plus_orderbook,7,tfu_028_spark10_plus_orderbook_raw_mfe,1.0 结构 + 盘口订单：直接预测冲高幅度,49.5656,17.8279,0.3594,0.25
+spark10_plus_limit_risk,7,tfu_042_spark10_plus_limit_risk_raw_mfe,1.0 结构 + 涨停风险：直接预测冲高幅度,49.3765,18.8934,0.5,0.1875
+spark10_plus_heat,7,tfu_014_spark10_plus_heat_raw_mfe,1.0 结构 + 热点增强：直接预测冲高幅度,47.7298,18.2676,0.5156,0.1562
+spark10_like,7,tfu_007_spark10_like_raw_mfe,1.0 结构复刻：直接预测冲高幅度,44.1626,17.9193,0.4688,0.2188
+spark10_plus_market,7,tfu_021_spark10_plus_market_raw_mfe,1.0 结构 + 市场环境：直接预测冲高幅度,42.7238,15.869,0.4062,0.2812
+spark10_plus_oib_cvd,7,tfu_035_spark10_plus_oib_cvd_raw_mfe,1.0 结构 + 主动买卖差：直接预测冲高幅度,41.9036,20.231,0.4844,0.2031
