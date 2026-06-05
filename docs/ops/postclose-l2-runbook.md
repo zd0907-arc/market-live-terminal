@@ -35,7 +35,7 @@ bash ops/run_daily_new_framework.sh --json
 - `model_feature_daily_v1`、`model_feature_intraday_shape_v1`
 - 选股模型依赖的当日热点结果已经生成
 - 热点页面依赖的当日热点缓存已经同步回 Mac
-- `selection_strategy_runs` 中当天活跃来源的 success 记录
+- `selection_strategy_runs` 中当天活跃来源的 success 记录：`spark_opportunity_selector`、`stable_capital_callback`、`trend_continuation_callback`、`probe_day0_watch`、`probe_d3_confirmed`
 
 只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
 
@@ -61,7 +61,7 @@ bash ops/run_postclose_l2.sh
 - 当日热点主线/热点池结果重算
 - 热点页面缓存刷新，并把结果同步回 Mac
 - 模型特征构建
-- 选股工作台当日模型/策略候选输出
+- 选股工作台当日模型/策略候选输出，包括星火、资金流回调、趋势中继，以及试盘观察池 / 试盘 D3 确认池
 
 其中指数刷新会和 Windows atomic 并行，热点计算会在 atomic 完成后执行，再进入模型特征构建。
 

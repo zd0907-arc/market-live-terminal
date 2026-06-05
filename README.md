@@ -2,13 +2,34 @@
 
 ## 项目定位
 - 当前工作版本：`v5.2.2`
-- 当前运行模式：**Windows 数据主站 + Mac 本地研究站 + Cloud 轻量盯盘**
+- 当前运行模式：**Mac 主开发控制台 + NAS 在线运行节点 + Windows 辅助计算节点**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
+- 当前已验证 NAS 直连入口：`dxp4800pro`（Tailscale MagicDNS） / `100.119.0.126`
+- 当前 NAS 局域网备用入口：`192.168.3.43`
+- 当前 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
+- 当前临时公网入口：`https://dxp4800pro.tailfff556.ts.net/`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；云端生产默认只开放盯盘与复盘。
 - 当前探索中能力：热点板块 / 市场热度研究；本地研究站已升级市场主线情报看板，云端轻量模式仍默认不开放研究页。
+
+## Mac 连接 NAS 快速入口
+
+以后从 Mac 管 NAS，按这套顺序，不再先想 Windows：
+
+- SSH 管理：`ssh zhangdong@dxp4800pro`
+- 项目服务：`http://dxp4800pro:8080`
+- Gitea：`http://dxp4800pro:3000`
+- Git 提交：`git push nas main`
+- 局域网备用：`192.168.3.43`
+
+规则：
+
+- 私网运维默认走 `dxp4800pro`
+- 外部访客当前走 `https://dxp4800pro.tailfff556.ts.net/`
+- 正式自定义域名仍属于 D1，后续单独通过 `Cloudflare Tunnel + 自定义域名` 收口
+- 所有 `Mac <-> NAS` 协作细节统一看：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/mac-nas-collaboration.md`
 
 ## 快速启动（本地）
 
@@ -60,6 +81,7 @@ bash ops/run_daily_new_framework.sh --json
 - 业务能力地图：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`
 - 数据/接口契约入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/03_DATA_CONTRACTS.md`
 - 运维与发版入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/04_OPS_AND_DEV.md`
+- Mac <-> NAS 协作入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/mac-nas-collaboration.md`
 - LLM 与密钥安全：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/05_LLM_KEY_SECURITY.md`
 - 变更与阶段目标流程：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/06_CHANGE_MANAGEMENT.md`
 - AI 协作交接：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/00_AI_HANDOFF_PROTOCOL.md`
@@ -78,6 +100,7 @@ bash ops/run_daily_new_framework.sh --json
    - `docs/domain/*`
    - `docs/contracts/*`
    - `docs/ops/*`
+   - Mac 直连 NAS、远程查库、发布路径优先看 `docs/ops/mac-nas-collaboration.md`
 6. 当前任务过程再看 `docs/changes/*`。
 7. 协作追踪看 `00_AI_HANDOFF_PROTOCOL.md` + `AI_HANDOFF_LOG.md` + `07_PENDING_TODO.md`。
 8. 真正开始开发前，再看 `docs/ops/development-workflow.md`。
@@ -91,6 +114,19 @@ bash ops/run_daily_new_framework.sh --json
 - 云端发布：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
 - Windows 脚本同步：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_to_windows.sh`
 - 本地离线补数上云：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
+
+## Git 仓库
+
+| Remote 名 | 地址 | 适用场景 |
+|---|---|---|
+| `origin` | `https://github.com/zd0907-arc/market-live-terminal.git` | GitHub 公开备份 |
+| `nas` | `nas-git:zhangdong/market-live-terminal.git` | NAS 私有仓库主入口（家里/外网统一） |
+| `nas-local` | `ssh://git@192.168.3.43:2222/zhangdong/market-live-terminal.git` | NAS 私有仓库局域网备用 |
+
+推送方式：
+
+- 推送到 GitHub：`git push origin main`
+- 推送到 NAS：`git push nas main`
 
 ## 最小自检
 ```bash

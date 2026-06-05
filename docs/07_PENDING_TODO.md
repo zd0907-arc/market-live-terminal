@@ -91,3 +91,13 @@
   3. 在核心文档里同步回写正式角色与兼容边界；
   4. 再决定是否进入物理迁移或代码级替换。
 - 关联任务：`MOD-20260524-12-formal-alias-and-shadow-sample-migration-plan`
+
+## T-035 Mac -> NAS 长期协作链收口
+- 状态：`ACTIVE`
+- 当前事实：`Mac -> NAS` 直连控制面、项目服务入口与 Git 链路都已经验证通过。当前可用入口是 `dxp4800pro` / `100.119.0.126` / `192.168.3.43`；`ssh zhangdong@dxp4800pro`、`http://dxp4800pro:8080`、`https://100.119.0.126:9443`、`docker compose ps`、远程 `python3/sqlite3` 查询都已通过验证。当前稳定的文件提交方式是 `git push nas main`、`tar | ssh`、`scp -O`；普通 `scp / sftp / rsync` 绝对路径上传在这台 UGOS 上仍不稳定。NAS Gitea 已打通，当前主 Git 入口为 `nas-git:zhangdong/market-live-terminal.git`。
+- 下一步：
+  1. 把 NAS 应用发布默认入口固定成 `git push nas` + 发布脚本 / `tar | ssh`，不再把普通 `scp` 写成默认方案；
+  2. 继续把盘后研究库发布收口到 `nas-research-release-runbook` 那套 `staging -> current -> archive` 链路；
+  3. 补一次“最新正式库完整发布到 NAS”实操，结束 bootstrap 版本状态；
+  4. 在服务链稳定后，再落公网域名，优先 `Cloudflare Tunnel + 自定义域名`。
+- 关联任务：`docs/ops/mac-nas-collaboration.md`, `docs/ops/nas-research-release-runbook.md`

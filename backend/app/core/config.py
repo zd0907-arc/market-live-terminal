@@ -4,17 +4,78 @@ from typing import List
 # 动态获取项目根目录 (backend/app/core 的父级的父级的父级)
 # 这样不论从哪里执行 python，都能唯一指向根目录下的 market_data.db
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-# 默认优先使用本机正式数据目录，其次回退到 repo/data
-DEFAULT_FORMAL_MARKET_DATA_ROOT = "/Users/dong/Desktop/AIGC/market-data"
-DEFAULT_REPO_DATA_DIR = os.path.join(ROOT_DIR, "data")
-DATA_DIR = os.getenv(
-    "DATA_DIR",
-    DEFAULT_FORMAL_MARKET_DATA_ROOT if os.path.isdir(DEFAULT_FORMAL_MARKET_DATA_ROOT) else DEFAULT_REPO_DATA_DIR,
+DEFAULT_FORMAL_MARKET_DATA_ROOT = os.getenv(
+    "FORMAL_MARKET_DATA_ROOT",
+    "/Users/dong/Desktop/AIGC/market-data",
 )
+DEFAULT_REPO_DATA_DIR = os.path.join(ROOT_DIR, "data")
+
+
+def _first_existing_dir(*candidates: str) -> str:
+    for candidate in candidates:
+        path = str(candidate or "").strip()
+        if path and os.path.isdir(path):
+            return path
+    return ""
+
+
+def _resolve_default_data_dir() -> str:
+    explicit = str(os.getenv("DATA_DIR", "")).strip()
+    if explicit:
+        return explicit
+    formal_root = str(os.getenv("FORMAL_MARKET_DATA_ROOT", DEFAULT_FORMAL_MARKET_DATA_ROOT)).strip()
+    research_root = str(os.getenv("RESEARCH_CURRENT_ROOT", "")).strip()
+    live_root = str(os.getenv("LIVE_DATA_ROOT", "")).strip()
+    if research_root:
+        return research_root
+    if live_root:
+        return live_root
+    derived_research = os.path.join(formal_root, "research", "current")
+    derived_live = os.path.join(formal_root, "live")
+    return _first_existing_dir(derived_research, formal_root, derived_live, DEFAULT_REPO_DATA_DIR) or DEFAULT_REPO_DATA_DIR
+
+
+def _resolve_live_data_root() -> str:
+    explicit = str(os.getenv("LIVE_DATA_ROOT", "")).strip()
+    if explicit:
+        return explicit
+    if os.getenv("DB_PATH") or os.getenv("USER_DB_PATH"):
+        return DATA_DIR
+    formal_root = str(os.getenv("FORMAL_MARKET_DATA_ROOT", DEFAULT_FORMAL_MARKET_DATA_ROOT)).strip()
+    derived_live = os.path.join(formal_root, "live")
+    if os.path.isdir(derived_live):
+        return derived_live
+    if os.path.isfile(os.path.join(formal_root, "market_data.db")) or os.path.isfile(os.path.join(formal_root, "user_data.db")):
+        return formal_root
+    return DEFAULT_REPO_DATA_DIR
+
+
+def _resolve_research_current_root() -> str:
+    explicit = str(os.getenv("RESEARCH_CURRENT_ROOT", "")).strip()
+    if explicit:
+        return explicit
+    if os.getenv("SELECTION_DB_PATH") or os.getenv("ATOMIC_MAINBOARD_DB_PATH") or os.getenv("ATOMIC_COMPACT_DB_PATH"):
+        return DATA_DIR
+    formal_root = str(os.getenv("FORMAL_MARKET_DATA_ROOT", DEFAULT_FORMAL_MARKET_DATA_ROOT)).strip()
+    derived_research = os.path.join(formal_root, "research", "current")
+    if os.path.isdir(derived_research):
+        return derived_research
+    if os.path.isdir(os.path.join(formal_root, "selection")) or os.path.isdir(os.path.join(formal_root, "atomic_facts")):
+        return formal_root
+    return DEFAULT_REPO_DATA_DIR
+
+
+DATA_DIR = _resolve_default_data_dir()
+LIVE_DATA_ROOT = _resolve_live_data_root()
+RESEARCH_CURRENT_ROOT = _resolve_research_current_root()
+
 os.makedirs(DATA_DIR, exist_ok=True)
-DB_FILE = os.getenv("DB_PATH", os.path.join(DATA_DIR, "market_data.db"))
-USER_DB_FILE = os.getenv("USER_DB_PATH", os.path.join(DATA_DIR, "user_data.db"))
-ATOMIC_FACTS_DIR = os.getenv("ATOMIC_FACTS_DIR", os.path.join(DATA_DIR, "atomic_facts"))
+os.makedirs(LIVE_DATA_ROOT, exist_ok=True)
+os.makedirs(RESEARCH_CURRENT_ROOT, exist_ok=True)
+
+DB_FILE = os.getenv("DB_PATH", os.path.join(LIVE_DATA_ROOT, "market_data.db"))
+USER_DB_FILE = os.getenv("USER_DB_PATH", os.path.join(LIVE_DATA_ROOT, "user_data.db"))
+ATOMIC_FACTS_DIR = os.getenv("ATOMIC_FACTS_DIR", os.path.join(RESEARCH_CURRENT_ROOT, "atomic_facts"))
 DEFAULT_ATOMIC_COMPACT_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic_mainboard_compact_current.db")
 DEFAULT_ATOMIC_MAINBOARD_DB_FILE = DEFAULT_ATOMIC_COMPACT_DB_FILE
 DEFAULT_ATOMIC_DB_FILE = os.path.join(ATOMIC_FACTS_DIR, "market_atomic.db")

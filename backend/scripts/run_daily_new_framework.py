@@ -20,7 +20,11 @@ from urllib.parse import quote
 import urllib.request
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_MAC_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
+DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
+DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
+DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
+DEFAULT_MAC_RUNTIME_ROOT = DEFAULT_MAC_LIVE_ROOT if DEFAULT_MAC_LIVE_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
 
 WIN_HOST_CANDIDATES = [
     item.strip()
@@ -49,7 +53,13 @@ WIN_HEAT_V2_DB = os.getenv("DAILY_WIN_HEAT_V2_DB", rf"{WIN_MARKET_HEAT_DIR}\fine
 WIN_TRADABLE_THEME_DB = os.getenv("DAILY_WIN_TRADABLE_THEME_DB", rf"{WIN_MARKET_HEAT_DIR}\tradable_theme_map.db")
 WIN_RUN_ROOT = os.getenv("DAILY_WIN_RUN_ROOT", r"D:\market-live-terminal\.run\daily_new_framework")
 
-LOCAL_DATA_ROOT = Path(os.getenv("LOCAL_PROCESSED_DATA_ROOT") or os.getenv("MARKET_DATA_ROOT") or str(DEFAULT_MAC_DATA_ROOT))
+LOCAL_DATA_ROOT = Path(
+    os.getenv("LOCAL_PROCESSED_DATA_ROOT")
+    or os.getenv("RESEARCH_CURRENT_ROOT")
+    or os.getenv("MARKET_DATA_ROOT")
+    or str(DEFAULT_MAC_DATA_ROOT)
+)
+LOCAL_LIVE_DATA_ROOT = Path(os.getenv("DAILY_LOCAL_LIVE_DATA_ROOT") or os.getenv("LIVE_DATA_ROOT") or str(DEFAULT_MAC_RUNTIME_ROOT))
 LOCAL_ATOMIC_DB = Path(
     os.getenv(
         "DAILY_LOCAL_ATOMIC_DB",
@@ -61,6 +71,8 @@ LOCAL_MODEL_FEATURE_DB = Path(os.getenv("DAILY_LOCAL_MODEL_FEATURE_DB", str(LOCA
 LOCAL_MODEL_INDEX_DB = Path(os.getenv("DAILY_LOCAL_MODEL_INDEX_DB", str(LOCAL_DATA_ROOT / "selection" / "model_market_index_daily.db")))
 LOCAL_MARKET_HEAT_DIR = Path(os.getenv("DAILY_LOCAL_MARKET_HEAT_DIR", str(LOCAL_DATA_ROOT / "market_heat")))
 LOCAL_HEAT_V2_DB = Path(os.getenv("DAILY_LOCAL_HEAT_V2_DB", str(LOCAL_MARKET_HEAT_DIR / "fine_theme_heat_daily_v2.db")))
+LOCAL_MARKET_DB = Path(os.getenv("DAILY_LOCAL_MARKET_DB", str(LOCAL_LIVE_DATA_ROOT / "market_data.db")))
+LOCAL_USER_DB = Path(os.getenv("DAILY_LOCAL_USER_DB", str(LOCAL_LIVE_DATA_ROOT / "user_data.db")))
 
 DAILY_INDEX_LOOKBACK_DAYS = int(os.getenv("DAILY_INDEX_LOOKBACK_DAYS", "10"))
 DAILY_HEAT_LOOKBACK_DAYS = int(os.getenv("DAILY_HEAT_LOOKBACK_DAYS", "63"))
@@ -123,6 +135,7 @@ WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/build_fine_theme_heat_daily.py",
     "backend/scripts/analyze_hot_sector_granularity.py",
     "backend/scripts/analyze_hot_theme_winner_lead_lag.py",
+    "backend/app/core/config.py",
     "backend/app/services/market_heat.py",
     "data/market_heat/fine_hotspot_rules.json",
     "data/market_heat/theme_canonical_rules.json",
@@ -158,9 +171,13 @@ REQUIRED_SELECTION_SOURCE_IDS = [
     "spark_opportunity_selector",
     "stable_capital_callback",
     "trend_continuation_callback",
+    "probe_day0_watch",
+    "probe_d3_confirmed",
 ]
 
 DEFAULT_AUTO_DETECT_LIMIT = int(os.getenv("DAILY_AUTO_DETECT_LIMIT", "20"))
+DEFAULT_SYNC_NAS = os.getenv("DAILY_SYNC_NAS", "").strip().lower() in {"1", "true", "yes"}
+DEFAULT_NAS_RELEASE_PREFIX = os.getenv("DAILY_NAS_RELEASE_PREFIX", "nas_daily_new")
 
 
 def _windows_existing_path_candidates(primary: str, *fallbacks: str) -> List[str]:
@@ -344,6 +361,44 @@ def _parse_json_output(stdout: str) -> Dict[str, object]:
     if first >= 0 and last > first:
         return json.loads(text[first : last + 1])
     raise ValueError(f"无法解析 JSON 输出: {text[:500]}")
+
+
+def _make_nas_release_name(trade_date: str) -> str:
+    return f"{DEFAULT_NAS_RELEASE_PREFIX}_{_compact_date(trade_date)}"
+
+
+def _publish_to_nas(trade_date: str) -> Dict[str, object]:
+    release_name = _make_nas_release_name(trade_date)
+    _progress(f"[{trade_date}] NAS research/current 发布开始 release={release_name}")
+    cmd = [
+        "bash",
+        str(ROOT_DIR / "ops" / "nas_run_phase_b_release.sh"),
+        release_name,
+    ]
+    result = _run(cmd, check=False)
+    if result.returncode != 0:
+        current_release = _run(
+            [
+                "ssh",
+                "-o",
+                "ConnectTimeout=8",
+                os.getenv("NAS_HOST", "zhangdong@192.168.3.43"),
+                "cat /volume1/docker/market-live-terminal/data/research/current/.release_name 2>/dev/null || true",
+            ],
+            check=False,
+        )
+        current_name = str(current_release.stdout or "").strip()
+        if current_name != release_name:
+            raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
+        _progress(f"[{trade_date}] NAS 发布脚本返回非零，但 current 已切到目标 release={release_name}，按成功处理")
+    _progress(f"[{trade_date}] NAS research/current 发布完成 release={release_name}")
+    return {
+        "release_name": release_name,
+        "command": f"bash ops/nas_run_phase_b_release.sh {release_name}",
+        "stdout": result.stdout,
+        "return_code": result.returncode,
+        "status": "published",
+    }
 
 
 def _ensure_local_parent(path: Path) -> None:
@@ -776,6 +831,10 @@ def _run_local_daily_candidates(trade_date: str) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     env = os.environ.copy()
     env["DATA_DIR"] = str(LOCAL_DATA_ROOT)
+    env["RESEARCH_CURRENT_ROOT"] = str(LOCAL_DATA_ROOT)
+    env["LIVE_DATA_ROOT"] = str(LOCAL_LIVE_DATA_ROOT)
+    env["DB_PATH"] = str(LOCAL_MARKET_DB)
+    env["USER_DB_PATH"] = str(LOCAL_USER_DB)
     env["SELECTION_DB_PATH"] = str(LOCAL_SELECTION_DB)
     env["ATOMIC_MAINBOARD_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["ATOMIC_DB_PATH"] = str(LOCAL_ATOMIC_DB)
@@ -1037,7 +1096,13 @@ def _write_report(trade_date: str, report: Dict[str, object]) -> None:
     latest.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool = False) -> Dict[str, object]:
+def run_daily(
+    trade_date: str,
+    *,
+    dry_run: bool = False,
+    skip_candidates: bool = False,
+    sync_nas: bool = DEFAULT_SYNC_NAS,
+) -> Dict[str, object]:
     trade_date = _compact_date(trade_date)
     local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
     local_run_root.mkdir(parents=True, exist_ok=True)
@@ -1077,6 +1142,8 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             "market_root": WIN_MARKET_ROOT,
         },
         "local_paths": {
+            "market_db": str(LOCAL_MARKET_DB),
+            "user_db": str(LOCAL_USER_DB),
             "atomic_db": str(LOCAL_ATOMIC_DB),
             "selection_db": str(LOCAL_SELECTION_DB),
             "model_feature_db": str(LOCAL_MODEL_FEATURE_DB),
@@ -1142,6 +1209,8 @@ def run_daily(trade_date: str, *, dry_run: bool = False, skip_candidates: bool =
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
         report["local_verify"] = _verify_full_local(trade_date)
         ok = _is_local_complete(report["local_verify"] or {})
+        if ok and sync_nas:
+            report["nas_release"] = _publish_to_nas(trade_date)
         report["status"] = "pass" if ok else "fail"
     except Exception as exc:
         report["status"] = "fail"
@@ -1158,6 +1227,7 @@ def run_auto_daily(
     dry_run: bool = False,
     skip_candidates: bool = False,
     max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT,
+    sync_nas: bool = DEFAULT_SYNC_NAS,
 ) -> Dict[str, object]:
     auto_detect = resolve_auto_trade_dates(max_candidates)
     selected_dates = list(auto_detect.get("selected_dates") or [])
@@ -1179,7 +1249,7 @@ def run_auto_daily(
     reports: List[Dict[str, object]] = []
     for trade_date in selected_dates:
         _progress(f"自动检测到未完整日期: {trade_date}")
-        report = run_daily(trade_date, dry_run=dry_run, skip_candidates=skip_candidates)
+        report = run_daily(trade_date, dry_run=dry_run, skip_candidates=skip_candidates, sync_nas=sync_nas)
         report["auto_detect"] = {
             "status": auto_detect.get("status"),
             "selected_dates": selected_dates,
@@ -1211,16 +1281,20 @@ def main() -> None:
     parser.add_argument("--auto-detect-limit", type=int, default=DEFAULT_AUTO_DETECT_LIMIT, help="自动检测时最多检查最近多少个 Windows 日包")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-candidates", action="store_true")
+    parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后把本地正式研究库发布到 NAS research/current")
+    parser.add_argument("--skip-nas", action="store_true", help="本次跳过 NAS 发布")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    sync_nas = bool(args.sync_nas and not args.skip_nas)
     try:
         if args.date:
-            report = run_daily(args.date, dry_run=args.dry_run, skip_candidates=args.skip_candidates)
+            report = run_daily(args.date, dry_run=args.dry_run, skip_candidates=args.skip_candidates, sync_nas=sync_nas)
         else:
             report = run_auto_daily(
                 dry_run=args.dry_run,
                 skip_candidates=args.skip_candidates,
                 max_candidates=args.auto_detect_limit,
+                sync_nas=sync_nas,
             )
     except Exception as exc:
         if args.json:

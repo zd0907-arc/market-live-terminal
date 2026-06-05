@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+      args:
+        BASE_IMAGE_PREFIX: ${BASE_IMAGE_PREFIX:-}
+    container_name: market-backend-nas
+    volumes:
+      - ${MARKET_DATA_HOST_DIR:-/volume1/docker/market-live-terminal/data}:/app/data
+    environment:
+      - DB_PATH=/app/data/market_data.db
+      - USER_DB_PATH=/app/data/user_data.db
+      - ATOMIC_MAINBOARD_DB_PATH=${ATOMIC_MAINBOARD_DB_PATH:-/app/data/atomic_facts/market_atomic_mainboard_compact_current.db}
+      - ATOMIC_DB_PATH=${ATOMIC_DB_PATH:-/app/data/atomic_facts/market_atomic_mainboard_compact_current.db}
+      - TZ=Asia/Shanghai
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
+      - LLM_PROXY=${LLM_PROXY:-}
+      - INGEST_TOKEN=${INGEST_TOKEN}
+      - WRITE_API_TOKEN=${WRITE_API_TOKEN}
+      - ENABLE_BACKGROUND_RUNTIME=${ENABLE_BACKGROUND_RUNTIME:-false}
+      - ENABLE_CLOUD_COLLECTOR=${ENABLE_CLOUD_COLLECTOR:-false}
+      - ENABLE_RESEARCH_API_ROUTES=${ENABLE_RESEARCH_API_ROUTES:-false}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        BASE_IMAGE_PREFIX: ${BASE_IMAGE_PREFIX:-}
+        VITE_CLOUD_LITE_MODE: ${VITE_CLOUD_LITE_MODE:-true}
+    container_name: market-frontend-nas
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+    environment:
+      - WRITE_API_TOKEN=${WRITE_API_TOKEN}
+    depends_on:
+      - backend
+    restart: unless-stopped

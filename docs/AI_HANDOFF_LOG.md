@@ -1,5 +1,21 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-06 02:05 | Codex
+- Task ID: `MOD-20260606-02-project-governance-master-plan`
+- CAP: `CAP-NAS-OPS`, `CAP-DOCS-GOVERNANCE`
+- 结论: 已按治理母卡开始执行 `Phase 1`，先复核 `NAS / research-current` 与三端真相文档线。当前基于代码、脚本和测试可确认：`LIVE_DATA_ROOT + RESEARCH_CURRENT_ROOT` 双口径、`--sync-nas` 日跑发布、`nas-research-release-runbook` 的 `staging -> current -> archive` 链路，以及 `docker-compose.nas-full.yml` 的运行时路径注入都已形成闭环；相关测试 `backend/tests/test_market_data_path_config.py`、`backend/tests/test_research_script_path_defaults.py`、`backend/tests/test_nas_release_scripts.py` 已全部通过。当前剩余工作不再是功能补齐，而是把高曝光入口文档和 pending 真相彻底对齐，再独立提交这条线。
+- 验证: `pytest -q backend/tests/test_market_data_path_config.py backend/tests/test_research_script_path_defaults.py backend/tests/test_nas_release_scripts.py` 通过，共 `14 passed`。
+- 风险: `T-035` 一类文档项里仍有旧说法，例如“NAS 上尚无 git”；这类错真相若不先修，会影响后续全仓治理判断。
+- 链接: `backend/app/core/config.py`, `backend/scripts/run_daily_new_framework.py`, `deploy/docker-compose.nas-full.yml`, `docs/ops/nas-research-release-runbook.md`, `docs/changes/MOD-20260606-02-project-governance-master-plan.md`
+
+## 2026-06-06 01:44 | Codex
+- Task ID: `MOD-20260606-01-selection-probe-model-research-closure`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-MODEL-RESEARCH`
+- 结论: 已完成一轮“按业务目标而不是按文件名”的收口复核，并把过时口径回写到核心文档。当前确认三条线都已达成原业务目标：`星火双轨持仓跟踪` 已形成 `exit_watchlist + dual_exit_tracks + 选股页展示` 的完整链路；`试盘识别` 已同时接入每日候选源和模型训练页独立研究页；`docs/model-research/*` 已形成模型研究总入口、方向索引、指标字典与 artifact 治理框架。本轮另修复了 `SelectionDecisionPanel` 的 hooks 顺序错误，解除选股页 `Rendered more hooks than during the previous render` 前端报错。
+- 验证: 本地前后端已在 `3001 / 8001` 运行；`pytest -q backend/tests/test_selection_daily_workbench.py backend/tests/test_spark_opportunity_exit_paths.py` 通过；另确认 `ModelTrainingPage -> 试盘事件研究页` 入口、`selection_daily_workbench` 活跃来源和 `SelectionDecisionPanel` 双轨展示代码均已到位。
+- 风险: 本轮不混入 `NAS / research-current` 路径迁移与发布链改动；那条线虽已有较完整实现，但仍作为后续独立治理主题处理。仓库里仍有大量未提交脏改，提交时必须按 `星火双轨`、`probe 研究资料包`、`model-research 文档包` 分组切开。
+- 链接: `docs/selection/daily_candidate_source_contract.md`, `docs/selection/model_development_sop.md`, `docs/model-research/research-directions-index.md`, `src/components/selection/SelectionDecisionPanel.tsx`, `backend/app/services/selection_daily_workbench.py`
+
 ## 2026-06-05 00:55 | Codex
 - Task ID: `MOD-20260605-02-spark-pattern-research-ui-closure`
 - CAP: `CAP-SELECTION-RESEARCH`
@@ -7,6 +23,27 @@
 - 验证: `npm run build` 通过；浏览器实开验收通过 `/selection-research` 与 `/selection-spark-pattern-research/1-0`。
 - 风险: 这次收口只代表研究页前端完成，不代表新增训练链路或模型结论更新。`selection-spark-pattern-prototype` 仍保留为历史样式参考页，不是主入口。
 - 链接: `docs/selection/spark_pattern_research_ui_closure_2026-06-05.md`, `src/components/selection/SelectionResearchPage.tsx`, `src/components/selection/SparkPatternResearchPage.tsx`, `backend/scripts/export_spark_pattern_research_payloads.py`
+
+## 2026-06-04 11:50 | Codex
+- Task ID: `MOD-20260604-01-nas-b1-bootstrap-current-switch`
+- CAP: `CAP-NAS-OPS`, `CAP-DEPLOYMENT`
+- 结论: 已按“先跑通迁移、后补缺失日期”的目标完成 `B1` 的现场收口。由于当前从 Mac 向 NAS 直传完整正式库接近 `79GB`，而现场 SSH 长连接间歇超时，本轮没有强行先做大上传，而是直接复用 NAS 现有 flat 研究库，在 NAS 本机引导出 `research/current`：`atomic_facts / selection / market_heat` 均以符号链接方式挂到 current，下发 `.release_name=nas_release_bootstrap_from_flat_20260604`，并重写 `market_heat/latest.json` 的 `meta.atomic_db` 指针。随后已执行 `docker compose --env-file .env.nas-full -f deploy/docker-compose.nas-full.yml up -d --build backend frontend`，确认线上前后端已经切到新版 compose 和 `research/current` 新口径。当前已验证通过：`/api/health`、`/api/selection/health`、`/api/selection/daily-candidates`、`/api/market_heat/latest`、`/api/trend-research/ideas`、`/selection-research`。因此“迁移结构已跑通”这一目标已达成。
+- 风险: 当前 `research/current` 仍是基于 NAS 旧 flat 研究库引导出来的 bootstrap 版本，不是从本地最新正式库完整上传得到的 staged release；其研究数据日期大致停在 `2026-05-27`，后续仍需补一轮“缺失日期同步到 NAS”。这不阻塞下一阶段 `A1`（NAS 接管盘中 crawler），但仍是后续必须收口的数据更新事项。
+- 链接: `docs/ops/nas-research-release-runbook.md`, `docs/ops/nas-migration-execution-plan.md`
+
+## 2026-06-03 15:42 | Codex
+- Task ID: `MOD-20260603-01-mac-nas-collaboration-and-domain-plan`
+- CAP: `CAP-NAS-OPS`, `CAP-DEPLOYMENT`
+- 结论: 已完成一轮 `Mac -> NAS` 长期协作面验证，并把结果回写到核心文档。当前已验证通过：Tailscale 节点 `dxp4800pro / 100.119.0.126` 在线；`ssh zhangdong@dxp4800pro` 可直连；`http://dxp4800pro:8080` 与 `https://100.119.0.126:9443` 可访问；NAS 上可执行 `docker compose ps`、`python3`、`sqlite3`，可直接做远程查库和容器管理。文件提交层面，`tar | ssh` 与 `ssh 'cat > file'` 已验证可用；`scp / sftp / rsync` 绝对路径上传当前不稳定，不再写成默认发布路径。另确认 NAS 上尚无 `git`，因此“自定义 Git 仓库”还不是已就绪能力。已新增 `docs/ops/mac-nas-collaboration.md`，并同步更新 `README / 04_OPS_AND_DEV / AI_QUICK_START`。
+- 风险: 当前公网自定义域名仍未落地；如果后续要长期给外部用户访问，建议在服务链稳定后再接 `Cloudflare Tunnel + 自定义域名`，不要把 Tailscale 本身当最终公网品牌入口。
+- 链接: `docs/ops/mac-nas-collaboration.md`, `README.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`
+
+## 2026-06-03 21:42 | Codex
+- Task ID: `MOD-20260603-02-gitea-nas-git-link`
+- CAP: `CAP-NAS-OPS`, `CAP-GIT`
+- 结论: 已完成 `Mac -> NAS Gitea` Git 链路接通。当前实际 owner 是 `zhangdong`，不是先前假设的 `dong`；已把本机现有 `id_ed25519.pub` 注册到 Gitea 用户 `zhangdong`，并验证 `ssh -p 2222 -T git@192.168.3.43` 与 `ssh -p 2222 -T git@dxp4800pro` 均返回认证成功。已为本地仓库添加 `nas` remote 并收口为统一入口 `nas-git:zhangdong/market-live-terminal.git`，同时保留 `nas-local` 作为局域网备用。`main` 已成功首次推送到 NAS Gitea。另已确认 `scp` 问题的真实原因是 macOS 15+ 默认走 SFTP 子系统，当前对这台 NAS 使用 `scp -O` 已实测可用。后续代码推送默认优先 `git push nas main`。
+- 风险: 这轮只打通了私网 / Tailscale Git 链路，公网自定义域名和公网 Git 服务入口仍未配置；如需外部任何网络直接访问项目网页，仍应走 `Cloudflare Tunnel + 自定义域名`。
+- 链接: `docs/ops/mac-nas-collaboration.md`, `README.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`
 
 ## 2026-05-28 01:45 | Codex
 - Task ID: `MOD-20260527-01-selection-v522-spark-priority-and-may-exit-backfill`

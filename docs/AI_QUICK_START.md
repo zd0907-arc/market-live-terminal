@@ -6,6 +6,9 @@
 - 当前工作版本：`v5.2.2`
 - 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
+- 当前已验证 NAS 直连入口：`dxp4800pro` / `100.119.0.126`
+- 当前已验证 NAS 公网入口：`https://dxp4800pro.tailfff556.ts.net/`
+- 当前已验证 NAS Git 入口：`ssh://git@192.168.3.43:2222/zhangdong/market-live-terminal.git`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前运行架构总入口：`docs/archive/changes/MOD-20260417-01-local-research-current-state.md`
@@ -35,6 +38,7 @@
 - 云端：盯盘 / 手机应急查看
 - Windows：raw + 盘后明细底座 + 选股研究 + 模型特征 + 跑数
 - Mac：复盘 + 选股 + 本地前后端 + 文档/开发，读取本机同步后的正式库
+- NAS：已打通的家庭服务节点；Mac 可通过 Tailscale 直接管理，后续公网发布优先基于它收口
 
 ## 最小自检
 ```bash
@@ -56,16 +60,23 @@ npm run check:baseline
 2. `docs/02_BUSINESS_DOMAIN.md`：只看能力地图与状态
 3. `docs/03_DATA_CONTRACTS.md`：只看契约入口与分组
 4. `docs/04_OPS_AND_DEV.md`：只看运维入口与常用脚本
-5. 非正式 `ops` 脚本边界看 `docs/ops/atomic-script-families-boundary.md`
-6. 若任务属于选股研究入口治理，先看 `docs/selection/daily_candidate_source_contract.md`，它是工作台统一候选池入口说明
-7. 若想看选股历史脉络，先看 `docs/selection/selection_research_history_summary.md`
-8. 需要细节时再进入：
+5. `docs/ops/mac-nas-collaboration.md`：看 Mac 直连 NAS、远程查库、发布与公网域名规划
+6. 非正式 `ops` 脚本边界看 `docs/ops/atomic-script-families-boundary.md`
+7. 若任务属于选股研究入口治理，先看 `docs/selection/daily_candidate_source_contract.md`，它是工作台统一候选池入口说明
+8. 若想看选股历史脉络，先看 `docs/selection/selection_research_history_summary.md`
+9. 需要细节时再进入：
    - `docs/domain/*`
    - `docs/contracts/*`
    - `docs/ops/*`
-9. 选股策略细节先看 `docs/strategy-rework/LONG_MEMORY.md`；当前阶段状态补充看 `docs/strategy-rework/current-research-operating-summary.md`
-10. 当前需求过程统一进 `docs/changes/*`
-11. 开始做需求前，先看：`docs/ops/development-workflow.md`
+10. 若任务属于模型训练 / 研究方向探索，先看：
+   - `docs/model-research/README.md`
+   - `docs/model-research/research-directions-index.md`
+   - `docs/model-research/evaluation-metrics-dictionary.md`
+   - `docs/model-research/current-material-map.md`
+   - `docs/model-research/worktree-lifecycle.md`
+11. 选股策略细节先看 `docs/strategy-rework/LONG_MEMORY.md`；当前阶段状态补充看 `docs/strategy-rework/current-research-operating-summary.md`
+12. 当前需求过程统一进 `docs/changes/*`
+13. 开始做需求前，先看：`docs/ops/development-workflow.md`
 
 ## 当前治理固定产物
 - `code review findings`：本轮代码审查发现与修复顺序
@@ -78,6 +89,7 @@ npm run check:baseline
 
 ## 当前关键脚本
 - Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
+- NAS 轻量部署：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/deploy_nas_lite.sh`
 - 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_station.sh`
 - 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_frontend.sh`
 - 每日盘后正式主链：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/run_daily_new_framework.sh`
@@ -88,6 +100,26 @@ npm run check:baseline
 - atomic 兼容直启（仅兼容排查）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_backend_with_atomic.sh`
 
 除白名单脚本外，其他 `ops` 脚本默认先按历史工具处理；具体边界见 `docs/ops/atomic-script-families-boundary.md`。
+
+## 当前 NAS 最小入口
+
+```bash
+ssh zhangdong@dxp4800pro
+```
+
+```text
+项目服务：http://dxp4800pro:8080
+管理后台：https://100.119.0.126:9443
+公网入口：https://dxp4800pro.tailfff556.ts.net/
+```
+
+当前默认规则：
+
+- Mac -> NAS 直接走 Tailscale
+- 不再默认经 Windows 跳转
+- 默认上传方式优先 `tar | ssh`
+- 当前 Git 推送优先 `git push nas main`；单文件上传可用 `scp -O`
+- 当前公网已可先走 `Tailscale Funnel`；要固定品牌域名再补 `Cloudflare Tunnel + 自定义域名`
 
 ## 每天盘后要跑的指令
 ```bash
