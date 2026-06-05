@@ -19,6 +19,7 @@ const ModelTrainingPage = lazy(() => import('./components/model/ModelTrainingPag
 const OpportunityTradeReviewPage = lazy(() => import('./components/selection/OpportunityTradeReviewPage'));
 const SparkPatternPrototypePage = lazy(() => import('./components/selection/SparkPatternPrototypePage'));
 const SparkPatternResearchPage = lazy(() => import('./components/selection/SparkPatternResearchPage'));
+const ProbeSignalResearchPage = lazy(() => import('./components/selection/ProbeSignalResearchPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
@@ -173,6 +174,16 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">星火形态研究页加载中...</div>}>
         <SparkPatternResearchPage />
+      </Suspense>
+    );
+  }
+
+  const isProbeSignalResearchRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/selection-probe-signal-research');
+  if (isProbeSignalResearchRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="试盘事件研究页" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">试盘事件研究页加载中...</div>}>
+        <ProbeSignalResearchPage />
       </Suspense>
     );
   }

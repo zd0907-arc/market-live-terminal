@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
+import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, Target, TrendingUp } from 'lucide-react';
 
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
 import { Metric } from '../common/ResearchCard';
@@ -9,6 +9,7 @@ import {
   HistoryMultiframeGranularity,
   SearchResult,
   SelectionCandidateItem,
+  SelectionDualExitTrack,
   SelectionEventInterpretation,
   SelectionProfileData,
   SelectionResearchContextData,
@@ -40,6 +41,20 @@ const scoreTone = (score?: number | null) => {
   if (value >= 75) return 'text-red-300';
   if (value >= 65) return 'text-amber-300';
   return 'text-slate-300';
+};
+
+const dualTrackToneClass = (status?: string) => {
+  if (status === 'sell') return 'border-rose-500/30 bg-rose-500/10';
+  if (status === 'hold') return 'border-sky-500/30 bg-sky-500/10';
+  if (status === 'closed') return 'border-slate-700 bg-slate-950/40';
+  return 'border-slate-800 bg-slate-950/35';
+};
+
+const dualTrackTitleClass = (status?: string) => {
+  if (status === 'sell') return 'text-rose-200';
+  if (status === 'hold') return 'text-sky-200';
+  if (status === 'closed') return 'text-slate-300';
+  return 'text-white';
 };
 
 const formatDateInput = (value: Date) => {
@@ -123,6 +138,11 @@ const levelText = (metric: string, value?: number | null) => {
     return '偏弱';
   }
   return '';
+};
+
+const pctFromRate = (value?: number | null) => {
+  if (value == null || Number.isNaN(Number(value))) return '--';
+  return `${(Number(value) * 100).toFixed(0)}%`;
 };
 
 const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus, latestTradeDate }) => {
@@ -215,6 +235,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   }, [coverageDays, effectiveEndDate, signalAnchorDate]);
   const tradePlanMarkers = useMemo(() => {
     const plan = profile?.trade_plan;
+    const dualTracks = (profile?.dual_exit_tracks || candidate?.dual_exit_tracks || []) as SelectionDualExitTrack[];
     const entrySignalDate = profile?.pullback_confirm_date || profile?.entry_signal_date || candidate?.entry_signal_date || plan?.signal_date || candidate?.trade_date;
     const plannedEntryDate = plan?.entry_date || profile?.entry_date || candidate?.entry_date;
     const markers: Array<{ date?: string | null; type: 'entry' | 'exit'; label: string; note?: string | null; simulated?: boolean }> = [];
@@ -278,6 +299,18 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         simulated: plan?.exit_is_simulated,
       });
     }
+    dualTracks.forEach((track) => {
+      if (!track.exit_signal_date) return;
+      pushMarker({
+        date: track.exit_signal_date,
+        type: 'exit',
+        label: `${track.track_name}卖点`,
+        note: [
+          track.current_judgement || null,
+          track.planned_exit_date ? `计划 ${track.planned_exit_date} 执行` : null,
+        ].filter(Boolean).join(' / '),
+      });
+    });
     return markers;
   }, [candidate, profile]);
   const tradeSummary = useMemo(() => {
@@ -330,13 +363,15 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const activeProfile = profile || (candidate as unknown as SelectionProfileData);
   const candidateTypeText = (activeProfile.candidate_types || candidate.candidate_types || []).join(' / ');
   const tradePlan = activeProfile.trade_plan;
+  const dualExitTracks = (activeProfile.dual_exit_tracks || candidate.dual_exit_tracks || []) as SelectionDualExitTrack[];
   const displayedEntrySignalDate = activeProfile.pullback_confirm_date || activeProfile.entry_signal_date || candidate.entry_signal_date || tradePlan?.signal_date || candidate.trade_date;
   const displayedEntryDate = tradePlan?.entry_date || activeProfile.entry_date || candidate.entry_date;
   const isStableCallback = activeProfile.strategy_internal_id === 'stable_capital_callback' || candidate.strategy_internal_id === 'stable_capital_callback';
   const isTrendContinuation = activeProfile.strategy_internal_id === 'trend_continuation_callback' || candidate.strategy_internal_id === 'trend_continuation_callback';
   const isSparkModel = activeProfile.strategy_internal_id === 'spark_opportunity_selector' || candidate.strategy_internal_id === 'spark_opportunity_selector';
-  const isSparkHoldingTracked = isSparkModel && activeProfile.entry_allowed === false && Boolean(displayedEntryDate);
-  const isSparkExitTracked = isSparkModel && Boolean(activeProfile.trade_plan?.exit_signal_date || activeProfile.exit_signal_date || candidate.exit_signal_date);
+  const hasDualExitTracks = dualExitTracks.length > 0;
+  const isSparkHoldingTracked = isSparkModel && (hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'hold') : (activeProfile.entry_allowed === false && Boolean(displayedEntryDate)));
+  const isSparkExitTracked = isSparkModel && (hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'sell') : Boolean(activeProfile.trade_plan?.exit_signal_date || activeProfile.exit_signal_date || candidate.exit_signal_date));
   const isProductStrategy = isStableCallback || isTrendContinuation;
   const eventInterpretation = researchContext?.event_interpretation as SelectionEventInterpretation | undefined;
   const decisionBrief = researchContext?.decision_brief;
@@ -356,6 +391,24 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     ].filter(Boolean).join('。')
     || '决策解释还没生成，点击“刷新研究摘要”后会把事件催化、趋势回踩和资金确认合成一段人话。';
   const auditFlags = researchContext?.source_audit?.audit_flags || [];
+  const probeHistorySource = useMemo(() => {
+    const sourceDetails = (profile?.daily_source_details || candidate?.source_details || []) as Array<Record<string, any>>;
+    return sourceDetails.find((item) => {
+      const sourceId = String(item?.source_id || '');
+      return sourceId === 'probe_day0_watch' || sourceId === 'probe_d3_confirmed';
+    }) || null;
+  }, [profile?.daily_source_details, candidate?.source_details]);
+  const probeHistoryExplain = (probeHistorySource?.explain_factors || {}) as Record<string, any>;
+  const probeHistorySummary = String(
+    probeHistoryExplain.history_summary_text
+    || probeHistorySource?.raw_payload?.historical_similar_stats?.summary_text
+    || ''
+  );
+  const probeSimilarCases = (
+    probeHistoryExplain.history_similar_cases
+    || probeHistorySource?.raw_payload?.historical_similar_stats?.similar_cases
+    || []
+  ) as Array<Record<string, any>>;
   const anchorDate = candidate.trade_date || activeProfile.observe_date || activeProfile.discovery_date || activeProfile.entry_signal_date || activeProfile.trade_plan?.signal_date || null;
   const strategyInsight: StrategyInsight = (() => {
     const intent = activeProfile.intent_profile || {};
@@ -479,14 +532,19 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     }
 
     if (isSparkModel) {
-      const isExitTracked = Boolean(activeProfile.exit_signal_date || candidate.exit_signal_date || activeProfile.trade_plan?.exit_signal_date);
-      const isHoldingTracked = !activeProfile.entry_allowed && Boolean(activeProfile.entry_date || candidate.entry_date || activeProfile.trade_plan?.entry_date);
-      const title = isExitTracked ? '次日卖出' : isHoldingTracked ? '继续持有' : activeProfile.entry_allowed === false ? '观察/风险提示' : '模型推荐';
-      const subtitle = isExitTracked
-        ? `${displayedEntryDate || displayedEntrySignalDate || '--'}买入 → ${exitSignalDate || '--'}盘后触发卖点`
-        : isHoldingTracked
-          ? `${displayedEntryDate || displayedEntrySignalDate || '--'}已持有，盘后继续跟踪`
-          : `${displayedEntrySignalDate || '--'}盘后推荐 → ${displayedEntryDate || '待下一交易日'}计划买入`;
+      const overviewJudgement = hasDualExitTracks ? (activeProfile.current_judgement || candidate.current_judgement || '持仓跟踪') : '';
+      const isExitTracked = hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'sell') : Boolean(activeProfile.exit_signal_date || candidate.exit_signal_date || activeProfile.trade_plan?.exit_signal_date);
+      const isHoldingTracked = hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'hold') : (!activeProfile.entry_allowed && Boolean(activeProfile.entry_date || candidate.entry_date || activeProfile.trade_plan?.entry_date));
+      const title = hasDualExitTracks
+        ? overviewJudgement || '持仓跟踪'
+        : isExitTracked ? '次日卖出' : isHoldingTracked ? '继续持有' : activeProfile.entry_allowed === false ? '观察/风险提示' : '模型推荐';
+      const subtitle = hasDualExitTracks
+        ? `${displayedEntryDate || displayedEntrySignalDate || '--'}买入 → ${overviewJudgement || '盘后双轨跟踪'}`
+        : isExitTracked
+          ? `${displayedEntryDate || displayedEntrySignalDate || '--'}买入 → ${exitSignalDate || '--'}盘后触发卖点`
+          : isHoldingTracked
+            ? `${displayedEntryDate || displayedEntrySignalDate || '--'}已持有，盘后继续跟踪`
+            : `${displayedEntrySignalDate || '--'}盘后推荐 → ${displayedEntryDate || '待下一交易日'}计划买入`;
       return {
         title,
         subtitle,
@@ -498,7 +556,7 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
               { label: '推荐日', value: displayedEntrySignalDate || '--', desc: '星火机会模型在该交易日盘后给出候选。' },
               { label: '计划买入', value: displayedEntryDate || '待下一交易日', desc: '默认按下一交易日开盘执行，但需满足高开不超过规则。' },
               { label: '卖出信号/卖出', value: [exitSignalDate, exitDate].filter(Boolean).join(' / ') || '待跟踪', desc: '盘后识别卖点，通常在下一交易日执行。' },
-              { label: '当前说明', value: activeProfile.exit_plan_summary || candidate.exit_plan_summary || '次日开盘高开不超过6.8%且不接近涨停才买', desc: '买入态展示可买条件；持仓态展示盘后持有/卖出建议。' },
+              { label: '当前说明', value: activeProfile.exit_plan_summary || candidate.exit_plan_summary || '次日开盘高开不超过6.8%且不接近涨停才买', desc: hasDualExitTracks ? '同一持仓同时显示两套卖点判断，便于你人工对比。' : '买入态展示可买条件；持仓态展示盘后持有/卖出建议。' },
             ],
           },
         ],
@@ -626,17 +684,21 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
             <div className="text-[11px] text-slate-500">入场结论</div>
             <div className={`mt-1 text-sm font-semibold ${activeProfile.entry_allowed === false ? (isSparkHoldingTracked || isSparkExitTracked ? 'text-sky-300' : 'text-amber-300') : 'text-emerald-300'}`}>
               {activeProfile.entry_allowed === false
-                ? isSparkExitTracked
-                  ? '次日卖出'
-                  : isSparkHoldingTracked
-                    ? '继续持有'
-                    : (isTrendContinuation ? '观察中' : '已拦截')
+                ? hasDualExitTracks
+                  ? (activeProfile.current_judgement || candidate.current_judgement || '持仓跟踪')
+                  : isSparkExitTracked
+                    ? '次日卖出'
+                    : isSparkHoldingTracked
+                      ? '继续持有'
+                      : (isTrendContinuation ? '观察中' : '已拦截')
                 : isProductStrategy ? '可买入' : '允许进场'}
             </div>
             <div className="mt-1 text-xs text-slate-400">
               {(activeProfile.entry_block_reasons || []).length > 0
                 ? activeProfile.entry_block_reasons?.join('；')
-                : isSparkExitTracked
+                : hasDualExitTracks
+                  ? (activeProfile.reason_summary || candidate.reason_summary || '同一持仓展示两套卖点模型判断。')
+                  : isSparkExitTracked
                   ? '该票已进入星火持仓跟踪池，盘后触发卖点，计划下一交易日执行'
                   : isSparkHoldingTracked
                     ? '该票已进入星火持仓跟踪池，当前盘后判断为继续持有'
@@ -648,7 +710,64 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
         </div>
       </section>
 
+      {hasDualExitTracks ? (
+        <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <ShieldAlert className="h-4 w-4 text-sky-300" />
+            双轨卖点跟踪
+          </div>
+          <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            {dualExitTracks.map((track) => (
+              <div key={track.track_id} className={`rounded-xl border p-3 ${dualTrackToneClass(track.status)}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className={`text-sm font-semibold ${dualTrackTitleClass(track.status)}`}>{track.track_name}</div>
+                    <div className="mt-1 text-xs text-slate-400">{track.style_summary || '--'}</div>
+                  </div>
+                  <div className={`text-sm font-semibold ${dualTrackTitleClass(track.status)}`}>{track.current_judgement || '--'}</div>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <Metric label="已持有" value={track.holding_days != null ? `${track.holding_days}天` : '--'} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                  <Metric label="当前收盘收益" value={fmtSignedPct(track.close_return_pct)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                  <Metric label="持仓内最高冲高" value={fmtSignedPct(track.max_runup_so_far_pct)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                  <Metric label="续持优势分" value={fmtNum(track.pred_hold_advantage_pp)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                  <Metric label="额外上行空间" value={fmtNum(track.pred_extra_upside_pp)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                  <Metric label="计划执行日" value={track.planned_exit_date || '--'} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+                </div>
+                <div className="mt-2 text-xs leading-5 text-slate-300">{track.summary || '--'}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1.2fr]">
+        {probeHistorySource ? (
+          <section className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 p-3 xl:col-span-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Target className="h-4 w-4 text-fuchsia-300" />
+              历史同类
+            </div>
+            <div className="mt-2 text-sm leading-6 text-slate-100">
+              {probeHistorySummary || '历史同类样本还不够，先按当前事件本身强弱观察。'}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-5">
+              <Metric label="同类样本数" value={`${probeHistoryExplain.history_sample_count || 0} 个`} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+              <Metric label="5日胜率" value={pctFromRate(probeHistoryExplain.history_close_win_rate_5d)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+              <Metric label="5日均收益" value={fmtPct(probeHistoryExplain.history_avg_return_5d_pct)} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+              <Metric label="10日+5%" value={pctFromRate(probeHistoryExplain['history_breakout_hit_+5_10d_rate'])} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+              <Metric label="5日-5%" value={pctFromRate(probeHistoryExplain['history_drawdown_hit_-5_5d_rate'])} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2" valueClassName="mt-0.5 text-sm font-semibold" />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {probeSimilarCases.slice(0, 3).map((item, idx) => (
+                <div key={`${item.trade_date || 'na'}_${item.symbol || idx}`} className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2 text-xs text-slate-300">
+                  像例{idx + 1}：{item.trade_date || '--'} {item.name || item.symbol || '--'} {item.sequence_label || ''}，5日收盘 {fmtPct(item.close_5d_pct)}，10日冲高 {fmtPct(item.max_high_10d_pct)}，5日回撤 {fmtPct(item.min_low_5d_pct)}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <TrendingUp className="h-4 w-4 text-sky-400" />

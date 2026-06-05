@@ -374,6 +374,8 @@ export interface SelectionCandidateItem {
   replay_exit_reason?: string | null;
   strategy_display_name?: string;
   strategy_internal_id?: string;
+  policy_id?: string;
+  policy_name?: string;
   entry_signal_date?: string | null;
   entry_date?: string | null;
   observe_date?: string | null;
@@ -381,7 +383,6 @@ export interface SelectionCandidateItem {
   launch_start_date?: string | null;
   launch_end_date?: string | null;
   pullback_confirm_date?: string | null;
-  observe_date?: string | null;
   exit_signal_date?: string | null;
   exit_date?: string | null;
   risk_count?: number;
@@ -406,6 +407,28 @@ export interface SelectionCandidateItem {
     source_strength_label?: string;
     source_score_distribution?: Record<string, number>;
   }>;
+  dual_exit_tracks?: SelectionDualExitTrack[];
+  spark_exit_meta?: Record<string, any>;
+  daily_source_details?: Array<Record<string, any>>;
+}
+
+export interface SelectionDualExitTrack {
+  track_id: string;
+  track_name: string;
+  style_summary?: string;
+  policy_id?: string;
+  policy_name?: string;
+  current_judgement?: string;
+  status?: 'hold' | 'sell' | 'closed' | string;
+  holding_days?: number | null;
+  close_return_pct?: number | null;
+  max_runup_so_far_pct?: number | null;
+  pred_hold_advantage_pp?: number | null;
+  pred_extra_upside_pp?: number | null;
+  exit_signal_date?: string | null;
+  planned_exit_date?: string | null;
+  exit_reason?: string | null;
+  summary?: string;
 }
 
 export interface SelectionCandidatesResponse {
@@ -714,6 +737,8 @@ export interface SelectionProfileData {
   research?: Record<string, any>;
   strategy_display_name?: string;
   strategy_internal_id?: string;
+  policy_id?: string;
+  policy_name?: string;
   entry_signal_date?: string | null;
   entry_date?: string | null;
   discovery_date?: string | null;
@@ -728,6 +753,9 @@ export interface SelectionProfileData {
   launch_reason?: string;
   pullback_reason?: string;
   exit_plan_summary?: string;
+  dual_exit_tracks?: SelectionDualExitTrack[];
+  spark_exit_meta?: Record<string, any>;
+  daily_source_details?: Array<Record<string, any>>;
 }
 
 export interface SelectionBacktestRunItem {

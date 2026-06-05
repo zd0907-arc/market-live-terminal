@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, BrainCircuit, FileText, LineChart, RefreshCw } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, FileText, LineChart, RefreshCw, Target } from 'lucide-react';
 
 import MarketTopHeader from '../common/MarketTopHeader';
 import { Metric, SectionCard } from '../common/ResearchCard';
@@ -92,6 +92,25 @@ const ModelTrainingPage: React.FC = () => {
                   <Metric label="总收益" value={fmtPct(summary.total_return_pct)} />
                   <Metric label="最大回撤" value={fmtPct(summary.max_drawdown_pct)} />
                   <Metric label="交易数" value={String(summary.trade_count || 0)} />
+                </div>
+              </div>
+            </a>
+            <a href="/selection-probe-signal-research" className="block px-4 py-4 transition hover:bg-slate-950/35">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-fuchsia-300" />
+                    <span className="text-sm font-semibold text-white">试盘事件研究页</span>
+                    <span className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-500">动态 payload</span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    观察池 + D3确认池，按历史同类、冲高率和先亏风险看样本
+                  </div>
+                </div>
+                <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-3">
+                  <Metric label="图表" value="K线+量+净流入" />
+                  <Metric label="入口" value="独立页面" />
+                  <Metric label="用途" value="盘后验证" />
                 </div>
               </div>
             </a>

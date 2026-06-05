@@ -50,26 +50,46 @@ export type PatternSignal = {
 
 export type PatternItem = {
   id: string;
-  tier: 'top1' | 'top3';
+  tier?: 'top1' | 'top3';
   symbol: string;
   name: string;
-  signal_count: number;
-  first_signal_date: string;
-  last_signal_date: string;
-  last_hard_exit_date: string;
-  max_final_score: number;
-  avg_final_score: number;
-  best_max_runup_22d_pct: number;
-  avg_max_runup_22d_pct: number;
-  avg_close_return_22d_pct: number;
-  worst_max_drawdown_22d_pct: number;
-  signals: PatternSignal[];
+  signal_count?: number;
+  first_signal_date?: string;
+  last_signal_date?: string;
+  last_hard_exit_date?: string;
+  max_final_score?: number;
+  avg_final_score?: number;
+  best_max_runup_22d_pct?: number;
+  avg_max_runup_22d_pct?: number;
+  avg_close_return_22d_pct?: number;
+  worst_max_drawdown_22d_pct?: number;
+  signals?: PatternSignal[];
   window: {
     actual_bars: number;
     start_date: string;
     end_date: string;
   };
   bars: PatternBar[];
+  source_id?: string;
+  source_name?: string;
+  trade_date?: string;
+  probe_type?: string;
+  signal_kind?: string;
+  score?: number;
+  probe_strength_score?: number | null;
+  history_sample_count?: number;
+  history_summary_text?: string;
+  history_close_win_rate_5d?: number | null;
+  history_avg_return_5d_pct?: number | null;
+  ['history_breakout_hit_+5_10d_rate']?: number | null;
+  ['history_breakout_hit_+8_10d_rate']?: number | null;
+  ['history_drawdown_hit_-5_5d_rate']?: number | null;
+  ['history_first_hit_+5_best_day']?: number | null;
+  history_similar_cases?: Array<Record<string, any>>;
+  realized_close_5d_pct?: number | null;
+  realized_close_10d_pct?: number | null;
+  realized_max_high_10d_pct?: number | null;
+  realized_min_low_5d_pct?: number | null;
 };
 
 export type PatternSection = {
@@ -124,6 +144,7 @@ export const fmtVol = (value?: number | null) => {
 export const pctTone = (value?: number | null) => Number(value || 0) >= 0 ? 'text-red-200' : 'text-emerald-200';
 
 export const pathLabel = (item: PatternItem) => {
+  if (item.probe_type) return item.probe_type;
   if (item.signal_count >= 3) return '多次信号';
   if (item.best_max_runup_22d_pct >= 70) return '强趋势大涨';
   if (item.best_max_runup_22d_pct < 10 && item.avg_close_return_22d_pct < 0) return '弱势失败';
@@ -173,8 +194,8 @@ export const summarizeItems = (items: PatternItem[]) => {
     };
   }
   return {
-    avgRunup: items.reduce((sum, item) => sum + item.avg_max_runup_22d_pct, 0) / count,
-    avgCloseReturn: items.reduce((sum, item) => sum + item.avg_close_return_22d_pct, 0) / count,
+    avgRunup: items.reduce((sum, item) => sum + Number(item.avg_max_runup_22d_pct || item.realized_max_high_10d_pct || 0), 0) / count,
+    avgCloseReturn: items.reduce((sum, item) => sum + Number(item.avg_close_return_22d_pct || item.realized_close_10d_pct || 0), 0) / count,
   };
 };
 
@@ -375,6 +396,196 @@ export const PatternCard: React.FC<{ item: PatternItem }> = ({ item }) => {
       </div>
       <div className="px-2 pb-3 pt-2">
         <ReactEChartsCore echarts={echarts} option={option} style={{ width: '100%', height: 365 }} />
+      </div>
+    </section>
+  );
+};
+
+export const buildProbePatternOption = (item: PatternItem) => {
+  const bars = item.bars || [];
+  const dates = bars.map((bar) => bar.trade_date.slice(5));
+  const candle = bars.map((bar) => [bar.open, bar.close, bar.low, bar.high]);
+  const volume = bars.map((bar) => Number(bar.total_volume || 0) / 100000000);
+  const l2MainNet = bars.map((bar) => Number(bar.l2_main_net_amount || 0) / 100000000);
+  const l2SuperNet = bars.map((bar) => Number(bar.l2_super_net_amount || 0) / 100000000);
+  const dateIndex = new Map(bars.map((bar, idx) => [bar.trade_date, idx]));
+  const signalIndex = item.trade_date ? dateIndex.get(item.trade_date) : null;
+
+  return {
+    backgroundColor: 'transparent',
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: 'rgba(15,23,42,0.96)',
+      borderColor: '#334155',
+      textStyle: { color: '#e2e8f0', fontSize: 11 },
+      formatter: (params: any[]) => {
+        const idx = params?.[0]?.dataIndex ?? 0;
+        const bar = bars[idx];
+        if (!bar) return '';
+        return [
+          `<b>${bar.trade_date}</b>`,
+          `开 ${fmtNum(bar.open)} 高 ${fmtNum(bar.high)} 低 ${fmtNum(bar.low)} 收 ${fmtNum(bar.close)}`,
+          `成交量 ${fmtVol(bar.total_volume)}`,
+          `成交额 ${fmtAmt(bar.total_amount)}`,
+          `主力净 ${fmtAmt(bar.l2_main_net_amount)}`,
+          `超大单净 ${fmtAmt(bar.l2_super_net_amount)}`,
+          item.trade_date === bar.trade_date ? `试盘信号：${item.probe_type || item.signal_kind || '--'}` : '',
+        ].filter(Boolean).join('<br/>');
+      },
+    },
+    legend: {
+      top: 0,
+      left: 8,
+      itemWidth: 10,
+      itemHeight: 8,
+      textStyle: { color: '#94a3b8', fontSize: 10 },
+    },
+    grid: [
+      { left: 46, right: 38, top: 30, height: 205 },
+      { left: 46, right: 38, top: 260, height: 92 },
+    ],
+    xAxis: [
+      {
+        type: 'category',
+        data: dates,
+        boundaryGap: true,
+        axisLabel: { color: '#94a3b8', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#334155' } },
+      },
+      {
+        type: 'category',
+        gridIndex: 1,
+        data: dates,
+        boundaryGap: true,
+        axisLabel: { color: '#64748b', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#334155' } },
+      },
+    ],
+    yAxis: [
+      {
+        type: 'value',
+        scale: true,
+        axisLabel: { color: '#fbbf24', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+      },
+      {
+        type: 'value',
+        gridIndex: 1,
+        scale: true,
+        name: '量',
+        axisLabel: { color: '#64748b', fontSize: 10, formatter: (v: number) => `${fmtNum(v, 1)}亿股` },
+        splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+      },
+      {
+        type: 'value',
+        gridIndex: 1,
+        scale: true,
+        position: 'right',
+        name: '净',
+        axisLabel: { color: '#60a5fa', fontSize: 10, formatter: (v: number) => `${fmtNum(v, 1)}亿` },
+        splitLine: { show: false },
+      },
+    ],
+    dataZoom: [{ type: 'inside', xAxisIndex: [0, 1], start: 0, end: 100 }],
+    series: [
+      {
+        name: '日K',
+        type: 'candlestick',
+        data: candle,
+        itemStyle: {
+          color: '#ef4444',
+          color0: '#22c55e',
+          borderColor: '#ef4444',
+          borderColor0: '#22c55e',
+        },
+        markLine: signalIndex != null ? {
+          symbol: 'none',
+          label: { color: '#f8fafc', fontSize: 10, formatter: '{b}' },
+          lineStyle: { type: 'dashed', color: '#f59e0b' },
+          data: [{ xAxis: signalIndex, name: item.source_id === 'probe_d3_confirmed' ? 'D3确认' : '试盘日' }],
+        } : undefined,
+      },
+      {
+        name: '成交量',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        data: volume,
+        itemStyle: { color: 'rgba(148,163,184,0.32)' },
+        barMaxWidth: 12,
+      },
+      {
+        name: '主力净流入',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 2,
+        data: l2MainNet,
+        itemStyle: { color: (params: any) => Number(params.value || 0) >= 0 ? '#ef4444' : '#22c55e' },
+        barMaxWidth: 10,
+      },
+      {
+        name: '超大单净流入',
+        type: 'line',
+        xAxisIndex: 1,
+        yAxisIndex: 2,
+        data: l2SuperNet,
+        showSymbol: false,
+        lineStyle: { color: '#38bdf8', width: 1.4 },
+      },
+    ],
+  };
+};
+
+export const ProbePatternCard: React.FC<{ item: PatternItem }> = ({ item }) => {
+  const option = useMemo(() => buildProbePatternOption(item), [item]);
+  const sourceClass = item.source_id === 'probe_d3_confirmed'
+    ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'
+    : 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200';
+  const sourceLabel = item.source_id === 'probe_d3_confirmed' ? 'D3确认' : '试盘观察';
+  return (
+    <section className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/70 shadow-lg">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-white">{item.name}</span>
+            <span className={`rounded border px-2 py-0.5 text-[11px] ${sourceClass}`}>{sourceLabel}</span>
+            <span className="rounded border border-slate-600/60 bg-slate-950/50 px-2 py-0.5 text-[11px] text-slate-300">{item.probe_type || '--'}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {item.symbol} · 信号日 {item.trade_date} · 窗口 {item.window.start_date} ~ {item.window.end_date}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-slate-500">试盘强度</div>
+          <div className="font-mono text-sm font-semibold text-slate-100">{fmtNum(item.probe_strength_score, 1)}</div>
+        </div>
+      </div>
+      <div className="grid gap-2 px-4 pt-3 md:grid-cols-5">
+        <Metric label="历史同类" value={`${item.history_sample_count || 0} 个`} className="rounded-lg border border-slate-800 bg-slate-950/45 p-2" />
+        <Metric label="5日胜率" value={fmtPct(item.history_close_win_rate_5d != null ? Number(item.history_close_win_rate_5d) * 100 : null)} tone="text-red-200" className="rounded-lg border border-slate-800 bg-slate-950/45 p-2" />
+        <Metric label="10日+5%" value={fmtPct(item['history_breakout_hit_+5_10d_rate'] != null ? Number(item['history_breakout_hit_+5_10d_rate']) * 100 : null)} tone="text-red-200" className="rounded-lg border border-slate-800 bg-slate-950/45 p-2" />
+        <Metric label="5日-5%" value={fmtPct(item['history_drawdown_hit_-5_5d_rate'] != null ? Number(item['history_drawdown_hit_-5_5d_rate']) * 100 : null)} tone="text-emerald-200" className="rounded-lg border border-slate-800 bg-slate-950/45 p-2" />
+        <Metric label="真实10日冲高" value={fmtPct(item.realized_max_high_10d_pct)} tone="text-red-200" className="rounded-lg border border-slate-800 bg-slate-950/45 p-2" />
+      </div>
+      <div className="mx-4 mt-2 rounded-lg border border-slate-800 bg-slate-950/45 px-3 py-2 text-xs leading-5 text-slate-300">
+        {item.history_summary_text || '暂无历史同类摘要。'}
+      </div>
+      <div className="mx-4 mt-2 grid gap-2 text-[11px] text-slate-400 md:grid-cols-3">
+        <div className="rounded border border-slate-800 bg-slate-950/45 px-2 py-2">真实5日收盘 {fmtPct(item.realized_close_5d_pct)}</div>
+        <div className="rounded border border-slate-800 bg-slate-950/45 px-2 py-2">真实10日收盘 {fmtPct(item.realized_close_10d_pct)}</div>
+        <div className="rounded border border-slate-800 bg-slate-950/45 px-2 py-2">真实5日最大回撤 {fmtPct(item.realized_min_low_5d_pct)}</div>
+      </div>
+      <div className="mx-4 mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-400">
+        {(item.history_similar_cases || []).slice(0, 3).map((signal, idx) => (
+          <span key={`${signal.trade_date}_${signal.symbol}_${idx}`} className="rounded border border-slate-800 bg-slate-950/45 px-2 py-1">
+            像例{idx + 1} {signal.trade_date} {signal.name || signal.symbol} · 10日冲高 {fmtPct(signal.max_high_10d_pct)}
+          </span>
+        ))}
+      </div>
+      <div className="px-2 pb-3 pt-2">
+        <ReactEChartsCore echarts={echarts} option={option} style={{ width: '100%', height: 372 }} />
       </div>
     </section>
   );

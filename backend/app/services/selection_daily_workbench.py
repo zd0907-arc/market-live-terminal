@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.app.services import spark_opportunity_selector
+from backend.app.services import probe_signal_selector
 from backend.app.services.selection_candidate_store import (
     query_daily_exit_watchlist,
     query_daily_candidate_profile,
@@ -21,7 +22,11 @@ from backend.app.services.selection_stable_callback import (
     STRATEGY_VERSION as STABLE_SOURCE_VERSION,
     get_stable_callback_candidates,
 )
-from backend.app.services.spark_opportunity_exit import get_daily_exit_watchlist
+from backend.app.services.spark_opportunity_exit import (
+    DEFAULT_DUAL_POLICY_ID,
+    DEFAULT_DUAL_POLICY_NAME,
+    get_daily_exit_watchlist,
+)
 from backend.app.services.selection_trend_continuation import (
     STRATEGY_DISPLAY_NAME as TREND_SOURCE_NAME,
     STRATEGY_INTERNAL_ID as TREND_SOURCE_ID,
@@ -31,11 +36,15 @@ from backend.app.services.selection_trend_continuation import (
 
 DAILY_POOL_ID = "daily_candidate_pool"
 SPARK_SOURCE_ID = spark_opportunity_selector.SOURCE_ID
-ACTIVE_SOURCE_IDS = [SPARK_SOURCE_ID, STABLE_SOURCE_ID, TREND_SOURCE_ID]
+PROBE_WATCH_SOURCE_ID = probe_signal_selector.WATCH_SOURCE_ID
+PROBE_CONFIRM_SOURCE_ID = probe_signal_selector.CONFIRM_SOURCE_ID
+ACTIVE_SOURCE_IDS = [SPARK_SOURCE_ID, STABLE_SOURCE_ID, TREND_SOURCE_ID, PROBE_WATCH_SOURCE_ID, PROBE_CONFIRM_SOURCE_ID]
 SOURCE_DAILY_LIMITS = {
     SPARK_SOURCE_ID: 3,
     STABLE_SOURCE_ID: 3,
     TREND_SOURCE_ID: 8,
+    PROBE_WATCH_SOURCE_ID: 12,
+    PROBE_CONFIRM_SOURCE_ID: 8,
 }
 TREND_OBSERVATION_MIN_SCORE = 70.0
 TREND_OBSERVATION_LIMIT = 5
@@ -43,6 +52,8 @@ SOURCE_STATUS_LABELS = {
     SPARK_SOURCE_ID: "星火模型",
     STABLE_SOURCE_ID: "资金流回调稳健",
     TREND_SOURCE_ID: "趋势中继高质量回踩",
+    PROBE_WATCH_SOURCE_ID: "试盘观察池",
+    PROBE_CONFIRM_SOURCE_ID: "试盘D3确认池",
 }
 
 
@@ -50,6 +61,7 @@ def source_registry_records() -> List[Dict[str, Any]]:
     spark_record = spark_opportunity_selector.source_registry_record()
     return [
         spark_record,
+        *probe_signal_selector.source_registry_records(),
         {
             "source_id": STABLE_SOURCE_ID,
             "source_name": STABLE_SOURCE_NAME,
@@ -186,6 +198,10 @@ def _generate_spark_candidates(trade_date: str, limit: int) -> List[Dict[str, An
     return spark_opportunity_selector.generate_daily_candidates(trade_date, limit=limit)
 
 
+def _generate_probe_candidates(source_id: str, trade_date: str, limit: int) -> List[Dict[str, Any]]:
+    return probe_signal_selector.generate_daily_candidates(source_id, trade_date, limit=limit)
+
+
 def source_daily_limit(source_id: str, fallback: int = 50) -> int:
     return int(SOURCE_DAILY_LIMITS.get(source_id, fallback))
 
@@ -197,6 +213,8 @@ def generate_source_candidates(source_id: str, trade_date: str, *, limit: int = 
         return _generate_stable_candidates(trade_date, limit)
     if source_id == TREND_SOURCE_ID:
         return _generate_trend_candidates(trade_date, limit)
+    if source_id in {PROBE_WATCH_SOURCE_ID, PROBE_CONFIRM_SOURCE_ID}:
+        return _generate_probe_candidates(source_id, trade_date, limit)
     raise ValueError(f"unsupported selection source: {source_id}")
 
 
@@ -272,8 +290,8 @@ def get_daily_selection_candidates(
     if not include_exit_watchlist:
         payload["exit_watchlist"] = {
             "trade_date": target_date,
-            "policy_id": "pc_model_th6_stop12",
-            "policy_name": "星火进攻版",
+            "policy_id": DEFAULT_DUAL_POLICY_ID,
+            "policy_name": DEFAULT_DUAL_POLICY_NAME,
             "items": [],
             "skipped": True,
         }
@@ -293,8 +311,8 @@ def get_daily_selection_candidates(
     except Exception as exc:
         payload["exit_watchlist"] = {
             "trade_date": target_date,
-            "policy_id": "pc_model_th6_stop12",
-            "policy_name": "星火进攻版",
+            "policy_id": DEFAULT_DUAL_POLICY_ID,
+            "policy_name": DEFAULT_DUAL_POLICY_NAME,
             "items": [],
             "error": str(exc),
         }
@@ -410,6 +428,8 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
                 "exit_signal_date": candidate_payload.get("exit_signal_date") or profile.get("exit_signal_date"),
                 "exit_date": candidate_payload.get("exit_date") or profile.get("exit_date"),
                 "exit_plan_summary": candidate_payload.get("exit_plan_summary") or profile.get("exit_plan_summary"),
+                "dual_exit_tracks": candidate_payload.get("dual_exit_tracks") or profile.get("dual_exit_tracks") or [],
+                "spark_exit_meta": candidate_payload.get("spark_exit_meta") or profile.get("spark_exit_meta") or {},
                 "trade_plan": trade_plan or profile.get("trade_plan") or {},
             }
         )
