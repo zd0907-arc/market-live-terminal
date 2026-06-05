@@ -1,0 +1,5 @@
+group,n,probe_index_mean,oib_ratio_mean,amount_vs_day_median_mean,same_day_pullback_ratio_mean,same_day_later_high_pct_mean,day_gap_pct_mean,bar_high_ret_pct_mean,probe_strength_score_mean,touch_limit_up_rate_pct
+big20,313,1.387,0.6352,23.065,0.837,0.0,-1.059,6.945,79.507,0.0
+monster60,295,1.4,0.6405,24.118,0.814,0.0,-0.997,6.569,79.338,0.0
+deepfail20,120,1.458,0.5325,35.214,0.872,0.0,-2.349,7.583,79.969,0.0
+fail20,63,1.571,0.5632,52.404,0.857,0.0,-2.623,7.707,80.411,0.0

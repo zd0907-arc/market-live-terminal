@@ -10,12 +10,14 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from backend.app.services import spark_opportunity_selector
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_MODEL_ROOT = ROOT / "data/selection/opportunity_discovery/postclose_exit_v0_2"
-PRIMARY_REPO_MODEL_ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/opportunity_discovery/postclose_exit_v0_2")
-DEFAULT_POLICY_ID = "pc_model_th6_stop12"
-DEFAULT_POLICY_NAME = "星火进攻版"
+
 DEFAULT_TRACK_SOURCE_ID = spark_opportunity_selector.SOURCE_ID
 DEFAULT_TRACK_LIMIT = 3
+DEFAULT_DUAL_POLICY_ID = "spark_exit_dual_track"
+DEFAULT_DUAL_POLICY_NAME = "星火双轨持仓跟踪"
+
+PRIMARY_MODEL_ROOT = ROOT / "data/selection/opportunity_discovery/postclose_exit_v0_2"
+BALANCED_MODEL_ROOT = ROOT / "data/selection/opportunity_discovery/postclose_exit_2025top5_heat_v0_1"
 
 
 @dataclass(frozen=True)
@@ -31,26 +33,56 @@ class SparkExitPolicy:
     min_hold_days: int = 1
 
 
-POLICY = SparkExitPolicy(
-    policy_id=DEFAULT_POLICY_ID,
-    policy_name=DEFAULT_POLICY_NAME,
-    strategy_mode="top3_follow",
-    follow_top_n=DEFAULT_TRACK_LIMIT,
-    max_holding_days=22,
-    close_stop_pct=-12.0,
-    exit_threshold=6.0,
+@dataclass(frozen=True)
+class ExitTrackSpec:
+    track_id: str
+    display_name: str
+    style_summary: str
+    model_root_env: Optional[str]
+    model_roots: Tuple[Path, ...]
+    policy: SparkExitPolicy
+    is_primary: bool = False
+
+
+TRACK_SPECS: Tuple[ExitTrackSpec, ...] = (
+    ExitTrackSpec(
+        track_id="profit_first",
+        display_name="落袋优先",
+        style_summary="偏快出，优先锁定利润和控制回撤。",
+        model_root_env="SPARK_OPPORTUNITY_EXIT_MODEL_ROOT",
+        model_roots=(PRIMARY_MODEL_ROOT,),
+        policy=SparkExitPolicy(
+            policy_id="pc_model_th6_stop12",
+            policy_name="落袋优先",
+            strategy_mode="top3_follow",
+            follow_top_n=DEFAULT_TRACK_LIMIT,
+            max_holding_days=22,
+            close_stop_pct=-12.0,
+            exit_threshold=6.0,
+        ),
+        is_primary=True,
+    ),
+    ExitTrackSpec(
+        track_id="trend_hold",
+        display_name="趋势续航",
+        style_summary="更愿意多拿趋势，争取多吃冲高段。",
+        model_root_env="SPARK_OPPORTUNITY_TREND_EXIT_MODEL_ROOT",
+        model_roots=(BALANCED_MODEL_ROOT,),
+        policy=SparkExitPolicy(
+            policy_id="pc_model_th3_stop12",
+            policy_name="趋势续航",
+            strategy_mode="top5_equal",
+            follow_top_n=DEFAULT_TRACK_LIMIT,
+            max_holding_days=22,
+            close_stop_pct=-12.0,
+            exit_threshold=3.0,
+        ),
+    ),
 )
 
+PRIMARY_TRACK = next(track for track in TRACK_SPECS if track.is_primary)
+MAX_HOLDING_DAYS = max(int(track.policy.max_holding_days) for track in TRACK_SPECS)
 _EXIT_WATCHLIST_CACHE: Dict[str, Dict[str, Any]] = {}
-
-
-def _model_root() -> Path:
-    explicit = os.getenv("SPARK_OPPORTUNITY_EXIT_MODEL_ROOT")
-    if explicit:
-        return Path(explicit)
-    if (DEFAULT_MODEL_ROOT / "summary.json").exists():
-        return DEFAULT_MODEL_ROOT
-    return PRIMARY_REPO_MODEL_ROOT
 
 
 def _joblib():
@@ -90,6 +122,17 @@ def _clean_text(value: Any, default: str = "") -> str:
     return text if text else default
 
 
+def _resolve_model_root(track: ExitTrackSpec) -> Path:
+    if track.model_root_env:
+        explicit = os.getenv(track.model_root_env)
+        if explicit:
+            return Path(explicit)
+    for candidate in track.model_roots:
+        if (candidate / "summary.json").exists():
+            return candidate
+    return track.model_roots[-1]
+
+
 def _parse_window_start_dates(summary: Dict[str, Any]) -> List[Tuple[str, str]]:
     windows = summary.get("windows") or []
     out: List[Tuple[str, str]] = []
@@ -115,12 +158,12 @@ def _window_for_trade_date(trade_date: str, summary: Dict[str, Any]) -> Optional
     return current
 
 
-def _load_models_for_trade_date(trade_date: str) -> Tuple[Any, Any]:
-    root = _model_root()
+def _load_models_for_trade_date(track: ExitTrackSpec, trade_date: str) -> Tuple[Any, Any]:
+    root = _resolve_model_root(track)
     summary = _read_json(root / "summary.json")
     window = _window_for_trade_date(trade_date, summary)
     if not window:
-        raise RuntimeError(f"no post-close exit window found for trade date {trade_date}")
+        raise RuntimeError(f"no post-close exit window found for {track.display_name} on {trade_date}")
     model_dir = root / "models"
     joblib = _joblib()
     exit_model = joblib.load(model_dir / f"{window}_postclose_exit.joblib")
@@ -235,7 +278,7 @@ def _historical_track_entries(asof_trade_date: str) -> List[Dict[str, Any]]:
               AND rank <= ?
             ORDER BY trade_date ASC, rank ASC
             """,
-            (DEFAULT_TRACK_SOURCE_ID, asof_trade_date, POLICY.follow_top_n),
+            (DEFAULT_TRACK_SOURCE_ID, asof_trade_date, PRIMARY_TRACK.policy.follow_top_n),
         ).fetchall()
         out: List[Dict[str, Any]] = []
         for row in rows:
@@ -276,7 +319,7 @@ def _future_path_map(atomic_panel, keys: Sequence[Tuple[str, str]]):
             if key not in wanted:
                 continue
             entry_i = i + 1
-            end_i = min(n, entry_i + int(POLICY.max_holding_days))
+            end_i = min(n, entry_i + int(MAX_HOLDING_DAYS))
             future = g.iloc[entry_i:end_i].copy()
             if future.empty:
                 continue
@@ -297,6 +340,7 @@ def _predict_model(model: Any, features: Sequence[str], row_data: Dict[str, Any]
 
 def _build_postclose_feature_row(
     *,
+    policy: SparkExitPolicy,
     symbol: str,
     signal_date: str,
     day,
@@ -345,7 +389,7 @@ def _build_postclose_feature_row(
             "signal_date": signal_date,
             "trade_date": trade_date,
             "holding_days": int(offset),
-            "holding_day_ratio": float(offset) / max(float(POLICY.max_holding_days), 1.0),
+            "holding_day_ratio": float(offset) / max(float(policy.max_holding_days), 1.0),
             "gross_entry_price": round(gross_entry, 4),
             "close": round(close_p, 4),
             "unrealized_close_return_pct": close_return,
@@ -364,7 +408,7 @@ def _build_postclose_feature_row(
             "hit15_so_far": float(max_runup >= 15.0),
             "hit20_so_far": float(max_runup >= 20.0),
             "profit_protect_active": float(max_runup >= 15.0),
-            "close_stop_distance_pct": close_return - POLICY.close_stop_pct,
+            "close_stop_distance_pct": close_return - policy.close_stop_pct,
             "peak_profit_over_15_pct": max(0.0, max_runup - 15.0),
             "peak_profit_over_20_pct": max(0.0, max_runup - 20.0),
             "peak_close_runup_pct": (peak_close / gross_entry - 1.0) * 100.0 if gross_entry > 0 else 0.0,
@@ -380,6 +424,7 @@ def _build_postclose_feature_row(
 
 def _simulate_live_exit(
     *,
+    track: ExitTrackSpec,
     future,
     feature_lookup,
     exit_model,
@@ -390,6 +435,7 @@ def _simulate_live_exit(
     pd = _pd()
     from backend.scripts import research_opportunity_discovery_model as base
 
+    policy = track.policy
     future = future.sort_values("trade_date").reset_index(drop=True)
     if future.empty:
         return None
@@ -441,6 +487,7 @@ def _simulate_live_exit(
         holding_days = offset
 
         row_data = _build_postclose_feature_row(
+            policy=policy,
             symbol=str(entry_row["symbol"]),
             signal_date=str(entry_row["trade_date"]),
             day=day_s,
@@ -465,20 +512,20 @@ def _simulate_live_exit(
         max_runup = (peak_high / gross_entry - 1.0) * 100.0 if gross_entry > 0 else 0.0
         should_exit = False
         reason = ""
-        if offset >= POLICY.max_holding_days:
+        if offset >= policy.max_holding_days:
             should_exit = True
             reason = "time_exit_close"
-        if not should_exit and offset >= max(POLICY.min_hold_days, 1) and close_return <= POLICY.close_stop_pct:
+        if not should_exit and offset >= max(policy.min_hold_days, 1) and close_return <= policy.close_stop_pct:
             should_exit = True
             reason = "postclose_close_stop_next_open"
-        if not should_exit and offset >= POLICY.min_hold_days and pred < POLICY.exit_threshold:
+        if not should_exit and offset >= policy.min_hold_days and pred < policy.exit_threshold:
             should_exit = True
             reason = "postclose_model_next_open"
-        if should_exit and POLICY.guard_threshold is not None:
+        if should_exit and policy.guard_threshold is not None:
             guard_active = (
-                cont_pred >= float(POLICY.guard_threshold)
-                or (offset <= 4 and cont_pred >= float(POLICY.guard_threshold) * 0.65)
-                or (max_runup >= 15.0 and cont_pred >= float(POLICY.guard_threshold) * 0.50)
+                cont_pred >= float(policy.guard_threshold)
+                or (offset <= 4 and cont_pred >= float(policy.guard_threshold) * 0.65)
+                or (max_runup >= 15.0 and cont_pred >= float(policy.guard_threshold) * 0.50)
             )
             if guard_active:
                 should_exit = False
@@ -486,6 +533,8 @@ def _simulate_live_exit(
         if should_exit:
             next_trade_date = _next_trade_date(future_trade_dates, trade_date) or _calendar_next_trade_date(trade_date)
             return {
+                "track_id": track.track_id,
+                "track_name": track.display_name,
                 "signal_date": str(entry_row["trade_date"]),
                 "entry_date": entry_date,
                 "asof_trade_date": asof_trade_date,
@@ -502,6 +551,8 @@ def _simulate_live_exit(
             }
         if trade_date == asof_trade_date:
             return {
+                "track_id": track.track_id,
+                "track_name": track.display_name,
                 "signal_date": str(entry_row["trade_date"]),
                 "entry_date": entry_date,
                 "asof_trade_date": asof_trade_date,
@@ -533,24 +584,58 @@ def _entry_row_from_seed(seed: Dict[str, Any]):
     )
 
 
-def _build_exit_summary(seed: Dict[str, Any], live_result: Dict[str, Any]) -> str:
-    if live_result.get("should_exit"):
-        reason = "模型续持优势不足"
-        if live_result.get("exit_reason") == "time_exit_close":
-            reason = "达到最大持有天数"
-        if live_result.get("exit_reason") == "postclose_close_stop_next_open":
-            reason = "收盘回撤触发止损"
-        return (
-            f"星火进攻版盘后建议卖出：持有第{int(live_result.get('holding_days') or 0)}天，"
-            f"hold_adv {live_result.get('pred_hold_advantage_pp')}，"
-            f"extra_upside {live_result.get('pred_extra_upside_pp')}，"
-            f"{reason}，计划下一交易日执行。"
-        )
-    return (
-        f"继续持有：持有第{int(live_result.get('holding_days') or 0)}天，"
-        f"hold_adv {live_result.get('pred_hold_advantage_pp')}，"
-        f"extra_upside {live_result.get('pred_extra_upside_pp')}。"
+def _reason_label(exit_reason: str) -> str:
+    if exit_reason == "time_exit_close":
+        return "达到最大持有天数"
+    if exit_reason == "postclose_close_stop_next_open":
+        return "收盘回撤触发止损"
+    if exit_reason == "postclose_model_next_open":
+        return "模型判断续持优势不足"
+    return "盘后跟踪判断"
+
+
+def _build_track_summary(track: ExitTrackSpec, live_result: Dict[str, Any]) -> str:
+    base_text = (
+        f"{track.display_name}：持有第{int(live_result.get('holding_days') or 0)}天，"
+        f"续持优势 {live_result.get('pred_hold_advantage_pp')}，"
+        f"额外空间 {live_result.get('pred_extra_upside_pp')}。"
     )
+    if live_result.get("closed_before_asof"):
+        return f"{base_text} 该模型已在 {live_result.get('exit_signal_date') or '--'} 发出卖出信号。"
+    if live_result.get("should_exit"):
+        return f"{base_text} 当前判断次日卖出，原因：{_reason_label(str(live_result.get('exit_reason') or ''))}。"
+    return f"{base_text} 当前判断继续持有。"
+
+
+def _build_track_payload(track: ExitTrackSpec, live_result: Dict[str, Any]) -> Dict[str, Any]:
+    status = "closed" if live_result.get("closed_before_asof") else ("sell" if live_result.get("should_exit") else "hold")
+    return {
+        "track_id": track.track_id,
+        "track_name": track.display_name,
+        "style_summary": track.style_summary,
+        "policy_id": track.policy.policy_id,
+        "policy_name": track.policy.policy_name,
+        "current_judgement": "已卖出" if status == "closed" else ("次日卖出" if status == "sell" else "继续持有"),
+        "status": status,
+        "holding_days": live_result.get("holding_days"),
+        "close_return_pct": live_result.get("close_return_pct"),
+        "max_runup_so_far_pct": live_result.get("max_runup_so_far_pct"),
+        "pred_hold_advantage_pp": live_result.get("pred_hold_advantage_pp"),
+        "pred_extra_upside_pp": live_result.get("pred_extra_upside_pp"),
+        "exit_signal_date": live_result.get("exit_signal_date") if status in {"sell", "closed"} else None,
+        "planned_exit_date": live_result.get("planned_exit_date") if status in {"sell", "closed"} else None,
+        "exit_reason": live_result.get("exit_reason") if status in {"sell", "closed"} else "",
+        "summary": _build_track_summary(track, live_result),
+    }
+
+
+def _compare_tracks(track_payloads: Sequence[Dict[str, Any]]) -> Tuple[str, str, str]:
+    active_statuses = [str(item.get("status") or "") for item in track_payloads]
+    if active_statuses and all(status == "sell" for status in active_statuses):
+        return ("一致卖出", "次日卖出", "两个卖点模型都判断应在下一交易日执行卖出。")
+    if active_statuses and all(status == "hold" for status in active_statuses):
+        return ("一致持有", "继续持有", "两个卖点模型都判断当前仍可继续持有。")
+    return ("模型分歧", "模型分歧", "两套卖点模型给出了不同判断，适合人工重点复核。")
 
 
 def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
@@ -558,8 +643,8 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
     if not entries:
         return {
             "trade_date": asof_trade_date,
-            "policy_id": POLICY.policy_id,
-            "policy_name": POLICY.policy_name,
+            "policy_id": DEFAULT_DUAL_POLICY_ID,
+            "policy_name": DEFAULT_DUAL_POLICY_NAME,
             "items": [],
         }
 
@@ -568,12 +653,15 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
     if atomic_panel.empty or feature_panel.empty:
         return {
             "trade_date": asof_trade_date,
-            "policy_id": POLICY.policy_id,
-            "policy_name": POLICY.policy_name,
+            "policy_id": DEFAULT_DUAL_POLICY_ID,
+            "policy_name": DEFAULT_DUAL_POLICY_NAME,
             "items": [],
         }
 
-    exit_model, continuation_model = _load_models_for_trade_date(asof_trade_date)
+    track_models = {
+        track.track_id: _load_models_for_trade_date(track, asof_trade_date)
+        for track in TRACK_SPECS
+    }
     keys = [(item["symbol"], item["trade_date"]) for item in entries]
     path_map = _future_path_map(atomic_panel, keys)
     feature_lookup = _feature_lookup(feature_panel)
@@ -589,32 +677,59 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
         future = path_map.get((symbol, seed["trade_date"]))
         if future is None or future.empty:
             continue
-        live_result = _simulate_live_exit(
+
+        primary_exit_model, primary_cont_model = track_models[PRIMARY_TRACK.track_id]
+        primary_live = _simulate_live_exit(
+            track=PRIMARY_TRACK,
             future=future,
             feature_lookup=feature_lookup,
-            exit_model=exit_model,
-            continuation_model=continuation_model,
+            exit_model=primary_exit_model,
+            continuation_model=primary_cont_model,
             entry_row=_entry_row_from_seed(seed),
             asof_trade_date=asof_trade_date,
         )
-        if not live_result:
+        if not primary_live:
             continue
-        if live_result.get("closed_before_asof"):
-            if live_result.get("planned_exit_date"):
-                symbol_next_available_date[symbol] = str(live_result["planned_exit_date"])
+        if primary_live.get("closed_before_asof"):
+            if primary_live.get("planned_exit_date"):
+                symbol_next_available_date[symbol] = str(primary_live["planned_exit_date"])
             continue
-        if live_result.get("entry_date") and live_result["entry_date"] > asof_trade_date:
+        if primary_live.get("entry_date") and primary_live["entry_date"] > asof_trade_date:
             continue
+
+        track_payloads: List[Dict[str, Any]] = []
+        for track in TRACK_SPECS:
+            exit_model, continuation_model = track_models[track.track_id]
+            live_result = primary_live if track.track_id == PRIMARY_TRACK.track_id else _simulate_live_exit(
+                track=track,
+                future=future,
+                feature_lookup=feature_lookup,
+                exit_model=exit_model,
+                continuation_model=continuation_model,
+                entry_row=_entry_row_from_seed(seed),
+                asof_trade_date=asof_trade_date,
+            )
+            if not live_result:
+                continue
+            track_payloads.append(_build_track_payload(track, live_result))
+
+        if not track_payloads:
+            continue
+
         open_positions[symbol] = {
             "seed": seed,
-            "live": live_result,
+            "primary_live": primary_live,
+            "tracks": track_payloads,
         }
 
     items: List[Dict[str, Any]] = []
     for symbol, payload in open_positions.items():
         seed = payload["seed"]
-        live_result = payload["live"]
-        should_exit = bool(live_result.get("should_exit"))
+        primary_live = payload["primary_live"]
+        track_payloads = payload["tracks"]
+        overview_label, action_label, overview_summary = _compare_tracks(track_payloads)
+        any_sell_now = any(str(item.get("status") or "") == "sell" for item in track_payloads)
+        primary_track_payload = next((item for item in track_payloads if item["track_id"] == PRIMARY_TRACK.track_id), track_payloads[0])
         items.append(
             {
                 "rank": int(seed.get("rank") or 0),
@@ -622,32 +737,32 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
                 "name": seed.get("name") or symbol,
                 "trade_date": asof_trade_date,
                 "score": _safe_float(seed.get("score")),
-                "signal": 1 if should_exit else 0,
-                "signal_label": "spark_exit_sell_next_open" if should_exit else "spark_exit_hold",
-                "current_judgement": "次日卖出" if should_exit else "继续持有",
-                "reason_summary": _build_exit_summary(seed, live_result),
-                "risk_level": "high" if should_exit else "watch",
+                "signal": 1 if any_sell_now else 0,
+                "signal_label": "spark_exit_dual_sell_next_open" if any_sell_now else "spark_exit_dual_hold",
+                "current_judgement": overview_label,
+                "reason_summary": overview_summary,
+                "risk_level": "high" if any_sell_now else "watch",
                 "stealth_score": 0.0,
                 "breakout_score": 0.0,
                 "distribution_score": 0.0,
-                "strategy_display_name": "星火进攻版持仓跟踪",
+                "strategy_display_name": DEFAULT_DUAL_POLICY_NAME,
                 "strategy_internal_id": DEFAULT_TRACK_SOURCE_ID,
                 "feature_version": "spark_opportunity_exit_watchlist",
-                "strategy_version": POLICY.policy_id,
-                "candidate_types": ["spark_exit_watch"],
+                "strategy_version": DEFAULT_DUAL_POLICY_ID,
+                "candidate_types": ["spark_exit_watch", "spark_exit_dual_track"],
                 "entry_allowed": False,
                 "entry_block_reasons": [],
                 "selection_rank_score": _safe_float(seed.get("score")),
                 "source_score": _safe_float(seed.get("score")),
                 "selection_rank_mode": "spark_exit_watch",
-                "lifecycle_phase": "sell" if should_exit else "hold",
-                "lifecycle_phase_label": "次日卖出" if should_exit else "继续持有",
-                "action_label": "次日卖出" if should_exit else "继续持有",
+                "lifecycle_phase": "sell" if any_sell_now else "hold",
+                "lifecycle_phase_label": action_label,
+                "action_label": action_label,
                 "entry_signal_date": seed["trade_date"],
-                "entry_date": live_result.get("entry_date"),
-                "exit_signal_date": live_result.get("exit_signal_date") if should_exit else None,
-                "exit_date": live_result.get("planned_exit_date") if should_exit else None,
-                "exit_plan_summary": _build_exit_summary(seed, live_result),
+                "entry_date": primary_live.get("entry_date"),
+                "exit_signal_date": asof_trade_date if any_sell_now else None,
+                "exit_date": primary_track_payload.get("planned_exit_date") if primary_track_payload.get("status") == "sell" else None,
+                "exit_plan_summary": "；".join(str(item.get("summary") or "") for item in track_payloads),
                 "primary_source_id": DEFAULT_TRACK_SOURCE_ID,
                 "primary_source_name": "星火机会模型 1.0",
                 "primary_source_type": "model",
@@ -664,29 +779,28 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
                 ],
                 "trade_plan": {
                     "signal_date": seed["trade_date"],
-                    "entry_date": live_result.get("entry_date"),
-                    "exit_signal_date": asof_trade_date if should_exit else None,
-                    "exit_date": live_result.get("planned_exit_date") if should_exit else None,
-                    "exit_reason": live_result.get("exit_reason"),
+                    "entry_date": primary_live.get("entry_date"),
+                    "exit_signal_date": primary_live.get("exit_signal_date") if primary_live.get("should_exit") else None,
+                    "exit_date": primary_live.get("planned_exit_date") if primary_live.get("should_exit") else None,
+                    "exit_reason": primary_live.get("exit_reason"),
                 },
+                "dual_exit_tracks": track_payloads,
                 "spark_exit_meta": {
-                    "policy_id": POLICY.policy_id,
-                    "policy_name": POLICY.policy_name,
-                    "follow_top_n": POLICY.follow_top_n,
+                    "policy_id": DEFAULT_DUAL_POLICY_ID,
+                    "policy_name": DEFAULT_DUAL_POLICY_NAME,
+                    "follow_top_n": PRIMARY_TRACK.policy.follow_top_n,
                     "tracking_rank": int(seed.get("rank") or 0),
                     "tracking_signal_date": seed["trade_date"],
-                    "pred_hold_advantage_pp": live_result.get("pred_hold_advantage_pp"),
-                    "pred_extra_upside_pp": live_result.get("pred_extra_upside_pp"),
-                    "close_return_pct": live_result.get("close_return_pct"),
-                    "max_runup_so_far_pct": live_result.get("max_runup_so_far_pct"),
-                    "holding_days": live_result.get("holding_days"),
-                    "should_exit": should_exit,
+                    "holding_days": primary_live.get("holding_days"),
+                    "should_exit": any_sell_now,
+                    "track_count": len(track_payloads),
                 },
             }
         )
     items.sort(
         key=lambda item: (
             0 if item.get("exit_signal_date") else 1,
+            0 if item.get("current_judgement") == "模型分歧" else 1,
             str(item.get("entry_signal_date") or ""),
             int(item.get("rank") or 0),
             str(item.get("symbol") or ""),
@@ -694,10 +808,10 @@ def build_daily_exit_watchlist(asof_trade_date: str) -> Dict[str, Any]:
     )
     return {
         "trade_date": asof_trade_date,
-        "policy_id": POLICY.policy_id,
-        "policy_name": POLICY.policy_name,
-        "strategy_mode": POLICY.strategy_mode,
-        "follow_top_n": POLICY.follow_top_n,
+        "policy_id": DEFAULT_DUAL_POLICY_ID,
+        "policy_name": DEFAULT_DUAL_POLICY_NAME,
+        "strategy_mode": PRIMARY_TRACK.policy.strategy_mode,
+        "follow_top_n": PRIMARY_TRACK.policy.follow_top_n,
         "items": items,
     }
 

@@ -1,0 +1,4 @@
+probe_cluster_type,stock_count,avg_best_fwd_10d_high,median_best_fwd_10d_high,avg_best_fwd_20d_close,median_best_fwd_20d_close
+两次试盘,25,11.82788695652174,8.7388,10.109295238095239,5.7489
+单次试盘,220,9.864239130434783,5.74375,-2.719901408450704,-6.1857500000000005
+多次试盘,1,13.4174,13.4174,5.9633,5.9633

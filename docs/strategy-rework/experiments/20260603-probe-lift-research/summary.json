@@ -1,0 +1,63 @@
+{
+  "scan_range": {
+    "start": "2026-03-02",
+    "end": "2026-06-03"
+  },
+  "thresholds": {
+    "probe_bar_high_ret_pct": 4.467106370757701,
+    "probe_bar_close_ret_pct": 2.7027027027027195,
+    "probe_amount_vs_day_median": 12.804827675687328,
+    "probe_same_day_pullback_ratio": 0.2904398826979458,
+    "probe_same_day_later_high_pct": 0.2535502825439795,
+    "probe_oib_ratio": 0.2210080966102539,
+    "launch_same_day_later_high_pct": 2.69151138716357,
+    "launch_close_pullback_ratio_max": -0.25000000000000133,
+    "launch_day_return_pct": 5.745939987412263,
+    "relaunch_return_3d_pct": 4.0
+  },
+  "event_counts": {
+    "non_probe": 19111,
+    "launch_day": 4899,
+    "probe_candidate": 273
+  },
+  "probe_roles": {
+    "首次试盘": 246,
+    "重新试盘": 25,
+    "连续试盘": 2
+  },
+  "beiyinmei_rows": [
+    {
+      "trade_date": "2026-06-01",
+      "event_time": "10:30",
+      "event_kind": "probe_candidate",
+      "event_role": "first_probe",
+      "sequence_label": "首次试盘",
+      "bar_high_ret_pct": 6.8686868686868685,
+      "amount_vs_day_median": 29.839431532708513,
+      "same_day_pullback_ratio": 0.4411764705882365,
+      "same_day_later_high_pct": 0.0
+    },
+    {
+      "trade_date": "2026-06-02",
+      "event_time": "13:00",
+      "event_kind": "probe_candidate",
+      "event_role": "continuous_probe",
+      "sequence_label": "连续试盘",
+      "bar_high_ret_pct": 5.2208835341365445,
+      "amount_vs_day_median": 22.969436388548637,
+      "same_day_pullback_ratio": 0.5,
+      "same_day_later_high_pct": 0.0
+    },
+    {
+      "trade_date": "2026-06-03",
+      "event_time": "14:30",
+      "event_kind": "launch_day",
+      "event_role": "probe_to_launch",
+      "sequence_label": "试盘后启动",
+      "bar_high_ret_pct": 3.2504780114722687,
+      "amount_vs_day_median": 4.449096184533084,
+      "same_day_pullback_ratio": 1.1764705882352957,
+      "same_day_later_high_pct": 4.074074074074074
+    }
+  ]
+}

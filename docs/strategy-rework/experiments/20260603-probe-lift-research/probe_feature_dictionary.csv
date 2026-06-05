@@ -1,0 +1,17 @@
+feature_name,business_name,business_meaning
+probe_index,试盘序号,第一次、第二次、第三次试盘。
+oib_ratio,订单失衡强度,试盘当日 OIB / 成交额，反映主动推动是否明显。
+l2_super_net_ratio,超大单净流入强度,试盘当日超大单净额 / 成交额。
+l2_main_net_ratio,主力净流入强度,试盘当日主力净额 / 成交额。
+same_day_pullback_ratio,同日回吐比例,试盘拉升后，当天回吐了多少。
+amount_vs_day_median,放量倍数,试盘 5 分钟成交额相对当日中位 5 分钟成交额的倍数。
+buy_support_ratio,买盘托举强度,盘口买方承接是否明显。
+support_pressure_spread,托举减抛压差,买盘托举相对卖盘压力的净差。
+hot_theme_best_rank,热点题材排名,试盘发生日，该票归属热点的最好排名。
+hot_theme_is_top10,是否属于前排热点,试盘发生日是否属于热点前十。
+d1_l2_super_net_ratio,试盘后 1 日超大单确认,试盘后第 1 日超大单是否继续流入。
+d1_oib_ratio,试盘后 1 日 OIB 确认,试盘后第 1 日订单失衡是否继续为正。
+d3_l2_super_net_ratio,试盘后 3 日超大单确认,试盘后第 3 日超大单是否继续流入。
+d3_oib_ratio,试盘后 3 日 OIB 确认,试盘后第 3 日订单失衡是否继续为正。
+d5_l2_super_net_ratio,试盘后 5 日超大单确认,试盘后第 5 日超大单是否继续流入。
+d5_oib_ratio,试盘后 5 日 OIB 确认,试盘后第 5 日订单失衡是否继续为正。

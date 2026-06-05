@@ -1,0 +1,31 @@
+{
+  "range": {
+    "train_start": "2024-09-02",
+    "train_end": "2025-09-30",
+    "valid_start": "2025-10-01",
+    "valid_end": "2025-12-31"
+  },
+  "probe_count": 858,
+  "targets": {
+    "limitup_rate": 0.3951,
+    "trend20_rate": 0.2727
+  },
+  "metrics": {
+    "limitup": {
+      "train_auc": 0.663,
+      "valid_auc": 0.6033,
+      "train_base_rate": 0.3896,
+      "valid_base_rate": 0.4086,
+      "train_n": 752,
+      "valid_n": 93
+    },
+    "trend": {
+      "train_auc": 0.7609,
+      "valid_auc": 0.7042,
+      "train_base_rate": 0.2779,
+      "valid_base_rate": 0.2366,
+      "train_n": 752,
+      "valid_n": 93
+    }
+  }
+}

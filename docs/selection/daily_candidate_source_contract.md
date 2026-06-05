@@ -13,9 +13,11 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 ## 2. 当前统一入口
 
 - 工作台统一候选池入口：`Selection Research` 工作台。
-- `机会发现模型` / `spark_opportunity_selector` 是盘后模型候选源，接入工作台统一候选池和模拟盘。
+- 当前活跃候选源为：`spark_opportunity_selector`、`stable_capital_callback`、`trend_continuation_callback`、`probe_day0_watch`、`probe_d3_confirmed`。
+- `机会发现模型` / `spark_opportunity_selector` 是盘后模型候选源，`probe_day0_watch` / `probe_d3_confirmed` 是已正式接入的试盘策略候选源。
 - 日常入口应先从统一候选池进入，再决定是否查看热点、复盘、长期趋势等子专题解释。
 - 合并候选时，模型源优先级应高于策略源；单日数量上限按来源单独配置，不做全局统一配额。
+- `星火双轨持仓跟踪` 不属于候选源；它是候选买入后的盘后持仓动作层，单独进入 `exit_watchlist / dual_exit_tracks` 并在工作台右侧展示。
 
 ## 3. 候选源边界
 
@@ -23,6 +25,7 @@ trade_date -> source adapter -> standard candidate records -> selection_candidat
 
 - `Selection Research` 工作台主候选池。
 - `机会发现模型` 输出的盘后模型候选。
+- `试盘观察池 / D3 确认池` 输出的盘后规则候选。
 
 子专题，不是独立主线入口：
 

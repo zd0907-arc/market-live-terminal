@@ -29,6 +29,15 @@
 | `docs/archive/selection/daily_selection_workbench_integration_plan_2026-05-16.md` | 每日选股工作台接入方案（已归档） |
 | `docs/selection/daily_candidate_source_contract.md` | 每日候选来源字段契约 |
 
+当前如果是做“模型训练 / 新方向探索 / 资料梳理”，先看：
+
+- `docs/model-research/README.md`
+- `docs/model-research/research-directions-index.md`
+- `docs/model-research/evaluation-metrics-dictionary.md`
+- `docs/model-research/current-material-map.md`
+- `docs/model-research/experiment-artifact-governance.md`
+- `docs/model-research/worktree-lifecycle.md`
+
 当前顶层保留的长记忆入口只保留少数几份：
 - `docs/selection/daily_candidate_source_contract.md`
 - `docs/selection/opportunity_discovery_model_final.md`
@@ -49,7 +58,7 @@ trade_date -> source adapter -> standard candidate records
 
 `daily_selection_workbench_integration_plan_2026-05-16.md` 属于阶段过程材料，已移入 archive 视角，不再作为顶层日常入口。
 
-## 2. 当前星火模型还缺什么
+## 2. 当前星火模型状态
 
 ### 星火机会模型
 
@@ -62,13 +71,13 @@ trade_date -> source adapter -> standard candidate records
 | 最新候选 | `latest_candidates.csv` / `latest_actionable_candidates.csv` |
 | 说明文档 | `docs/selection/opportunity_discovery_model_final.md` |
 
-还缺：
+当前已完成：
 
 1. `generate_daily_candidates(trade_date)` 标准适配器。
-2. 按任意目标日期推理，而不是只读 `latest_candidates.csv`。
+2. 按任意目标日期重算，而不是只读 `latest_candidates.csv`。
 3. 标准候选 JSON 样例。
 4. 模型 manifest，明确 `source_id/source_version/训练截止日/标签定义/数据依赖`。
-5. 写入 `selection_candidate_sources` 的转换逻辑。
+5. 写入 `selection_candidate_sources` 的转换逻辑，并已接入 `selection_daily_workbench`。
 
 ### 守势持仓模型
 
@@ -88,7 +97,7 @@ trade_date -> source adapter -> standard candidate records
 4. 输出 `hold / watch_risk / sell_next_open` 的标准动作记录。
 5. 明确生产时到底使用哪个冻结窗口模型，不能让页面或用户手动选 `2026-03_postclose_exit.joblib` 这种文件。
 
-因此第一批只能先接星火机会模型候选；守势持仓模型应放到 P4。
+因此当前“星火机会模型进入统一候选池”这一步已完成；守势持仓模型的统一训练与动作接口仍放在后续收口。
 
 ## 3. 模型命名规则
 
@@ -299,7 +308,7 @@ docs/selection/model_market_index_daily_runbook.md
 watch_only
 ```
 
-原因：已有回测价值和模型产物，但还缺按 `trade_date` 的生产推理适配器和真实前推记录。
+原因：已具备按 `trade_date` 的生产推理适配器并进入统一候选池，但仍以观察为主，不直接升级为正式自动买入来源。
 
 守势持仓模型当前应是：
 
@@ -311,13 +320,10 @@ research
 
 ## 11. 当前下一步
 
-模型侧下一步只做三件事：
+模型侧当前下一步收口为两件事：
 
-1. 给星火机会模型补 `source_manifest.json`。
-2. 给星火机会模型补 `generate_daily_candidates(trade_date)` 适配器。
-3. 产出一天标准候选 JSON 样例，交给工作台开发侧对接。
-
-守势持仓模型等 `model_position_daily` 定下来后，再做动作适配器。
+1. 继续做真实前推观察，决定 `watch_only` 是否有升级空间。
+2. 把守势持仓模型的统一输入输出契约补齐，再决定是否保留旧 `sentinel_postclose_exit` 口径。
 
 ## 12. 星火机会模型 1.0 已固化产物
 

@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.app.db.selection_db import ensure_selection_schema, get_selection_connection
 from backend.app.db.selection_db import query_exit_watchlist_rows, replace_exit_watchlist_rows
+from backend.app.services.spark_opportunity_exit import DEFAULT_DUAL_POLICY_ID, DEFAULT_DUAL_POLICY_NAME
 from backend.app.services.spark_opportunity_selector import SOURCE_ID as SPARK_SOURCE_ID
 
 ACTION_PRIORITY = {
@@ -20,9 +21,11 @@ SOURCE_PRIORITY = {
     SPARK_SOURCE_ID: 0,
     "stable_capital_callback": 1,
     "trend_continuation_callback": 2,
+    "probe_d3_confirmed": 3,
+    "probe_day0_watch": 4,
 }
 MAX_TRADE_DATE_WINDOW_DAYS = 540
-DEFAULT_EXIT_POLICY_ID = "pc_model_th6_stop12"
+DEFAULT_EXIT_POLICY_ID = DEFAULT_DUAL_POLICY_ID
 
 
 def _json_dump(value: Any) -> str:
@@ -105,8 +108,24 @@ def _dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _sanitize_artifact_path(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    normalized = text.replace("\\", "/").rstrip("/")
+    if "/" not in normalized:
+        return normalized
+    parts = [part for part in normalized.split("/") if part]
+    if len(parts) >= 2:
+        return "/".join(parts[-2:])
+    return parts[-1]
+
+
 def _exit_watch_row_to_candidate(row: Any) -> Dict[str, Any]:
     raw_payload = _json_load(row["raw_payload_json"], {})
+    dual_exit_tracks = raw_payload.get("dual_exit_tracks") if isinstance(raw_payload.get("dual_exit_tracks"), list) else []
+    spark_exit_meta = _dict(raw_payload.get("spark_exit_meta"))
+    candidate_types = _list(raw_payload.get("candidate_types")) or ["spark_exit_watch"]
     return {
         "rank": int(row["rank"] or 0),
         "symbol": str(row["symbol"]),
@@ -121,11 +140,13 @@ def _exit_watch_row_to_candidate(row: Any) -> Dict[str, Any]:
         "stealth_score": 0.0,
         "breakout_score": 0.0,
         "distribution_score": 0.0,
-        "strategy_display_name": "星火进攻版持仓跟踪",
-        "strategy_internal_id": str(row["source_id"] or ""),
+        "strategy_display_name": str(row["policy_name"] or raw_payload.get("strategy_display_name") or DEFAULT_DUAL_POLICY_NAME),
+        "strategy_internal_id": str(row["source_id"] or raw_payload.get("strategy_internal_id") or ""),
         "feature_version": "spark_opportunity_exit_watchlist",
-        "strategy_version": str(row["policy_id"] or ""),
-        "candidate_types": ["spark_exit_watch"],
+        "strategy_version": str(row["policy_id"] or DEFAULT_EXIT_POLICY_ID),
+        "policy_id": str(row["policy_id"] or DEFAULT_EXIT_POLICY_ID),
+        "policy_name": str(row["policy_name"] or DEFAULT_DUAL_POLICY_NAME),
+        "candidate_types": candidate_types,
         "entry_allowed": bool(row["entry_allowed"]),
         "entry_block_reasons": [],
         "selection_rank_score": _safe_float(row["score"]),
@@ -147,6 +168,8 @@ def _exit_watch_row_to_candidate(row: Any) -> Dict[str, Any]:
         "primary_source_type": str(row["source_type"] or ""),
         "source_details": _json_load(row["source_details_json"], []),
         "trade_plan": _json_load(row["trade_plan_json"], {}),
+        "dual_exit_tracks": dual_exit_tracks,
+        "spark_exit_meta": spark_exit_meta,
         "raw_payload": raw_payload,
     }
 
@@ -253,7 +276,7 @@ def normalize_candidate_record(record: Dict[str, Any]) -> Dict[str, Any]:
         "entry_block_reasons": _list(record.get("entry_block_reasons")),
         "explain_factors": _dict(record.get("explain_factors")),
         "raw_payload": _dict(record.get("raw_payload")),
-        "artifact_path": _clean_text(record.get("artifact_path"), ""),
+        "artifact_path": _sanitize_artifact_path(record.get("artifact_path")),
     }
 
 
@@ -414,7 +437,7 @@ def _source_row_to_dict(row: Any) -> Dict[str, Any]:
         "entry_block_reasons": _json_load(row["entry_block_reasons_json"], []),
         "explain_factors": _json_load(row["explain_factors_json"], {}),
         "raw_payload": _json_load(row["raw_payload_json"], {}),
-        "artifact_path": str(row["artifact_path"] or ""),
+        "artifact_path": _sanitize_artifact_path(row["artifact_path"]),
     }
 
 
@@ -899,9 +922,11 @@ def replace_daily_exit_watchlist(trade_date: str, payload: Dict[str, Any]) -> in
 
 def query_daily_exit_watchlist(trade_date: str, policy_id: str = DEFAULT_EXIT_POLICY_ID) -> Dict[str, Any]:
     rows = query_exit_watchlist_rows(trade_date, policy_id=policy_id)
+    if not rows and policy_id == DEFAULT_EXIT_POLICY_ID:
+        rows = query_exit_watchlist_rows(trade_date, policy_id=None)
     return {
         "trade_date": str(trade_date),
-        "policy_id": str(policy_id),
-        "policy_name": str(rows[0]["policy_name"]) if rows else "星火进攻版",
+        "policy_id": str(rows[0]["policy_id"]) if rows else str(policy_id),
+        "policy_name": str(rows[0]["policy_name"]) if rows else DEFAULT_DUAL_POLICY_NAME,
         "items": [_exit_watch_row_to_candidate(row) for row in rows],
     }

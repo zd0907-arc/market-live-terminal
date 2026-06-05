@@ -355,6 +355,13 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       importance: item.importance,
     }));
   }, [eventFeed, researchContext?.research_evidence?.items]);
+  const probeHistorySource = useMemo(() => {
+    const sourceDetails = (profile?.daily_source_details || candidate?.source_details || []) as Array<Record<string, any>>;
+    return sourceDetails.find((item) => {
+      const sourceId = String(item?.source_id || '');
+      return sourceId === 'probe_day0_watch' || sourceId === 'probe_d3_confirmed';
+    }) || null;
+  }, [profile?.daily_source_details, candidate?.source_details]);
 
   if (!candidate || !activeStock) {
     return <div className="py-16 text-center text-sm text-slate-500">请选择左侧候选，右侧会直接加载复盘决策视图。</div>;
@@ -391,13 +398,6 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
     ].filter(Boolean).join('。')
     || '决策解释还没生成，点击“刷新研究摘要”后会把事件催化、趋势回踩和资金确认合成一段人话。';
   const auditFlags = researchContext?.source_audit?.audit_flags || [];
-  const probeHistorySource = useMemo(() => {
-    const sourceDetails = (profile?.daily_source_details || candidate?.source_details || []) as Array<Record<string, any>>;
-    return sourceDetails.find((item) => {
-      const sourceId = String(item?.source_id || '');
-      return sourceId === 'probe_day0_watch' || sourceId === 'probe_d3_confirmed';
-    }) || null;
-  }, [profile?.daily_source_details, candidate?.source_details]);
   const probeHistoryExplain = (probeHistorySource?.explain_factors || {}) as Record<string, any>;
   const probeHistorySummary = String(
     probeHistoryExplain.history_summary_text

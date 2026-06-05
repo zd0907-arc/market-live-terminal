@@ -51,6 +51,8 @@ const STRATEGY_LABELS: Record<string, string> = {
   spark_opportunity_selector: '星火机会模型 1.0',
   stable_capital_callback: '资金流回调稳健',
   trend_continuation_callback: '趋势中继高质量回踩',
+  probe_day0_watch: '试盘观察池',
+  probe_d3_confirmed: '试盘D3确认池',
   v2: '旧策略对照',
 };
 type CandidateEmptyState = 'idle' | 'not_run' | 'completed_empty' | 'failed';
@@ -68,6 +70,8 @@ const sourceBadgeClass = (sourceId?: string) => {
   if (sourceId === 'spark_opportunity_selector') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
   if (sourceId === 'trend_continuation_callback') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
   if (sourceId === 'stable_capital_callback') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (sourceId === 'probe_day0_watch') return 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200';
+  if (sourceId === 'probe_d3_confirmed') return 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200';
   return 'border-slate-700 bg-slate-950 text-slate-400';
 };
 const fmtSortScoreLabel = (item: SelectionCandidateItem) => {
@@ -77,6 +81,13 @@ const fmtSortScoreLabel = (item: SelectionCandidateItem) => {
     return `排序分｜源分${fmtNum(sourceScore)}`;
   }
   return '综合分';
+};
+
+const dualTrackToneClass = (status?: string) => {
+  if (status === 'sell') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  if (status === 'hold') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
+  if (status === 'closed') return 'border-slate-700 bg-slate-950 text-slate-400';
+  return 'border-slate-700 bg-slate-950 text-slate-300';
 };
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
@@ -862,6 +873,7 @@ const SelectionResearchPage: React.FC = () => {
     const strategyId = item.strategy_internal_id || item.primary_source_id || 'daily_candidate_pool';
     const active = selected?.symbol === item.symbol && selected?.trade_date === item.trade_date;
     const sourceLabels = (item.source_details?.length ? item.source_details : [{ source_id: strategyId, source_name: item.strategy_display_name || STRATEGY_LABELS[String(strategyId)] || strategyId }]).slice(0, 3);
+    const dualTracks = item.dual_exit_tracks || [];
     return (
       <button
         key={`daily_candidate_pool-${item.symbol}-${item.trade_date}-${item.rank}`}
@@ -886,6 +898,15 @@ const SelectionResearchPage: React.FC = () => {
                 <span className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-500">+{(item.source_count || 0) - sourceLabels.length}</span>
               ) : null}
             </div>
+            {dualTracks.length > 0 ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                {dualTracks.map((track) => (
+                  <span key={`${item.symbol}-${track.track_id}`} className={`rounded border px-1.5 py-0.5 ${dualTrackToneClass(track.status)}`}>
+                    {track.track_name}：{track.current_judgement || '--'}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="grid min-w-[132px] shrink-0 grid-cols-2 gap-2 text-right text-[10px]">
             <div>
@@ -894,7 +915,7 @@ const SelectionResearchPage: React.FC = () => {
             </div>
             <div>
               <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
-              <div className="text-slate-500">动作</div>
+              <div className="text-slate-500">{dualTracks.length > 0 ? '双轨判断' : '动作'}</div>
             </div>
           </div>
         </div>
