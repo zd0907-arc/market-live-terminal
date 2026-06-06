@@ -9,26 +9,36 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from backend.app.core.config import candidate_atomic_db_paths
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, candidate_atomic_db_paths
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MARKET_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
 WATCHLIST_PATH = REPO_ROOT / "data" / "selection" / "research_watchlist" / "watchlist.json"
 SNAPSHOT_DIR = REPO_ROOT / "data" / "selection" / "research_watchlist" / "snapshots"
 DAILY_DOC_DIR = REPO_ROOT / "docs" / "selection" / "research_watchlist" / "daily"
-SELECTION_DB = MARKET_DATA_ROOT / "selection" / "selection_research.db"
+SELECTION_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
 
 
 def resolve_atomic_db() -> Path:
-    explicit = str(os.getenv("ATOMIC_MAINBOARD_DB_PATH") or os.getenv("ATOMIC_DB_PATH") or "").strip()
+    explicit = str(
+        os.getenv("ATOMIC_MAINBOARD_DB_PATH")
+        or os.getenv("ATOMIC_COMPACT_DB_PATH")
+        or os.getenv("ATOMIC_DB_PATH")
+        or ""
+    ).strip()
     if explicit:
         return Path(explicit)
     for raw in candidate_atomic_db_paths():
         path = Path(str(raw))
         if path.exists():
             return path
-    return MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+    return DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 
 
 ATOMIC_DB = resolve_atomic_db()

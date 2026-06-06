@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
 DEFAULT_ATOMIC_DB = Path(

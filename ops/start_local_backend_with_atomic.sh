@@ -4,8 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DB_PATH_DEFAULT="$ROOT/data/market_data.db"
 USER_DB_PATH_DEFAULT="$ROOT/data/user_data.db"
-FORMAL_DATA_ROOT_DEFAULT="/Users/dong/Desktop/AIGC/market-data"
-ATOMIC_DEFAULT="${ATOMIC_DEFAULT:-$FORMAL_DATA_ROOT_DEFAULT/atomic_facts/market_atomic_mainboard_compact_current.db}"
+FORMAL_DATA_ROOT_DEFAULT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+RESEARCH_ROOT_DEFAULT="$FORMAL_DATA_ROOT_DEFAULT/research/current"
+if [ -d "$RESEARCH_ROOT_DEFAULT" ]; then
+  ATOMIC_ROOT_DEFAULT="$RESEARCH_ROOT_DEFAULT"
+else
+  ATOMIC_ROOT_DEFAULT="$FORMAL_DATA_ROOT_DEFAULT"
+fi
+ATOMIC_DEFAULT="${ATOMIC_DEFAULT:-$ATOMIC_ROOT_DEFAULT/atomic_facts/market_atomic_mainboard_compact_current.db}"
 ATOMIC_REPO_DEFAULT="$ROOT/data/atomic_facts/market_atomic_mainboard_compact_current.db"
 
 export DB_PATH="${DB_PATH:-$DB_PATH_DEFAULT}"

@@ -4,12 +4,29 @@ from __future__ import annotations
 import csv
 import math
 import re
+import os
 import sqlite3
+import sys
 from pathlib import Path
 from statistics import mean, median
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
+
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
 IN_CSV = ROOT / "data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv"
 OUT_MD = ROOT / "docs/selection/market_heat/backtests/hot_theme_rule_pack_portfolio_2025.md"
 OUT_TRADES = ROOT / "data/selection/market_heat/backtests/hot_theme_rule_pack_portfolio_2025_trades.csv"

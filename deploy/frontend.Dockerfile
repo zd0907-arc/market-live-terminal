@@ -1,5 +1,7 @@
+ARG BASE_IMAGE_PREFIX=
+
 # Stage 1: 构建阶段 (Node.js 环境)
-FROM node:20-alpine AS builder
+FROM ${BASE_IMAGE_PREFIX}node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: 运行阶段 (Nginx 环境)
-FROM nginx:alpine
+FROM ${BASE_IMAGE_PREFIX}nginx:alpine
 
 # 复制编译好的静态文件到 Nginx 目录
 COPY --from=builder /app/dist /usr/share/nginx/html

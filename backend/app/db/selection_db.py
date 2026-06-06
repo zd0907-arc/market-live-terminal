@@ -3,9 +3,9 @@ import os
 import sqlite3
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import DATA_DIR
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
-SELECTION_DATA_DIR = os.getenv("SELECTION_DATA_DIR", os.path.join(DATA_DIR, "selection"))
+SELECTION_DATA_DIR = os.getenv("SELECTION_DATA_DIR", os.path.join(RESEARCH_CURRENT_ROOT, "selection"))
 SELECTION_DB_FILE = os.getenv("SELECTION_DB_PATH", os.path.join(SELECTION_DATA_DIR, "selection_research.db"))
 
 FeatureRow = Tuple[

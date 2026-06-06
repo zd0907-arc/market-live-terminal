@@ -9,7 +9,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-DEFAULT_DATA_DIR = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
+FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_RESEARCH_ROOT = FORMAL_MARKET_DATA_ROOT / "research" / "current"
+DEFAULT_DATA_DIR = Path(os.getenv("DATA_DIR", str(DEFAULT_RESEARCH_ROOT if DEFAULT_RESEARCH_ROOT.is_dir() else FORMAL_MARKET_DATA_ROOT)))
 DEFAULT_INDEX_DB = Path(os.getenv("MODEL_INDEX_DB", str(DEFAULT_DATA_DIR / "selection" / "model_market_index_daily.db")))
 DEFAULT_FEATURE_DB = Path(
     os.getenv("MODEL_FEATURE_DB_PATH", str(DEFAULT_DATA_DIR / "selection" / "model_feature_store.db"))

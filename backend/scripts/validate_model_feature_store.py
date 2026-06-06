@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 from collections import defaultdict
@@ -12,7 +13,10 @@ from typing import Any, Iterable, Optional
 from urllib.parse import quote
 
 
-DEFAULT_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db")
+FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_RESEARCH_ROOT = FORMAL_MARKET_DATA_ROOT / "research" / "current"
+DEFAULT_DATA_ROOT = Path(os.getenv("DATA_DIR", str(DEFAULT_RESEARCH_ROOT if DEFAULT_RESEARCH_ROOT.is_dir() else FORMAL_MARKET_DATA_ROOT)))
+DEFAULT_DB = Path(os.getenv("MODEL_FEATURE_DB_PATH", str(DEFAULT_DATA_ROOT / "selection" / "model_feature_store.db")))
 DEFAULT_SCAN_REGEX = "|".join(
     [
         "atomic_" + "limit_state" + "_5m",

@@ -49,6 +49,7 @@ WINDOWS: Tuple[Tuple[str, str, str], ...] = (
 ENTRY_STRATEGIES: Tuple[Dict[str, Any], ...] = (
     {"name": "top1", "mode": "top1"},
     {"name": "top1_top2_conditional", "mode": "top1_top2_conditional"},
+    {"name": "top5_equal", "mode": "top5_equal"},
 )
 
 
@@ -185,7 +186,10 @@ POSTCLOSE_FEATURES: Tuple[str, ...] = tuple(
             "hot_theme_best_rank",
             "hot_theme_score",
             "hot_theme_persistence_score",
+            "hot_theme_member_count",
             "hot_theme_is_top10",
+            "hot_theme_is_new_hot",
+            "hot_theme_is_continuing_hot",
             "hot_theme_is_climax_hot",
             "hot_theme_is_fading",
             "signal_limit_up_like",
@@ -552,6 +556,9 @@ def _select_entries(scored: pd.DataFrame, strategy: Dict[str, Any]) -> pd.DataFr
                     picks["weight"] = [0.55, 0.35]
             else:
                 picks["weight"] = 0.70
+        elif str(strategy["mode"]) == "top5_equal":
+            picks = day.head(5).copy()
+            picks["weight"] = 0.18
         else:
             raise ValueError(f"unknown entry strategy: {strategy}")
         if not picks.empty:
@@ -1000,6 +1007,10 @@ def run_command(args: argparse.Namespace) -> None:
             horizon_days=config.horizon_days,
         )
         train_scored, valid_scored, selector_model, selector_features = _score_split(data, validation_start, validation_end, split_config)
+        valid_scored.sort_values(["trade_date", "final_score", "symbol"], ascending=[True, False, True]).groupby("trade_date").head(5).to_csv(
+            out_dir / f"{window}_strict_top5.csv",
+            index=False,
+        )
         exit_samples = _build_postclose_exit_samples(
             train_scored,
             atomic,

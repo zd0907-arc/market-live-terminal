@@ -4,16 +4,32 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
-DEFAULT_SELECTION_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db")
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+DEFAULT_ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
+DEFAULT_SELECTION_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
 DEFAULT_TRADES = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_trades.csv"
 DEFAULT_SUMMARY = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_summary.csv"
 DEFAULT_OUT = ROOT / "public/research/opportunity_trade_review_payload.json"

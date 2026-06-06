@@ -4,14 +4,36 @@ from __future__ import annotations
 import csv
 import json
 import math
+import os
 import sqlite3
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from statistics import mean, median
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
-HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
+
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+HEAT_DB = Path(
+    os.getenv(
+        "FINE_THEME_HEAT_DB",
+        str(DEFAULT_RESEARCH_ROOT / "market_heat" / "fine_theme_heat_daily.db"),
+    )
+)
+ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
 DATA_OUT = ROOT / "data/selection/market_heat/backtests"
 DOC_OUT = ROOT / "docs/selection/market_heat/backtests"
 OUT_CSV = DATA_OUT / "hot_theme_big_mover_l2_precondition_events.csv"

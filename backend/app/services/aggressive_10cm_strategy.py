@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 from backend.app.services.fine_theme_heat_db import connect_fine_heat_ro
 from backend.app.services.selection_strategy_v2 import (
     SelectionV2Params,
@@ -23,8 +24,14 @@ from backend.app.services.selection_strategy_v2 import (
 
 
 STRATEGY_VERSION = "aggressive_10cm_v0_1"
-DEFAULT_SELECTION_DB = "/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db"
-DEFAULT_FINE_HEAT_DB = "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db"
+DEFAULT_SELECTION_DB = os.getenv(
+    "AGGRESSIVE_10CM_SELECTION_DB",
+    os.path.join(RESEARCH_CURRENT_ROOT, "selection", "selection_research.db"),
+)
+DEFAULT_FINE_HEAT_DB = os.getenv(
+    "AGGRESSIVE_10CM_FINE_HEAT_DB",
+    os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_daily_v2.db"),
+)
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from backend.app.core.config import candidate_atomic_db_paths
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, candidate_atomic_db_paths
 
 SOURCE_ID = "spark_opportunity_selector"
 SOURCE_NAME = "星火机会模型 1.0"
@@ -21,7 +21,7 @@ STATUS = "watch_only"
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MODEL_DIR = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1"
-DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
 DEFAULT_ATOMIC_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts/market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = DEFAULT_MARKET_DATA_ROOT / "selection/selection_research.db"
 DEFAULT_HEAT_DB = DEFAULT_MARKET_DATA_ROOT / "market_heat/fine_theme_heat_daily_v2.db"
@@ -43,6 +43,13 @@ def source_registry_record() -> Dict[str, Any]:
 
 def _model_dir(model_dir: Optional[str | Path] = None) -> Path:
     return Path(model_dir or os.getenv("SPARK_OPPORTUNITY_MODEL_DIR") or DEFAULT_MODEL_DIR)
+
+
+def _artifact_label(path: str | Path) -> str:
+    candidate = Path(path)
+    if candidate.name:
+        return str(Path(candidate.parent.name) / candidate.name) if candidate.parent and candidate.parent.name else candidate.name
+    return str(candidate)
 
 
 def _atomic_db(path: Optional[str | Path] = None) -> Path:
@@ -271,7 +278,7 @@ def standardize_candidate_row(row: Any, rank: int) -> Dict[str, Any]:
             "entry_signal_date": _clean_text(_row_get(row, "entry_signal_date"), trade_date),
             "entry_date": entry_date or None,
         },
-        "artifact_path": str(_model_dir() / "model.joblib"),
+        "artifact_path": _artifact_label(_model_dir() / "model.joblib"),
     }
 
 

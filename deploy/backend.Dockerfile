@@ -1,5 +1,7 @@
+ARG BASE_IMAGE_PREFIX=
+
 # 使用官方轻量级 Python 镜像
-FROM python:3.9-slim
+FROM ${BASE_IMAGE_PREFIX}python:3.9-slim
 
 # 设置工作目录
 WORKDIR /app

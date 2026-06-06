@@ -35,10 +35,36 @@ from backend.app.services.selection_strategy_v2 import (  # noqa: E402
     _is_limit_down_day,
     _is_limit_up_day,
 )
+from backend.app.core.config import RESEARCH_CURRENT_ROOT  # noqa: E402
 
 
 DEFAULT_DATA_OUT = ROOT_DIR / "data/selection/aggressive_10cm/execution_agent"
 DEFAULT_DOC_OUT = ROOT_DIR / "docs/strategy-rework/strategies/aggressive-10cm/experiments/execution-agent"
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+DEFAULT_ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
+DEFAULT_SELECTION_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
+DEFAULT_FINE_HEAT_DB = Path(
+    os.getenv(
+        "FINE_THEME_HEAT_V2_DB",
+        os.getenv(
+            "FINE_THEME_HEAT_DB",
+            str(DEFAULT_RESEARCH_ROOT / "market_heat" / "fine_theme_heat_daily_v2.db"),
+        ),
+    )
+)
 BASE_TOP_N = 12
 INITIAL_BUDGET = 1_000_000.0
 
@@ -815,7 +841,7 @@ def _render_readme(summary_payload: Dict[str, Any]) -> str:
 def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
     db_path = os.getenv(
         "ATOMIC_MAINBOARD_DB_PATH",
-        "/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db",
+        str(DEFAULT_ATOMIC_DB),
     )
     if not os.path.exists(db_path):
         raise FileNotFoundError(f"atomic db not found: {db_path}")
@@ -826,8 +852,8 @@ def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
         earliest_metrics_start,
         latest_end,
         db_path=db_path,
-        selection_db_path="/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db",
-        fine_heat_db_path="/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db",
+        selection_db_path=str(DEFAULT_SELECTION_DB),
+        fine_heat_db_path=str(DEFAULT_FINE_HEAT_DB),
     )
     if metrics.empty:
         raise RuntimeError("prepare_metrics returned empty result")
@@ -858,8 +884,8 @@ def run_research(data_out: Path, doc_out: Path) -> Dict[str, Any]:
         },
         "data_sources": {
             "atomic_db": db_path,
-            "selection_db": "/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db",
-            "fine_heat_db": "/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db",
+            "selection_db": str(DEFAULT_SELECTION_DB),
+            "fine_heat_db": str(DEFAULT_FINE_HEAT_DB),
         },
         "windows": [{"start_date": s, "end_date": e} for s, e in WINDOWS],
         "variants": [asdict(v) for v in VARIANTS],

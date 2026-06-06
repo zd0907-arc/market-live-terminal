@@ -31,7 +31,11 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_MAC_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
+DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
+DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
+DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
+DEFAULT_MAC_RUNTIME_ROOT = DEFAULT_MAC_LIVE_ROOT if DEFAULT_MAC_LIVE_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
 
 WIN_HOST = os.getenv("L2_WIN_HOST", "")
 WIN_HOST_CANDIDATES = [
@@ -65,10 +69,13 @@ CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal"
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
 LOCAL_DATA_ROOT = Path(
     os.getenv("LOCAL_PROCESSED_DATA_ROOT")
+    or os.getenv("RESEARCH_CURRENT_ROOT")
     or os.getenv("MARKET_DATA_ROOT")
     or (str(DEFAULT_MAC_DATA_ROOT) if DEFAULT_MAC_DATA_ROOT.exists() else str(ROOT_DIR / "data"))
 )
-LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_DATA_ROOT / "market_data.db")))
+LOCAL_LIVE_DATA_ROOT = Path(os.getenv("LOCAL_LIVE_DATA_ROOT") or os.getenv("LIVE_DATA_ROOT") or str(DEFAULT_MAC_RUNTIME_ROOT))
+LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_LIVE_DATA_ROOT / "market_data.db")))
+LOCAL_USER_DB = Path(os.getenv("LOCAL_USER_DB", str(LOCAL_LIVE_DATA_ROOT / "user_data.db")))
 LOCAL_ATOMIC_DB = Path(
     os.getenv(
         "LOCAL_ATOMIC_DB",
@@ -1221,7 +1228,11 @@ def _run_local_selection_pipeline(trade_date: str) -> Dict[str, object]:
     iso_date = _compact_to_iso(trade_date)
     _progress(f"[{trade_date}] 开始更新 Mac 本地 selection 主库")
     env = os.environ.copy()
+    env["DATA_DIR"] = str(LOCAL_DATA_ROOT)
+    env["RESEARCH_CURRENT_ROOT"] = str(LOCAL_DATA_ROOT)
+    env["LIVE_DATA_ROOT"] = str(LOCAL_LIVE_DATA_ROOT)
     env["DB_PATH"] = str(LOCAL_MARKET_DB)
+    env["USER_DB_PATH"] = str(LOCAL_USER_DB)
     env["ATOMIC_MAINBOARD_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["ATOMIC_DB_PATH"] = str(LOCAL_ATOMIC_DB)
     env["SELECTION_DB_PATH"] = str(LOCAL_SELECTION_DB)

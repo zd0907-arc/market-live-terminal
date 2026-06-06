@@ -5,10 +5,10 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from backend.app.core.config import DATA_DIR
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 
-MARKET_HEAT_DIR = Path(DATA_DIR) / "market_heat"
+MARKET_HEAT_DIR = Path(RESEARCH_CURRENT_ROOT) / "market_heat"
 DEFAULT_FINE_THEME_HEAT_V2_DB = MARKET_HEAT_DIR / "fine_theme_heat_daily_v2.db"
 DEFAULT_FINE_THEME_HEAT_V1_DB = MARKET_HEAT_DIR / "fine_theme_heat_daily.db"
 DEFAULT_TRADABLE_THEME_MAP_DB = MARKET_HEAT_DIR / "tradable_theme_map.db"

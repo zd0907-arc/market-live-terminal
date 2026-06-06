@@ -3,11 +3,24 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import sqlite3
 from pathlib import Path
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
-ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
 TRADES_CSVS = [
     ROOT / "data/selection/market_heat/backtests/hot_theme_strategy_variants_2025-01_2026-03_trades.csv",
     ROOT / "data/selection/market_heat/backtests/hot_theme_l2_5d_confirm_2025-01_2026-03_trades.csv",

@@ -66,7 +66,12 @@ $ingestToken = Resolve-EnvValue -Name 'INGEST_TOKEN'
 if ([string]::IsNullOrWhiteSpace($ingestToken)) {
     throw 'INGEST_TOKEN missing in Process/User/Machine scope; refuse to register task'
 }
-$cloudApi = Resolve-EnvValue -Name 'CLOUD_API_URL' -Default $CloudApiUrl
+$cloudApi = if ($PSBoundParameters.ContainsKey('CloudApiUrl') -and -not [string]::IsNullOrWhiteSpace($CloudApiUrl)) {
+    $CloudApiUrl
+}
+else {
+    Resolve-EnvValue -Name 'CLOUD_API_URL' -Default $CloudApiUrl
+}
 $focus = Resolve-EnvValue -Name 'FOCUS_TICK_INTERVAL_SECONDS' -Default '5'
 $warm = Resolve-EnvValue -Name 'WARM_TICK_INTERVAL_SECONDS' -Default '30'
 $fullSweep = Resolve-EnvValue -Name 'FULL_SWEEP_INTERVAL_SECONDS' -Default '900'

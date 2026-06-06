@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import pickle
 import sqlite3
 import sys
@@ -24,13 +25,36 @@ try:
 except Exception:  # pragma: no cover
     joblib = None
 
-from backend.app.services.fine_theme_heat_db import connect_fine_heat_ro
+from backend.app.services.fine_theme_heat_db import connect_fine_heat_ro, quote_sqlite_uri, resolve_tradable_theme_map_db
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ATOMIC_DB = Path("/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db")
-DEFAULT_SELECTION_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db")
-DEFAULT_HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db")
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+DEFAULT_ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
+DEFAULT_SELECTION_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
+DEFAULT_HEAT_DB = Path(
+    os.getenv(
+        "FINE_THEME_HEAT_V2_DB",
+        os.getenv(
+            "FINE_THEME_HEAT_DB",
+            str(DEFAULT_RESEARCH_ROOT / "market_heat" / "fine_theme_heat_daily_v2.db"),
+        ),
+    )
+)
 MODEL_VERSION = "opportunity_discovery_trade_l2_v0_1"
 OUT_DIR = ROOT / "data/selection/opportunity_discovery" / MODEL_VERSION
 
@@ -251,6 +275,16 @@ def _connect_ro(path: Path | str) -> sqlite3.Connection:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    if "." in table:
+        schema, name = table.split(".", 1)
+        attached = {str(row[1]) for row in conn.execute("PRAGMA database_list").fetchall()}
+        if schema not in attached:
+            return False
+        row = conn.execute(
+            f"SELECT name FROM {schema}.sqlite_master WHERE type IN ('table', 'view') AND name=?",
+            (name,),
+        ).fetchone()
+        return row is not None
     for schema_table in ("sqlite_temp_master", "sqlite_master"):
         row = conn.execute(
             f"SELECT name FROM {schema_table} WHERE type IN ('table', 'view') AND name=?",
@@ -525,7 +559,58 @@ def add_atomic_features(df: pd.DataFrame) -> pd.DataFrame:
 def load_heat_features(start_date: str, end_date: str, heat_db: Path) -> pd.DataFrame:
     if not heat_db.exists():
         return pd.DataFrame()
-    sql = """
+    sql_theme_map = """
+        WITH heat_base AS (
+            SELECT
+                h.trade_date,
+                h.theme_id,
+                COALESCE(
+                    h.sector_code,
+                    CASE WHEN instr(h.theme_id, 'BK') > 0 THEN substr(h.theme_id, instr(h.theme_id, 'BK')) END
+                ) AS sector_code_norm,
+                CASE
+                    WHEN h.sector_type LIKE 'fine_%' THEN substr(h.sector_type, 6)
+                    ELSE h.sector_type
+                END AS sector_type_norm,
+                h.hot_rank,
+                h.hot_score,
+                h.persistence_score
+            FROM fine_theme_heat_daily AS h
+            WHERE h.trade_date >= ? AND h.trade_date <= ?
+        )
+        SELECT
+            lower(m.symbol) AS symbol,
+            hb.trade_date,
+            MIN(hb.hot_rank) AS hot_theme_best_rank,
+            MAX(hb.hot_score) AS hot_theme_score,
+            MAX(hb.persistence_score) AS hot_theme_persistence_score,
+            COUNT(DISTINCT hb.theme_id) AS hot_theme_member_count,
+            MAX(CASE WHEN hb.hot_rank <= 10 THEN 1 ELSE 0 END) AS hot_theme_is_top10,
+            MAX(CASE WHEN lc.is_new_hot = 1 THEN 1 ELSE 0 END) AS hot_theme_is_new_hot,
+            MAX(CASE WHEN lc.is_continuing_hot = 1 THEN 1 ELSE 0 END) AS hot_theme_is_continuing_hot,
+            MAX(CASE WHEN lc.is_climax_hot = 1 THEN 1 ELSE 0 END) AS hot_theme_is_climax_hot,
+            MAX(CASE WHEN lc.is_fading = 1 THEN 1 ELSE 0 END) AS hot_theme_is_fading
+        FROM heat_base AS hb
+        JOIN theme_map.clean_stock_sector_memberships AS m
+          ON m.sector_code = hb.sector_code_norm
+         AND m.sector_type = hb.sector_type_norm
+        JOIN theme_map.clean_sector_boards AS b
+          ON b.sector_code = m.sector_code
+         AND b.sector_type = m.sector_type
+        LEFT JOIN fine_theme_lifecycle_daily AS lc
+          ON lc.trade_date = hb.trade_date
+         AND lc.theme_id = hb.theme_id
+        WHERE b.clean_status != 'excluded'
+          AND (
+            hb.hot_rank <= 30
+            OR COALESCE(lc.is_new_hot, 0) = 1
+            OR COALESCE(lc.is_continuing_hot, 0) = 1
+            OR COALESCE(lc.is_climax_hot, 0) = 1
+            OR COALESCE(lc.is_fading, 0) = 1
+          )
+        GROUP BY lower(m.symbol), hb.trade_date
+    """
+    sql_legacy = """
         SELECT
             lower(m.symbol) AS symbol,
             m.trade_date,
@@ -546,14 +631,28 @@ def load_heat_features(start_date: str, end_date: str, heat_db: Path) -> pd.Data
           ON lc.trade_date = m.trade_date
          AND lc.theme_id = m.theme_id
         WHERE m.trade_date >= ? AND m.trade_date <= ?
-          AND h.hot_rank <= 30
+          AND (
+            h.hot_rank <= 30
+            OR COALESCE(lc.is_new_hot, 0) = 1
+            OR COALESCE(lc.is_continuing_hot, 0) = 1
+            OR COALESCE(lc.is_climax_hot, 0) = 1
+            OR COALESCE(lc.is_fading, 0) = 1
+          )
         GROUP BY lower(m.symbol), m.trade_date
     """
     try:
-        with connect_fine_heat_ro(heat_db) as conn:
-            if not (_table_exists(conn, "fine_theme_member_daily") and _table_exists(conn, "fine_theme_heat_daily")):
+        with connect_fine_heat_ro(heat_db, tradable_theme_db=resolve_tradable_theme_map_db()) as conn:
+            theme_map_db = resolve_tradable_theme_map_db()
+            attached = {str(row[1]) for row in conn.execute("PRAGMA database_list").fetchall()}
+            if theme_map_db.exists() and "theme_map" not in attached:
+                conn.execute("ATTACH DATABASE ? AS theme_map", (quote_sqlite_uri(theme_map_db),))
+            has_theme_map = _table_exists(conn, "theme_map.clean_stock_sector_memberships") and _table_exists(conn, "theme_map.clean_sector_boards")
+            if has_theme_map and _table_exists(conn, "fine_theme_heat_daily"):
+                df = pd.read_sql_query(sql_theme_map, conn, params=[start_date, end_date])
+            elif _table_exists(conn, "fine_theme_member_daily") and _table_exists(conn, "fine_theme_heat_daily"):
+                df = pd.read_sql_query(sql_legacy, conn, params=[start_date, end_date])
+            else:
                 return pd.DataFrame()
-            df = pd.read_sql_query(sql, conn, params=[start_date, end_date])
     except sqlite3.OperationalError:
         return pd.DataFrame()
     if df.empty:
@@ -728,6 +827,8 @@ def build_dataset(config: OpportunityConfig, atomic_db: Path, selection_db: Path
     panel["signal_broken_limit_up"] = pd.to_numeric(panel.get("broken_limit_up", 0), errors="coerce").fillna(0.0)
 
     labels = build_labels(atomic, config)
+    if not labels.empty and "label_complete_asof_date" not in labels.columns:
+        labels["label_complete_asof_date"] = labels["label_end_date"]
     data = panel.merge(labels, on=["symbol", "trade_date"], how="inner")
     data = data[data["risk_flag_type"].fillna("normal").eq("normal")].copy()
     data = data[pd.to_numeric(data["total_amount"], errors="coerce").fillna(0.0) >= float(config.min_train_amount)].copy()

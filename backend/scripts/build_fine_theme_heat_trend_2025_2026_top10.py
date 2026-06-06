@@ -3,14 +3,37 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
 from pathlib import Path
 from statistics import mean
 
-ROOT = Path('/Users/dong/Desktop/AIGC/market-live-terminal')
-HEAT_DB = Path('/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db')
-THEME_DB = Path('/Users/dong/Desktop/AIGC/market-data/market_heat/tradable_theme_map.db')
-ATOMIC_DB = Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db')
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+HEAT_DB = Path(
+    os.getenv(
+        "FINE_THEME_HEAT_DB",
+        str(DEFAULT_RESEARCH_ROOT / "market_heat" / "fine_theme_heat_daily.db"),
+    )
+)
+THEME_DB = Path(
+    os.getenv(
+        "TRADABLE_THEME_MAP_DB",
+        str(DEFAULT_RESEARCH_ROOT / "market_heat" / "tradable_theme_map.db"),
+    )
+)
+ATOMIC_DB = Path(
+    os.getenv(
+        "ATOMIC_COMPACT_DB_PATH",
+        os.getenv(
+            "ATOMIC_MAINBOARD_DB_PATH",
+            str(DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"),
+        ),
+    )
+)
 OUT = ROOT / 'docs/selection/market_heat/fine_theme_heat_trend_2025_2026_top10.html'
 START = '2025-01-02'
 END = '2026-04-30'

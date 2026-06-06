@@ -7,11 +7,12 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 
-from backend.app.core.config import DB_FILE, USER_DB_FILE, candidate_atomic_db_paths
+from backend.app.core.config import DB_FILE, RESEARCH_CURRENT_ROOT, USER_DB_FILE, candidate_atomic_db_paths
 
-DEFAULT_MARKET_DATA_ROOT = "/Users/dong/Desktop/AIGC/market-data"
-DEFAULT_FORMAL_MAIN_DB = os.path.join(DEFAULT_MARKET_DATA_ROOT, "market_data.db")
-DEFAULT_FORMAL_USER_DB = os.path.join(DEFAULT_MARKET_DATA_ROOT, "user_data.db")
+DEFAULT_MARKET_DATA_ROOT = os.getenv("SELECTION_V2_DATA_DIR", RESEARCH_CURRENT_ROOT)
+DEFAULT_LIVE_DATA_ROOT = os.getenv("SELECTION_V2_LIVE_DATA_DIR", os.getenv("LIVE_DATA_ROOT", DEFAULT_MARKET_DATA_ROOT))
+DEFAULT_FORMAL_MAIN_DB = os.path.join(DEFAULT_LIVE_DATA_ROOT, "market_data.db")
+DEFAULT_FORMAL_USER_DB = os.path.join(DEFAULT_LIVE_DATA_ROOT, "user_data.db")
 DEFAULT_FORMAL_ATOMIC_DB = os.path.join(
     DEFAULT_MARKET_DATA_ROOT,
     "atomic_facts",
@@ -102,6 +103,7 @@ def _candidate_v2_main_db_paths() -> List[str]:
     candidates = [
         os.getenv("SELECTION_V2_MAIN_DB_PATH", "").strip(),
         os.getenv("DB_PATH", "").strip(),
+        os.getenv("SELECTION_V2_ATOMIC_DB_PATH", "").strip(),
         DEFAULT_FORMAL_MAIN_DB,
         DB_FILE,
     ]
@@ -876,16 +878,19 @@ def _load_company_basics(
         "company_context_missing": True,
     }
     with _main_connection(main_db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT symbol, name, market_cap, as_of_date, source
-            FROM stock_universe_meta
-            WHERE lower(symbol)=lower(?) AND as_of_date <= ?
-            ORDER BY as_of_date DESC
-            LIMIT 1
-            """,
-            (normalized_symbol, trade_date),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                """
+                SELECT symbol, name, market_cap, as_of_date, source
+                FROM stock_universe_meta
+                WHERE lower(symbol)=lower(?) AND as_of_date <= ?
+                ORDER BY as_of_date DESC
+                LIMIT 1
+                """,
+                (normalized_symbol, trade_date),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            row = None
         if row:
             basics.update(
                 {

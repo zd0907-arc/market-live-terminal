@@ -12,9 +12,9 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import DATA_DIR, ROOT_DIR, candidate_atomic_db_paths
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, ROOT_DIR, candidate_atomic_db_paths
 
-MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(DATA_DIR, "market_heat")))
+MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat")))
 REPO_THEME_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "themes.seed.json"
 THEME_FILE = Path(os.getenv("MARKET_HEAT_THEME_FILE", str(REPO_THEME_FILE if REPO_THEME_FILE.exists() else MARKET_HEAT_DIR / "themes.seed.json")))
 FINE_HEAT_CACHE_SOURCE = "local atomic_trade_daily + canonical fine themes"
@@ -28,7 +28,7 @@ def _resolve_market_heat_atomic_db() -> Path:
     compact_env = os.getenv("ATOMIC_COMPACT_DB_PATH", "").strip()
     if compact_env:
         compact_candidates.append(compact_env)
-    compact_candidates.append(str(Path(DATA_DIR) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"))
+    compact_candidates.append(str(Path(RESEARCH_CURRENT_ROOT) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"))
     for path in compact_candidates:
         candidate = Path(path)
         if candidate.exists():
@@ -37,17 +37,16 @@ def _resolve_market_heat_atomic_db() -> Path:
         candidate = Path(path)
         if candidate.exists():
             return candidate
-    raise FileNotFoundError(
-        "未找到可用的 market_heat atomic 库：优先使用 compact 库，找不到时回退到 candidate_atomic_db_paths 的可用项"
-    )
+    fallback = Path(compact_candidates[0]) if compact_candidates else Path(RESEARCH_CURRENT_ROOT) / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+    return fallback
 
 
 ATOMIC_DB = _resolve_market_heat_atomic_db()
 LOW_POSITION_L2_SAMPLES_DB = Path(os.getenv("HOT_THEME_LOW_POSITION_L2_SAMPLES_DB", str(MARKET_HEAT_DIR / "hot_theme_low_position_l2_samples.db")))
 FINE_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "fine_hotspot_rules.json"
 THEME_CANONICAL_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "theme_canonical_rules.json"
-TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(DATA_DIR, "market_heat", "tradable_theme_map.db")))
-FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(DATA_DIR, "market_heat", "fine_theme_heat_forecast.db")))
+TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "tradable_theme_map.db")))
+FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_forecast.db")))
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

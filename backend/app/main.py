@@ -34,8 +34,7 @@ except Exception as e:
     logging.error(f"Trade Calendar init failed: {e}")
 
 # 3. Now import routers
-from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest, sandbox_review, review, selection, stock_events, market_heat, trend_research
-# Import removed
+from backend.app.routers import watchlist, market, analysis, config, monitor, sentiment, ingest, sandbox_review, review, stock_events
 from backend.app.services.monitor import monitor as sentiment_monitor
 from backend.app.scheduler import init_scheduler
 from datetime import datetime
@@ -81,6 +80,8 @@ app.include_router(stock_events.router, prefix="/api", tags=["Stock Events"])
 app.include_router(ingest.router, prefix="/api/internal/ingest", tags=["Ingest"])
 app.include_router(review.router, prefix="/api/review", tags=["Review"])
 if is_research_api_routes_enabled():
+    from backend.app.routers import selection, market_heat, trend_research
+
     app.include_router(selection.router, prefix="/api", tags=["Selection Research"])
     app.include_router(market_heat.router, prefix="/api", tags=["Market Heat"])
     app.include_router(trend_research.router, prefix="/api", tags=["Trend Research"])

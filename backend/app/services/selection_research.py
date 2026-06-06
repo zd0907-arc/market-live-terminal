@@ -901,13 +901,23 @@ def _selection_score_col(strategy: str) -> str:
 def get_selection_health() -> Dict[str, object]:
     ensure_selection_schema()
     latest_signal_date = fetch_latest_signal_date()
-    with _main_connection() as conn:
-        min_date, max_date = _available_selection_history_bounds(conn)
-        atomic_min, atomic_max = _available_atomic_trade_bounds()
+    atomic_min, atomic_max = _available_atomic_trade_bounds()
     with get_selection_connection() as conn:
         feature_count = int(conn.execute("SELECT COUNT(*) FROM selection_feature_daily").fetchone()[0])
         signal_count = int(conn.execute("SELECT COUNT(*) FROM selection_signal_daily").fetchone()[0])
         run_count = int(conn.execute("SELECT COUNT(*) FROM selection_backtest_runs").fetchone()[0])
+        feature_bounds = conn.execute(
+            "SELECT MIN(trade_date), MAX(trade_date) FROM selection_feature_daily"
+        ).fetchone()
+        signal_bounds = conn.execute(
+            "SELECT MIN(trade_date), MAX(trade_date) FROM selection_signal_daily"
+        ).fetchone()
+    feature_min = str(feature_bounds[0]) if feature_bounds and feature_bounds[0] else None
+    feature_max = str(feature_bounds[1]) if feature_bounds and feature_bounds[1] else None
+    signal_min = str(signal_bounds[0]) if signal_bounds and signal_bounds[0] else None
+    signal_max = str(signal_bounds[1]) if signal_bounds and signal_bounds[1] else None
+    min_date = feature_min or signal_min
+    max_date = feature_max or signal_max or latest_signal_date
     return {
         "status": "ok",
         "feature_version": FEATURE_VERSION,
@@ -921,7 +931,7 @@ def get_selection_health() -> Dict[str, object]:
         "backtest_runs": run_count,
         "source_snapshot": {
             "history_bounds": {"min_date": min_date, "max_date": max_date},
-            "local_history": {"min_date": min_date, "max_date": max_date, "row_count": None},
+            "local_history": {"min_date": feature_min, "max_date": feature_max, "row_count": feature_count},
             "atomic_bounds": {"min_date": atomic_min, "max_date": atomic_max},
             "atomic_trade_daily": {"min_date": atomic_min, "max_date": atomic_max, "row_count": None},
             "auto_refresh_on_read": SELECTION_AUTO_REFRESH_ON_READ,
