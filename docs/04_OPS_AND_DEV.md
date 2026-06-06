@@ -5,19 +5,18 @@
 > 正式操作先从本页列出的 runbook 和少数正式脚本进入，不要默认从 `ops/` 目录里的历史 `bench / full_reverse / atomic` 族脚本开始。
 
 ## 1. 当前正式运行拓扑
-- **Cloud**：轻量盯盘 / 手机应急查看
+- **NAS**：当前线上前后端、`live/` 轻量盯盘、`research/current` 在线查询、发布/回滚节点
 - **Windows**：原始包、正式跑数、实时 crawler、研究结果产出
 - **Mac**：本地研究站、复盘、选股、文档与开发
-- **NAS**：已打通的家庭服务节点；Mac 可通过 Tailscale 直接 SSH / Web / Docker 管理，后续公网发布优先基于它收口
 
 ## 2. 当前总原则
 1. Windows 是数据主站；Mac 不直接跨网络读 Windows sqlite 主库。
 2. Mac 保留一份同步后的正式库，作为本地研究主消费。
-3. Cloud 不承载 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main` 主链，只保留轻量盯盘链路。
+3. NAS 不承担盘后重跑真相源，但承担当前线上轻量盯盘与 `research/current` 查询主链。
 4. `snapshot` 只作验证/应急，不是正式主方案。
 5. 所有跨机器动作，先过连通性 gate，再执行同步/发布。
 6. Windows -> Mac 正式同步只允许“局域网 HTTP relay / Cloud relay”，禁止再走 SSH/scp 直拉。
-7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者是 `ZhangDataLiveCrawler`，后者当前正式主链是 `ops/run_daily_new_framework.sh`；`ops/run_postclose_l2.sh` 仅保留为旧盘后 L2 / cloud 同步兼容链路。
+7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者当前仍以 Windows `ZhangDataLiveCrawler` 为正式基线，NAS crawler 已跑通但仍在观察期；后者当前正式主链是 `ops/run_daily_new_framework.sh`；`ops/run_postclose_l2.sh` 仅保留为旧盘后 L2 / cloud 同步兼容链路。
 8. Mac -> NAS 默认直连 Tailscale，不再把 Windows 当跳板机。
 
 ## 3. 先看哪个操作文档
@@ -27,7 +26,9 @@
 | Mac 直连 NAS / 远程查库 / 发布控制 / 公网域名规划 | `docs/ops/mac-nas-collaboration.md` |
 | NAS 正式公网域名 / Cloudflare Tunnel 切换 | `docs/ops/nas-public-domain-cloudflare.md` |
 | Windows 数据主站 / crawler / 远控 | `docs/ops/windows-data-station.md` |
-| Cloud 发版 / 冒烟 / 回滚 | `docs/ops/cloud-release.md` |
+| 旧 Cloud 发版 / 退役边界 | `docs/ops/cloud-release.md` |
+| NAS 盘中 crawler 切换 | `docs/ops/nas-crawler-cutover-runbook.md` |
+| NAS `research/current` 发布 / 回滚 | `docs/ops/nas-research-release-runbook.md` |
 | 盘后正式主链 / 兼容旧链路 | `docs/ops/postclose-l2-runbook.md` |
 | 标准开发流程 / 分支收口 / 文档收尾 | `docs/ops/development-workflow.md` |
 | 历史脚本族边界 | `docs/ops/atomic-script-families-boundary.md` |
@@ -70,7 +71,7 @@ https://dxp4800pro.tailfff556.ts.net/
 | 旧盘后链路状态查看 | `ops/check_postclose_l2_status.sh` |
 | 新框架月批 / 阶段状态查看 | `ops/check_windows_new_framework_months_status.sh` |
 | Windows 脚本同步 | `sync_to_windows.sh` |
-| 云端发布 | `deploy_to_cloud.sh` |
+| 旧 Cloud 发布 | `deploy_to_cloud.sh` |
 | 基线检查 | `scripts/check_baseline.sh` |
 
 > `bench / full_reverse / atomic backfill` 一类脚本族属于历史遗留、验证排查或二线运行工具；

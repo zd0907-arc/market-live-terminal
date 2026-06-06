@@ -4,7 +4,7 @@
 >
 > **边界提醒**：本文件只裁决“组件职责/数据流/部署边界”；业务规则与验收标准统一在 `docs/02_BUSINESS_DOMAIN.md`，接口字段约束统一在 `docs/03_DATA_CONTRACTS.md`，执行步骤统一在 `docs/04_OPS_AND_DEV.md`。
 >
-> **当前真相提醒（2026-04-24）**：当前正式架构已收口为 **Windows 数据主站 / Mac 本地研究站 / Cloud 轻量盯盘**。本文件下半段仍保留少量早期演化背景，但当前判断一律先以本文件前 3 节 + `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md` 为准。
+> **当前真相提醒（2026-06-06）**：当前正式架构已收口为 **Windows 数据主站 / Mac 开发与本地研究控制台 / NAS 在线运行节点**。旧 `Cloud` 叙事只按历史阶段理解；当前在线服务、`research/current` 发布与公网收口都以 NAS 线为准。本文件下半段仍保留少量早期演化背景，但当前判断一律先以本文件前 3 节 + `docs/changes/MOD-20260606-02-project-governance-master-plan.md` 为准。
 
 ## 一、 系统角色与物理边界
 
@@ -42,13 +42,20 @@
      - 不把 Windows 当作文档主编辑区；
      - 不让未验真的中间产物直接替代正式库。
 
-3. **指挥中心 (腾讯云 Ubuntu - 公网 IP: 111.229.144.202)**
-   * **职责**：提供轻量盯盘 / 手机应急查看；接收 Windows 的 ingest；承接前端静态资源和轻量 API。
-   * **数据库**：`data/market_data.db`（轻量盯盘链路所需数据），**不再承担 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main` 的主查询或主存储职责**。
+3. **在线服务节点 (家庭 NAS - `dxp4800pro`)**
+   * **职责**：承接当前线上前后端、NAS `research/current` 正式查询口径、发布/回滚链，以及后续公网域名收口。
+   * **数据库与目录口径**：
+     - `live/market_data.db`（在线轻量盯盘库）
+     - `research/current/atomic_facts/*`
+     - `research/current/selection/*`
+     - `research/current/market_heat/*`
+   * **当前事实**：
+     - NAS 查询主链已经切到 `LIVE_DATA_ROOT=/runtime-data/live` 与 `RESEARCH_CURRENT_ROOT=/runtime-data/research/current`
+     - NAS crawler 容器已跑通 ingest 验证，但 Windows `ZhangDataLiveCrawler` 还未正式下线；当前处于观察期
    * **致命红线**：
-     - 云端绝对禁止直接向东财 / AkShare 等外部行情源主动外采；
-     - 云端不是盘后明细底座中转站；
-     - 不把研究型重查询默认压到云端。
+     - 不把 repo 内 `data/*` 误当 NAS 正式数据根；
+     - 不把 bootstrap current 误记成“已长期追平本地正式库”的最终状态；
+     - 不在未完成观察期前下线 Windows 盘中 crawler。
 
 4. **影子 / 样本对象的边界说明**
    * `backend/market.db`、`backend/app/market_data.db`、`backend/app/db/market_data.db` 只作为 shadow / sample / 排障对象存在，不承担正式主链职责。
@@ -56,14 +63,14 @@
 
 ## 二、 核心数据流转架构 (Data Flow)
 
-当前主线数据流是**双下游单主站**：外网 -> Windows -> {Cloud 轻量盯盘, Mac 本地研究站}。
+当前主线数据流是**双下游单主站**：外网 -> Windows -> {NAS 在线轻量盯盘, Mac 本地研究站}。
 
 ### 流水线 A：盘中实时流 (The Live Pipeline)
-1. **前端声明活跃**：线上 / 本地前端打开盯盘页后，通过 `/api/monitor/heartbeat` 上报当前股票和 focus/warm 状态；云端 `/api/monitor/active_symbols` 聚合活跃股票。
-2. **Windows 统一外采**：Windows 计划任务 `ZhangDataLiveCrawler` 启动 `backend/scripts/live_crawler_win.py`，读取云端 `/api/watchlist` 与 `/api/monitor/active_symbols`，再从腾讯行情 / AkShare 拉盘口快照和逐笔。
-3. **射向云端**：Windows 只通过 HTTP POST 写 Cloud：`/api/internal/ingest/snapshots`、`/api/internal/ingest/ticks`，必须携带 `INGEST_TOKEN`。
-4. **云端被动入库**：Cloud 写入轻量 `data/market_data.db` 的 `sentiment_snapshots`、`trade_ticks`、`history_30m` 等盯盘所需表。云端默认 `ENABLE_CLOUD_COLLECTOR=false`，不主动外采。
-5. **页面读取**：线上盯盘页读取 Cloud API；Mac 本地盯盘页默认读取 Mac 本地 DB，必要时单票接口可按需补拉当日 ticks，但不等同于生产后台 crawler。
+1. **前端声明活跃**：线上 / 本地前端打开盯盘页后，通过 `/api/monitor/heartbeat` 上报当前股票和 focus/warm 状态；线上 `active_symbols` 当前由 NAS 后端聚合。
+2. **统一外采主源**：正式生产外采仍以 Windows `ZhangDataLiveCrawler` 为基线；NAS crawler 容器已完成在线跑通验证，但在连续观察期通过前，Windows 盘中 crawler 暂不下线。
+3. **写入在线节点**：生产 ingest 目标当前应理解为 NAS 在线后端的 `/api/internal/ingest/snapshots`、`/api/internal/ingest/ticks`，必须携带 `INGEST_TOKEN`。
+4. **在线节点被动入库**：NAS 写入 `live/market_data.db` 的 `sentiment_snapshots`、`trade_ticks`、`history_30m` 等盯盘所需表。默认 `ENABLE_CLOUD_COLLECTOR=false`，不主动外采。
+5. **页面读取**：线上盯盘页读取 NAS API；Mac 本地盯盘页默认读取 Mac 本地 DB，必要时单票接口可按需补拉当日 ticks，但不等同于生产后台 crawler。
 
 > **[架构澄清] 本地 Tick 存储与容量**：
 > 系统作为“精细化 Watchlist”（约 50 只核心股票）而非全市场雷达。每天产生的有效 Tick 约 20万-40万行，落入 SQLite 仅 20MB-30MB。存满一年不到 10GB。
@@ -79,14 +86,14 @@
    - `model_feature_store_main`（模型训练特征库）
    - Mac 所需日增量或整库同步产物。
 3. **分发下游**：
-   - 轻量结果送 Cloud；
+   - 轻量结果送 NAS `live/`；
    - 研究正式库同步到 Mac。
 
 ### 流水线 C：Mac 本地研究站消费
 1. **首次全量同步**：Mac 从 Windows 同步处理后正式库，当前外置数据根目录优先使用 `/Users/dong/Desktop/AIGC/market-data`。
-2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。Windows -> Mac 数据同步禁止 SSH/scp 直拉，只允许“局域网 HTTP relay / Cloud relay 中转”。
+2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。当前正式入口是 `ops/run_daily_new_framework.sh --json`；如需同时发布到线上运行节点，则使用 `--sync-nas` 进入 NAS `staging -> current -> archive` 链路。
 3. **本地服务消费**：Mac 本地后端通过 `ops/start_local_research_station.sh` 读取本机正式库，为复盘 / 选股 / 研究页面供数。
-4. **本地实时语义**：Mac 本地默认不长期跑后台 crawler（`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`）；打开单票盯盘时，接口可触发按需补拉当日 ticks 并写入本地库。若要获得与线上完全一致的连续盘中体验，应以 Windows -> Cloud 生产实时链路为准。
+4. **本地实时语义**：Mac 本地默认不长期跑后台 crawler（`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`）；打开单票盯盘时，接口可触发按需补拉当日 ticks 并写入本地库。若要获得与线上完全一致的连续盘中体验，应以 Windows/NAS 线上 realtime 链路为准。
 
 ### 流水线 D：兼容链路与过渡工具
 1. `snapshot` 类工具仍可用于验证、裁剪样本或应急排查。
@@ -100,12 +107,12 @@
 |------|------|------|
 | **Windows** | raw 原始包 + `market_data.db` + `atomic_compact_main` + `selection_research_main` + `model_feature_store_main` | 数据真相源 / 跑数主站 |
 | **Mac** | `market-data/market_data.db` + `market-data/atomic_facts/market_atomic_mainboard_compact_current.db` + `market-data/selection/selection_research.db` + `market-data/selection/model_feature_store.db` + `market-data/user_data.db` | 本地研究站主消费 |
-| **Cloud** | 轻量 `data/market_data.db` | 线上盯盘 / 应急访问 |
+| **NAS** | `live/market_data.db` + `research/current/*` | 线上盯盘 / 在线查询 / 正式发布节点 |
 
 ### 数据一致性原则
 * **Windows**：当前数据主站与正式跑数真相源。
 * **Mac 本地**：当前研究、复盘、选股主消费环境；读取同步后的处理后正式库。
-* **Cloud**：轻量线上服务，不作为研究主查询真相源。
+* **NAS**：当前在线运行节点；线上查询和 `research/current` 发布都以它为准，但它不是盘后重跑真相源。
 
 ## 四、 环境变量与配置依赖 (.env Blueprint)
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：

@@ -4,14 +4,15 @@
 - 当前稳定基线目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前主线分支：`main`
 - 当前工作版本：`v5.2.2`
-- 当前真实运行模式：**云端只保留轻量盯盘；Windows 做数据主站；Mac 做本地研究工作台**
+- 当前真实运行模式：**Mac 主开发控制台 + Windows 数据主站 + NAS 在线运行节点**
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
 - 当前已验证 NAS 直连入口：`dxp4800pro` / `100.119.0.126`
 - 当前已验证 NAS 公网入口：`https://dxp4800pro.tailfff556.ts.net/`
-- 当前已验证 NAS Git 入口：`ssh://git@192.168.3.43:2222/zhangdong/market-live-terminal.git`
+- 当前已验证 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
+- 当前 NAS Git 局域网备用入口：`ssh://git@192.168.3.43:2222/zhangdong/market-live-terminal.git`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
-- 当前运行架构总入口：`docs/archive/changes/MOD-20260417-01-local-research-current-state.md`
+- 当前运行架构总入口：`docs/01_SYSTEM_ARCHITECTURE.md`
 - 当前唯一持续更新研究目录：`docs/selection/long_term_trends/`
 - 当前阶段回滚锚点：
   - 老阶段：`stage-pre-selection-v4.2.32`
@@ -35,10 +36,10 @@
 - 若要做治理线收口，先在 `main` 只读排查；进入写入阶段时，治理工作必须放到独立治理分支 / worktree。
 
 ## 当前数据职责
-- 云端：盯盘 / 手机应急查看
+- NAS：线上前后端、`live/` 轻量盯盘、`research/current` 在线查询、发布/回滚节点
 - Windows：raw + 盘后明细底座 + 选股研究 + 模型特征 + 跑数
 - Mac：复盘 + 选股 + 本地前后端 + 文档/开发，读取本机同步后的正式库
-- NAS：已打通的家庭服务节点；Mac 可通过 Tailscale 直接管理，后续公网发布优先基于它收口
+- Windows 盘中 crawler 仍是当前正式基线；NAS crawler 已跑通但还在观察期，Windows 暂未下线
 
 ## 最小自检
 ```bash
@@ -49,7 +50,7 @@ npm run check:baseline
 ## 当前工作原则
 1. 复盘/选股/研究型改动优先按 **Mac 本地研究站** 设计，不默认以上生产为目标。
 2. 不把 `38GB+` 盘后明细底座放到云端；**Mac 允许保留一份处理后全量库**。
-3. 当前最新冻结：**raw 只留 Windows；处理后全量库 Windows / Mac 各保留一份；Cloud 只保留轻量盯盘数据。**
+3. 当前最新冻结：**raw 只留 Windows；处理后正式研究库由 Windows 产出、Mac 主读、NAS 走 `research/current` 在线查询；repo 内 `data/` 只按回退/兼容副本理解。**
 4. Mac 不直接跨网络读 Windows sqlite 主库。
 5. `snapshot` 只作为验证/应急工具，不作为当前正式主方案。
 6. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
@@ -165,4 +166,4 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 老阶段回退：`stage-pre-selection-v4.2.32`
 - 选股进行中阶段回退：`stage-selection-in-progress-v4.3.2`
 - 当前工作版本：`v5.2.2`
-- 运行架构回看：`docs/archive/changes/MOD-20260417-01-local-research-current-state.md`
+- 运行架构当前入口：`docs/01_SYSTEM_ARCHITECTURE.md`

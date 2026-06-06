@@ -7,7 +7,7 @@
 ## 当前正式结论
 1. 当日分时页正式主路径是 `/api/realtime/intraday_fusion`。
 2. 交易日状态机已经收口到明确的盘前 / 盘中 / 午间 / 盘后 / 休盘语义。
-3. Cloud 盯盘是轻量线上能力：云端只被动接收 Windows ingest，不主动外采。
+3. 当前线上盯盘节点是 NAS `live/market_data.db`：线上后端只被动接收 ingest，不主动外采。
 4. Mac 本地盯盘默认读取本机同步库；单票接口允许按需补拉当日 ticks，但不默认启动生产级后台 crawler。
 5. 首页 `realtime/dashboard` 盘后首次打开时，默认先看今天；如果该票今天分时尚未就绪且用户没有手动指定日期，必须自动回退到上一交易日，不能空白。
 
@@ -15,19 +15,19 @@
 ```text
 浏览器盯盘页
   -> /api/monitor/heartbeat
-  -> Cloud active_symbols
-  -> Windows ZhangDataLiveCrawler
+  -> NAS active_symbols
+  -> Windows `ZhangDataLiveCrawler` / NAS crawler(观察期)
   -> 腾讯行情 / AkShare
   -> /api/internal/ingest/snapshots, /api/internal/ingest/ticks
-  -> Cloud data/market_data.db
+  -> NAS live/market_data.db
   -> /api/realtime/dashboard, /api/realtime/intraday_fusion
 ```
 
 关键约束：
-- `INGEST_TOKEN` 必须在 Windows 与 Cloud 对齐。
-- `ENABLE_CLOUD_COLLECTOR=false` 是云端默认红线。
-- Windows crawler 必须只在真实交易日交易时段抓取；周末/节假日不跑全量轮扫和收盘 sweep。
-- `ZhangDataLiveCrawler` 只能保留一个有效 Python crawler 进程，重复进程会造成重复抓取和云端反复覆盖。
+- `INGEST_TOKEN` 必须在 Windows / NAS 线上后端对齐。
+- `ENABLE_CLOUD_COLLECTOR=false` 仍是线上默认红线。
+- Windows crawler 仍是当前正式基线；NAS crawler 已跑通但还在观察期，Windows 暂未下线。
+- `ZhangDataLiveCrawler` 只能保留一个有效 Python crawler 进程，重复进程会造成重复抓取和线上反复覆盖。
 
 ## Mac 本地实时现状
 - 本地启动脚本：`ops/start_local_research_station.sh`。

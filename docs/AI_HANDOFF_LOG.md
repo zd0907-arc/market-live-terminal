@@ -1,5 +1,13 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-06 16:50 | Codex
+- Task ID: `MOD-20260606-02-project-governance-master-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
+- 结论: 这轮项目综合治理已经按总控卡完成到 `Phase 7` 收口。当前已完成三类闭环：一是仓库资产盘点与低风险文件治理，仓库体积约从 `7.8G` 压到 `6.2G`，并把根目录历史兼容库下沉到 `data/legacy/`；二是高曝光真相文档统一到 `Mac 开发控制台 / Windows 数据主站 / NAS 在线运行与 research/current 发布节点` 口径；三是 `Mac -> NAS` 控制面、Git、`research/current` 发布链与线上 API 当前都已有实证。当前 `research/current` 版本为 `nas_daily_new_20260605`，archive 已保留 `20260604 / 20260605` 两个回滚点。
+- 验证: `pytest -q backend/tests/test_market_data_path_config.py backend/tests/test_research_script_path_defaults.py backend/tests/test_nas_release_scripts.py` 通过，共 `14 passed`；`bash ops/nas_list_research_releases.sh` 已确认 current/staging/archive；`bash ops/nas_check_crawler_status.sh` 已确认 `backend/frontend/crawler` 容器在线且 crawler 日志持续推送；`curl -fsS --max-time 10 http://dxp4800pro:8080/api/health` 与 `curl -i --max-time 20 http://dxp4800pro:8080/api/selection/health` 均返回 `200`。
+- 风险: 当前剩余的大文件不再属于“误删候选”，而是显式保留对象：`data/market_data.db`、`data/selection/selection_research.db`、`data/legacy/root_market_data_history.db` 与最近两天 `.run/daily_new_framework/*processed*`。后续若继续做，应转到 `T-034` 那条“正式别名 / shadow sample 迁移规划”，不是继续把这轮治理重复打开。
+- 链接: `docs/changes/MOD-20260606-02-project-governance-master-plan.md`, `docs/changes/MOD-20260606-09-phase7-governance-closeout-audit.md`, `docs/07_PENDING_TODO.md`, `docs/ops/mac-nas-collaboration.md`
+
 ## 2026-06-06 02:05 | Codex
 - Task ID: `MOD-20260606-02-project-governance-master-plan`
 - CAP: `CAP-NAS-OPS`, `CAP-DOCS-GOVERNANCE`

@@ -3,7 +3,20 @@ import os
 import sys
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LIVE_DB_PATH = os.path.join(ROOT_DIR, 'market_data.db')
+LEGACY_DIR = os.path.join(ROOT_DIR, 'data', 'legacy')
+
+
+def _first_existing_path(*candidates):
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return ""
+
+
+LIVE_DB_PATH = _first_existing_path(
+    os.path.join(LEGACY_DIR, 'root_market_data.db'),
+    os.path.join(ROOT_DIR, 'market_data.db'),
+) or os.path.join(LEGACY_DIR, 'root_market_data.db')
 HISTORY_DB_PATH = os.path.join(ROOT_DIR, 'data', 'market_data_history.db')
 
 def merge_databases():

@@ -7,7 +7,7 @@
 当前正式日跑主路径是：
 1. Windows 产出原始包与正式跑数结果
 2. 通过新框架主链刷新 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main`
-3. 必要结果同步到 Mac；轻量盯盘结果同步到 Cloud
+3. 必要结果同步到 Mac；如需上线，则再通过 NAS release 链把正式研究库发布到 `research/current`
 4. `run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
 
 当前要区分两条链：
@@ -102,7 +102,7 @@ docs/selection/model_market_index_daily_runbook.md
 - Windows -> Mac **禁止**走 SSH/scp 直拉。
 - 只允许两条正式路径：
   1. 局域网 HTTP relay
-  2. Cloud relay 中转
+  2. Cloud relay 中转（仅兼容旧中转语义）
 - 脚本当前已内置：
   - 局域网优先
   - 局域网失败自动回退云中转
@@ -134,7 +134,7 @@ bash ops/check_postclose_l2_status.sh
   - Mac `history_5m_l2 = 346154`
   - Mac `atomic_trade_daily = 3184`
   - Mac `selection_feature_daily = 3184`
-  - Cloud 同日 verify 已通过
+  - 当时旧在线节点 verify 已通过；当前线上查询口径已迁到 NAS
 
 ## 4. 当前待完成问题
 - 是否继续推进完全无人值守

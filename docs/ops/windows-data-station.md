@@ -5,7 +5,7 @@ Windows 是当前数据主站，负责：
 - 原始包保存
 - 正式 L2 / 盘后明细底座 / 选股研究 / 模型特征 跑数
 - 实时 crawler
-- 向 Mac / Cloud 输出处理结果
+- 向 Mac / NAS 在线节点输出处理结果
 
 ## 2. 当前关键路径
 - 项目目录：`D:\market-live-terminal`
@@ -16,8 +16,8 @@ Windows 是当前数据主站，负责：
 
 ## 2.1 实时 crawler 正式语义
 - Windows 是唯一生产实时外采节点。
-- crawler 从 Cloud 拉 `/api/watchlist` 和 `/api/monitor/active_symbols`。
-- crawler 向 Cloud 写 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`。
+- crawler 当前从线上后端拉 `/api/watchlist` 和 `/api/monitor/active_symbols`；默认应理解为 NAS 在线节点。
+- crawler 当前向线上后端写 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`；NAS crawler 虽已跑通，但 Windows 仍是当前正式基线。
 - crawler 必须使用交易日历判断；周末/节假日不得做 periodic full sweep / final sweep。
 - crawler 内置单实例锁，计划任务重复触发时新实例应直接退出。
 

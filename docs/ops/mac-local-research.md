@@ -61,7 +61,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - 本地页面默认读取 Mac 本机同步库，不跨网络直接查询 Windows sqlite。
 - 默认不启动后台实时外采：`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`。
 - 单票当日数据陈旧时，后端可按需调用行情源补拉该票 ticks 并写入本地库。
-- 这不是生产连续 crawler；生产连续盯盘仍以 Windows -> Cloud ingest 链路为准。
+- 这不是生产连续 crawler；生产连续盯盘当前仍以 Windows -> NAS 在线后端 ingest 链路为准。NAS crawler 已跑通，但 Windows 暂未下线。
 
 ## 4. 日常 smoke
 - `/api/health`

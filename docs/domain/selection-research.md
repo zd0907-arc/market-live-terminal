@@ -4,7 +4,7 @@
 - `CAP-SELECTION-RESEARCH`
 
 ## 当前正式结论
-1. 选股研究结果写入独立库 `data/selection/selection_research.db`。
+1. 选股研究结果的正式主链语义是 `selection_research_main`：Windows 主写 `selection_research_windows.db`，Mac 主读外置 `market-data/selection/selection_research.db`；repo 内 `data/selection/selection_research.db` 只按回退 / 兼容副本理解。
 2. 候选、画像、回测、策略评估接口已经存在，主链路可用。
 3. 当前产品入口已经从单策略候选页推进到“每日复盘决策”，并接入候选票研究上下文包：公司概况、决策解释、研究依据、事件覆盖、价格/L2 序列可统一查询。
 4. 当前判断要保守：选股模块已经能支持研究和观察，但策略表现、覆盖面、摘要质量和实时可交易性还没有达到稳定自动买入信号标准。

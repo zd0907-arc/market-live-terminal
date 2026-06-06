@@ -2,7 +2,7 @@
 
 ## 项目定位
 - 当前工作版本：`v5.2.2`
-- 当前运行模式：**Mac 主开发控制台 + NAS 在线运行节点 + Windows 辅助计算节点**
+- 当前运行模式：**Mac 主开发控制台 + Windows 数据主站 + NAS 在线运行节点**
 - 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
 - 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
 - 当前已验证 NAS 直连入口：`dxp4800pro`（Tailscale MagicDNS） / `100.119.0.126`
@@ -11,8 +11,8 @@
 - 当前临时公网入口：`https://dxp4800pro.tailfff556.ts.net/`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
-- 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；云端生产默认只开放盯盘与复盘。
-- 当前探索中能力：热点板块 / 市场热度研究；本地研究站已升级市场主线情报看板，云端轻量模式仍默认不开放研究页。
+- 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；当前线上运行节点是 NAS，研究页默认也按 NAS `research/current` 口径提供在线查询。
+- 当前探索中能力：热点板块 / 市场热度研究；本地研究站仍是主研究工作台，NAS 线上查询能力已经打通，但盘中 crawler 切换仍处观察期。
 
 ## Mac 连接 NAS 快速入口
 
@@ -111,7 +111,7 @@ bash ops/run_daily_new_framework.sh --json
 - 编号冻结规则见：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
 
 ## 发布与同步
-- 云端发布：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
+- 旧云端发布：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
 - Windows 脚本同步：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_to_windows.sh`
 - 本地离线补数上云：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
 

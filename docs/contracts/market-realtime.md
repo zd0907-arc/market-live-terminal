@@ -25,7 +25,7 @@
 2. `history/multiframe` 是多时间粒度正式主路径。
 3. 正式复盘与沙盒复盘必须隔离，不互相回退污染。
 4. 无数据必须显式返回，不允许静默假空数组冒充成功态。
-5. 生产实时写入只允许 Windows crawler 调用 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`；Cloud 自身默认不外采。
+5. 当前正式生产实时写入仍以 Windows crawler 为基线，目标是 NAS 在线后端的 `/api/internal/ingest/ticks` 与 `/api/internal/ingest/snapshots`；NAS crawler 已跑通但仍在观察期，线上节点自身默认不主动外采。
 6. Mac 本地按需 hydrate 只服务本机开发/研究，不代表生产 ingest。
 7. 首页 `realtime/dashboard` 在交易日盘后的默认语义是“优先看今天”；但如果该股票今天分时尚未就绪，且用户没有手动指定日期，必须自动回退到上一交易日，不能把首页留在空白态。
 
@@ -36,7 +36,7 @@
 - `realtime_5m_preview` / `realtime_daily_preview`：兼容预览层，非当前唯一事实源。
 
 ## 4. 运行关系
-- 线上：浏览器 -> Cloud API -> Windows crawler ingest -> Cloud DB -> 浏览器。
+- 线上：浏览器 -> NAS API -> Windows crawler ingest / NAS crawler(观察期) -> NAS `live/market_data.db` -> 浏览器。
 - Mac 本地：浏览器 -> Mac backend -> Mac DB；必要时单票按需补拉。
 
 ## 5. 相关细节来源
