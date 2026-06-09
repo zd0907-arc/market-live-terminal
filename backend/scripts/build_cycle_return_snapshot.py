@@ -5,6 +5,7 @@ import argparse
 import concurrent.futures
 import json
 import math
+import os
 import statistics
 import sqlite3
 import time
@@ -15,9 +16,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DB = REPO_ROOT / "data" / "selection" / "selection_research.db"
+DEFAULT_RESEARCH_ROOT = Path(RESEARCH_CURRENT_ROOT)
+DEFAULT_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
 EASTMONEY_QUOTE_API = "https://push2.eastmoney.com/api/qt/clist/get"
 EASTMONEY_KLINE_API = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 

@@ -18,8 +18,8 @@
 | Mac 本地后端启动 | `ops/start_local_research_station.sh` |
 | Mac 本地前端启动 | `ops/start_local_research_frontend.sh` |
 | 每日盘后正式主链 | `ops/run_daily_new_framework.sh` |
-| 盘后状态查看 | `ops/check_postclose_l2_status.sh` |
-| Windows 实时 crawler 任务注册 | `ops/win_register_live_crawler_tasks.ps1` |
+| 盘后状态查看 | `ops/legacy/check_postclose_l2_status.sh` |
+| Windows 实时 crawler 任务注册 | `ops/windows/win_register_live_crawler_tasks.ps1` |
 
 补充：
 - repo 根目录的 `sync_to_windows.sh`、`deploy_to_cloud.sh`
@@ -32,10 +32,10 @@
 ### 3.1 `full_reverse`
 
 典型对象：
-- `ops/start_atomic_backfill_full_reverse.sh`
-- `ops/start_atomic_backfill_full_reverse_direct.sh`
-- `ops/start_atomic_backfill_mainboard_full_reverse.sh`
-- `ops/check_atomic_backfill_full_reverse.sh`
+- `ops/legacy/start_atomic_backfill_full_reverse.sh`
+- `ops/legacy/start_atomic_backfill_full_reverse_direct.sh`
+- `ops/legacy/start_atomic_backfill_mainboard_full_reverse.sh`
+- `ops/legacy/check_atomic_backfill_full_reverse.sh`
 
 语义：
 - 对应旧 atomic 主库命名和治理迁移阶段的历史操作。
@@ -48,14 +48,14 @@
 ### 3.2 `atomic backfill`
 
 典型对象：
-- `ops/start_atomic_backfill_job.ps1`
-- `ops/check_atomic_backfill_status.sh`
-- `ops/check_atomic_backfill_status.py`
-- `ops/check_atomic_backfill_status_brief.sh`
-- `ops/get_atomic_backfill_status.ps1`
-- `ops/win_run_atomic_backfill.bat`
-- `ops/win_prepare_l2_day.bat`
-- `ops/win_run_l2_shard.bat`
+- `ops/windows/start_atomic_backfill_job.ps1`
+- `ops/legacy/check_atomic_backfill_status.sh`
+- `ops/legacy/check_atomic_backfill_status.py`
+- `ops/legacy/check_atomic_backfill_status_brief.sh`
+- `ops/windows/get_atomic_backfill_status.ps1`
+- `ops/windows/win_run_atomic_backfill.bat`
+- `ops/windows/win_prepare_l2_day.bat`
+- `ops/windows/win_run_l2_shard.bat`
 
 语义：
 - 历史补数、专项治理、大窗口重跑、Windows 分片执行。
@@ -68,11 +68,11 @@
 ### 3.3 `bench`
 
 典型对象：
-- `ops/bench_7z_extract.ps1`
-- `ops/bench_extract_backend.ps1`
-- `ops/bench_extract_drive_compare.ps1`
-- `ops/measure_full_extract.ps1`
-- `ops/run_short_atomic_bench.ps1`
+- `ops/bench/bench_7z_extract.ps1`
+- `ops/bench/bench_extract_backend.ps1`
+- `ops/bench/bench_extract_drive_compare.ps1`
+- `ops/bench/measure_full_extract.ps1`
+- `ops/bench/run_short_atomic_bench.ps1`
 
 语义：
 - 性能测试、预演、磁盘/解压对比、局部压测。
@@ -84,9 +84,9 @@
 ### 3.4 `snapshot / atomic 兼容启动`
 
 典型对象：
-- `ops/sync_windows_research_snapshot.sh`
-- `backend/scripts/build_local_research_snapshot.py`
-- `ops/start_local_backend_with_atomic.sh`
+- `ops/legacy/sync_windows_research_snapshot.sh`
+- `backend/scripts/legacy/compat/build_local_research_snapshot.py`
+- `ops/legacy/start_local_backend_with_atomic.sh`
 
 语义：
 - 过渡验证、旧链路兼容、本地排查。
@@ -94,13 +94,13 @@
 当前边界：
 - 不是当前正式默认入口。
 - 只有在明确说明“本轮任务是旧快照验证或兼容排查”时才应使用。
-- 其中 `build_local_research_snapshot.py` 默认也应优先跟随当前 `compact_current` atomic 解析链，而不是再把旧 `full_reverse` 当正式底座理解。
+- 其中 `backend/scripts/legacy/compat/build_local_research_snapshot.py` 默认也应优先跟随当前 `compact_current` atomic 解析链，而不是再把旧 `full_reverse` 当正式底座理解。
 
 ### 3.5 `run_postclose_l2`
 
 典型对象：
-- `ops/run_postclose_l2.sh`
-- `ops/check_postclose_l2_status.sh`
+- `ops/legacy/run_postclose_l2.sh`
+- `ops/legacy/check_postclose_l2_status.sh`
 
 语义：
 - 旧盘后 L2 / cloud 同步兼容链路。

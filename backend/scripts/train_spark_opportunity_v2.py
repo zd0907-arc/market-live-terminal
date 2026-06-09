@@ -19,6 +19,8 @@ from sklearn.metrics import mean_absolute_error, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
 try:
     import joblib
 except Exception:  # pragma: no cover
@@ -31,10 +33,11 @@ ARTIFACT_VERSION = "spark_opportunity_v2_0"
 SOURCE_ID = "spark_opportunity_selector"
 SOURCE_NAME = "星火机会模型 2.0"
 OUT_DIR = ROOT / "data/selection/models" / SOURCE_ID / MODEL_VERSION
+DEFAULT_RESEARCH_ROOT = Path(RESEARCH_CURRENT_ROOT)
 
-DEFAULT_TRAIN_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_v2_2026_train.db")
-DEFAULT_MAY_DB = Path("/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store_v2_may.db")
-DEFAULT_STOCK_SECTOR_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/stock_sector_map.db")
+DEFAULT_TRAIN_DB = DEFAULT_RESEARCH_ROOT / "selection" / "model_feature_store_v2_2026_train.db"
+DEFAULT_MAY_DB = DEFAULT_RESEARCH_ROOT / "selection" / "model_feature_store_v2_may.db"
+DEFAULT_STOCK_SECTOR_DB = DEFAULT_RESEARCH_ROOT / "market_heat" / "stock_sector_map.db"
 
 FEATURE_TABLE = "model_feature_daily_v1"
 SHAPE_TABLE = "model_feature_intraday_shape_v1"

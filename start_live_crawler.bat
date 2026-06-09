@@ -4,6 +4,7 @@ setlocal EnableExtensions
 :: =========================================================
 :: ZhangData - Windows Live Crawler Auto-Starter
 :: Stable entry for Task Scheduler / watchdog / manual recovery
+:: 历史环境变量名仍叫 CLOUD_API_URL，但当前正式默认 ingest 目标应理解为 NAS 在线后端。
 :: =========================================================
 
 set "PROJECT_ROOT=D:\market-live-terminal"
@@ -17,27 +18,21 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 if "%PYTHON_EXE%"=="" set "PYTHON_EXE=%DEFAULT_PYTHON_EXE%"
 if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
 
-if "%INGEST_TOKEN%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('INGEST_TOKEN','Machine')"`) do set "INGEST_TOKEN=%%i"
-)
+set "INGEST_TOKEN="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('INGEST_TOKEN','Machine')"`) do set "INGEST_TOKEN=%%i"
 
-if "%CLOUD_API_URL%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('CLOUD_API_URL','Machine')"`) do set "CLOUD_API_URL=%%i"
-)
-if "%CLOUD_API_URL%"=="" set "CLOUD_API_URL=http://111.229.144.202"
+set "CLOUD_API_URL="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('CLOUD_API_URL','Machine')"`) do set "CLOUD_API_URL=%%i"
+if "%CLOUD_API_URL%"=="" set "CLOUD_API_URL=http://dxp4800pro:8080"
 
-if "%FOCUS_TICK_INTERVAL_SECONDS%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FOCUS_TICK_INTERVAL_SECONDS','Machine')"`) do set "FOCUS_TICK_INTERVAL_SECONDS=%%i"
-)
-if "%WARM_TICK_INTERVAL_SECONDS%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('WARM_TICK_INTERVAL_SECONDS','Machine')"`) do set "WARM_TICK_INTERVAL_SECONDS=%%i"
-)
-if "%FULL_SWEEP_INTERVAL_SECONDS%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FULL_SWEEP_INTERVAL_SECONDS','Machine')"`) do set "FULL_SWEEP_INTERVAL_SECONDS=%%i"
-)
-if "%AKSHARE_TICK_TIMEOUT_SECONDS%"=="" (
-  for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('AKSHARE_TICK_TIMEOUT_SECONDS','Machine')"`) do set "AKSHARE_TICK_TIMEOUT_SECONDS=%%i"
-)
+set "FOCUS_TICK_INTERVAL_SECONDS="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FOCUS_TICK_INTERVAL_SECONDS','Machine')"`) do set "FOCUS_TICK_INTERVAL_SECONDS=%%i"
+set "WARM_TICK_INTERVAL_SECONDS="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('WARM_TICK_INTERVAL_SECONDS','Machine')"`) do set "WARM_TICK_INTERVAL_SECONDS=%%i"
+set "FULL_SWEEP_INTERVAL_SECONDS="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('FULL_SWEEP_INTERVAL_SECONDS','Machine')"`) do set "FULL_SWEEP_INTERVAL_SECONDS=%%i"
+set "AKSHARE_TICK_TIMEOUT_SECONDS="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('AKSHARE_TICK_TIMEOUT_SECONDS','Machine')"`) do set "AKSHARE_TICK_TIMEOUT_SECONDS=%%i"
 
 if "%INGEST_TOKEN%"=="" (
   echo [%date% %time%] [BOOT] ERROR: INGEST_TOKEN is not set.>> "%LOG_FILE%"

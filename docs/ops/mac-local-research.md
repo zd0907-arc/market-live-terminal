@@ -17,6 +17,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 默认：
 - 前端：`http://localhost:3001`
 - 后端：`http://127.0.0.1:8001`
+- 端口规范：`docs/ops/port-management.md`
 
 ## 2.1 启动红线
 - 本地后端必须通过 `ops/start_local_research_station.sh` 启动。
@@ -37,10 +38,17 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
   - 直接重新执行 `PORT=8001 bash ops/start_local_research_station.sh`；
   - 脚本会自动清理同仓库旧实例并拉起干净的新实例。
 
-## 2.3 兼容链边界
-- `ops/sync_windows_research_snapshot.sh`
-- `backend/scripts/build_local_research_snapshot.py`
-- `ops/start_local_backend_with_atomic.sh`
+## 2.3 前端端口纪律
+- 本地前端正式端口固定为 `3001`。
+- `5173`、`5174` 这类 Vite 临时端口不属于正式口径。
+- `ops/start_local_research_frontend.sh` 现在会直接拉起本仓库 `vite`，并强制 `--strictPort`；若 `3001` 被占用，会直接报错，不再静默漂移。
+- 正常恢复方式是重新执行：
+  - `BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh`
+
+## 2.4 兼容链边界
+- `ops/legacy/sync_windows_research_snapshot.sh`
+- `backend/scripts/legacy/compat/build_local_research_snapshot.py`
+- `ops/legacy/start_local_backend_with_atomic.sh`
 
 这三项只属于旧快照验证、兼容排查或人工应急链，不属于当前正式本地研究入口。
 
@@ -48,12 +56,12 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 
 ## 3. 当前正式消费对象
 优先使用外置数据根目录：`/Users/dong/Desktop/AIGC/market-data`。启动脚本会自动把它映射成：
-- `DB_PATH=/Users/dong/Desktop/AIGC/market-data/market_data.db`
-- `USER_DB_PATH=/Users/dong/Desktop/AIGC/market-data/user_data.db`
-- `ATOMIC_COMPACT_DB_PATH=/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db`
+- `DB_PATH=/Users/dong/Desktop/AIGC/market-data/live/market_data.db`
+- `USER_DB_PATH=/Users/dong/Desktop/AIGC/market-data/live/user_data.db`
+- `ATOMIC_COMPACT_DB_PATH=/Users/dong/Desktop/AIGC/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
 - `ATOMIC_MAINBOARD_DB_PATH` 在默认开启 compact 读取时会落到上述 compact 主路径
-- `SELECTION_DB_PATH=/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db`
-- `model_feature_store` 正式主读路径：`/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db`
+- `SELECTION_DB_PATH=/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db`
+- `model_feature_store` 正式主读路径：`/Users/dong/Desktop/AIGC/market-data/research/current/selection/model_feature_store.db`
 
 若外置目录不存在，才回退到项目内 `data/`。
 

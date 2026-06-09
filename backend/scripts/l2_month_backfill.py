@@ -117,7 +117,7 @@ def main() -> None:
     parser.add_argument("--large-threshold", type=float, default=200000.0)
     parser.add_argument("--super-threshold", type=float, default=1000000.0)
     parser.add_argument("--mode", default="manual_batch")
-    parser.add_argument("--db-path", default="", help="可选 DB 路径；默认使用环境变量 DB_PATH 或 data/market_data.db")
+    parser.add_argument("--db-path", default="", help="可选 DB 路径；默认使用环境变量 DB_PATH 或正式 live/market_data.db")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--cleanup-extracted", action="store_true", help="回补后删除解压目录，保留原始 .7z")
     parser.add_argument("--json", action="store_true")

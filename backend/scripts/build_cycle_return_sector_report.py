@@ -3,16 +3,30 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sqlite3
 import statistics
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SELECTION_DB = REPO_ROOT / "data" / "selection" / "selection_research.db"
-DEFAULT_THEME_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/tradable_theme_map.db")
+DEFAULT_RESEARCH_ROOT = Path(RESEARCH_CURRENT_ROOT)
+DEFAULT_SELECTION_DB = Path(
+    os.getenv(
+        "SELECTION_DB_PATH",
+        str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
+    )
+)
+DEFAULT_THEME_DB = Path(
+    os.getenv(
+        "TRADABLE_THEME_MAP_DB",
+        str(DEFAULT_RESEARCH_ROOT / "market_heat" / "tradable_theme_map.db"),
+    )
+)
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "selection" / "cycle_returns"
 DEFAULT_DOCS_DIR = REPO_ROOT / "docs" / "selection" / "cycle_returns"
 

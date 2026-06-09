@@ -19,8 +19,10 @@
 
 当前如果是看治理收口和活跃待办，优先看：
 - `docs/changes/README_STAGE_SUMMARY.md`
-- `docs/changes/MOD-20260524-13-governance-phase-summaries-and-active-wip-map.md`
-- `docs/changes/MOD-20260524-14-active-pending-nine-item-audit.md`
+- `docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+- `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`
+- `docs/changes/MOD-20260606-11-repo-and-market-data-governance-handoff.md`
+- `docs/07_PENDING_TODO.md`
 
 涉及运行、补数、atomic、bench、full_reverse 的当前做法，先看 `docs/04_OPS_AND_DEV.md` 与 `docs/ops/atomic-script-families-boundary.md`，不要直接把历史 `changes` 卡里的脚本当正式入口。
 

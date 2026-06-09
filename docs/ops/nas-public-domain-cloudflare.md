@@ -61,8 +61,8 @@ Cloudflare Tunnel + 自定义域名
 仓库里已经补好了三样东西：
 
 1. `deploy/docker-compose.cloudflare-tunnel.yml`
-2. `ops/nas_enable_cloudflare_tunnel.sh`
-3. `ops/nas_disable_tailscale_funnel.sh`
+2. `ops/nas/nas_enable_cloudflare_tunnel.sh`
+3. `ops/nas/nas_disable_tailscale_funnel.sh`
 
 设计原则：
 
@@ -81,6 +81,14 @@ Cloudflare Tunnel + 自定义域名
 
 - 你要有一个自己的域名
 - 这个域名已经接入 Cloudflare DNS
+
+如果你不想买域名，这条 runbook 就不是当前优先方案。
+
+免费口径可以直接定成：
+
+- 继续使用当前 `*.ts.net` 的 `Tailscale Funnel` 地址作为公网入口
+
+这套方案的优点是零额外成本；缺点是地址不可品牌化，而且当前仍有 `443` 冲突噪音。
 
 ### 5.2 在 Cloudflare 创建 Tunnel
 
@@ -132,7 +140,7 @@ Service: http://localhost:3000
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
 CLOUDFLARE_TUNNEL_TOKEN='你的 token' \
-bash ops/nas_enable_cloudflare_tunnel.sh
+bash ops/nas/nas_enable_cloudflare_tunnel.sh
 ```
 
 然后我会验证：
@@ -154,7 +162,7 @@ bash ops/nas_enable_cloudflare_tunnel.sh
 
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/nas_disable_tailscale_funnel.sh
+bash ops/nas/nas_disable_tailscale_funnel.sh
 ```
 
 这样做的好处是：

@@ -49,6 +49,53 @@ TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(RES
 FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_forecast.db")))
 
 
+def _formal_market_data_root() -> Path:
+    research_root = Path(RESEARCH_CURRENT_ROOT).expanduser()
+    if research_root.name == "current" and research_root.parent.name == "research":
+        return research_root.parent.parent
+    return research_root
+
+
+def _canonicalize_market_data_alias(path: Path) -> Path:
+    expanded = path.expanduser()
+    formal_root = _formal_market_data_root()
+    aliases = {
+        formal_root / "market_data.db": formal_root / "live" / "market_data.db",
+        formal_root / "user_data.db": formal_root / "live" / "user_data.db",
+        formal_root / "atomic_facts": Path(RESEARCH_CURRENT_ROOT) / "atomic_facts",
+        formal_root / "selection": Path(RESEARCH_CURRENT_ROOT) / "selection",
+        formal_root / "market_heat": Path(RESEARCH_CURRENT_ROOT) / "market_heat",
+    }
+    for legacy_path, canonical_path in aliases.items():
+        if expanded == legacy_path:
+            return canonical_path
+        try:
+            relative = expanded.relative_to(legacy_path)
+        except ValueError:
+            continue
+        return canonical_path / relative
+    return expanded
+
+
+def _normalize_path_identity(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    canonical = _canonicalize_market_data_alias(Path(raw))
+    try:
+        return str(canonical.resolve(strict=False))
+    except Exception:
+        return str(canonical)
+
+
+def _same_path_identity(left: Any, right: Any) -> bool:
+    return _normalize_path_identity(left) == _normalize_path_identity(right)
+
+
+def _atomic_db_identity() -> str:
+    return _normalize_path_identity(ATOMIC_DB)
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
@@ -420,7 +467,7 @@ def build_market_heat_snapshot(trade_date: Optional[str] = None, themes_override
             "version": "market_heat_v1_local_theme",
             "source": "local atomic_trade_daily + curated theme baskets",
             "theme_file": str(THEME_FILE),
-            "atomic_db": str(ATOMIC_DB),
+            "atomic_db": _atomic_db_identity(),
             "notes": [
                 "第一版使用自定义主题篮子和本地个股行情/L2重建板块热度。",
                 "不依赖全市场新闻、公告、财报。",
@@ -536,7 +583,7 @@ def _snapshot_matches_current_sources(snapshot: Dict[str, Any], trade_date: Opti
         return False
     if str(meta.get("trade_date") or "") != str(target):
         return False
-    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+    if not _same_path_identity(meta.get("atomic_db"), ATOMIC_DB):
         return False
     return True
 
@@ -604,7 +651,7 @@ def _find_fine_heat_cache(target: Optional[str] = None, allow_stale: bool = Fals
     meta = payload.get("meta") or {}
     if str(meta.get("source") or "") != FINE_HEAT_CACHE_SOURCE:
         raise FileNotFoundError(f"细颗粒热点缓存来源不匹配：{cache_path}")
-    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+    if not _same_path_identity(meta.get("atomic_db"), ATOMIC_DB):
         raise FileNotFoundError(f"细颗粒热点缓存对应的 atomic_db 已变更：{cache_path}")
     return cache_path
 
@@ -670,7 +717,7 @@ def refresh_fine_heat_snapshot_cache(end_date: Optional[str] = None, days: int =
         snapshots = payload.get("snapshots") or {}
         if (
             str(meta.get("source") or "") == FINE_HEAT_CACHE_SOURCE
-            and str(meta.get("atomic_db") or "") == str(ATOMIC_DB)
+            and _same_path_identity(meta.get("atomic_db"), ATOMIC_DB)
             and all(date in snapshots for date in dates)
         ):
             return {
@@ -701,7 +748,7 @@ def refresh_fine_heat_snapshot_cache(end_date: Optional[str] = None, days: int =
             "min_member_count": min_count,
             "max_member_count": max_count,
             "source": FINE_HEAT_CACHE_SOURCE,
-            "atomic_db": str(ATOMIC_DB),
+            "atomic_db": _atomic_db_identity(),
         },
         "snapshots": snapshots,
     }
@@ -1380,7 +1427,7 @@ def build_fine_market_heat_dashboard(end_date: Optional[str] = None, days: int =
     meta = payload.get("meta") or {}
     if str(meta.get("source") or "") != FINE_HEAT_CACHE_SOURCE:
         raise RuntimeError(f"细颗粒热点缓存来源不匹配：{cache_path}")
-    if str(meta.get("atomic_db") or "") != str(ATOMIC_DB):
+    if not _same_path_identity(meta.get("atomic_db"), ATOMIC_DB):
         raise RuntimeError(f"细颗粒热点缓存对应的 atomic_db 已变更：{cache_path}")
     snapshots = payload.get("snapshots") or {}
     if target and str(target) not in snapshots:

@@ -76,12 +76,12 @@ https://dxp4800pro.tailfff556.ts.net/
 
 - 对外访问时，访问者不需要安装 Tailscale
 - 它已经证明 NAS 可以直接承担公网服务
-- 它只是 `Tailscale Funnel` 的临时公网入口
-- 它不是最终 D1 的正式自定义域名方案
+- 它当前可以继续作为正式公网入口使用
+- 只有在你需要长期固定品牌域名时，才再切自定义域名方案
 
 ### 3.3 最终公网入口目标
 
-正式方案仍然是：
+如果后面确实需要固定品牌域名，正式方案仍然是：
 
 ```text
 Cloudflare Tunnel + 自定义域名
@@ -111,6 +111,29 @@ Cloudflare Tunnel + 自定义域名
 - `Mac -> NAS` 已经是当前正式运维入口
 - `research/current` 当前正式版本是 `nas_daily_new_20260605`
 - 当前仍保留 `Tailscale Funnel` 作为临时公网入口，但正式品牌域名仍属于后续增强项
+
+## 4.1 2026-06-08 实机补充判断
+
+这轮实际登录 NAS 复核后，需要再补两条真相：
+
+1. 当前 NAS 服务已经稳定在线，但**目录结构还不是最终版**。
+2. 当前 NAS 只有**临时公网入口**，还没有最终自定义域名入口。
+
+具体表现：
+
+1. 这轮实机已把 root 旧实体下沉到：
+   - `/volume1/docker/market-live-terminal/backups/legacy_flat_root_20260608/`
+2. 当前正式数据根顶层只保留：
+   - `data/live/`
+   - `data/research/current/`
+   - `data/cache/`
+   - `data/artifacts/`
+   - `data/incoming/`
+3. 项目根旁还存在：
+   - `full-import/`
+   - `data-backup-20260528-211003/`
+4. 其中 `full-import/` 和 `data-backup-20260528-211003/` 也已下沉到 `backups/imports/` 与 `backups/manual/`。
+5. 当前公网仍是 `Tailscale Funnel`；`tailscale-nas` 仍在报 `443` 冲突，`cloudflared` 还没真正跑起来。
 
 ## 5. 对未来多项目的能力建设要求
 
@@ -181,7 +204,7 @@ ssh zhangdong@dxp4800pro \
 例子：
 
 ```bash
-scp -O local-file zhangdong@192.168.3.43:/volume1/docker/market-live-terminal/data/incoming/
+scp -O local-file zhangdong@dxp4800pro:/volume1/docker/market-live-terminal/data/incoming/
 ```
 
 ### 5.4 能提 Git
@@ -250,19 +273,23 @@ git push origin main
 ```text
 data/
   live/
-  research/
+  research/current/
+  research/staging/
+  research/archive/
   cache/
+  artifacts/
   incoming/
-  archive/
 ```
 
 说明：
 
 - `live/`：线上运行依赖的正式数据库
-- `research/`：研究产物、页面数据、策略结果
+- `research/current/`：线上查询和研究主链当前正式口径
+- `research/staging/`：待发布校验版本
+- `research/archive/`：历史归档版本
 - `cache/`：可重建缓存
+- `artifacts/`：研究导出、模型产物、报告和一次性专题输出
 - `incoming/`：从 Windows / Mac 新传上来的待整理数据
-- `archive/`：旧版本归档
 
 ### 6.3 Git / 仓库
 

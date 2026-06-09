@@ -10,14 +10,18 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import candidate_atomic_db_paths
+from backend.app.core.config import LIVE_DATA_ROOT, RESEARCH_CURRENT_ROOT, candidate_atomic_db_paths
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STUDY_CSV = REPO_ROOT / 'logs' / 'ytd_doublers_20260430.study.csv'
 DEFAULT_OUTPUT_DIR = REPO_ROOT / 'data' / 'selection' / 'doubler_analysis'
 DEFAULT_DOCS_DIR = REPO_ROOT / 'docs' / 'selection' / 'doublers' / '2026-ytd' / 'top20'
-DEFAULT_MARKET_DB = Path(os.getenv('DB_PATH', '/Users/dong/Desktop/AIGC/market-data/market_data.db'))
-DEFAULT_SELECTION_DB = Path(os.getenv('SELECTION_DB_PATH', '/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db'))
+DEFAULT_LIVE_ROOT = Path(os.getenv('LIVE_DATA_ROOT', LIVE_DATA_ROOT))
+DEFAULT_RESEARCH_ROOT = Path(os.getenv('RESEARCH_CURRENT_ROOT', RESEARCH_CURRENT_ROOT))
+DEFAULT_MARKET_DB = Path(os.getenv('DB_PATH', str(DEFAULT_LIVE_ROOT / 'market_data.db')))
+DEFAULT_SELECTION_DB = Path(
+    os.getenv('SELECTION_DB_PATH', str(DEFAULT_RESEARCH_ROOT / 'selection' / 'selection_research.db'))
+)
 
 
 def resolve_default_atomic_db() -> Path:
@@ -28,7 +32,7 @@ def resolve_default_atomic_db() -> Path:
         path = Path(str(raw))
         if path.exists():
             return path
-    return Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db')
+    return DEFAULT_RESEARCH_ROOT / 'atomic_facts' / 'market_atomic_mainboard_compact_current.db'
 
 
 DEFAULT_ATOMIC_DB = resolve_default_atomic_db()

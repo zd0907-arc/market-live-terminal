@@ -26,7 +26,7 @@ Windows 是训练执行节点，不是 Git 主开发环境。
 
 当前正式训练默认使用 `model_feature_store.db`。它是从 Mac 侧完整特征库同步到 Windows 的正式别名，已确认覆盖 `2024-09-02 ~ 2026-05-27`。
 
-旧文件 `model_feature_store_smoke_20260401_20260515.db` 仍可保留做历史兼容，但不能再作为星火 v2 正式训练默认库。实测它缺少 38 个市场指数相关字段，包括：
+旧文件 `model_feature_store_smoke_20260401_20260515.db` 已退休到 `Z:\atomic_legacy_backup\windows_retired_20260608\selection\`，不能再作为星火 v2 正式训练默认库。当前 Windows 现场只应把 canonical `model_feature_store.db` 当正式库。实测旧 smoke 库缺少 38 个市场指数相关字段，包括：
 
 - 中证 1000 的完整收盘、均线、斜率、1/5/20 日收益；
 - 中证 500、沪深 300、上证指数、创业板指对应的同类字段。

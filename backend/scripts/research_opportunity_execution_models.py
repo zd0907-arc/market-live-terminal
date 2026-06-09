@@ -19,6 +19,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 import research_opportunity_discovery_model as base
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 try:
     import joblib
@@ -31,7 +32,7 @@ MODEL_VERSION = "execution_v0_1"
 OUT_DIR = ROOT / "data/selection/opportunity_discovery" / MODEL_VERSION
 OPP22_DIR = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1"
 SHORT_DIR = ROOT / "data/selection/opportunity_discovery/short_horizon_v0_1"
-DEFAULT_STOCK_SECTOR_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/stock_sector_map.db")
+DEFAULT_STOCK_SECTOR_DB = Path(RESEARCH_CURRENT_ROOT) / "market_heat" / "stock_sector_map.db"
 
 
 @dataclass(frozen=True)

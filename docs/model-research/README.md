@@ -85,7 +85,7 @@
 
 - `/Users/dong/Desktop/AIGC/market-live-terminal/docs/selection/daily_candidate_source_contract.md`
 - `/Users/dong/Desktop/AIGC/market-live-terminal/docs/contracts/review-selection.md`
-- `/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260525-01-spark-exit-watchlist-integration.md`
+- `/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/changes/MOD-20260525-01-spark-exit-watchlist-integration.md`
 
 ## 以后默认阅读顺序
 

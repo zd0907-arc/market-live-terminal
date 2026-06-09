@@ -22,12 +22,12 @@
 
 ## 已落地数据
 
-- 小主题日度热度：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db`
-- 细颗粒主题统一训练表：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db`
-- 板块热度预测库：`/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_forecast.db`
-- 当前预测模型：`/Users/dong/Desktop/AIGC/market-data/market_heat/models/fine_theme_heat_forecast_latest.joblib`
+- 小主题日度热度：`/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_daily.db`
+- 细颗粒主题统一训练表：`/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_daily_v2.db`
+- 板块热度预测库：`/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_forecast.db`
+- 当前预测模型：`/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/models/fine_theme_heat_forecast_latest.joblib`
 - 个股 L1/L2 底座：当前正式默认应理解为 `market_atomic_mainboard_compact_current.db`；旧 `market_atomic_mainboard_full_reverse.db` 只作为历史兼容名保留
-- 当前细颗粒看板缓存：`/Users/dong/Desktop/AIGC/market-data/market_heat/cache/fine_heat_snapshots_*_m5_80.json`
+- 当前细颗粒看板缓存：`/Users/dong/Desktop/AIGC/market-data/cache/market_heat/fine_heat_snapshots_*_m5_80.json`
 - 热点大涨样本：`/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv`
 - 板块口径管理：`docs/selection/market_heat/theme_taxonomy_management.md`
 - 本轮板块审计：`docs/selection/market_heat/theme_taxonomy_audit_2026-05-10.md`

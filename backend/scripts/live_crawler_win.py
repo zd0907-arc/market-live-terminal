@@ -222,16 +222,16 @@ import json
 def fetch_tencent_snapshot(symbol):
     try:
         import urllib.request
-        pure_symbol = symbol.replace("sh", "").replace("sz", "")
-        market = "sh" if symbol.startswith("sh") else "sz"
-        url = f"http://qt.gtimg.cn/q=s_{market}{pure_symbol}"
+        url = f"http://qt.gtimg.cn/q={symbol}"
         
         req = urllib.request.Request(url, headers={'Referer': 'http://finance.qq.com'})
         with urllib.request.urlopen(req, timeout=3) as response:
             data = response.read().decode('gbk')
             
         parts = data.split('~')
-        if len(parts) < 30: return None
+        if len(parts) < 40:
+            logger.warning(f"Snapshot response incomplete [{symbol}] parts={len(parts)}")
+            return None
         
         # Calculate derived metrics (simplified version of backend monitor.py)
         bid1_v = int(parts[10]) * 100 if parts[10].isdigit() else 0
@@ -259,7 +259,7 @@ def fetch_tencent_snapshot(symbol):
             "tick_vol": tick_v
         }
     except Exception as e:
-        logger.warning(f"Snapshot fetch fail [{symbol}]")
+        logger.warning(f"Snapshot fetch fail [{symbol}]: {e}")
         return None
 
 async def poll_snapshots_loop():
@@ -305,7 +305,11 @@ async def poll_snapshots_loop():
                     "token": INGEST_TOKEN,
                     "snapshots": snapshots
                 }
-                requests.post(f"{CLOUD_URL}/api/internal/ingest/snapshots", json=payload, timeout=5)
+                res = requests.post(f"{CLOUD_URL}/api/internal/ingest/snapshots", json=payload, timeout=5)
+                if res.status_code != 200:
+                    logger.error(f"Snapshot POST failed: {res.status_code} {res.text}")
+                else:
+                    logger.info(f" -> Pushed {len(snapshots)} snapshots to Cloud")
             except Exception as e:
                 logger.error(f"Snapshot POST failed: {e}")
                 

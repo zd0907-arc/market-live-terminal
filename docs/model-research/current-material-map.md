@@ -31,7 +31,7 @@
 | 方向 | 当前主入口 |
 |---|---|
 | 星火 1.0 机会发现 | `docs/selection/opportunity_discovery_model_final.md` |
-| 星火持仓 / 卖点 | `docs/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` |
+| 星火持仓 / 卖点 | `docs/archive/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` |
 | 热点板块研究 | `docs/selection/market_heat/README.md` |
 | 市场环境过滤 | `docs/strategy-rework/strategies/S05-market-regime-filter/README.md` |
 | 自进化训练环境 | `docs/strategy-rework/evolution-lab/README.md` |
@@ -80,7 +80,7 @@
 |---|---|
 | `docs/selection/daily_candidate_source_contract.md` | 候选怎么标准化输出 |
 | `docs/contracts/review-selection.md` | 复盘 / 选股接口契约 |
-| `docs/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` | 星火买入 / 持仓 / 卖出接到工作台的真实例子 |
+| `docs/archive/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` | 星火买入 / 持仓 / 卖出接到工作台的真实例子 |
 
 ## 6. 当前明显缺口
 

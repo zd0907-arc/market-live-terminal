@@ -18,10 +18,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data/selection/long_term_trends/ai_interconnect"
 DOC_DIR = ROOT / "docs/selection/long_term_trends/ai_interconnect"
-MARKET_HEAT_ROOT = Path("/Users/dong/Desktop/AIGC/market-data/market_heat")
+MARKET_HEAT_ROOT = Path(RESEARCH_CURRENT_ROOT) / "market_heat"
 FINE_HEAT_DB = MARKET_HEAT_ROOT / "fine_theme_heat_daily.db"
 FINE_HEAT_CACHE_DIR = MARKET_HEAT_ROOT / "cache"
 LOCAL_TZ = ZoneInfo("Asia/Shanghai")

@@ -36,10 +36,8 @@ WIN_PROJECT_ROOT = os.getenv("DAILY_WIN_PROJECT_ROOT", r"D:\market-live-terminal
 WIN_PYTHON_EXE = os.getenv("DAILY_WIN_PYTHON_EXE", r"C:\Users\laqiyuan\AppData\Local\Programs\Python\Python311\python.exe")
 WIN_MARKET_ROOT = os.getenv("DAILY_WIN_MARKET_ROOT", r"D:\MarketData")
 DEFAULT_WIN_ATOMIC_DB_ALIAS = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db"
-DEFAULT_WIN_ATOMIC_DB_LEGACY = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db"
-DEFAULT_WIN_SELECTION_DB = r"D:\market-live-terminal\data\selection\selection_research_windows.db"
+DEFAULT_WIN_SELECTION_DB = r"D:\market-live-terminal\data\selection\selection_research.db"
 DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS = r"D:\market-live-terminal\data\selection\model_feature_store.db"
-DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY = r"D:\market-live-terminal\data\selection\model_feature_store_smoke_20260401_20260515.db"
 WIN_ATOMIC_DB = os.getenv("DAILY_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB_ALIAS)
 WIN_SELECTION_DB = os.getenv("DAILY_WIN_SELECTION_DB", DEFAULT_WIN_SELECTION_DB)
 WIN_MODEL_FEATURE_DB = os.getenv("DAILY_WIN_MODEL_FEATURE_DB", DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS)
@@ -178,6 +176,31 @@ REQUIRED_SELECTION_SOURCE_IDS = [
 DEFAULT_AUTO_DETECT_LIMIT = int(os.getenv("DAILY_AUTO_DETECT_LIMIT", "20"))
 DEFAULT_SYNC_NAS = os.getenv("DAILY_SYNC_NAS", "").strip().lower() in {"1", "true", "yes"}
 DEFAULT_NAS_RELEASE_PREFIX = os.getenv("DAILY_NAS_RELEASE_PREFIX", "nas_daily_new")
+DEFAULT_INCLUDE_LIVE_SYNC = os.getenv("DAILY_INCLUDE_LIVE_SYNC", "1").strip().lower() not in {"0", "false", "no"}
+NAS_HOST = os.getenv("NAS_HOST", "zhangdong@192.168.3.43").strip()
+NAS_DATA_ROOT = os.getenv("NAS_DATA_ROOT", "/volume1/docker/market-live-terminal/data").strip()
+NAS_PROJECT_ROOT = os.getenv("NAS_PROJECT_ROOT", "/volume1/docker/market-live-terminal/app").strip()
+NAS_LIVE_MARKET_DB = os.getenv("NAS_LIVE_MARKET_DB", f"{NAS_DATA_ROOT}/live/market_data.db").strip()
+NAS_INCOMING_ROOT = os.getenv("NAS_INCOMING_ROOT", f"{NAS_DATA_ROOT}/incoming").strip()
+NAS_BACKUP_ROOT = os.getenv("NAS_BACKUP_ROOT", "/volume1/docker/market-live-terminal/backups/db_snapshots").strip()
+NAS_SCP_PROTOCOL_OPT = os.getenv("SCP_PROTOCOL_OPT", "-O").strip() or "-O"
+NAS_SSH_CONNECT_TIMEOUT = int(os.getenv("SSH_CONNECT_TIMEOUT", "8"))
+
+HISTORY_5M_L2_COLUMNS = (
+    "symbol, datetime, source_date, open, high, low, close, total_amount, "
+    "l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell, "
+    "l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell, quality_info"
+)
+
+HISTORY_DAILY_L2_COLUMNS = (
+    "symbol, date, open, high, low, close, total_amount, "
+    "l1_main_buy, l1_main_sell, l1_main_net, "
+    "l1_super_buy, l1_super_sell, l1_super_net, "
+    "l2_main_buy, l2_main_sell, l2_main_net, "
+    "l2_super_buy, l2_super_sell, l2_super_net, "
+    "l1_activity_ratio, l1_super_ratio, l2_activity_ratio, l2_super_ratio, "
+    "l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio, quality_info"
+)
 
 
 def _windows_existing_path_candidates(primary: str, *fallbacks: str) -> List[str]:
@@ -372,7 +395,7 @@ def _publish_to_nas(trade_date: str) -> Dict[str, object]:
     _progress(f"[{trade_date}] NAS research/current 发布开始 release={release_name}")
     cmd = [
         "bash",
-        str(ROOT_DIR / "ops" / "nas_run_phase_b_release.sh"),
+        str(ROOT_DIR / "ops" / "nas" / "nas_run_phase_b_release.sh"),
         release_name,
     ]
     result = _run(cmd, check=False)
@@ -382,7 +405,7 @@ def _publish_to_nas(trade_date: str) -> Dict[str, object]:
                 "ssh",
                 "-o",
                 "ConnectTimeout=8",
-                os.getenv("NAS_HOST", "zhangdong@192.168.3.43"),
+                NAS_HOST,
                 "cat /volume1/docker/market-live-terminal/data/research/current/.release_name 2>/dev/null || true",
             ],
             check=False,
@@ -394,10 +417,268 @@ def _publish_to_nas(trade_date: str) -> Dict[str, object]:
     _progress(f"[{trade_date}] NAS research/current 发布完成 release={release_name}")
     return {
         "release_name": release_name,
-        "command": f"bash ops/nas_run_phase_b_release.sh {release_name}",
+        "command": f"bash ops/nas/nas_run_phase_b_release.sh {release_name}",
         "stdout": result.stdout,
         "return_code": result.returncode,
         "status": "published",
+    }
+
+
+def _nas_ssh(remote_command: str, *, check: bool = True) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        ["ssh", "-o", f"ConnectTimeout={NAS_SSH_CONNECT_TIMEOUT}", NAS_HOST, remote_command],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
+    return result
+
+
+def _sync_file_to_nas(local_path: Path, remote_path: str) -> Dict[str, object]:
+    if not local_path.exists():
+        raise FileNotFoundError(f"本地文件不存在，无法同步到 NAS: {local_path}")
+    remote_dir = str(Path(remote_path).parent)
+    _nas_ssh(f"mkdir -p {shlex.quote(remote_dir)}")
+    cmd = ["scp", NAS_SCP_PROTOCOL_OPT, "-o", f"ConnectTimeout={NAS_SSH_CONNECT_TIMEOUT}", str(local_path), f"{NAS_HOST}:{remote_path}"]
+    _run(cmd)
+    remote_size_result = _nas_ssh(f"stat -c %s {shlex.quote(remote_path)}")
+    remote_size = int(str(remote_size_result.stdout or "").strip() or "0")
+    local_size = local_path.stat().st_size
+    if remote_size != local_size:
+        raise RuntimeError(f"NAS 同步后文件大小不一致: local={local_size} remote={remote_size} path={remote_path}")
+    return {
+        "local": str(local_path),
+        "remote": remote_path,
+        "bytes": remote_size,
+    }
+
+
+def _extract_postclose_local_delta(postclose_report: Dict[str, object], trade_date: str) -> Path:
+    target_date = _compact_date(trade_date)
+    for day_report in postclose_report.get("day_reports") or []:
+        day_trade_date = str(day_report.get("trade_date") or "").strip()
+        if not day_trade_date:
+            continue
+        if _compact_date(day_trade_date) != target_date:
+            continue
+        local_artifacts = day_report.get("local_artifacts") or []
+        if local_artifacts:
+            return Path(str(local_artifacts[0]))
+    fallback = ROOT_DIR / ".run" / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
+    if fallback.exists():
+        return fallback
+    raise FileNotFoundError(f"未找到本地 postclose L2 日增量: trade_date={trade_date}")
+
+
+def _build_stock_universe_meta_sync_db(trade_date: str) -> Dict[str, object]:
+    target_date = _compact_date(trade_date)
+    sync_db = ROOT_DIR / ".run" / "daily_new_framework" / target_date / "processed" / f"stock_universe_meta_sync_{target_date}.db"
+    sync_db.parent.mkdir(parents=True, exist_ok=True)
+    sync_db.unlink(missing_ok=True)
+    with sqlite3.connect(str(LOCAL_MARKET_DB)) as source_conn:
+        create_row = source_conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='stock_universe_meta'"
+        ).fetchone()
+        if not create_row or not create_row[0]:
+            raise RuntimeError("Mac 本地 live 库缺少 stock_universe_meta 表")
+        columns = [str(row[1]) for row in source_conn.execute("PRAGMA table_info(stock_universe_meta)").fetchall()]
+        if not columns:
+            raise RuntimeError("无法解析 stock_universe_meta 列定义")
+        rows = source_conn.execute(f"SELECT {', '.join(columns)} FROM stock_universe_meta").fetchall()
+    if not rows:
+        raise RuntimeError("Mac 本地 stock_universe_meta 为空，拒绝同步到 NAS")
+    with sqlite3.connect(str(sync_db)) as target_conn:
+        target_conn.execute(str(create_row[0]))
+        placeholders = ",".join(["?"] * len(columns))
+        target_conn.executemany(
+            f"INSERT INTO stock_universe_meta ({', '.join(columns)}) VALUES ({placeholders})",
+            rows,
+        )
+        target_conn.commit()
+    return {
+        "path": str(sync_db),
+        "rows": len(rows),
+    }
+
+
+def _verify_nas_live_state(trade_date: str) -> Dict[str, int]:
+    trade_date_iso = _compact_to_iso(trade_date)
+    sql = (
+        f"SELECT COUNT(*) FROM history_daily_l2 WHERE date='{trade_date_iso}'; "
+        f"SELECT COUNT(*) FROM history_5m_l2 WHERE source_date='{trade_date_iso}'; "
+        "SELECT COUNT(*) FROM stock_universe_meta;"
+    )
+    result = _nas_ssh(f"sqlite3 {shlex.quote(NAS_LIVE_MARKET_DB)} {shlex.quote(sql)}")
+    lines = [line.strip() for line in str(result.stdout or "").splitlines()]
+    while len(lines) < 3:
+        lines.append("0")
+    return {
+        "rows_daily": int(lines[0] or 0),
+        "rows_5m": int(lines[1] or 0),
+        "stock_universe_meta_rows": int(lines[2] or 0),
+    }
+
+
+def _sync_nas_live_market_db(trade_date: str, local_live_sync_report: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+    postclose_report = (local_live_sync_report or {}).get("postclose_l2") if isinstance(local_live_sync_report, dict) else None
+    if not isinstance(postclose_report, dict):
+        return {"status": "skipped", "reason": "missing_local_live_sync"}
+
+    target_date = _compact_date(trade_date)
+    trade_date_iso = _compact_to_iso(target_date)
+    local_delta = _extract_postclose_local_delta(postclose_report, target_date)
+    meta_sync_db = _build_stock_universe_meta_sync_db(target_date)
+    remote_dir = f"{NAS_INCOMING_ROOT.rstrip('/')}/daily_new_framework/{target_date}"
+    remote_l2_delta = f"{remote_dir}/{local_delta.name}"
+    remote_meta_delta = f"{remote_dir}/{Path(meta_sync_db['path']).name}"
+
+    l2_sync_result = _sync_file_to_nas(local_delta, remote_l2_delta)
+    meta_sync_result = _sync_file_to_nas(Path(str(meta_sync_db["path"])), remote_meta_delta)
+
+    remote_sql = f"""
+PRAGMA busy_timeout=5000;
+ATTACH DATABASE '{remote_l2_delta.replace("'", "''")}' AS delta;
+ATTACH DATABASE '{remote_meta_delta.replace("'", "''")}' AS meta;
+BEGIN IMMEDIATE;
+DELETE FROM history_5m_l2 WHERE source_date='{trade_date_iso}';
+DELETE FROM history_daily_l2 WHERE date='{trade_date_iso}';
+INSERT INTO history_5m_l2 ({HISTORY_5M_L2_COLUMNS})
+SELECT {HISTORY_5M_L2_COLUMNS}
+FROM delta.history_5m_l2
+WHERE source_date='{trade_date_iso}';
+INSERT INTO history_daily_l2 ({HISTORY_DAILY_L2_COLUMNS})
+SELECT {HISTORY_DAILY_L2_COLUMNS}
+FROM delta.history_daily_l2
+WHERE date='{trade_date_iso}';
+CREATE TABLE IF NOT EXISTS stock_universe_meta AS
+SELECT *
+FROM meta.stock_universe_meta
+WHERE 0;
+DELETE FROM stock_universe_meta;
+INSERT INTO stock_universe_meta
+SELECT *
+FROM meta.stock_universe_meta;
+COMMIT;
+DETACH DATABASE delta;
+DETACH DATABASE meta;
+"""
+    _nas_ssh(
+        f"sqlite3 {shlex.quote(NAS_LIVE_MARKET_DB)} <<'SQL'\n{remote_sql}\nSQL\nrm -rf {shlex.quote(remote_dir)}"
+    )
+    verify = _verify_nas_live_state(target_date)
+    if int(verify.get("rows_daily") or 0) <= 0 or int(verify.get("rows_5m") or 0) <= 0:
+        raise RuntimeError(
+            f"NAS live 同步后校验失败: rows_daily={verify.get('rows_daily')} rows_5m={verify.get('rows_5m')}"
+        )
+    if int(verify.get("stock_universe_meta_rows") or 0) <= 0:
+        raise RuntimeError("NAS stock_universe_meta 同步后为空")
+    return {
+        "status": "synced",
+        "trade_date": target_date,
+        "l2_delta": l2_sync_result,
+        "stock_universe_meta_sync": {
+            **meta_sync_result,
+            "rows": int(meta_sync_db["rows"]),
+        },
+        "verify": verify,
+    }
+
+
+def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
+    running = _nas_ssh("ps -ef | grep '[n]as_backup_runtime_db_snapshot.sh' || true")
+    running_lines = [line.strip() for line in str(running.stdout or "").splitlines() if line.strip()]
+    if running_lines:
+        return {
+            "status": "running",
+            "processes": running_lines,
+        }
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    target_root = f"{NAS_BACKUP_ROOT.rstrip('/')}/{stamp}"
+    log_dir = f"{NAS_INCOMING_ROOT.rstrip('/')}/daily_new_framework/backup_logs"
+    log_path = f"{log_dir}/nas_backup_runtime_db_snapshot_{stamp}.log"
+    command = (
+        f"mkdir -p {shlex.quote(log_dir)} && "
+        f"cd {shlex.quote(NAS_PROJECT_ROOT)} && "
+        f"STAMP={shlex.quote(stamp)} nohup bash ops/nas/nas_backup_runtime_db_snapshot.sh "
+        f"> {shlex.quote(log_path)} 2>&1 < /dev/null & echo $!"
+    )
+    result = _nas_ssh(command)
+    pid = str(result.stdout or "").strip().splitlines()[-1].strip()
+    if not pid.isdigit():
+        raise RuntimeError(f"NAS 快照后台启动失败: {result.stdout or result.stderr}")
+    return {
+        "status": "started",
+        "pid": int(pid),
+        "target_root": target_root,
+        "log_path": log_path,
+    }
+
+
+def _run_nas_postprocess(trade_date: str, local_live_sync_report: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+    live_sync = _sync_nas_live_market_db(trade_date, local_live_sync_report)
+    snapshot = _snapshot_nas_runtime_dbs()
+    return {
+        "status": "done",
+        "live_sync": live_sync,
+        "research_release": {
+            "status": "skipped",
+            "reason": "daily_sync_focuses_on_live_and_backup",
+        },
+        "snapshot": snapshot,
+    }
+
+
+def _run_json_command(cmd: Sequence[str]) -> Dict[str, object]:
+    result = _run(cmd, check=False)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(f"命令失败: {shlex.join(list(cmd))} ; {detail[:500]}")
+    return _parse_json_output(result.stdout)
+
+
+def _run_local_postclose_l2_sync(trade_date: str) -> Dict[str, object]:
+    script_path = ROOT_DIR / "backend" / "scripts" / "run_postclose_l2_daily.py"
+    report = _run_json_command(
+        [
+            LOCAL_PYTHON,
+            str(script_path),
+            "--date",
+            _compact_date(trade_date),
+            "--skip-cloud-merge",
+            "--skip-mac-sync",
+            "--json",
+        ]
+    )
+    final_status = str(report.get("final_status") or "")
+    if report.get("status") != "done" or final_status == "FAIL":
+        raise RuntimeError(
+            f"postclose L2 同步失败: status={report.get('status')} final_status={final_status or 'unknown'}"
+        )
+    return report
+
+
+def _refresh_local_stock_universe_meta() -> Dict[str, object]:
+    script_path = ROOT_DIR / "backend" / "scripts" / "refresh_stock_universe_meta.py"
+    report = _run_json_command(
+        [
+            LOCAL_PYTHON,
+            str(script_path),
+            "--db-path",
+            str(LOCAL_MARKET_DB),
+            "--json",
+        ]
+    )
+    if int(report.get("rows") or 0) <= 0:
+        raise RuntimeError(f"stock_universe_meta 刷新结果异常: rows={report.get('rows')}")
+    return report
+
+
+def _run_local_live_postprocess(trade_date: str) -> Dict[str, object]:
+    return {
+        "postclose_l2": _run_local_postclose_l2_sync(trade_date),
+        "stock_universe_meta": _refresh_local_stock_universe_meta(),
     }
 
 
@@ -1102,6 +1383,7 @@ def run_daily(
     dry_run: bool = False,
     skip_candidates: bool = False,
     sync_nas: bool = DEFAULT_SYNC_NAS,
+    include_live_sync: bool = DEFAULT_INCLUDE_LIVE_SYNC,
 ) -> Dict[str, object]:
     trade_date = _compact_date(trade_date)
     local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
@@ -1115,7 +1397,7 @@ def run_daily(
     else:
         host = resolve_windows_host()
         win_atomic_db = _resolve_windows_data_path(
-            _windows_existing_path_candidates(WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+            _windows_existing_path_candidates(WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS)
         )
         win_selection_db = _resolve_windows_data_path(
             _windows_existing_path_candidates(WIN_SELECTION_DB, DEFAULT_WIN_SELECTION_DB)
@@ -1124,7 +1406,6 @@ def run_daily(
             _windows_existing_path_candidates(
                 WIN_MODEL_FEATURE_DB,
                 DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
             )
         )
         win_model_index_db = WIN_MODEL_INDEX_DB
@@ -1209,8 +1490,19 @@ def run_daily(
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
         report["local_verify"] = _verify_full_local(trade_date)
         ok = _is_local_complete(report["local_verify"] or {})
+        if ok and include_live_sync:
+            report["local_live_sync"] = _run_local_live_postprocess(trade_date)
+        elif not include_live_sync:
+            report["local_live_sync"] = {"status": "skipped", "reason": "skip_live_sync"}
         if ok and sync_nas:
-            report["nas_release"] = _publish_to_nas(trade_date)
+            nas_sync = _run_nas_postprocess(
+                trade_date,
+                report["local_live_sync"] if isinstance(report.get("local_live_sync"), dict) else None,
+            )
+            report["nas_sync"] = nas_sync
+            report["nas_live_sync"] = nas_sync.get("live_sync")
+            report["nas_release"] = nas_sync.get("research_release")
+            report["nas_snapshot"] = nas_sync.get("snapshot")
         report["status"] = "pass" if ok else "fail"
     except Exception as exc:
         report["status"] = "fail"
@@ -1228,6 +1520,7 @@ def run_auto_daily(
     skip_candidates: bool = False,
     max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT,
     sync_nas: bool = DEFAULT_SYNC_NAS,
+    include_live_sync: bool = DEFAULT_INCLUDE_LIVE_SYNC,
 ) -> Dict[str, object]:
     auto_detect = resolve_auto_trade_dates(max_candidates)
     selected_dates = list(auto_detect.get("selected_dates") or [])
@@ -1249,7 +1542,13 @@ def run_auto_daily(
     reports: List[Dict[str, object]] = []
     for trade_date in selected_dates:
         _progress(f"自动检测到未完整日期: {trade_date}")
-        report = run_daily(trade_date, dry_run=dry_run, skip_candidates=skip_candidates, sync_nas=sync_nas)
+        report = run_daily(
+            trade_date,
+            dry_run=dry_run,
+            skip_candidates=skip_candidates,
+            sync_nas=sync_nas,
+            include_live_sync=include_live_sync,
+        )
         report["auto_detect"] = {
             "status": auto_detect.get("status"),
             "selected_dates": selected_dates,
@@ -1283,18 +1582,27 @@ def main() -> None:
     parser.add_argument("--skip-candidates", action="store_true")
     parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后把本地正式研究库发布到 NAS research/current")
     parser.add_argument("--skip-nas", action="store_true", help="本次跳过 NAS 发布")
+    parser.add_argument("--skip-live-sync", action="store_true", help="本次跳过 Mac 本地 live/market_data.db 的 L2 历史补齐与 stock_universe_meta 刷新")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     sync_nas = bool(args.sync_nas and not args.skip_nas)
+    include_live_sync = not bool(args.skip_live_sync)
     try:
         if args.date:
-            report = run_daily(args.date, dry_run=args.dry_run, skip_candidates=args.skip_candidates, sync_nas=sync_nas)
+            report = run_daily(
+                args.date,
+                dry_run=args.dry_run,
+                skip_candidates=args.skip_candidates,
+                sync_nas=sync_nas,
+                include_live_sync=include_live_sync,
+            )
         else:
             report = run_auto_daily(
                 dry_run=args.dry_run,
                 skip_candidates=args.skip_candidates,
                 max_candidates=args.auto_detect_limit,
                 sync_nas=sync_nas,
+                include_live_sync=include_live_sync,
             )
     except Exception as exc:
         if args.json:

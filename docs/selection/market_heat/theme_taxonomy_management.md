@@ -23,7 +23,7 @@
 当前本地源头：
 
 - 原始库：`/Users/dong/Desktop/AIGC/market-data/market_heat/stock_sector_map.db`
-- 清洗库：`/Users/dong/Desktop/AIGC/market-data/market_heat/tradable_theme_map.db`
+- 清洗库：`/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/tradable_theme_map.db`
 - 原始来源字段：`eastmoney.push2`
 - 当前原始库生成时间：2026-04-29 13:34
 - 当前清洗库生成时间：2026-04-29 14:41
@@ -123,7 +123,7 @@ python3 backend/scripts/build_tradable_theme_map.py
 如果只是交易日数据已经跑完，需要刷新市场热点页面缓存，不需要重建板块关系，直接在页面点 `刷新最新数据`，或调用：
 
 ```bash
-curl -X POST 'http://127.0.0.1:8000/api/market_heat/fine_dashboard/refresh?days=63&force=true'
+curl -X POST 'http://127.0.0.1:8001/api/market_heat/fine_dashboard/refresh?days=63&force=true'
 ```
 
 刷新后必须检查：

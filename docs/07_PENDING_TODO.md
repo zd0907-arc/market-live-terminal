@@ -42,12 +42,13 @@
 
 ## T-022 选股工作台数据对齐与本地补齐
 - 状态：`ACTIVE`
-- 当前事实：选股工作台能力已可用，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；但当前仍只能视为研究/观察工作台，不能当稳定自动买入信号。最新复核结果是：`2026-05-26` 日跑已把市场环境指数和热点结果纳入主链，选股工作台当天候选也已输出；当前最实的剩余缺口是 `stock_universe_meta` 为空，以及 `2026-04-01 ~ 2026-04-10` 的 `history_*_l2` 缺口。
+- 当前事实：选股工作台能力已可用，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；但当前仍只能视为研究/观察工作台，不能当稳定自动买入信号。`2026-06-09` 已把本地 `stock_universe_meta` 刷新脚本改成“优先东方财富全市场快照、无依赖可跑”的口径，并已把 Mac 本地正式库刷到 `5532` 行，`/api/review/pool` 现可返回带名称/市值的正式池。同日又把 `run_daily_new_framework.py` 补上“主链本地校验通过后，默认继续触发本地 `postclose_l2` L2 历史补齐 + `stock_universe_meta` 刷新”的后处理，所以未来新交易日不该再继续漏写这两张正式历史表。实际补跑上，本轮还利用已跑完的 `worker_*.db` 手工把 `2026-06-08` 合并回 Windows / Mac 本地正式 `market_data.db`，当前本地 `history_daily_l2` 与 `history_5m_l2` 的最大日期已推进到 `2026-06-08`。剩余 backlog 已收缩为 `2026-05-22 ~ 2026-06-05` 这 `11` 个交易日；同时 NAS / 线上 `live` 口径是否要跟随这条主链，仍需单独决定。
 - 下一步：
-  1. 补 `stock_universe_meta`；
-  2. 恢复 `2026-04-01 ~ 2026-04-10` 的 `history_daily_l2 / history_5m_l2` 正式覆盖，并决定是否显式暴露 atomic fallback/source；
-  3. 跟踪资金流回调稳健与趋势中继最近信号的真实后续表现；
-  4. 明确哪些策略结果只做解释/观察，哪些可以进入模拟盘优先级。
+  1. 用一次真实日跑验证 `run_daily_new_framework.sh` 新增的本地 `postclose_l2 + stock_universe_meta` 后处理闭环；
+  2. 恢复剩余 `2026-05-22 ~ 2026-06-05` 的 `history_daily_l2 / history_5m_l2` 存量 backlog，并决定是否显式暴露 atomic fallback/source；
+  3. 确认 NAS / 线上 `live/market_data.db` 是否也要跟随这条主链自动补齐；
+  4. 跟踪资金流回调稳健与趋势中继最近信号的真实后续表现；
+  5. 明确哪些策略结果只做解释/观察，哪些可以进入模拟盘优先级。
 - 关联任务：`CHG-20260404-02`, `REL-20260427-selection-strategy-research-v5.0.9`, `MOD-20260429-07`
 
 ## T-027 单票新闻 / 公告 / 互动问答事件层基础建设
@@ -70,25 +71,30 @@
   5. 记录哪些链路只是 atomic merge / cache 命中后勉强可用，哪些已经真正完成新基线切换。
 - 关联任务：`CHG-20260417-01`
 
-## T-033 过程材料分级清理与入口降噪
-- 状态：`DONE`
-- 当前事实：这一轮已经完成最后一批高收益入口与命名收口：`README / AI_QUICK_START / 01 / 04 / contracts / domain / windows-data-station / mac-local-research / postclose-l2-runbook` 已统一到 `Mac 开发控制台 + NAS 在线运行节点 + Windows 数据主站` 口径，并把 repo 内 `data/` 明确成回退 / 兼容副本；同时清掉了一批高误导运行产物和根目录历史兼容库噪音。当前继续大面积压历史文档的收益已经不高，不再作为活跃待办保留。
-- 关闭标准：高曝光入口不再把后续 AI 拉回旧 Cloud 主叙事、repo 内副本主库叙事或根目录历史兼容库叙事。
-- 关联任务：`MOD-20260519-01`, `MOD-20260519-02`, `MOD-20260424-02`, `MOD-20260424-03`
-
 ## T-034 正式别名与 shadow/sample 迁移规划
-- 状态：`ACTIVE`
-- 当前事实：Windows 正式主链仍在用 `compact_smoke_*`、`model_feature_store_smoke_*` 这类物理名；后端目录里的 `backend/market.db`、`backend/app/market_data.db`、`backend/app/db/market_data.db` 仍是容易误导的 shadow/sample 对象。当前并不是要删库，而是要先把正式别名、迁移目标和回写范围定清。
-- 当前卡点：别名还没真正落成，因此不能先改默认路径；后端 sample / shadow 也还没确定最终目标目录，不能直接搬。
-- 下一步：
-  1. 固化正式别名映射：业务名 -> 物理文件名 -> 默认入口；
-  2. 固化 shadow/sample 目录迁移目标与保留策略；
-  3. 在核心文档里同步回写正式角色与兼容边界；
-  4. 再决定是否进入物理迁移或代码级替换。
-- 关联任务：`MOD-20260524-12-formal-alias-and-shadow-sample-migration-plan`
-
-## T-035 Mac -> NAS 长期协作链收口
 - 状态：`DONE`
-- 当前事实：`Mac -> NAS` 直连控制面、项目服务入口、Git 链路、`research/current` 发布链和线上运行态都已经形成闭环。当前已复核通过：`ssh zhangdong@dxp4800pro`、`http://dxp4800pro:8080/api/health`、`http://dxp4800pro:8080/api/selection/health`、`docker compose ps`、远程 `python3/sqlite3` 查询、`git push nas main` 入口，以及 `nas-research-release-runbook` 的 `staging -> current -> archive` 发布状态；当前 `research/current` 版本为 `nas_daily_new_20260605`，archive 已保留 `20260604 / 20260605` 回滚点。
-- 关闭标准：默认协作口径固定为 `Mac 控制台 -> NAS 服务与发布节点`，不再把“NAS Git 未打通”“research/current 仍是 bootstrap”“普通 scp 是默认方案”当成当前 pending 真相。
-- 关联任务：`docs/ops/mac-nas-collaboration.md`, `docs/ops/nas-research-release-runbook.md`
+- 当前事实：`2026-06-08` 已完成 Windows 正式命名收口：正式主链只保留 `selection_research.db`、`market_atomic_mainboard_compact_current.db`、`model_feature_store.db`；旧 `selection_research_windows.db` 与 `compact_smoke_*` 正式别名已退休，`model_feature_store_smoke_*` 与 atomic 历史测试/备份库已下沉到 `Z:\atomic_legacy_backup\windows_retired_20260608\`。
+- 收口结果：
+  1. 活跃脚本默认值已统一到 canonical 名；
+  2. Windows 现场不再保留旧正式别名；
+  3. 历史对象进入冷备退休区，不再和正式运行目录并列。
+- 关联任务：`MOD-20260524-12-formal-alias-and-shadow-sample-migration-plan`, `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+
+## T-037 Windows / NAS 终态对齐与正式公网入口
+- 状态：`ACTIVE`
+- 当前事实：按 `2026-06-09` 晚间的现场核查，三端“文件名口径”已经基本统一，Windows 也已补出和 Mac / NAS 一致的入口层。更关键的是，Mac 本地正式 `live` 库与 NAS 生产 `live` 库现在都已经补到 `2026-06-09`，当天 `history_daily_l2=7739`、`history_5m_l2=349019`、`stock_universe_meta=5532` 已对齐。当前没有做成的，不再是“当天数据进生产”，而是 NAS 侧的长期自动化与大体量 `research/current` 发布策略。
+- 下一步：
+  1. 决定 NAS 快照是否继续采用“每日 Mac 跑数后后台触发”这条方式，还是以后再补更高权限的 NAS 定时任务；
+  2. 决定 `research/current` 是否还需要每天整包发布到 NAS；如果需要，要单独设计适合大库的发布方式，而不是继续绑在每日收盘主链里；
+  3. 决定 Windows 后续是停在“别名层对齐”还是继续做物理目录终态整理；
+  4. 如果不购买域名，就把当前 `*.ts.net` 免费地址作为长期公网入口；如果以后要品牌域名，再启用 `Cloudflare Tunnel + 自定义域名`。
+- 关联任务：`MOD-20260608-01-windows-nas-runtime-storage-and-public-entry-audit`
+
+## T-038 基线版本面一致性收口
+- 状态：`ACTIVE`
+- 当前事实：`2026-06-09` 已把高曝光文档和 skill 中错误的 baseline 入口从 `npm run check:baseline` 收口到真实存在的 `bash scripts/check_baseline.sh`。脚本现可真实执行，但当前会失败在版本一致性 gate：`package.json=1.16.0`，而 `README.md`、`src/version.ts`、`backend/app/main.py` 都是 `5.2.2`。这说明现在的问题已不是“命令写错”，而是“当前到底哪一处才是正式版本面”没有完全收口。
+- 下一步：
+  1. 明确 `package.json` 是否仍属于当前正式版本面；
+  2. 若属于，统一把它与 `README.md`、`src/version.ts`、`backend/app/main.py` 收成同一版本；
+  3. 若不属于，调整 `scripts/check_baseline.sh` 与相关 skill / 文档口径，避免继续把它当 hard gate。
+- 关联任务：`MOD-20260609-06-ai-skill-routing-and-governance-alignment`

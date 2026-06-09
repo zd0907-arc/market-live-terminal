@@ -27,7 +27,7 @@
 ```bash
 ssh -o ServerAliveInterval=5 -o ServerAliveCountMax=6 zhangdong@dxp4800pro 'echo ok'
 curl http://dxp4800pro:8080/api/health
-bash ops/nas_probe_market_sources.sh
+bash ops/nas/nas_probe_market_sources.sh
 ```
 
 说明：
@@ -41,7 +41,7 @@ bash ops/nas_probe_market_sources.sh
 执行：
 
 ```bash
-bash ops/nas_enable_crawler.sh
+bash ops/nas/nas_enable_crawler.sh
 ```
 
 它会在 NAS 上执行：
@@ -55,7 +55,7 @@ docker compose --env-file .env.nas-full -f deploy/docker-compose.nas-full.yml --
 执行：
 
 ```bash
-bash ops/nas_check_crawler_status.sh
+bash ops/nas/nas_check_crawler_status.sh
 ```
 
 重点看三类信号：
@@ -75,7 +75,7 @@ bash ops/nas_check_crawler_status.sh
 执行：
 
 ```bash
-bash ops/nas_verify_crawler_ingest.sh
+bash ops/nas/nas_verify_crawler_ingest.sh
 ```
 
 重点看：
@@ -129,7 +129,7 @@ bash ops/nas_verify_crawler_ingest.sh
 
 回退动作：
 
-1. 执行 `bash ops/nas_disable_crawler.sh` 停掉 NAS crawler
+1. 执行 `bash ops/nas/nas_disable_crawler.sh` 停掉 NAS crawler
 2. 恢复 Windows `ZhangDataLiveCrawler`
 3. 保留 NAS 日志和 DB 证据继续排查
 
@@ -144,10 +144,10 @@ bash ops/nas_verify_crawler_ingest.sh
 - NAS 后端未被 crawler 拖挂：
   - `market-backend-nas   Up`
   - `/api/health`、`/api/selection/health` 可继续返回 `200`
-- `ops/nas_probe_market_sources.sh` 已验证：
+- `ops/nas/nas_probe_market_sources.sh` 已验证：
   - NAS 主机可访问 `qt.gtimg.cn`
   - crawler 容器内也可访问 `qt.gtimg.cn`
-- `ops/nas_verify_crawler_ingest.sh` 已验证：
+- `ops/nas/nas_verify_crawler_ingest.sh` 已验证：
   - `trade_ticks` 已写入 `2026-06-04`
   - `sentiment_snapshots` 也已写入 `2026-06-04`
 - 交易时段补验后确认：
@@ -172,7 +172,7 @@ bash ops/nas_verify_crawler_ingest.sh
 
 ### 9.2 本轮发现的问题
 
-- 原始运维脚本默认 `NAS_HOST` 仍指向 `zhangdong@192.168.3.43`
+- 原始运维脚本默认 `NAS_HOST` 当时仍指向 `zhangdong@192.168.3.43`
 - 当前实际更稳定的运维入口应优先走：
   - `zhangdong@dxp4800pro`
   - 或 `zhangdong@100.119.0.126`
@@ -182,7 +182,7 @@ bash ops/nas_verify_crawler_ingest.sh
 - 本轮已把本地代码修正为：
   - 直接请求 `http://qt.gtimg.cn/q={symbol}`
   - 对 snapshot POST 增加返回码检查和日志
-- 本轮也已把 `ops/nas_enable_crawler.sh`、`ops/nas_disable_crawler.sh`、`ops/nas_check_crawler_status.sh`、`ops/nas_verify_crawler_ingest.sh`、`ops/nas_probe_market_sources.sh` 的默认 `NAS_HOST` 改为 `zhangdong@dxp4800pro`
+- 本轮也已把 `ops/nas/nas_enable_crawler.sh`、`ops/nas/nas_disable_crawler.sh`、`ops/nas/nas_check_crawler_status.sh`、`ops/nas/nas_verify_crawler_ingest.sh`、`ops/nas/nas_probe_market_sources.sh` 的默认 `NAS_HOST` 改为 `zhangdong@dxp4800pro`
 
 ### 9.3 当前仍未完成的验收项
 

@@ -16,9 +16,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from backend.app.core.config import FORMAL_MARKET_DATA_ROOT
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("MARKET_DATA_ROOT", FORMAL_MARKET_DATA_ROOT))
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "selection" / "litong_similarity"
 DEFAULT_DOCS_DIR = REPO_ROOT / "docs" / "selection" / "litong_similarity"
 

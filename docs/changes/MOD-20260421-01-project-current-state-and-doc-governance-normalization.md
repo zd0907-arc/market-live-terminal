@@ -39,7 +39,8 @@
 ### 2.3 当前三端职责
 - Windows：raw、正式跑数、处理后正式库与研究结果真相源；
 - Mac：当前唯一开发 / 复盘 / 选股 / 文档主工作台，并持有同步后的正式研究库；
-- Cloud：轻量盯盘 / 应急查看。
+- NAS：当前线上前后端、轻量盯盘、在线查询与发布/回滚节点。
+- 旧 Cloud：只按历史 lite / 应急查看环境理解。
 
 ### 2.4 当前文档治理原则
 - `docs/02~08` 只保留**当前真相 / 当前规则 / 当前待办**；
@@ -50,7 +51,7 @@
 ### 2.5 当前研究冻结口径（2026-05-07）
 - 盯盘、复盘、选股、热点研究的功能开发默认进入冻结 / 收口状态，除非用户明确重新开启。
 - 当前唯一持续更新研究目录：`docs/selection/long_term_trends/`。
-- Cloud 后续只按 Lite 目标发布：盯盘 + 复盘优先；选股、热点、长期趋势研究默认不作为云端必需能力。
+- 旧 Cloud 后续只按 Lite / emergency 目标保留：盯盘 + 复盘优先；选股、热点、长期趋势研究默认不作为它的必需能力。
 - 后续清理、stash、worktree 收口时，必须确认长期趋势目录仍在工作区且已纳入版本管理。
 
 ## 3. 这次治理收口的目标
@@ -104,19 +105,19 @@
 - 已把以下脚本从“写死旧 worktree 路径”改为“按当前仓库根目录解析”：
   - `ops/start_local_research_frontend.sh`
   - `ops/start_local_research_station.sh`
-  - `ops/sync_windows_research_snapshot.sh`
-  - `ops/check_postclose_l2_status.sh`
+  - `ops/legacy/sync_windows_research_snapshot.sh`
+  - `ops/legacy/check_postclose_l2_status.sh`
 
 ## 6.5 当前正式数据路径
 - Mac 本地研究站当前正式主路径：
-  - `data/market_data.db`
-  - `data/atomic_facts/market_atomic_mainboard_full_reverse.db`
-  - `data/selection/selection_research.db`
-  - `data/user_data.db`
+  - `market-data/live/market_data.db`
+  - `market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
+  - `market-data/research/current/selection/selection_research.db`
+  - `market-data/live/user_data.db`
 - `snapshot` 相关文件仅保留为验证 / 过渡工具，不再描述为正式主路径。
 
 ## 6.6 已落地三模块现状
-- 盯盘：主路径为首页当日分时 / 历史多维，生产实时链路仍是 Windows crawler -> Cloud ingest -> Cloud 轻量库；Mac 本地只默认读同步库并支持单票按需 hydrate。
+- 盯盘：主路径为首页当日分时 / 历史多维，生产实时链路当前应理解为 Windows crawler -> NAS ingest -> NAS `live/market_data.db`；Mac 本地只默认读同步库并支持单票按需 hydrate。
 - 正式复盘：canonical 路由 `/review`，接口为 `/api/review/pool` 与 `/api/review/data`，复用正式 L2 历史表；`/sandbox-review` 只做兼容跳转。
 - 选股研究：canonical 路由 `/selection-research`，已接入每日复盘决策、资金流回调稳健、趋势中继高质量回踩；当前定位是研究与观察工作台，策略效果和覆盖面仍需继续验证，不能当自动交易信号。
 

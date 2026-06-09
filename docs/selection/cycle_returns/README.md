@@ -16,7 +16,7 @@
 
 ## 数据表
 
-表：`data/selection/selection_research.db::stock_cycle_return_daily`
+表：`market-data/research/current/selection/selection_research.db::stock_cycle_return_daily`
 
 关键字段：
 
@@ -47,6 +47,8 @@ python3 backend/scripts/build_cycle_return_snapshot.py \
   --symbols sz001309,sh603629,sz301308 \
   --workers 3
 ```
+
+默认读取 `RESEARCH_CURRENT_ROOT/selection/selection_research.db`；repo 内 `data/selection/selection_research.db` 只按回退副本理解。
 
 ## 当前 2026-04-30 快照
 

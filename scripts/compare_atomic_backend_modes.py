@@ -17,11 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.app.core.config import FORMAL_MARKET_DATA_ROOT, RESEARCH_CURRENT_ROOT
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MARKET_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
-DEFAULT_FORMAL_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
-DEFAULT_COMPACT_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", FORMAL_MARKET_DATA_ROOT))
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
+DEFAULT_FORMAL_DB = DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
+DEFAULT_COMPACT_DB = DEFAULT_RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 URL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 

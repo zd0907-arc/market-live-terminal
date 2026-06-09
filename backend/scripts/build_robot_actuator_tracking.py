@@ -17,11 +17,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data/selection/long_term_trends/robot_actuator"
 DOC_DIR = ROOT / "docs/selection/long_term_trends/robot_actuator"
-HEAT_DB = Path("/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db")
+HEAT_DB = Path(RESEARCH_CURRENT_ROOT) / "market_heat" / "fine_theme_heat_daily.db"
 LITONG_CSV = ROOT / "data/selection/litong_similarity/litong_similarity_all_20260331_20260430.csv"
 LOCAL_TZ = ZoneInfo("Asia/Shanghai")
 RUN_DATE = os.getenv("TREND_RUN_DATE", "2026-05-11")

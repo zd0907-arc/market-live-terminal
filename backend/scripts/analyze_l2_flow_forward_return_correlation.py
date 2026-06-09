@@ -8,8 +8,10 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, median
 
+from backend.app.core.config import RESEARCH_CURRENT_ROOT
+
 ROOT = Path('/Users/dong/Desktop/AIGC/market-live-terminal')
-ATOMIC_DB = Path('/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db')
+ATOMIC_DB = Path(RESEARCH_CURRENT_ROOT) / 'atomic_facts' / 'market_atomic_mainboard_compact_current.db'
 DATA_OUT = ROOT / 'data/selection/market_heat/backtests'
 DOC_OUT = ROOT / 'docs/selection/market_heat/backtests'
 VARIANT_CSV = DATA_OUT / 'hot_theme_strategy_variants_2025-01_2026-03_trades.csv'

@@ -1,3 +1,7 @@
+# 兼容说明（2026-06-07）：
+# 这是 NAS lite 的旧 flat-data 兼容链。
+# 当前 NAS 正式运行口径以 deploy/docker-compose.nas-full.yml 的
+# /runtime-data/live 与 /runtime-data/research/current 为准。
 services:
   backend:
     build:

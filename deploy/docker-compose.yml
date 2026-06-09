@@ -1,3 +1,7 @@
+# 兼容说明（2026-06-07）：
+# 这是旧 repo-data / flat-data 本地兼容链。
+# 当前正式数据根默认口径是 external market-data 的 live/ 与 research/current/，
+# 不要把这里的 ../data:/app/data 解释成默认正式真相路径。
 services:
   backend:
     build:

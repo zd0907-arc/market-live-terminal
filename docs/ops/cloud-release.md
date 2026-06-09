@@ -4,13 +4,14 @@
 这份 runbook 只记录旧 Cloud 阶段的遗留发布入口与退役边界。
 
 当前正式线上节点已经切到 NAS；Cloud 不再是当前默认发布目标。
+当前如果只是需要一个可访问的公网入口，`https://dxp4800pro.tailfff556.ts.net/` 已经可用，不需要为了这轮治理再单独恢复 Cloud。
 
 旧 Cloud 历史上只负责：
 - 轻量盯盘
 - 手机 / 异地应急查看
 - 生产只读 / 轻写接口消费
 
-## 2. 当前发布入口
+## 2. 当前兼容入口
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
 ./deploy_to_cloud.sh
@@ -19,12 +20,13 @@ cd /Users/dong/Desktop/AIGC/market-live-terminal
 使用规则：
 
 - 只有在明确需要维护旧 Cloud 遗留环境时才使用这条入口
+- 默认把它理解为 `legacy/emergency only`
 - 当前默认线上发布、在线查询和 `research/current` 收口都应走 NAS 相关 runbook
 
 ## 3. 发布前必须确认
 1. 当前改动确实属于 Cloud 范围
 2. `main` 已包含要发布的提交
-3. `npm run check:baseline` 已通过
+3. `bash scripts/check_baseline.sh` 已通过
 4. 版本号一致：`package.json / src/version.ts / README.md / backend/app/main.py`
 
 ## 4. 发布后最小冒烟

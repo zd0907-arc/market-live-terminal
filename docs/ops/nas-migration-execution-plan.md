@@ -115,16 +115,16 @@
 ### 2.5 已确认的离线资产与测试事实
 
 - 阶段 B 脚本链已具备可用基础：
-  - `ops/nas_prepare_research_dirs.sh`
-  - `ops/build_nas_research_release_manifest.sh`
-  - `ops/check_nas_research_release.sh`
-  - `ops/upload_nas_research_release.sh`
-  - `ops/rewrite_market_heat_release_metadata.sh`
-  - `ops/nas_publish_research_release.sh`
-  - `ops/nas_rollback_research_release.sh`
-  - `ops/nas_list_research_releases.sh`
-  - `ops/nas_smoke_research_release.sh`
-  - `ops/nas_run_phase_b_release.sh`
+  - `ops/nas/nas_prepare_research_dirs.sh`
+  - `ops/nas/build_nas_research_release_manifest.sh`
+  - `ops/nas/check_nas_research_release.sh`
+  - `ops/nas/upload_nas_research_release.sh`
+  - `ops/nas/rewrite_market_heat_release_metadata.sh`
+  - `ops/nas/nas_publish_research_release.sh`
+  - `ops/nas/nas_rollback_research_release.sh`
+  - `ops/nas/nas_list_research_releases.sh`
+  - `ops/nas/nas_smoke_research_release.sh`
+  - `ops/nas/nas_run_phase_b_release.sh`
 - 阶段 C 的一批路径治理已经完成并有测试支撑
 
 ## 3. 当前任务顺序
@@ -172,10 +172,10 @@
 
 执行入口：
 
-- `bash ops/nas_probe_market_sources.sh`
-- `bash ops/nas_run_phase_a.sh`
-- `bash ops/nas_check_crawler_status.sh`
-- `bash ops/nas_verify_crawler_ingest.sh`
+- `bash ops/nas/nas_probe_market_sources.sh`
+- `bash ops/nas/nas_run_phase_a.sh`
+- `bash ops/nas/nas_check_crawler_status.sh`
+- `bash ops/nas/nas_verify_crawler_ingest.sh`
 
 完成标准：
 

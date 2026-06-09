@@ -173,6 +173,10 @@ def ensure_l2_history_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_history_daily_l2_date
             ON history_daily_l2(date);
+            CREATE INDEX IF NOT EXISTS idx_history_daily_l2_symbol_date
+            ON history_daily_l2(symbol, date);
+            CREATE INDEX IF NOT EXISTS idx_history_daily_l2_lower_symbol_date
+            ON history_daily_l2(lower(symbol), date);
 
             CREATE TABLE IF NOT EXISTS l2_daily_ingest_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,6 +218,8 @@ def ensure_l2_history_schema() -> None:
             ON stock_universe_meta(market_cap DESC, symbol ASC);
             CREATE INDEX IF NOT EXISTS idx_stock_universe_meta_as_of_date
             ON stock_universe_meta(as_of_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_stock_universe_meta_lower_symbol_as_of_date
+            ON stock_universe_meta(lower(symbol), as_of_date DESC);
             """
         )
         _ensure_column(conn, "history_5m_l2", "total_volume", "REAL NULL")
@@ -225,6 +231,12 @@ def ensure_l2_history_schema() -> None:
         _ensure_column(conn, "history_5m_l2", "l2_oib_delta", "REAL NULL")
         _ensure_column(conn, "history_5m_l2", "quality_info", "TEXT NULL")
         _ensure_column(conn, "history_daily_l2", "quality_info", "TEXT NULL")
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_history_5m_l2_lower_symbol_date
+            ON history_5m_l2(lower(symbol), source_date)
+            """
+        )
         conn.commit()
     finally:
         conn.close()

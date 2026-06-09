@@ -3356,10 +3356,27 @@ def _load_symbol_name_map() -> Dict[str, str]:
 
     name_map: Dict[str, str] = {}
     candidates: List[Tuple[str, Sequence[str]]] = []
+    candidate_roots: List[str] = []
+    seen_roots = set()
+
+    def _append_root(root: Optional[str]) -> None:
+        root_text = str(root or "").strip()
+        if not root_text or root_text in seen_roots:
+            return
+        seen_roots.add(root_text)
+        candidate_roots.append(root_text)
+
+    for env_key in ("FORMAL_MARKET_DATA_ROOT", "RESEARCH_CURRENT_ROOT", "LIVE_DATA_ROOT"):
+        _append_root(os.getenv(env_key))
+
     try:
         from backend.app.core.config import DEFAULT_FORMAL_MARKET_DATA_ROOT
 
-        root = DEFAULT_FORMAL_MARKET_DATA_ROOT
+        _append_root(DEFAULT_FORMAL_MARKET_DATA_ROOT)
+    except Exception:
+        pass
+
+    for root in candidate_roots:
         candidates.extend(
             [
                 (os.path.join(root, "market_data.db"), ("stock_universe_meta",)),
@@ -3369,19 +3386,6 @@ def _load_symbol_name_map() -> Dict[str, str]:
                 (os.path.join(root, "market_heat", "fine_theme_heat_daily_v2.db"), ("fine_theme_heat_daily_v2",)),
                 (os.path.join(root, "market_heat", "fine_theme_heat_daily.db"), ("fine_theme_member_daily",)),
                 (os.path.join(root, "market_heat", "hot_theme_low_position_l2_samples.db"), ("samples",)),
-                ("data/market_data.db", ("stock_universe_meta",)),
-                ("data/user_data.db", ("watchlist",)),
-                ("data/market_heat/stock_sector_map.db", ("stock_sector_memberships",)),
-                ("data/market_heat/tradable_theme_map.db", ("clean_stock_sector_memberships", "tradable_theme_memberships")),
-            ]
-        )
-    except Exception:
-        candidates.extend(
-            [
-                ("data/market_data.db", ("stock_universe_meta",)),
-                ("data/user_data.db", ("watchlist",)),
-                ("data/market_heat/stock_sector_map.db", ("stock_sector_memberships",)),
-                ("data/market_heat/tradable_theme_map.db", ("clean_stock_sector_memberships", "tradable_theme_memberships")),
             ]
         )
 

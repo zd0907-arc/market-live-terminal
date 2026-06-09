@@ -575,7 +575,7 @@ def main() -> None:
     parser.add_argument("--large-threshold", type=float, default=default_large)
     parser.add_argument("--super-threshold", type=float, default=default_super)
     parser.add_argument("--mode", default="manual", help="run mode，例如 manual/daily_auto")
-    parser.add_argument("--db-path", default="", help="可选 DB 路径；默认使用环境变量 DB_PATH 或 data/market_data.db")
+    parser.add_argument("--db-path", default="", help="可选 DB 路径；默认使用环境变量 DB_PATH 或正式 live/market_data.db")
     parser.add_argument("--dry-run", action="store_true", help="只解析与统计，不写库")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
     args = parser.parse_args()

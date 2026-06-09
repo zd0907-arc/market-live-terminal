@@ -18,9 +18,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.scripts.run_daily_new_framework import (  # noqa: E402
     DEFAULT_WIN_ATOMIC_DB_ALIAS,
-    DEFAULT_WIN_ATOMIC_DB_LEGACY,
     DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-    DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
     DEFAULT_WIN_SELECTION_DB,
     WIN_MARKET_ROOT,
     WIN_PROJECT_ROOT,
@@ -392,7 +390,7 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
         resolved_model_feature_db = args.model_feature_db
     elif args.background and not args.local_windows:
         resolved_atomic_db = _resolve_windows_data_path(
-            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS)
         )
         resolved_selection_db = _resolve_windows_data_path(
             _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
@@ -401,7 +399,6 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
             _windows_existing_path_candidates(
                 args.model_feature_db,
                 DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
             )
         )
         args.atomic_db = resolved_atomic_db
@@ -411,7 +408,7 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
     else:
         host = "local-windows" if args.local_windows else resolve_windows_host()
         resolved_atomic_db = args.atomic_db if args.local_windows else _resolve_windows_data_path(
-            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY)
+            _windows_existing_path_candidates(args.atomic_db, DEFAULT_WIN_ATOMIC_DB_ALIAS)
         )
         resolved_selection_db = args.selection_db if args.local_windows else _resolve_windows_data_path(
             _windows_existing_path_candidates(args.selection_db, DEFAULT_WIN_SELECTION_DB)
@@ -420,7 +417,6 @@ def run_months(args: argparse.Namespace) -> Dict[str, Any]:
             _windows_existing_path_candidates(
                 args.model_feature_db,
                 DEFAULT_WIN_MODEL_FEATURE_DB_ALIAS,
-                DEFAULT_WIN_MODEL_FEATURE_DB_LEGACY,
             )
         )
     state: Dict[str, Any] = {

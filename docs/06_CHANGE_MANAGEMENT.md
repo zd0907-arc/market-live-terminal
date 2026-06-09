@@ -80,7 +80,7 @@
 7. 已解决或已失效的 pending 必须从 `07_PENDING_TODO.md` 清理；
 8. 开发完成后，至少完成：
    - 用户可见的明确产品改动必须同步升版本号，并在 release notes 中写清可见变化
-   - `npm run check:baseline`
+   - `bash scripts/check_baseline.sh`
    - 若已到用户验收阶段，必须把对应 worktree/分支的前后端服务启动到用户可刷新验证的地址
    - 回填受影响核心文档
    - 更新 `AI_HANDOFF_LOG`

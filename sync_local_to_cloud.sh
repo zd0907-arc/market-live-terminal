@@ -5,6 +5,8 @@
 # ==============================================================================
 # 说明：此脚本用于解决云服务器 IP 被东方财富等数据源封锁的情况。
 # 它会在当前本地网络环境下执行爬虫，生成 SQL 包，并自动注入到云端。
+# 兼容说明（2026-06-07）：这是旧 cloud / flat-data 兼容链，
+# 当前正式默认入口不是它，也不要把其中的 data/market_data.db 当成当前正式真相。
 
 SERVER_IP="111.229.144.202"
 SERVER_USER="ubuntu"
@@ -29,7 +31,7 @@ fi
 
 echo ""
 echo "========================================================"
-echo " ☁️ 数据包打包完毕，准备通过 SSH 隧道注入云端服务器..."
+echo " ☁️ 数据包打包完毕，准备通过 SSH 隧道注入旧 Cloud 兼容环境..."
 echo "========================================================"
 
 # 2. 传输文件到服务器 (先传到 ubuntu 用户的 home 目录，避开 Docker 的 root 权限导致 Permission denied)
@@ -46,7 +48,7 @@ ssh -t $SERVER_USER@$SERVER_IP << 'EOF'
     cd ~/market-live-terminal/deploy
     # 容器是精简版 python 没预装 sqlite3 命令行工具，因此直接用内置的 python sqlite3 库执行 SQL 管道
     sudo docker compose exec -T backend python -c "import sys, sqlite3; conn=sqlite3.connect('data/market_data.db'); conn.executescript(sys.stdin.read()); conn.close()" < ~/sync_data.sql
-    echo "✅ 云端数据库 30 分钟 K 线历史合并/覆盖完成！"
+    echo "✅ 旧 Cloud 兼容库的 30 分钟 K 线历史合并/覆盖完成！"
     
     # 顺手把服务器上的同步包删掉，保持整洁
     rm -f ~/sync_data.sql

@@ -38,7 +38,7 @@ NAS 数据根统一按下面结构：
 先建目录：
 
 ```bash
-bash ops/nas_prepare_research_dirs.sh
+bash ops/nas/nas_prepare_research_dirs.sh
 ```
 
 完成标准：
@@ -58,25 +58,25 @@ research/staging/<release_name>/
 1. 先在当前正式数据根生成 release 清单：
 
 ```bash
-bash ops/build_nas_research_release_manifest.sh <release_name>
+bash ops/nas/build_nas_research_release_manifest.sh <release_name>
 ```
 
 2. 直接把这版 release 上传到 NAS staging：
 
 ```bash
-bash ops/upload_nas_research_release.sh <release_name>
+bash ops/nas/upload_nas_research_release.sh <release_name>
 ```
 
 如果要一口气跑完整个阶段 B 发布链，可直接执行：
 
 ```bash
-bash ops/nas_run_phase_b_release.sh <release_name>
+bash ops/nas/nas_run_phase_b_release.sh <release_name>
 ```
 
 3. 发布前先做 release 校验：
 
 ```bash
-bash ops/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data
+bash ops/nas/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data
 ```
 
 这一步主要验证正式库、正式表、关键交易日是否完整。
@@ -84,8 +84,8 @@ bash ops/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data
 如果已经上传到 NAS staging，也可以直接校验 staging 版本目录：
 
 ```bash
-ssh zhangdong@192.168.3.43 \
-  'bash /volume1/docker/market-live-terminal/app/ops/check_nas_research_release.sh /volume1/docker/market-live-terminal/data/research/staging/<release_name>'
+ssh zhangdong@dxp4800pro \
+  'bash /volume1/docker/market-live-terminal/app/ops/nas/check_nas_research_release.sh /volume1/docker/market-live-terminal/data/research/staging/<release_name>'
 ```
 
 区别要点：
@@ -110,13 +110,13 @@ ssh zhangdong@192.168.3.43 \
 发布命令：
 
 ```bash
-bash ops/nas_publish_research_release.sh <release_name>
+bash ops/nas/nas_publish_research_release.sh <release_name>
 ```
 
 例子：
 
 ```bash
-bash ops/nas_publish_research_release.sh 20260529_postclose
+bash ops/nas/nas_publish_research_release.sh 20260529_postclose
 ```
 
 发布动作：
@@ -129,7 +129,7 @@ bash ops/nas_publish_research_release.sh 20260529_postclose
 6. 发布后执行：
 
 ```bash
-bash ops/nas_smoke_research_release.sh
+bash ops/nas/nas_smoke_research_release.sh
 ```
 
 它会做三件事：
@@ -141,13 +141,13 @@ bash ops/nas_smoke_research_release.sh
 如果希望在发布命令后自动连跑这一步，可执行：
 
 ```bash
-RUN_SMOKE_AFTER_PUBLISH=true bash ops/nas_publish_research_release.sh <release_name>
+RUN_SMOKE_AFTER_PUBLISH=true bash ops/nas/nas_publish_research_release.sh <release_name>
 ```
 
 ## 6. 查看当前版本
 
 ```bash
-bash ops/nas_list_research_releases.sh
+bash ops/nas/nas_list_research_releases.sh
 ```
 
 重点看：
@@ -162,13 +162,13 @@ bash ops/nas_list_research_releases.sh
 如果当前版本有问题，执行：
 
 ```bash
-bash ops/nas_rollback_research_release.sh <archive_name>
+bash ops/nas/nas_rollback_research_release.sh <archive_name>
 ```
 
 例子：
 
 ```bash
-bash ops/nas_rollback_research_release.sh 20260529_231500_20260529_postclose
+bash ops/nas/nas_rollback_research_release.sh 20260529_231500_20260529_postclose
 ```
 
 回滚动作：
@@ -181,12 +181,12 @@ bash ops/nas_rollback_research_release.sh 20260529_231500_20260529_postclose
 
 至少要留这几类证据：
 
-1. `bash ops/nas_list_research_releases.sh` 输出
+1. `bash ops/nas/nas_list_research_releases.sh` 输出
 2. `docker compose ps`
 3. 页面 / API 抽样验证
 4. `release_manifest.json`
-5. `bash ops/check_nas_research_release.sh ...` 输出
-6. `bash ops/nas_smoke_research_release.sh` 输出
+5. `bash ops/nas/check_nas_research_release.sh ...` 输出
+6. `bash ops/nas/nas_smoke_research_release.sh` 输出
 
 建议最少验证：
 
@@ -220,16 +220,16 @@ bash ops/nas_rollback_research_release.sh 20260529_231500_20260529_postclose
 
 以下脚本已通过 `bash -n`：
 
-- `ops/nas_prepare_research_dirs.sh`
-- `ops/build_nas_research_release_manifest.sh`
-- `ops/check_nas_research_release.sh`
-- `ops/rewrite_market_heat_release_metadata.sh`
-- `ops/upload_nas_research_release.sh`
-- `ops/nas_publish_research_release.sh`
-- `ops/nas_rollback_research_release.sh`
-- `ops/nas_list_research_releases.sh`
-- `ops/nas_smoke_research_release.sh`
-- `ops/nas_run_phase_b_release.sh`
+- `ops/nas/nas_prepare_research_dirs.sh`
+- `ops/nas/build_nas_research_release_manifest.sh`
+- `ops/nas/check_nas_research_release.sh`
+- `ops/nas/rewrite_market_heat_release_metadata.sh`
+- `ops/nas/upload_nas_research_release.sh`
+- `ops/nas/nas_publish_research_release.sh`
+- `ops/nas/nas_rollback_research_release.sh`
+- `ops/nas/nas_list_research_releases.sh`
+- `ops/nas/nas_smoke_research_release.sh`
+- `ops/nas/nas_run_phase_b_release.sh`
 
 ### 10.2 自动化测试
 
@@ -282,7 +282,7 @@ pytest -q backend/tests/test_nas_release_scripts.py
 
 现象：
 
-- `ops/check_nas_research_release.sh` 之前只要目录名叫 `current`，就会强制要求 `market_heat/latest.json` 指向 release 内 atomic 路径。
+- `ops/nas/check_nas_research_release.sh` 之前只要目录名叫 `current`，就会强制要求 `market_heat/latest.json` 指向 release 内 atomic 路径。
 - 这会导致本地 `FORMAL_MARKET_DATA_ROOT/research/current` 无法通过阶段 B 的本地自检。
 
 修正：
@@ -301,7 +301,7 @@ pytest -q backend/tests/test_nas_release_scripts.py
 
 修正：
 
-- `ops/nas_publish_research_release.sh` 现在在两处补做 rewrite：
+- `ops/nas/nas_publish_research_release.sh` 现在在两处补做 rewrite：
   1. 旧 `current` 归档到 `archive` 后，重写 archive 内 metadata
   2. 新 release 提升为 `current` 后，立即重写 current 内 metadata
 
@@ -326,8 +326,8 @@ pytest -q backend/tests/test_nas_release_scripts.py
 执行：
 
 ```bash
-bash ops/build_nas_research_release_manifest.sh nas_release_20260602_online
-bash ops/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data
+bash ops/nas/build_nas_research_release_manifest.sh nas_release_20260602_online
+bash ops/nas/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data
 ```
 
 当前结果：
@@ -396,7 +396,7 @@ sqlite3 /Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db 'p
 
 ### 11.3 上传脚本当前状态
 
-`ops/upload_nas_research_release.sh` 本轮已完成两处补强：
+`ops/nas/upload_nas_research_release.sh` 本轮已完成两处补强：
 
 1. `scp` 上传模式已通过本地 fake remote 验证
 2. SSH / `scp` 的 `ConnectTimeout` 已提取为环境变量：
@@ -408,7 +408,7 @@ SSH_CONNECT_TIMEOUT="${SSH_CONNECT_TIMEOUT:-8}"
 这样在 NAS 响应慢时，可以直接用：
 
 ```bash
-SSH_CONNECT_TIMEOUT=20 bash ops/upload_nas_research_release.sh <release_name>
+SSH_CONNECT_TIMEOUT=20 bash ops/nas/upload_nas_research_release.sh <release_name>
 ```
 
 不需要再改脚本。
@@ -416,7 +416,7 @@ SSH_CONNECT_TIMEOUT=20 bash ops/upload_nas_research_release.sh <release_name>
 本地验证结果：
 
 ```bash
-bash -n ops/upload_nas_research_release.sh
+bash -n ops/nas/upload_nas_research_release.sh
 pytest -q backend/tests/test_nas_release_scripts.py
 ```
 
@@ -432,18 +432,18 @@ pytest -q backend/tests/test_nas_release_scripts.py
 最近一次尝试执行：
 
 ```bash
-bash ops/upload_nas_research_release.sh nas_release_20260602_online
+bash ops/nas/upload_nas_research_release.sh nas_release_20260602_online
 ```
 
 实际阻塞：
 
-- `ssh: connect to host 192.168.3.43 port 22: Operation timed out`
+- `ssh: connect to host dxp4800pro port 22: Operation timed out`
 
 随后复测：
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@192.168.3.43 'echo ok'
-ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@192.168.3.43 'echo ok'
+ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@dxp4800pro 'echo ok'
+ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@dxp4800pro 'echo ok'
 ```
 
 结果仍然都是：
@@ -498,11 +498,11 @@ ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@192.168.3.43 'echo ok'
   - `.release_name = nas_release_bootstrap_from_flat_20260604`
   - `.published_at = 2026-06-04 11:37:23`
 - 已执行：
-  - `bash ops/rewrite_market_heat_release_metadata.sh /volume1/docker/market-live-terminal/data/research/current`
+  - `bash ops/nas/rewrite_market_heat_release_metadata.sh /volume1/docker/market-live-terminal/data/research/current`
 
 验证结果：
 
-- `bash ops/check_nas_research_release.sh /volume1/docker/market-live-terminal/data/research/current`
+- `bash ops/nas/check_nas_research_release.sh /volume1/docker/market-live-terminal/data/research/current`
   已通过
 - `latest.json` 的 `meta.atomic_db` 已重写为：
   - `/volume1/docker/market-live-terminal/data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`

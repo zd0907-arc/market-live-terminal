@@ -53,11 +53,15 @@ WIN_PYTHON_EXE = os.getenv(
 WIN_MARKET_ROOT = os.getenv("L2_WIN_MARKET_ROOT", r"D:\MarketData")
 WIN_STAGE_ROOT = os.getenv("L2_WIN_STAGE_ROOT", r"Z:\l2_stage")
 WIN_OUTPUT_ROOT = os.getenv("L2_WIN_OUTPUT_ROOT", r"D:\market-live-terminal\.run\l2_postclose")
-WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", r"D:\market-live-terminal\ops\win_prepare_l2_day.bat")
-WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", r"D:\market-live-terminal\ops\win_run_l2_shard.bat")
+DEFAULT_WIN_PREPARE_BAT = rf"{WIN_PROJECT_ROOT}\ops\windows\win_prepare_l2_day.bat"
+DEFAULT_WIN_WORKER_BAT = rf"{WIN_PROJECT_ROOT}\ops\windows\win_run_l2_shard.bat"
+LEGACY_WIN_PREPARE_BAT = rf"{WIN_PROJECT_ROOT}\ops\win_prepare_l2_day.bat"
+LEGACY_WIN_WORKER_BAT = rf"{WIN_PROJECT_ROOT}\ops\win_run_l2_shard.bat"
+WIN_PREPARE_BAT = os.getenv("L2_WIN_PREPARE_BAT", DEFAULT_WIN_PREPARE_BAT)
+WIN_WORKER_BAT = os.getenv("L2_WIN_WORKER_BAT", DEFAULT_WIN_WORKER_BAT)
 WIN_MARKET_DB = os.getenv("L2_WIN_MARKET_DB", r"D:\market-live-terminal\data\market_data.db")
 DEFAULT_WIN_ATOMIC_DB_ALIAS = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db"
-DEFAULT_WIN_ATOMIC_DB_LEGACY = r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_smoke_20260401_20260515.db"
+DEFAULT_WIN_SELECTION_DB_ALIAS = r"D:\market-live-terminal\data\selection\selection_research.db"
 WIN_ATOMIC_DB = os.getenv("L2_WIN_ATOMIC_DB", DEFAULT_WIN_ATOMIC_DB_ALIAS)
 WIN_SELECTION_DB = os.getenv("L2_WIN_SELECTION_DB", "")
 WIN_DATA_DIR = os.getenv("L2_WIN_DATA_DIR", rf"{WIN_PROJECT_ROOT}\data")
@@ -67,11 +71,13 @@ WIN_MODEL_INDEX_DB = os.getenv(
 )
 CLOUD_PROJECT_ROOT = os.getenv("L2_CLOUD_PROJECT_ROOT", "~/market-live-terminal")
 CLOUD_PROJECT_ROOT_ABS = os.getenv("L2_CLOUD_PROJECT_ROOT_ABS", "/home/ubuntu/market-live-terminal")
+DEFAULT_CLOUD_FORMAL_ROOT = os.getenv("L2_CLOUD_FORMAL_MARKET_DATA_ROOT", "/runtime-data").strip()
+DEFAULT_CLOUD_LIVE_ROOT = os.getenv("L2_CLOUD_LIVE_DATA_ROOT", f"{DEFAULT_CLOUD_FORMAL_ROOT}/live").strip()
 LOCAL_DATA_ROOT = Path(
     os.getenv("LOCAL_PROCESSED_DATA_ROOT")
     or os.getenv("RESEARCH_CURRENT_ROOT")
     or os.getenv("MARKET_DATA_ROOT")
-    or (str(DEFAULT_MAC_DATA_ROOT) if DEFAULT_MAC_DATA_ROOT.exists() else str(ROOT_DIR / "data"))
+    or str(DEFAULT_MAC_DATA_ROOT)
 )
 LOCAL_LIVE_DATA_ROOT = Path(os.getenv("LOCAL_LIVE_DATA_ROOT") or os.getenv("LIVE_DATA_ROOT") or str(DEFAULT_MAC_RUNTIME_ROOT))
 LOCAL_MARKET_DB = Path(os.getenv("LOCAL_MARKET_DB", str(LOCAL_LIVE_DATA_ROOT / "market_data.db")))
@@ -109,6 +115,9 @@ WINDOWS_REQUIRED_SCRIPTS = [
 CLOUD_REQUIRED_SCRIPTS = [
     "backend/scripts/postclose_http_relay.py",
 ]
+_RESOLVED_CLOUD_MARKET_DB: Optional[str] = None
+_RESOLVED_WIN_PREPARE_BAT: Optional[str] = None
+_RESOLVED_WIN_WORKER_BAT: Optional[str] = None
 
 
 def _now_text() -> str:
@@ -118,6 +127,52 @@ def _now_text() -> str:
 def _progress(message: str) -> None:
     if PROGRESS_ENABLED:
         print(f"[postclose-l2] [{_now_text()}] {message}", flush=True)
+
+
+def _cloud_market_db_candidates() -> List[str]:
+    explicit_db = os.getenv("L2_CLOUD_MARKET_DB", "").strip()
+    explicit_live_root = os.getenv("L2_CLOUD_LIVE_DATA_ROOT", "").strip()
+    explicit_formal_root = os.getenv("L2_CLOUD_FORMAL_MARKET_DATA_ROOT", "").strip()
+    candidates: List[str] = []
+    for candidate in (
+        explicit_db,
+        f"{explicit_live_root}/market_data.db" if explicit_live_root else "",
+        f"{explicit_formal_root}/live/market_data.db" if explicit_formal_root else "",
+        f"{DEFAULT_CLOUD_LIVE_ROOT}/market_data.db" if DEFAULT_CLOUD_LIVE_ROOT else "",
+        f"{CLOUD_PROJECT_ROOT_ABS}/data/live/market_data.db",
+        f"{CLOUD_PROJECT_ROOT_ABS}/data/market_data.db",
+    ):
+        text = str(candidate or "").strip()
+        if text and text not in candidates:
+            candidates.append(text)
+    return candidates
+
+
+def _resolve_cloud_market_db() -> str:
+    global _RESOLVED_CLOUD_MARKET_DB
+    if _RESOLVED_CLOUD_MARKET_DB:
+        return _RESOLVED_CLOUD_MARKET_DB
+    candidates = _cloud_market_db_candidates()
+    python_code = (
+        "from pathlib import Path; import json; "
+        f"candidates={json.dumps(candidates, ensure_ascii=False)}; "
+        "resolved=next((p for p in candidates if Path(p).is_file()), ''); "
+        "print(json.dumps({'resolved': resolved or (candidates[0] if candidates else ''), 'exists': bool(resolved), 'candidates': candidates}, ensure_ascii=False))"
+    )
+    result = _ssh(CLOUD_HOST, f"cd {CLOUD_PROJECT_ROOT} && python3 -c {shlex.quote(python_code)}")
+    payload = json.loads(result.stdout or "{}")
+    resolved = str(payload.get("resolved") or "").strip()
+    if not resolved or not payload.get("exists"):
+        raise RuntimeError(
+            "云端未找到 market_data.db；请显式设置 L2_CLOUD_MARKET_DB 或 L2_CLOUD_LIVE_DATA_ROOT。"
+            f" candidates={payload.get('candidates') or candidates}"
+        )
+    _RESOLVED_CLOUD_MARKET_DB = resolved
+    return resolved
+
+
+def _cloud_market_db_uri() -> str:
+    return f"file:{urllib.parse.quote(_resolve_cloud_market_db(), safe='/:')}?mode=ro&immutable=1"
 
 
 def _run(cmd: Sequence[str], *, check: bool = True, capture_output: bool = True, text: bool = True) -> subprocess.CompletedProcess:
@@ -294,9 +349,10 @@ def _discover_windows_archives(market_root: str) -> List[str]:
 
 def _query_cloud_existing_dates() -> Set[str]:
     _progress("查询云端正式库已存在的 L2 交易日")
+    market_db_uri = _cloud_market_db_uri()
     python_code = (
         "import sqlite3; "
-        "conn=sqlite3.connect('file:data/market_data.db?mode=ro&immutable=1', uri=True); "
+        f"conn=sqlite3.connect({market_db_uri!r}, uri=True); "
         "cur=conn.cursor(); "
         "print('\\n'.join(r[0] for r in cur.execute(\"SELECT DISTINCT date FROM history_daily_l2 ORDER BY date\")))"
     )
@@ -358,15 +414,14 @@ def _parse_json_output(stdout: str) -> Dict[str, object]:
 def _resolve_windows_selection_db() -> str:
     if WIN_SELECTION_DB:
         return WIN_SELECTION_DB
-    preferred = f"{WIN_PROJECT_ROOT}\data\selection\selection_research_windows.db"
-    fallback = f"{WIN_PROJECT_ROOT}\data\selection\selection_research.db"
-    cmd = f'cmd /c if exist "{preferred}" (echo {preferred}) else if exist "{fallback}" (echo {fallback})'
+    preferred = DEFAULT_WIN_SELECTION_DB_ALIAS
+    cmd = f'cmd /c if exist "{preferred}" (echo {preferred})'
     result = _ssh(WIN_HOST, cmd)
     return str((result.stdout or "").strip().splitlines()[-1] if (result.stdout or "").strip() else "")
 
 
 def _resolve_windows_atomic_db() -> str:
-    candidates = [WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS, DEFAULT_WIN_ATOMIC_DB_LEGACY]
+    candidates = [WIN_ATOMIC_DB, DEFAULT_WIN_ATOMIC_DB_ALIAS]
     unique: List[str] = []
     seen = set()
     for item in candidates:
@@ -382,6 +437,40 @@ def _resolve_windows_atomic_db() -> str:
         if lines:
             return lines[-1].strip()
     return unique[0]
+
+
+def _resolve_windows_existing_path(*candidates: str) -> str:
+    unique: List[str] = []
+    seen = set()
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    for candidate in unique:
+        cmd = f'cmd /c if exist "{candidate}" (echo {candidate})'
+        result = _ssh(WIN_HOST, cmd, check=False)
+        lines = (result.stdout or "").strip().splitlines()
+        if lines:
+            return lines[-1].strip()
+    return unique[0]
+
+
+def _resolve_windows_prepare_bat() -> str:
+    global _RESOLVED_WIN_PREPARE_BAT
+    if _RESOLVED_WIN_PREPARE_BAT:
+        return _RESOLVED_WIN_PREPARE_BAT
+    _RESOLVED_WIN_PREPARE_BAT = _resolve_windows_existing_path(WIN_PREPARE_BAT, DEFAULT_WIN_PREPARE_BAT, LEGACY_WIN_PREPARE_BAT)
+    return _RESOLVED_WIN_PREPARE_BAT
+
+
+def _resolve_windows_worker_bat() -> str:
+    global _RESOLVED_WIN_WORKER_BAT
+    if _RESOLVED_WIN_WORKER_BAT:
+        return _RESOLVED_WIN_WORKER_BAT
+    _RESOLVED_WIN_WORKER_BAT = _resolve_windows_existing_path(WIN_WORKER_BAT, DEFAULT_WIN_WORKER_BAT, LEGACY_WIN_WORKER_BAT)
+    return _RESOLVED_WIN_WORKER_BAT
 
 
 def _backup_local_file(path: Path) -> None:
@@ -739,8 +828,9 @@ def _sync_required_windows_scripts() -> None:
 
 def _prepare_day(trade_date: str, workers: int, stable_seconds: int) -> Dict[str, object]:
     _progress(f"[{trade_date}] 开始 prepare：检查归档稳定性、解压、切 {workers} 个 shard")
+    prepare_bat = _resolve_windows_prepare_bat()
     cmd = (
-        f'cmd /c ""{WIN_PREPARE_BAT}" {trade_date} '
+        f'cmd /c ""{prepare_bat}" {trade_date} '
         f'--market-root "{WIN_MARKET_ROOT}" '
         f'--stage-root "{WIN_STAGE_ROOT}" '
         f'--output-root "{WIN_OUTPUT_ROOT}" '
@@ -756,8 +846,9 @@ def _prepare_day(trade_date: str, workers: int, stable_seconds: int) -> Dict[str
 
 
 def _worker_command(day_root: str, symbols_file: str, artifact_db: str, trade_date: str, worker: int) -> str:
+    worker_bat = _resolve_windows_worker_bat()
     return (
-        f'cmd /c ""{WIN_WORKER_BAT}" "{day_root}" '
+        f'cmd /c ""{worker_bat}" "{day_root}" '
         f'--symbols-file "{symbols_file}" '
         f'--db-path "{artifact_db}" '
         f'--mode "postclose_{trade_date}_w{worker}" --json"'
@@ -932,6 +1023,7 @@ def _upload_single_file_to_cloud(trade_date: str, local_file: str, remote_name: 
 def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str, object]:
     _progress(f"[{trade_date}] 开始云端 merge 入正式库")
     artifacts_arg = ",".join(cloud_artifacts)
+    cloud_market_db = _resolve_cloud_market_db()
     cloud_tmp_dir = f"{CLOUD_PROJECT_ROOT_ABS}/.run/l2_postclose/{trade_date}"
     report_file = f"{cloud_tmp_dir}/cloud_merge_report.json"
     log_file = f"{cloud_tmp_dir}/cloud_merge.log"
@@ -939,7 +1031,7 @@ def _merge_on_cloud(trade_date: str, cloud_artifacts: Sequence[str]) -> Dict[str
         f"mkdir -p {shlex.quote(cloud_tmp_dir)} && "
         f"rm -f {shlex.quote(report_file)} {shlex.quote(log_file)} && "
         f"cd {shlex.quote(CLOUD_PROJECT_ROOT_ABS)} && "
-        f"sudo -n python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
+        f"sudo -n env DB_PATH={shlex.quote(cloud_market_db)} python3 backend/scripts/merge_l2_day_delta.py {trade_date} "
         f"--artifacts {shlex.quote(artifacts_arg)} "
         f'--source-root {shlex.quote("postclose_l2_daily")} '
         f'--mode {shlex.quote("postclose_one_command")} --json '
@@ -1298,9 +1390,10 @@ def _bootstrap_mac_full_sync() -> Dict[str, object]:
 def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
     _progress(f"[{trade_date}] 校验云端正式库写入结果")
     trade_date_iso = f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}"
+    market_db_uri = _cloud_market_db_uri()
     python_code = (
         "import sqlite3, json; "
-        "conn=sqlite3.connect('file:data/market_data.db?mode=ro&immutable=1', uri=True); "
+        f"conn=sqlite3.connect({market_db_uri!r}, uri=True); "
         "cur=conn.cursor(); "
         f"rows_daily=cur.execute(\"SELECT COUNT(*) FROM history_daily_l2 WHERE date='{trade_date_iso}'\").fetchone()[0]; "
         f"rows_5m=cur.execute(\"SELECT COUNT(*) FROM history_5m_l2 WHERE source_date='{trade_date_iso}'\").fetchone()[0]; "
@@ -1316,9 +1409,10 @@ def _verify_cloud_day(trade_date: str) -> Dict[str, int]:
 
 
 def _fetch_cloud_failure_summary(run_id: int) -> Dict[str, object]:
+    market_db_uri = _cloud_market_db_uri()
     python_code = (
         "import sqlite3, json; "
-        "conn=sqlite3.connect('file:data/market_data.db?mode=ro&immutable=1', uri=True); "
+        f"conn=sqlite3.connect({market_db_uri!r}, uri=True); "
         "conn.row_factory=sqlite3.Row; "
         "cur=conn.cursor(); "
         f"rows=[dict(r) for r in cur.execute(\"SELECT symbol, source_file, error_message FROM l2_daily_ingest_failures WHERE run_id={int(run_id)} ORDER BY symbol\")]; "
@@ -1340,6 +1434,7 @@ def _classify_day_report(report: Dict[str, object]) -> Dict[str, object]:
     merge_report = report.get("merge_report") or {}
     verify_report = report.get("verify_report") or {}
     skip_cloud_merge = bool(report.get("skip_cloud_merge"))
+    local_market_merge_report = report.get("local_market_merge_report") or {}
 
     if any(int(item.get("return_code", 1)) != 0 for item in worker_results if isinstance(item, dict)):
         return {
@@ -1351,9 +1446,19 @@ def _classify_day_report(report: Dict[str, object]) -> Dict[str, object]:
         }
 
     if skip_cloud_merge:
+        local_rows_daily = int(local_market_merge_report.get("rows_daily") or 0)
+        local_rows_5m = int(local_market_merge_report.get("rows_5m") or 0)
+        if local_rows_daily > 0 and local_rows_5m > 0:
+            return {
+                "final_status": "PASS",
+                "reason": "local_market_sync_complete",
+                "warning_count": 0,
+                "failure_summary": {},
+                "is_production_ready": False,
+            }
         return {
             "final_status": "FAIL",
-            "reason": "跳过 cloud merge，未形成生产可用结果",
+            "reason": "跳过 cloud merge，且本地 live 库未写入有效结果",
             "warning_count": 0,
             "failure_summary": {},
             "is_production_ready": False,

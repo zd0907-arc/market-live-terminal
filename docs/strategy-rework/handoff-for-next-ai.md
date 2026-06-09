@@ -84,9 +84,9 @@
 本地正式研究数据不在 repo 内 `data/`，而在：
 
 ```text
-/Users/dong/Desktop/AIGC/market-data/market_data.db
-/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db
-/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db
+/Users/dong/Desktop/AIGC/market-data/live/market_data.db
+/Users/dong/Desktop/AIGC/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db
+/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db
 ```
 
 启动脚本：`ops/start_local_research_station.sh`

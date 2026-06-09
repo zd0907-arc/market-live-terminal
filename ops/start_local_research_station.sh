@@ -55,6 +55,17 @@ DEFAULT_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/ma
 DEFAULT_RESEARCH_ROOT="$DEFAULT_MARKET_DATA_ROOT/research/current"
 DEFAULT_LIVE_ROOT="$DEFAULT_MARKET_DATA_ROOT/live"
 
+if [ -z "${LOCAL_DATA_ROOT+x}" ] \
+  && [ -z "${MARKET_DATA_ROOT+x}" ] \
+  && [ -z "${LIVE_DATA_ROOT+x}" ] \
+  && [ -z "${DB_PATH+x}" ] \
+  && [ -z "${SELECTION_DB_PATH+x}" ] \
+  && [ ! -d "$DEFAULT_MARKET_DATA_ROOT" ]; then
+  echo "[local-research] 未找到 formal 数据根: $DEFAULT_MARKET_DATA_ROOT" >&2
+  echo "[local-research] 请先执行: bash ops/bootstrap_mac_full_processed_sync.sh，或显式传入 LOCAL_DATA_ROOT/MARKET_DATA_ROOT/LIVE_DATA_ROOT/DB_PATH/SELECTION_DB_PATH" >&2
+  exit 1
+fi
+
 if [ -d "$DEFAULT_RESEARCH_ROOT" ]; then
   DEFAULT_DATA_ROOT="$DEFAULT_RESEARCH_ROOT"
 elif [ -d "$DEFAULT_MARKET_DATA_ROOT" ]; then

@@ -1,10 +1,153 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-09 每日主链收口到 NAS 生产库 | Codex
+- Task ID: `MOD-20260609-07-daily-live-nas-sync-closeout`
+- CAP: `CAP-NAS-OPS`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已把每日主链真正收口到你关心的业务动作上。第一，修掉了 `run_postclose_l2_daily.py` 的本地-only 判定 bug，避免“Mac 本地 live 已经补成功，但脚本仍误报失败”。第二，把 `run_daily_new_framework.py` 的 `--sync-nas` 改成收盘后先同步 NAS 生产 `live/market_data.db`，再后台触发一轮 NAS 数据库快照，不再把大体量 `research/current` 整包发布绑进每天主链。第三，已做了一次真实补跑：`2026-06-09` 的 `history_daily_l2=7739`、`history_5m_l2=349019`、`stock_universe_meta=5532` 现已在 Mac 本地和 NAS 生产库两端对齐，用户最核心的“当天数据为什么没进生产”问题已经收口。
+- 风险: 这不等于 NAS 一切都彻底自动化。当前快照是“每日主链成功后后台触发”，还不是 NAS 自治的计划任务；另外 `research/current` 若以后仍要每天发布，需要单独设计适合 70G 级 atomic 主库的增量或高效发布方式，不能继续沿用整包上传。
+- 验证: 已实测 `2026-06-09` 本地 `postclose_l2` 补跑成功；Mac 本地 `live/market_data.db` 已见 `7739 / 349019 / 5532`；NAS 生产 `live/market_data.db` 也已见同样结果；NAS 新快照目录 `20260609_225608` 已启动后台生成；并已清理本轮超时留下的半成品 staging 目录 `research/staging/nas_daily_new_20260609`。
+- 链接: `backend/scripts/run_postclose_l2_daily.py`, `backend/scripts/run_daily_new_framework.py`, `backend/tests/test_run_postclose_l2_daily.py`, `backend/tests/test_run_daily_new_framework_auto.py`, `docs/ops/three-end-sync.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`, `docs/07_PENDING_TODO.md`
+
+## 2026-06-09 AI / skill 路由与治理口径收口 | Codex
+- Task ID: `MOD-20260609-06-ai-skill-routing-and-governance-alignment`
+- CAP: `CAP-DOCS-GOVERNANCE`
+- 结论: 已把这轮项目管理层的关键分工写清：新增了 `docs/ops/ai-skill-routing.md`，明确全局 `AGENTS.md`、项目 `AGENTS.md`、核心文档、`AI_QUICK_START.md`、project skills 之间各自负责什么；同时把它接回 `AGENTS.md`、`04_OPS_AND_DEV.md`、`AI_QUICK_START.md`，不再靠口头解释。顺手修了 3 处容易误导后续 AI 的 skill 冲突：`version/release` 由 `origin/main` 主线改回 `nas/main` 主线、`dev-workflow-coordinator` 补进 Windows / UI 两类高频 specialist、`mac-windows-ops-bridge` 不再把旧 sandbox / worker 口径混成当前正式 L2 规则。
+- 风险: 这轮又暴露出一个真实治理阻塞：高曝光文档原来一直写 `npm run check:baseline`，但仓库真实入口是 `bash scripts/check_baseline.sh`。入口已统一改正，但脚本执行后发现当前 `package.json=1.16.0`，而 `README.md`、`src/version.ts`、`backend/app/main.py` 都是 `5.2.2`，基线 gate 目前仍会因此失败；该问题已单独挂到 `07_PENDING_TODO.md`。
+- 链接: `docs/ops/ai-skill-routing.md`, `AGENTS.md`, `docs/04_OPS_AND_DEV.md`, `docs/AI_QUICK_START.md`, `docs/07_PENDING_TODO.md`, `docs/changes/MOD-20260609-06-ai-skill-routing-and-governance-alignment.md`
+
+## 2026-06-09 三端目录与命名同步核查 | Codex
+- Task ID: `MOD-20260609-05-three-end-sync-audit`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`
+- 结论: 已按业务目标重新做了一次只看“三端文件管理”的现场核查，并顺手修了三处低风险收口。第一，Mac 与 NAS 现在确实已经共享同一套正式目录层级：`live / research/current / cache / artifacts / incoming`；Windows 现场原来仍是扁平 `data/*`，本轮已补出同名入口层，所以三端之后可以统一按同一套路径说话。第二，Mac 端 `cache/market_heat` 与 `cache/eastmoney_sector_cache` 原来是断软链，已修回有效入口。第三，NAS 作为代码备份和数据库快照落点已经成立，但“自动定时备份”还没完成，因为当前 SSH 用户写 crontab 会报权限错误。最关键的业务结论是：你的“三端同步目标”还没有完全达成，因为 NAS 生产 `live/market_data.db` 还没有和 Mac 本地 `live/market_data.db` 完全收成同一份状态。
+- 验证: 已现场核查 Mac、Windows、NAS 三端路径；Windows 新增可见入口 `data/live`、`data/research/current`、`data/cache`、`data/artifacts`、`data/incoming`；NAS 确认存在 Gitea 仓库 `/volume1/docker/gitea/git/repositories/zhangdong/market-live-terminal.git` 与数据库快照目录 `/volume1/docker/market-live-terminal/backups/db_snapshots/20260609_100757`。同时对比生产库状态：Mac `history_daily_l2` 最新日 `2026-06-08` 为 `7745` 行、`stock_universe_meta=5532`；NAS 同日为 `3193` 行、`stock_universe_meta=5230`，说明生产 `live` 还没真正跟上 Mac 本地正式库。
+- 链接: `docs/ops/three-end-sync.md`, `docs/07_PENDING_TODO.md`, `docs/04_OPS_AND_DEV.md`
+
+## 2026-06-09 本地 live backlog 实推 20260608 | Codex
+- Task ID: `MOD-20260609-04-live-history-backlog-repair-sample`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
+- 结论: 已继续把 T-022 从“只修代码”往前推到一次真实补库。先补了 `run_postclose_l2_daily.py` 的 Windows bat 路径兼容，让它能同时识别新 `ops/windows/*` 和现场仍在用的旧 `ops/*`；随后复用已经跑出的 `20260608` `worker_*.db`，手工完成 Windows merge、导出 `l2_day_delta_20260608.db`、回传并 merge 到 Mac 本地正式 `live/market_data.db`。结果是本地 `history_daily_l2 / history_5m_l2` 最大日期都已推进到 `2026-06-08`，不再停在 `2026-05-21`。当前 backlog 已收缩到 `2026-05-22 ~ 2026-06-05` 共 `11` 个交易日。
+- 风险: `20260608` 这次 merge 状态是 `partial_done`，共有 `16` 个 symbol failure，但主表已落入 `7745` 条 `history_daily_l2` 与 `351136` 条 `history_5m_l2`；这更像数据日包局部质量问题，不是主链路径问题。整条 `run_postclose_l2_daily.py --date 20260608` 仍会超时，因此本轮真实推进采用“复用 worker 产物，直接继续 merge/export”的方式完成。
+- 验证: Windows 正式库 `history_daily_l2` 在 `2026-06-08` 新增 `7745` 行，Mac 本地正式库 `history_daily_l2` 在 `2026-06-08` 为 `7745` 行、`history_5m_l2` 在 `2026-06-08` 为 `351136` 行；随后再次执行 `python3 backend/scripts/refresh_stock_universe_meta.py --json`，`stock_universe_meta=5532`。剩余缺口日期复核为：`2026-05-22, 2026-05-25, 2026-05-26, 2026-05-27, 2026-05-28, 2026-05-29, 2026-06-01, 2026-06-02, 2026-06-03, 2026-06-04, 2026-06-05`。
+- 链接: `backend/scripts/run_postclose_l2_daily.py`, `.run/postclose_l2/20260608/processed/l2_day_delta_20260608.db`, `docs/07_PENDING_TODO.md`
+
+## 2026-06-09 日常主链补上本地 live 后处理 | Codex
+- Task ID: `MOD-20260609-03-daily-mainline-live-postprocess`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把 `backend/scripts/run_daily_new_framework.py` 补成“研究主链本地校验通过后，默认继续触发一次本地 `postclose_l2` L2 历史补齐，并刷新 `stock_universe_meta`”的后处理闭环。这样未来新交易日的 Mac 本地 `live/market_data.db` 不该再继续停在 `2026-05-21` 这类断更状态；同时保留 `--skip-live-sync` 作为排障开关，避免把旧 `live` 链路重新抬成不可绕过的黑盒。边界没有变：`--sync-nas` 仍只负责 `research/current`，不自动同步 NAS `live/market_data.db`。
+- 验证: 新增 `backend/tests/test_run_daily_new_framework_auto.py` 两条用例，覆盖“默认会先做本地 live 后处理再 NAS 发布”和“显式 `skip` 时不会触发 live 后处理”；连同既有自动补跑检测用例一起执行 `pytest -q backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_refresh_stock_universe_meta.py` 通过。`python3 -m py_compile backend/scripts/run_daily_new_framework.py backend/scripts/refresh_stock_universe_meta.py` 通过。
+- 链接: `backend/scripts/run_daily_new_framework.py`, `backend/tests/test_run_daily_new_framework_auto.py`, `backend/scripts/refresh_stock_universe_meta.py`, `docs/07_PENDING_TODO.md`, `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`
+
+## 2026-06-09 stock_universe_meta 无依赖刷新修复 | Codex
+- Task ID: `MOD-20260609-02-stock-universe-meta-refresh-hardening`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把 `backend/scripts/refresh_stock_universe_meta.py` 从“硬依赖 akshare + pandas”改成“优先东方财富全市场快照接口、无第三方依赖也能跑；akshare 退为次级 fallback；最后才用本地 selection/live 库兜底”。这样当前这台 Mac 就算只有系统 `python3`，也能直接把正式 `live/market_data.db` 里的 `stock_universe_meta` 刷起来，不再卡在依赖缺失。顺手复核出 `07_PENDING_TODO` 里旧说法已过期：当前真实历史缺口不再是 `2026-04-01 ~ 2026-04-10`，而是 `history_daily_l2 / history_5m_l2` 实际只覆盖到 `2026-05-21`；根因也已经钉住，当前 `run_daily_new_framework.py` 正式主链没有继续触发 `postclose_l2 / l2_daily_backfill`。
+- 验证: 新增 `backend/tests/test_refresh_stock_universe_meta.py` 覆盖东方财富分页抓取和本地兜底逻辑，`pytest -q backend/tests/test_refresh_stock_universe_meta.py` 通过（`2 passed`）；实际执行 `python3 backend/scripts/refresh_stock_universe_meta.py --json` 后，Mac 本地正式库 `stock_universe_meta=5532`，其中 `market_cap > 0` 为 `5208`，`query_review_pool(limit=10)` 已能返回带名称/市值的正式池，`as_of_date=2026-06-09`、`latest_date=2026-06-08`。
+
+## 2026-06-09 本地端口规范收口 | Codex
+- Task ID: `MOD-20260609-01-local-port-governance`
+- CAP: `CAP-DOCS-GOVERNANCE`
+- 结论: 已把本地与 NAS 的正式端口口径重新收口。当前正式规则固定为：Mac 本地前端 `3001`、Mac 本地后端 `8001`、NAS 项目 Web `8080`、NAS Gitea Web `3000`；`8000` 只按 Docker 内部 backend 端口理解，`5173/5174` 只按历史临时调试端口理解，不再写入正式 runbook。顺手修复了 `ops/start_local_research_frontend.sh`：它不再依赖仓库根错误的 `npm run dev`，改为直接拉起本仓库 `vite`，并强制 `--strictPort`，防止前端端口静默漂移。
+- 验证: 已确认 `vite.config.ts`、`src/config.ts`、`README.md`、`docs/AI_QUICK_START.md`、`docs/04_OPS_AND_DEV.md`、`docs/ops/mac-local-research.md` 当前都对齐到 `3001 / 8001`；`npm run dev` 现状会报 `Missing script: dev`；直接执行 `node_modules/.bin/vite --host 127.0.0.1 --port 3001 --strictPort` 可正常监听 `127.0.0.1:3001`。
+
+## 2026-06-08 Windows/NAS 实机盘点 | Codex
+- Task ID: `MOD-20260608-01-windows-nas-runtime-storage-and-public-entry-audit`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`
+- 结论: 已完成一轮不靠猜的 Windows / NAS 实机盘点，并顺手做了第一批低风险现场调整。Windows 侧已经确认不是开发仓，而是运行数据站：`D:\MarketData` 保存原始 `.7z` 包，`D:\market-live-terminal` 保存裁剪后的运行代码、正式产出 `data/` 和运行产物 `.run/`；`Z:\atomic_stage` 是 staging，`Z:\atomic_legacy_backup` 是冷备。本轮又已把 `selection_research.db`、`market_atomic_mainboard_compact_current.db` 两个 canonical 名补到 Windows 磁盘上，并保留旧名兼容。NAS 侧已经确认“服务在线，但目录和公网都还没到最终版”；同时已把 `full-import/` 和 `data-backup-*` 下沉到 `backups/`，并补了正式数据库快照脚本与备份策略文档。
+- 风险: 当前真正剩余的不是 Mac 端，而是两端现场收口：Windows 的旧兼容名何时退休，以及 NAS 上 old flat-data root 实体的最终下线策略。正式公网入口还受制于域名和 `CLOUDFLARE_TUNNEL_TOKEN` 这两个外部条件。
+- 验证: 已通过 SSH 实测两端目录与服务；Windows 侧确认 `.git / src / docs / package.json` 均不存在、`D:\MarketData` 约 `178.79 GB`、`D:\market-live-terminal\data\atomic_facts` 约 `108.82 GB`、`Z:\atomic_stage` 约 `99.37 GB`、`Z:\atomic_legacy_backup` 约 `40.21 GB`；同时已确认 `selection_research.db` 与 `selection_research_windows.db`、`market_atomic_mainboard_compact_current.db` 与 `compact_smoke_*` 当前长度一致并兼容共存。NAS 侧确认 `market-backend-nas / market-frontend-nas / gitea / tailscale-nas` 在线，且 `tailscale-nas` 仍报 `443` 冲突。
+- 链接: `docs/changes/MOD-20260608-01-windows-nas-runtime-storage-and-public-entry-audit.md`, `docs/ops/windows-data-station.md`, `docs/ops/mac-nas-collaboration.md`, `docs/ops/storage-backup-policy.md`, `ops/nas/nas_backup_runtime_db_snapshot.sh`, `docs/07_PENDING_TODO.md`
+
+## 2026-06-08 单日主链执行 20260608 | Codex
+- Task ID: `CHG-20260608-daily-run-20260608`
+- CAP: `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已执行正式单日主链 `bash ops/run_daily_new_framework.sh --date 20260608 --json --sync-nas`。Windows `D:\MarketData\202606\20260608.7z` 已被消费，Windows 跑数、Mac 合并、选股候选生成均完成；首次失败只发生在 NAS 发布尾步，根因是 NAS 在线代码目录仍是旧扁平 `ops/` 结构，而本地发布链已切到 `ops/nas/`。已补齐 NAS 端 `ops/nas/*`，并把本地发布脚本改成兼容远端 `ops/nas/` 与旧 `ops/` 两种布局后重试成功。
+- 验证: `.run/daily_new_framework/latest.json` 当前为 `pass`；`20260608` 当日 `atomic_trade_daily=3193`、`selection_feature_daily=3193`、`model_feature_daily_v1=3193`、热点 `v2` 已到 `2026-06-08`；NAS 当前 release 为 `nas_daily_new_20260608`，`/api/health` 返回 `200 OK`。
+
+## 2026-06-08 Windows/NAS 结构退休收口 | Codex
+- Task ID: `MOD-20260608-01-windows-nas-runtime-storage-and-public-entry-audit`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`
+- 结论: 已把“只新增不退休”的结构问题收口。Mac 侧正式 `atomic_facts` 当前只保留一份 `market_atomic_mainboard_compact_current.db`；Windows 侧 `selection_research_windows.db` 与 `compact_smoke_*` 正式别名已退休，`model_feature_store_smoke_*` 与 atomic 历史测试/备份库已下沉到 `Z:\atomic_legacy_backup\windows_retired_20260608\`；NAS 侧 root old flat-data 实体已下沉到 `/volume1/docker/market-live-terminal/backups/legacy_flat_root_20260608/`，在线服务仍保持 `200 OK`。
+- 风险: 当前剩余不是“正式目录还在并行双写”，而是 Windows 0 MB 空壳与公网入口是否继续沿用免费 `*.ts.net`，还是以后再补自定义域名。
+- 验证: 已实测 Mac `market-data/research/current/atomic_facts` 当前只有一份 `66G` 正式库；Windows `selection_research.db` 与 `market_atomic_mainboard_compact_current.db` 当前都只剩 canonical 名；NAS `/api/health` 在 old flat-data 下沉后仍返回 `200 OK`。
+
+## 2026-06-08 治理卡收尾 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把这轮“仓库与 market-data 结构治理”的主目标收尾到可关闭状态。`T-036` 目录结构治理已从活跃待办移出：云端线、report 线、删库后的文档闭环都已完成，root 层孤儿 `market_data.db-wal / market_data.db-shm` 也已删除。当前仍保留的治理项只剩 `T-034`，但它已经不再是结构治理，而是是否继续改 Windows 侧历史物理文件名的命名治理问题。
+- 风险: 当前剩余不再是“系统会不会继续读错库”，而是“要不要继续追求更直观的跨端物理名”。这属于下一张卡，不应再混在本轮结构治理里。
+- 验证: 已确认 `/Users/dong/Desktop/AIGC/market-data/live/market_data.db-shm` 与 `/Users/dong/Desktop/AIGC/market-data/live/market_data.db-wal` 正常保留；root 层同名孤儿文件已不存在；`07_PENDING_TODO` 现已不再保留 `T-036`。
+- 链接: `docs/07_PENDING_TODO.md`, `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`, `docs/contracts/storage.md`
+
+## 2026-06-08 三线收口 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已把当前用户最关心的三条线收口。第一，云端线已定性为“NAS 正式线上 + old cloud 兼容应急”，并把 Windows crawler 默认 ingest 目标、高曝光运维文档、旧 cloud 脚本说明统一降权。第二，report 线已补出单点边界文档，正式研究真相、人读结论、仓外 artifacts、运行态副产物四层已明确。第三，删库后的现场和文档已重新对齐：repo 内三类兼容库当前默认不存在，`market-data` root 旧入口已删除，正式库实体继续稳定落在 `live/` 与 `research/current/`。
+- 风险: 当前已不再是“默认路径走错”的风险；剩余只是低风险残留，例如 root 层孤儿 `market_data.db-wal / market_data.db-shm`，以及 report builder 家族后续若要继续整理时的物理分层问题。
+- 验证: 已确认 `/Users/dong/Desktop/AIGC/market-data/{market_data.db,user_data.db,atomic_facts,selection,market_heat}` 当前不存在；`/Users/dong/Desktop/AIGC/market-data/live/{market_data.db,user_data.db}` 与 `/Users/dong/Desktop/AIGC/market-data/research/current/{atomic_facts,selection,market_heat}` 正常存在；市场热点删除旧入口后的缓存路径兼容修复已通过 `pytest backend/tests/test_market_heat_forecast.py -q`。
+- 链接: `docs/ops/report-and-artifact-boundary.md`, `docs/05_LLM_KEY_SECURITY.md`, `docs/04_OPS_AND_DEV.md`, `docs/contracts/storage.md`, `/Users/dong/Desktop/AIGC/market-data/README.md`
+
+## 2026-06-07 结构治理-1 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续把三块高价值治理落地。第一，repo 内三类兼容库角色已固定：`data/market_data.db`、`data/user_data.db`、`data/selection/selection_research.db` 统一降级为兼容副本，并通过 `data/README.md` / `data/selection/README.md` 写死边界。第二，外置 `market-data` 已完成最终物理搬迁：正式库实体已落到 `live/` 与 `research/current/`，root 旧路径改为兼容软链，`cache/` 与 `artifacts/market_heat/models` 仍保留结构别名。第三，`watchlist snapshot / cycle return` 之外，又补了一批活跃研究脚本默认跟随新正式根。第四，高曝光文档和旧 flat-data 兼容脚本都补上了“不是当前默认正式入口”的提醒，盘点脚本也新增了 symlink 与 runtime residue 清单导出。
+- 风险: 当前最值得继续治理的，不再是默认入口解析，而是仍可能默认写 repo fallback 的研究脚本尾项，以及旧 `cloud / repo-data` 兼容链是否继续保留。
+- 验证: 已确认 `/Users/dong/Desktop/AIGC/market-data/live/{market_data.db,user_data.db}`、`/Users/dong/Desktop/AIGC/market-data/research/current/{atomic_facts,selection,market_heat}` 当前是实体对象；`/Users/dong/Desktop/AIGC/market-data/{market_data.db,user_data.db,atomic_facts,selection,market_heat}` 当前已改为兼容软链；`ops/bench/export_market_data_inventory.sh` 已新增 symlink / wal-shm 导出。
+- 链接: `data/README.md`, `data/selection/README.md`, `/Users/dong/Desktop/AIGC/market-data/README.md`, `/Users/dong/Desktop/AIGC/market-data/live/README.md`, `/Users/dong/Desktop/AIGC/market-data/research/current/README.md`, `ops/bench/export_market_data_inventory.sh`
+
+## 2026-06-06 续接-3 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续按主卡完成两块收口：一是把最后 3 个 active residual fallback 清掉，分别是 `backend/scripts/run_postclose_l2_daily.py` 的本地 / cloud 默认路径解析、`ops/legacy/start_local_backend_with_atomic.sh` 的 legacy 启动默认值，以及 `backend/app/core/config.py` 的默认 resolver；二是通过子 Agent 把 `docs/archive/changes/MOD-20260606-02-project-governance-master-plan.md` 恢复成纯 archive 内容，使 `docs/archive/changes` 这组不再混入额外正文改动。
+- 风险: 当前“默认入口 fallback”已不是主问题；下一步真正要决定的是 repo 内 `data/market_data.db`、`data/user_data.db`、`data/selection/selection_research.db` 的最终保留语义，以及 `report builder / watchlist snapshot / cycle return` 这类研究脚本族是否仍会默认写 repo fallback。
+- 验证: `python3 -m py_compile backend/app/core/config.py backend/scripts/run_postclose_l2_daily.py` 通过；`bash -n ops/legacy/start_local_backend_with_atomic.sh` 通过；搜索 `file:data/market_data.db`、`DEFAULT_REPO_DATA_DIR`、`ATOMIC_REPO_DEFAULT` 已不再命中；archive 卡 `MOD-20260606-02` 中的 `11.5` 已移除。
+- 链接: `backend/app/core/config.py`, `backend/scripts/run_postclose_l2_daily.py`, `ops/legacy/start_local_backend_with_atomic.sh`, `docs/archive/changes/MOD-20260606-02-project-governance-master-plan.md`, `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`
+
+## 2026-06-06 续接-2 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续按主卡推进到“少数 residual fallback 收口”这一步。本轮完成两类动作：一是修掉 3 个活跃旧路径残留，分别是 `run_daily_new_framework.py` 中的 `ops/nas/nas_run_phase_b_release.sh` 调用、`run_postclose_l2_daily.py` 中的 `ops/windows/win_prepare_l2_day.bat` / `ops/windows/win_run_l2_shard.bat` 默认路径，以及 `AI_HANDOFF_LOG` 自身的旧入口描述；二是通过子 Agent 收紧了 `intraday_evolution_lab.py`、`start_local_research_station.sh`、`run_model_feature_store_batch.sh` 的默认 repo fallback 行为。
+- 风险: 当前 residual fallback 已缩到 3 个重点对象：`backend/scripts/run_postclose_l2_daily.py` 的旧 postclose/cloud 兼容读取、`ops/legacy/start_local_backend_with_atomic.sh`、`backend/app/core/config.py` 的最终 fallback。它们都比本轮已处理的入口更敏感，不继续在这一步扩大改动面。
+- 验证: `python3 -m py_compile backend/app/services/intraday_evolution_lab.py backend/scripts/run_daily_new_framework.py backend/scripts/run_postclose_l2_daily.py` 通过；`bash -n ops/start_local_research_station.sh ops/run_model_feature_store_batch.sh` 通过；对活跃面执行旧路径搜索后，未再命中 `ops/nas_run_phase_b_release.sh`、`ops/win_prepare_l2_day.bat`、`ops/win_run_l2_shard.bat`、`ops/nas_list_research_releases.sh`、`ops/nas_check_crawler_status.sh`、`ops/run_postclose_l2.sh` 这批已修对象。
+- 链接: `backend/app/services/intraday_evolution_lab.py`, `backend/scripts/run_daily_new_framework.py`, `backend/scripts/run_postclose_l2_daily.py`, `ops/start_local_research_station.sh`, `ops/run_model_feature_store_batch.sh`, `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`
+
+## 2026-06-06 续接 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已按用户要求以“总控 + 子 Agent”方式接手 repo / 文档 / 数据结构治理线。复核结论是：前序方向正确，运行真相和第一批低风险结构治理已完成；当前不应继续扩大搬迁面，先要把现有 `git status` 中的结构迁移形成可审计闭环。已把续接点评和下一轮 P0-P3 计划写回 `MOD-20260606-10`，把 `MOD-20260606-11` 补成最新接手交接文档，并从 `07_PENDING_TODO` 移除 `T-033`、`T-035` 两个已完成项。
+- 新增: 已创建 `/Users/dong/Desktop/AIGC/market-data/README.md`，作为外置数据根的单点说明入口，明确正式库、非正式主库对象、目标结构和操作红线。
+- 风险: repo fallback 仍未最终收口；当前少数仍需重点处理的入口包括 `intraday_evolution_lab.py`、`run_postclose_l2_daily.py`、`start_local_research_station.sh`、`run_model_feature_store_batch.sh`、`ops/legacy/start_local_backend_with_atomic.sh` 和 `backend/app/core/config.py` 的最终 fallback。
+- 验证: 本次只改文档和数据根 README，未迁移数据库，未改运行代码；已执行只读盘点并确认 `docs/changes` 顶层为 6 个文件、`backend/scripts` 顶层为 185 个文件、外置 `market-data` 当前仍是兼容正式目录结构。
+- 链接: `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`, `docs/changes/MOD-20260606-11-repo-and-market-data-governance-handoff.md`, `docs/07_PENDING_TODO.md`, `/Users/dong/Desktop/AIGC/market-data/README.md`
+
+## 2026-06-06 23:35 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续按治理卡完成第二批真正落到目录结构上的收口，并同步把“已完成”写回主文档。当前新增完成四件事：一是 `backend/scripts` 再做一批低风险物理分层，已把 `l2_wait_then_backfill.py`、`l2_repair_failed_samples.py`、`l2_repair_missing_daily_symbols.py`、`l2_review_empty_samples.py` 下沉到 `backend/scripts/maintenance/l2_repair/`，把 `backfill_history.py`、`backfill_history_1m.py`、`backfill_local_history.py`、`backfill_local_symbol_from_windows_raw.py`、`build_atomic_trade_from_history.py` 下沉到 `backend/scripts/legacy/history_repair/`；二是修正了这批脚本迁目录后仓库根路径解析会跑错的问题；三是 `build_cycle_return_snapshot.py`、`build_cycle_return_sector_report.py` 已从默认读取 repo `data/selection/selection_research.db` 改成默认跟随 `RESEARCH_CURRENT_ROOT/selection/selection_research.db`，并把对应研究 README 口径回写；四是继续把结构治理现状回写到 `MOD-20260606-10`、`07_PENDING_TODO`、`backend-script-families-boundary`、`market-data-reclassification-plan`、`contracts/storage`。
+- 验证: `python3 -m py_compile` 已覆盖 `build_cycle_return_*` 与第二批新迁的 9 个脚本并通过；`bash -n sync_to_windows.sh ops/nas/*.sh ops/legacy/*.sh` 通过；当前 `backend/scripts` 顶层文件数已进一步降到约 `185`。
+- 风险: repo 内 `data/market_data.db`、`data/user_data.db`、`data/selection/selection_research.db` 的最终保留策略还没做完；`market-data` 下 `cache / latest 元数据 / models / wal-shm / atomic_facts/shadow` 这批对象也还没进入物理治理；`cycle return / watchlist snapshot / report builder` 这类仍有活跃研究入口引用的脚本族还没进入下一批迁移。
+- 链接: `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`, `docs/07_PENDING_TODO.md`, `docs/ops/backend-script-families-boundary.md`, `docs/ops/market-data-reclassification-plan.md`, `docs/contracts/storage.md`
+
+## 2026-06-06 22:20 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续按治理卡推进 `backend/scripts` 的第一批最小物理分层，并完成实际迁移与回写。当前已下沉：`benchmark_atomic_*` -> `backend/scripts/maintenance/bench/`，`audit_l2_order_event_codes.py` -> `backend/scripts/maintenance/audit/`，`build_local_research_snapshot.py` -> `backend/scripts/legacy/compat/`，`merge_historical_db.py` 与 `merge_historical_db_local.py` -> `backend/scripts/legacy/history_merge/`。同时已把 `ops/legacy/sync_windows_research_snapshot.sh`、`AI_QUICK_START`、`mac-local-research`、`atomic-script-families-boundary`、`backend-script-families-boundary` 等活跃入口回写到新路径。`backend/scripts` 顶层文件数已从约 `202` 降到 `194`。
+- 验证: `python3 -m py_compile` 已覆盖上述 8 个新迁脚本并通过；`bash -n ops/legacy/sync_windows_research_snapshot.sh` 通过；活跃文档扫描后，除 `AI_HANDOFF_LOG` 历史日志保留旧路径外，已无非 archive 活跃引用继续指向这批旧路径。
+- 风险: 这轮仍未处理 repo 内 `data/market_data.db`、`data/selection/selection_research.db` 的最终边界；`cycle return / watchlist snapshot / report builder` 这类仍有活跃研究入口引用的脚本，也还没进入下一批迁移。
+- 链接: `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`, `docs/ops/backend-script-families-boundary.md`, `ops/legacy/sync_windows_research_snapshot.sh`
+
+## 2026-06-06 21:35 | Codex
+- Task ID: `MOD-20260606-10-repo-and-market-data-structure-governance-plan`
+- CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
+- 结论: 已继续按当前治理卡推进“仓库与 market-data 结构治理”并完成第一批真正会影响后续执行的收口：一是把 `ops/nas/*`、`ops/legacy/*` 迁目录后的脚本根路径、互调路径和默认主机口径修正到当前结构，避免 NAS 发布链和旧兼容链因为迁目录直接跑错；二是把 `04_OPS_AND_DEV / AI_QUICK_START / nas-research-release-runbook / nas-crawler-cutover-runbook / mac-local-research / windows-data-station / postclose-l2-runbook / atomic-script-families-boundary` 等高曝光文档回写到 `ops/nas/*`、`ops/legacy/*`、`ops/windows/*` 新路径；三是继续对外置 `market-data` 做低风险物理整理，把 `legacy_market_merge_report_20260425.json` 与 `model_market_index_daily_validation_20260523.json` 下沉到 `artifacts/`，并清掉根目录 / `atomic_facts` / `market_heat` 下的 `.DS_Store`。当前还没开始的是 repo 内 fallback 库最终边界和 `backend/scripts` 的物理分层。
+- 验证: `bash -n sync_to_windows.sh ops/nas/*.sh ops/legacy/*.sh` 通过；`python3 -m py_compile backend/scripts/run_daily_new_framework.py` 通过；`bash ops/nas/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data` 通过，确认当前本地正式库与 `market_heat/latest.json` 元数据仍一致。
+- 风险: `backend/scripts` 仍有大量研究/专题/历史脚本混在顶层，这轮只完成认知与入口收口，没有开始物理迁移；`market-data` 里也仍保留 `market_heat/cache`、`market_heat/models`、`*_latest.json`、`atomic_facts/shadow`、`*.db-wal/*.db-shm` 这些下一批对象。
+- 链接: `docs/changes/MOD-20260606-10-repo-and-market-data-structure-governance-plan.md`, `docs/07_PENDING_TODO.md`, `docs/ops/market-data-reclassification-plan.md`, `docs/04_OPS_AND_DEV.md`
+
 ## 2026-06-06 16:50 | Codex
 - Task ID: `MOD-20260606-02-project-governance-master-plan`
 - CAP: `CAP-DOCS-GOVERNANCE`, `CAP-NAS-OPS`, `CAP-SELECTION-RESEARCH`
 - 结论: 这轮项目综合治理已经按总控卡完成到 `Phase 7` 收口。当前已完成三类闭环：一是仓库资产盘点与低风险文件治理，仓库体积约从 `7.8G` 压到 `6.2G`，并把根目录历史兼容库下沉到 `data/legacy/`；二是高曝光真相文档统一到 `Mac 开发控制台 / Windows 数据主站 / NAS 在线运行与 research/current 发布节点` 口径；三是 `Mac -> NAS` 控制面、Git、`research/current` 发布链与线上 API 当前都已有实证。当前 `research/current` 版本为 `nas_daily_new_20260605`，archive 已保留 `20260604 / 20260605` 两个回滚点。
-- 验证: `pytest -q backend/tests/test_market_data_path_config.py backend/tests/test_research_script_path_defaults.py backend/tests/test_nas_release_scripts.py` 通过，共 `14 passed`；`bash ops/nas_list_research_releases.sh` 已确认 current/staging/archive；`bash ops/nas_check_crawler_status.sh` 已确认 `backend/frontend/crawler` 容器在线且 crawler 日志持续推送；`curl -fsS --max-time 10 http://dxp4800pro:8080/api/health` 与 `curl -i --max-time 20 http://dxp4800pro:8080/api/selection/health` 均返回 `200`。
+- 验证: `pytest -q backend/tests/test_market_data_path_config.py backend/tests/test_research_script_path_defaults.py backend/tests/test_nas_release_scripts.py` 通过，共 `14 passed`；`bash ops/nas/nas_list_research_releases.sh` 已确认 current/staging/archive；`bash ops/nas/nas_check_crawler_status.sh` 已确认 `backend/frontend/crawler` 容器在线且 crawler 日志持续推送；`curl -fsS --max-time 10 http://dxp4800pro:8080/api/health` 与 `curl -i --max-time 20 http://dxp4800pro:8080/api/selection/health` 均返回 `200`。
 - 风险: 当前剩余的大文件不再属于“误删候选”，而是显式保留对象：`data/market_data.db`、`data/selection/selection_research.db`、`data/legacy/root_market_data_history.db` 与最近两天 `.run/daily_new_framework/*processed*`。后续若继续做，应转到 `T-034` 那条“正式别名 / shadow sample 迁移规划”，不是继续把这轮治理重复打开。
 - 链接: `docs/changes/MOD-20260606-02-project-governance-master-plan.md`, `docs/changes/MOD-20260606-09-phase7-governance-closeout-audit.md`, `docs/07_PENDING_TODO.md`, `docs/ops/mac-nas-collaboration.md`
 
@@ -177,7 +320,7 @@
 ## 2026-05-24 16:40 | Codex
 - Task ID: `MOD-20260524-05-business-view-governance-execution-checklist`
 - CAP: `CAP-WIN-PIPELINE`, `CAP-SELECTION-RESEARCH`, `CAP-L2-HISTORY-FOUNDATION`
-- 结论: 已完成第一批命名收口的文档回写。核心文档和直接入口文档已统一三条正式主链口径：`selection_research_main` 为每日选股研究主链，Windows 主写 `selection_research_windows.db`、Mac 主读 `selection_research.db`；`atomic_compact_main` 为盘后明细底座，不再把 `full_reverse` 讲成当前正式底座；`model_feature_store_main` 被明确为正式主链之一。运维入口同时改为：`ops/run_daily_new_framework.sh` 是当前盘后正式主链，`ops/run_postclose_l2.sh` 仅保留为兼容旧链路。
+- 结论: 已完成第一批命名收口的文档回写。核心文档和直接入口文档已统一三条正式主链口径：`selection_research_main` 为每日选股研究主链，Windows 主写 `selection_research_windows.db`、Mac 主读 `selection_research.db`；`atomic_compact_main` 为盘后明细底座，不再把 `full_reverse` 讲成当前正式底座；`model_feature_store_main` 被明确为正式主链之一。运维入口同时改为：`ops/run_daily_new_framework.sh` 是当前盘后正式主链，`ops/legacy/run_postclose_l2.sh` 仅保留为兼容旧链路。
 - 风险: 这一步只改文档口径，没有改脚本默认变量；像 `ops/start_local_research_station.sh`、`backend/app/core/config.py` 里仍保留 `full_reverse` 兼容路径，属于后续代码治理范围。
 - 链接: `docs/01_SYSTEM_ARCHITECTURE.md`, `docs/03_DATA_CONTRACTS.md`, `docs/contracts/storage.md`, `docs/04_OPS_AND_DEV.md`, `docs/ops/mac-local-research.md`, `docs/ops/windows-data-station.md`, `docs/ops/postclose-l2-runbook.md`, `docs/AI_QUICK_START.md`
 
@@ -337,7 +480,7 @@
 - CAP: `CAP-SELECTION-RESEARCH`, `CAP-STOCK-EVENTS`
 - 结论: 已发布 v5.0.19 到 main：候选票研究上下文包、公司概况/决策解释持久化、研究依据包、查询触发预热、选股页加载稳定和波段复盘日涨跌口径均已收口。
 - 风险: 公共新闻仍偏标题级；严格历史公司档案版本化未做；LLM 不可用时摘要会退化为规则解释。
-- 验证: `npm run build`、`npm run check:version` 通过；浏览器验证 `localhost:5173/selection-research` 可看到 2026-04-24 申通快递的公司概况、决策解释和研究依据。
+- 验证: `npm run build`、`npm run check:version` 通过；浏览器验证 `localhost:5173/selection-research` 可看到 2026-04-24 申通快递的公司概况、决策解释和研究依据（当时是临时 Vite 验证端口，不是当前正式口径）。
 - 链接: `docs/changes/REQ-20260427-03-selection-news-event-research-context.md`, `docs/domain/selection-research.md`, `docs/contracts/review-selection.md`
 
 

@@ -59,7 +59,7 @@
 ## 5. 完成实现后先做什么
 至少完成：
 1. 若本轮是用户可见的明确产品改动，先同步更新版本号（`package.json`、`README.md`、`src/version.ts`、`backend/app/main.py`），并在 release notes 里写清可见变化；
-2. `npm run check:baseline`
+2. `bash scripts/check_baseline.sh`
 3. 变更卡结果回填
 4. 回流受影响的长期事实到核心文档
 5. 追加 `AI_HANDOFF_LOG`

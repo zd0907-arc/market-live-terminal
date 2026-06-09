@@ -17,9 +17,9 @@
 当时盘点时，本地研究站指向的是下列路径：
 
 ```text
-/Users/dong/Desktop/AIGC/market-data/market_data.db
+/Users/dong/Desktop/AIGC/market-data/live/market_data.db
 /Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db
-/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db
+/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db
 ```
 
 注意：这段是阶段性盘点快照。当前正式 atomic 默认入口已切到 compact 体系；这里保留旧路径只是为了说明当时实验上下文。
@@ -111,7 +111,7 @@ return_20d_pct >= 10
 
 截至本次盘点：
 
-### `/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db`
+### `/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db`
 
 - `selection_feature_daily`：1,000,078 行，覆盖 `2025-01-02 ~ 2026-04-24`，约 3,222 只。
 - `selection_signal_daily`：1,000,078 行，覆盖 `2025-01-02 ~ 2026-04-24`。

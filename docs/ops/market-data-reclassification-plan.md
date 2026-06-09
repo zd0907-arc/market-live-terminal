@@ -1,6 +1,6 @@
 # market-data 重分类与迁移映射
 
-更新时间：2026-06-04
+更新时间：2026-06-08
 
 关联文档：
 
@@ -18,16 +18,16 @@
 - 明确哪些是研究产物
 - 明确哪些对象最危险，后续要优先消歧
 
-当前只做识别、映射、迁移顺序，不直接删库。
+当前阶段已经不再只是“识别与映射”。Mac 本地正式库物理迁移、root 兼容入口删除、以及第一轮 artifacts/cache 收口已经落地；这份文档现在主要承担“当前结构说明 + 后续继续治理的边界”。
 
 ## 2. 当前执行边界
 
-截至 `2026-06-04`，这份文档面对的现场条件已经变了：
+截至 `2026-06-06`，这份文档面对的现场条件已经变了：
 
 - NAS 已可通过局域网、Tailscale 私网和 Tailscale Funnel 访问
 - NAS 查询主链已经切到 `live/` + `research/current/` 新口径
-- 但 NAS 当前 `research/current` 仍然是 bootstrap current，不是最终治理完成态
-- 当前 NAS 上的正式研究数据大致停在 `2026-05-27`
+- NAS 运行态已经完成一轮收口，`research/current` 发布、回滚和检查链路已闭环
+- 当前 NAS 上已验证的正式版本是 `nas_daily_new_20260605`
 
 因此阶段 C 当前不再只是“离线资产建设”，而是要同时服务两件事：
 
@@ -42,23 +42,34 @@
 
 - `/Users/dong/Desktop/AIGC/market-data`
 
-当前二级目录：
+当前主目录结构：
 
 ```text
 market-data/
-  _incoming/
-  atomic_facts/
-  market_heat/
+  live/
+  research/current/
+  research/staging/
+  research/archive/
+  cache/
+  artifacts/
+  incoming/
   sandbox/
-  selection/
 ```
 
-其中 `market_heat/` 下又混放了：
+当前已复核体积：
 
-- 正式热点库
-- 缓存
-- 研究导出
-- 板块映射缓存
+- `/Users/dong/Desktop/AIGC/market-data`：约 `86G`
+- `live/market_data.db`：约 `4.6G`
+- `research/current/atomic_facts/`：约 `66G`
+- `research/current/selection/selection_research.db`：约 `3.2G`
+- `research/current/selection/model_feature_store.db`：约 `4.5G`
+- `artifacts/model_feature_store/model_feature_store.db.backup_20260602_101012`：约 `4.5G`
+- `artifacts/model_feature_store/model_feature_store.db.repaired`：约 `2.9G`
+
+补充：
+
+1. root 层旧 `market_data.db / user_data.db / atomic_facts / selection / market_heat` 兼容入口已删除。
+2. 顶层当前若仍看到 `market_data.db-wal / market_data.db-shm`，按旧 root 运行残留理解，不按正式主库对象解释。
 
 ### 3.2 仓库内 data 目录
 
@@ -83,23 +94,23 @@ market-data/
 
 | 对象 | 当前路径 | 当前作用 | 后续目标目录 |
 |---|---|---|---|
-| `market_data.db` | `/Users/dong/Desktop/AIGC/market-data/market_data.db` | 首页实时盯盘、基础历史接口、在线轻量消费 | `market-data/live/market_data.db` |
-| `user_data.db` | `/Users/dong/Desktop/AIGC/market-data/user_data.db` | watchlist、配置、用户态设置 | `market-data/live/user_data.db` |
+| `market_data.db` | `/Users/dong/Desktop/AIGC/market-data/live/market_data.db` | 首页实时盯盘、基础历史接口、在线轻量消费 | 已落位 |
+| `user_data.db` | `/Users/dong/Desktop/AIGC/market-data/live/user_data.db` | watchlist、配置、用户态设置 | 已落位 |
 
 ### 4.2 正式研究库
 
 | 对象 | 当前路径 | 当前作用 | 后续目标目录 |
 |---|---|---|---|
-| `market_atomic_mainboard_compact_current.db` | `/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_compact_current.db` | atomic 明细底座 | `market-data/research/current/atomic_facts/` |
-| `selection_research.db` | `/Users/dong/Desktop/AIGC/market-data/selection/selection_research.db` | 选股研究正式库 | `market-data/research/current/selection/` |
-| `model_feature_store.db` | `/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db` | 模型训练特征库 | `market-data/research/current/selection/` |
-| `model_market_index_daily.db` | `/Users/dong/Desktop/AIGC/market-data/selection/model_market_index_daily.db` | 模型指数前置库 | `market-data/research/current/selection/` |
-| `fine_theme_heat_daily.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db` | 热点页面正式日表 | `market-data/research/current/market_heat/` |
-| `fine_theme_heat_daily_v2.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily_v2.db` | 热点训练 / 回测长表 | `market-data/research/current/market_heat/` |
-| `fine_theme_heat_forecast.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_forecast.db` | 热点预测结果库 | `market-data/research/current/market_heat/` |
-| `stock_sector_map.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/stock_sector_map.db` | 股票-板块映射库 | `market-data/research/current/market_heat/` |
-| `tradable_theme_map.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/tradable_theme_map.db` | 可交易主题映射库 | `market-data/research/current/market_heat/` |
-| `hot_theme_low_position_l2_samples.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/hot_theme_low_position_l2_samples.db` | 热点低位样本专题库 | `market-data/research/current/market_heat/` |
+| `market_atomic_mainboard_compact_current.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db` | atomic 明细底座 | 已落位 |
+| `selection_research.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db` | 选股研究正式库 | 已落位 |
+| `model_feature_store.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/selection/model_feature_store.db` | 模型训练特征库 | 已落位 |
+| `model_market_index_daily.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/selection/model_market_index_daily.db` | 模型指数前置库 | 已落位 |
+| `fine_theme_heat_daily.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_daily.db` | 热点页面正式日表 | 已落位 |
+| `fine_theme_heat_daily_v2.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_daily_v2.db` | 热点训练 / 回测长表 | 已落位 |
+| `fine_theme_heat_forecast.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/fine_theme_heat_forecast.db` | 热点预测结果库 | 已落位 |
+| `stock_sector_map.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/stock_sector_map.db` | 股票-板块映射库 | 已落位 |
+| `tradable_theme_map.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/tradable_theme_map.db` | 可交易主题映射库 | 已落位 |
+| `hot_theme_low_position_l2_samples.db` | `/Users/dong/Desktop/AIGC/market-data/research/current/market_heat/hot_theme_low_position_l2_samples.db` | 热点低位样本专题库 | 已落位 |
 
 ## 5. 当前高风险误导对象
 
@@ -108,7 +119,10 @@ market-data/
 | 对象 | 当前路径 | 风险 | 当前判断 |
 |---|---|---|---|
 | `market_atomic_mainboard_full_reverse.db` | `/Users/dong/Desktop/AIGC/market-data/atomic_facts/market_atomic_mainboard_full_reverse.db` | 名字像正式 atomic 主库，但当前是 `0B` | 高风险历史残留 |
-| `fine_theme_member_daily.db` | `/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_member_daily.db` | 名字像正式配套库，但当前是 `0B` | 高风险不完整对象 |
+| `fine_theme_member_daily` | 当前作为正式表存放在 `/Users/dong/Desktop/AIGC/market-data/market_heat/fine_theme_heat_daily.db` 内 | 热点主题成员表 | 已不再保留独立 `fine_theme_member_daily.db` 文件 |
+| `market_feature_store.db` | `/Users/dong/Desktop/AIGC/market-data/market_feature_store.db` | 顶层名字像正式模型库，但当前是 `0B` | 高风险空壳残留 |
+| `model_feature_store.db.backup_20260602_101012` | `/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db.backup_20260602_101012` | 和正式库几乎同体积，疑似一次性修复备份 | 高优先级候选复核对象 |
+| `model_feature_store.db.repaired` | `/Users/dong/Desktop/AIGC/market-data/selection/model_feature_store.db.repaired` | 和正式库并存的大副本 | 高优先级候选复核对象 |
 | `market_heat.db` | `/Users/dong/Desktop/AIGC/market-live-terminal/data/market_heat/market_heat.db` | 极易被误判为正式热点主库，当前是 `0B` | 高风险仓库内残留 |
 | `market_data_history.db` | `/Users/dong/Desktop/AIGC/market-live-terminal/data/market_data_history.db` | 容易被当成正式历史库 | 历史兼容对象 |
 | `market_data_history_202602_fix.db` | `/Users/dong/Desktop/AIGC/market-live-terminal/data/market_data_history_202602_fix.db` | 名字不自解释，容易混入正式链路 | 修复产物 |
@@ -162,6 +176,31 @@ market-data/
 
 - `market-data/artifacts/market_heat/`
 
+`2026-06-06` 已落地的第一批收口：
+
+1. `market-data/artifacts/market_heat/` 已建立。
+2. `market_heat/` 根目录中的专题 `json/md` 导出已下沉到该目录。
+3. `market_heat/` 根目录当前只保留正式库与正式元数据：
+   - `fine_theme_heat_daily.db`
+   - `fine_theme_heat_daily_v2.db`
+   - `fine_theme_heat_forecast.db`
+   - `stock_sector_map.db`
+   - `tradable_theme_map.db`
+   - `hot_theme_low_position_l2_samples.db`
+   - `latest.json`
+   - `stock_sector_map_latest.json`
+   - `sector_boards_latest.json`
+   - `tradable_theme_map_latest.json`
+
+`2026-06-06` 第二批复核补充结论：
+
+1. `market_heat/cache/` 当前约 `291M`，是页面快照缓存，不是正式主库。
+2. `market_heat/eastmoney_sector_cache/` 当前约 `17M`，是板块接口缓存，不是正式主库。
+3. `market_heat/models/` 当前约 `24M`，是模型产物目录，不是正式主题热度真相源。
+4. `market_heat/*_latest.json` 仍是运行时快照元数据，当前保留在正式目录旁边是为了兼容现有页面和发布检查脚本，不等于它们属于正式底层库。
+5. `atomic_facts/shadow/` 不是空壳目录，当前是一个指向 `../market_atomic_mainboard_compact_current.db` 的符号链接壳；现阶段不能按垃圾目录直接删除，只能先记为待定兼容对象。
+6. `selection/` 下当前 `*.db-wal/*.db-shm` 主要是 SQLite 运行期临时文件，不计入正式资产盘点，不作为长期结构对象解释。
+
 ### 7.2 repo data 下的研究产物
 
 主要包括：
@@ -201,20 +240,36 @@ market-data/
   incoming/
 ```
 
+补充判断：
+
+1. 当前三端对齐已经完成的是职责、入口脚本、环境变量解析和 NAS 发布链。
+2. `2026-06-07` 已完成 Mac 本地 `market-data` 的最终物理迁移：正式库实体已落到 `live/` 与 `research/current/`。
+3. `2026-06-08` 已删除 root 层旧兼容入口，不再继续保留 `market_data.db / user_data.db / atomic_facts / selection / market_heat` 的 root alias。
+
 ### 8.1 映射表
 
-| 当前路径 | 目标路径 | 说明 |
+| 历史/说明路径 | 当前正式路径 | 说明 |
 |---|---|---|
-| `market-data/market_data.db` | `market-data/live/market_data.db` | 在线轻量运行库 |
-| `market-data/user_data.db` | `market-data/live/user_data.db` | 用户态配置库 |
-| `market-data/atomic_facts/*` | `market-data/research/current/atomic_facts/*` | atomic 正式链 |
-| `market-data/selection/*.db` | `market-data/research/current/selection/*.db` | selection 正式链 |
-| `market-data/market_heat/*.db` | `market-data/research/current/market_heat/*.db` | 热点正式链 |
-| `market-data/market_heat/cache/*` | `market-data/cache/market_heat/*` | 缓存 |
-| `market-data/market_heat/eastmoney_sector_cache/*` | `market-data/cache/eastmoney_sector_cache/*` | 缓存 |
-| `market-data/market_heat/*.json` | `market-data/artifacts/market_heat/*` | 导出 / 研究产物 |
-| `market-data/market_heat/*.md` | `market-data/artifacts/market_heat/*` | 导出 / 研究产物 |
-| `market-data/_incoming/*` | `market-data/incoming/*` | 临时导入 |
+| `market-data/market_data.db` | `market-data/live/market_data.db` | root 旧入口已删除；这里只保留语义映射 |
+| `market-data/user_data.db` | `market-data/live/user_data.db` | root 旧入口已删除；这里只保留语义映射 |
+| `market-data/atomic_facts/*` | `market-data/research/current/atomic_facts/*` | root 旧入口已删除；正式 atomic 链 |
+| `market-data/selection/*.db` | `market-data/research/current/selection/*.db` | root 旧入口已删除；正式 selection 链 |
+| `market-data/market_heat/*.db` | `market-data/research/current/market_heat/*.db` | root 旧入口已删除；正式热点链 |
+| `market-data/cache/market_heat/*` | `market-data/cache/market_heat/*` | 缓存 |
+| `market-data/cache/eastmoney_sector_cache/*` | `market-data/cache/eastmoney_sector_cache/*` | 缓存 |
+| `market-data/research/current/market_heat/*_latest.json` | `market-data/research/current/market_heat/*_latest.json` | 运行元数据，留在正式热点目录旁 |
+| `market-data/artifacts/market_heat/*` | `market-data/artifacts/market_heat/*` | 导出 / 研究产物 |
+| `market-data/artifacts/reports/*` | `market-data/artifacts/reports/*` | 导出 / 兼容报告 |
+| `market-data/incoming/*` | `market-data/incoming/*` | 临时导入 |
+
+`2026-06-07` 新增状态：
+
+1. `market-data/live/` 已建立，并已承载 `market_data.db`、`user_data.db` 的正式实体文件。
+2. `market-data/research/current/` 已建立，并已承载 `atomic_facts/`、`selection/`、`market_heat/` 的正式实体目录。
+3. `market-data/cache/market_heat`、`market-data/cache/eastmoney_sector_cache` 已建立 canonical alias。
+4. `market-data/artifacts/market_heat/models` 已建立 canonical alias。
+5. `2026-06-08` 已删除根目录旧入口 `market_data.db / user_data.db / atomic_facts / selection / market_heat`，不再继续保留 root alias。
+6. root 层仅剩 `market_data.db-wal / market_data.db-shm` 这类孤儿 runtime residue；它们不再代表正式主库。
 
 ## 9. 阶段 C 的执行顺序
 
@@ -258,6 +313,22 @@ market-data/
 - `selection/*.db`
 - `market_heat/*.db`
 
+## 10. 2026-06-06 新增执行判断
+
+当前最应该优先复核的不是正式大库本身，而是这些对象：
+
+1. `selection/model_feature_store.db.backup_20260602_101012`
+2. `selection/model_feature_store.db.repaired`
+3. `market_feature_store.db`
+4. `atomic_facts/market_atomic_mainboard_full_reverse.db`
+5. `fine_theme_member_daily` 的正式表表达与文档口径统一
+6. `incoming/`
+
+原因：
+
+1. 它们最像“一次性修复产物、空壳对象或历史残留”。
+2. 处理它们的风险明显低于直接调整正式主库位置。
+
 ## 10. 当前不做的事情
 
 当前明确不做：
@@ -288,7 +359,7 @@ market-data/
 
 ### 12.1 本轮已确认的阻塞
 
-- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@dxp4800pro 'echo ok'`
   - 结果：超时
 - `curl --max-time 8 -fsS http://192.168.3.43:8080/api/health`
   - 结果：超时
@@ -318,9 +389,9 @@ market-data/
 - `backend/app/services/spark_opportunity_selector.py`
 - `backend/app/services/selection_candidate_store.py`
 - `ops/start_local_research_station.sh`
-- `ops/start_local_backend_with_atomic.sh`
+- `ops/legacy/start_local_backend_with_atomic.sh`
 - `ops/run_model_feature_store_batch.sh`
-- `ops/export_market_data_inventory.sh`
+- `ops/bench/export_market_data_inventory.sh`
 - `backend/scripts/build_model_feature_store.py`
 - `backend/scripts/backfill_model_feature_store_indexes.py`
 - `backend/scripts/sync_model_market_index_daily.py`
@@ -419,9 +490,9 @@ python3 -m py_compile \
 ```text
 bash -n \
   ops/start_local_research_station.sh \
-  ops/start_local_backend_with_atomic.sh \
+  ops/legacy/start_local_backend_with_atomic.sh \
   ops/run_model_feature_store_batch.sh \
-  ops/export_market_data_inventory.sh
+  ops/bench/export_market_data_inventory.sh
 ```
 
 追加执行并通过：
@@ -481,20 +552,20 @@ pytest -q \
    - `RESEARCH_CURRENT_ROOT=/runtime-data/research/current`
    - crawler 默认读写 `live/market_data.db` 和 `live/user_data.db`
 2. research 发布链脚本和 runbook 已落地：
-   - `ops/build_nas_research_release_manifest.sh`
-   - `ops/check_nas_research_release.sh`
-   - `ops/upload_nas_research_release.sh`
-   - `ops/nas_prepare_research_dirs.sh`
-   - `ops/nas_publish_research_release.sh`
-   - `ops/nas_rollback_research_release.sh`
-   - `ops/nas_list_research_releases.sh`
+   - `ops/nas/build_nas_research_release_manifest.sh`
+   - `ops/nas/check_nas_research_release.sh`
+   - `ops/nas/upload_nas_research_release.sh`
+   - `ops/nas/nas_prepare_research_dirs.sh`
+   - `ops/nas/nas_publish_research_release.sh`
+   - `ops/nas/nas_rollback_research_release.sh`
+   - `ops/nas/nas_list_research_releases.sh`
    - [nas-research-release-runbook.md](/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/nas-research-release-runbook.md)
 
 补充事实：
 
 - 当前本机正式数据根仍是 flat 结构，不是物理上已经切完的 `research/current/`
-- 但基于 `ops/build_nas_research_release_manifest.sh` 已能从这套 flat 正式库生成一版可发布 release
-- `ops/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data` 已验证：
+- 但基于 `ops/nas/build_nas_research_release_manifest.sh` 已能从这套 flat 正式库生成一版可发布 release
+- `ops/nas/check_nas_research_release.sh /Users/dong/Desktop/AIGC/market-data` 已验证：
   - `atomic_compact_main` 最新交易日：`2026-05-28`
   - `selection_research_main` 最新候选交易日：`2026-05-28`
   - `model_feature_store_main` 最新交易日：`2026-05-28`
@@ -506,7 +577,7 @@ pytest -q \
 
 本轮先按执行规划做 NAS 可达性分流：
 
-- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@dxp4800pro 'echo ok'`
   - 结果：超时
 - `curl --max-time 8 -fsS http://192.168.3.43:8080/api/health`
   - 结果：连接失败
@@ -628,9 +699,9 @@ pytest -q \
 ```text
 bash -n \
   ops/start_local_research_station.sh \
-  ops/start_local_backend_with_atomic.sh \
+  ops/legacy/start_local_backend_with_atomic.sh \
   ops/run_model_feature_store_batch.sh \
-  ops/export_market_data_inventory.sh
+  ops/bench/export_market_data_inventory.sh
 ```
 
 ### 13.6 当前仍未处理的残留
@@ -723,9 +794,9 @@ pytest -q \
 
 本轮先按执行规划继续尝试 `B1a`：
 
-- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@dxp4800pro 'echo ok'`
   - 结果：`Operation timed out`
-- `ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@dxp4800pro 'echo ok'`
   - 结果：`Operation timed out`
 - `curl --max-time 8 -fsS http://192.168.3.43:8080/api/health`
   - 结果：`Connection timed out`
@@ -882,7 +953,7 @@ pytest -q \
 - 研究脚本又收了一批高命中旧路径
 - `B1a` 继续被 NAS 网络不可达阻塞
 - 但等 NAS 恢复后，当前下一目标仍然是：
-  - `SSH_CONNECT_TIMEOUT=20 bash ops/upload_nas_research_release.sh nas_release_20260602_online`
+  - `SSH_CONNECT_TIMEOUT=20 bash ops/nas/upload_nas_research_release.sh nas_release_20260602_online`
 
 ## 15. 2026-06-03 阶段 C1 第四批收口
 
@@ -890,9 +961,9 @@ pytest -q \
 
 在继续离线收口前，本轮再次复测了 NAS 可达性：
 
-- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=8 zhangdong@dxp4800pro 'echo ok'`
   - 结果：`Operation timed out`
-- `ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@192.168.3.43 'echo ok'`
+- `ssh -o BatchMode=yes -o ConnectTimeout=20 zhangdong@dxp4800pro 'echo ok'`
   - 结果：`Operation timed out`
 - `curl --max-time 8 -fsS http://192.168.3.43:8080/api/health`
   - 结果：`Connection timed out`

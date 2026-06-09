@@ -66,3 +66,5 @@ python3 backend/scripts/build_research_watchlist_snapshot.py
 ```bash
 python3 backend/scripts/build_research_watchlist_snapshot.py --date 2026-04-30
 ```
+
+默认读取 `RESEARCH_CURRENT_ROOT/selection/selection_research.db`；repo 内 `data/selection/selection_research.db` 只按兼容副本理解。

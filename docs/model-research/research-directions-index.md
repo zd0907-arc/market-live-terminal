@@ -13,7 +13,7 @@
 | 方向 | 目标 | 当前状态 | 主资料入口 | 当前建议 |
 |---|---|---|---|---|
 | 星火 1.0 机会发现 | 盘后纯选股，找未来 22 日冲高大的票 | 已在系统里有历史影响 | `docs/selection/opportunity_discovery_model_final.md` | 继续作为基线对照 |
-| 星火持仓 / 卖点 | 对历史已推候选做盘后继续持有 / 次日卖出判断 | 已接入双轨跟踪链路并进入工作台展示 | `docs/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` | 当前以产品收口为主，训练统一口径后补 |
+| 星火持仓 / 卖点 | 对历史已推候选做盘后继续持有 / 次日卖出判断 | 已接入双轨跟踪链路并进入工作台展示 | `docs/archive/changes/MOD-20260525-01-spark-exit-watchlist-integration.md` | 当前以产品收口为主，训练统一口径后补 |
 | 星火 v2 纯选股 | 更稳定地选出后续会冲高的票 | 正在验证 | `docs/selection/spark_v2_pure_selection_direction_status_2026-06-05.md` | 继续滚动训练，维持 watch_only / research_only |
 | 次日 / 超短方向 | 目标是低痛感、次日就有冲高，不追求拿 22 天 | 已有首轮结果 | `docs/selection/nextday_short_horizon_direction_status_2026-06-05.md` | 继续推进双模型或组合排序 |
 | 热点板块研究 | 判断板块热度、阶段、拥挤度，并做候选过滤或解释 | 已形成独立研究线 | `docs/selection/market_heat/README.md` | 先做增强与过滤，不直接当买点 |

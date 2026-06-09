@@ -21,8 +21,13 @@ def _run_script(script_name: str, *args: str, env: dict[str, str] | None = None)
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)
+    script_path = ROOT_DIR / "ops" / script_name
+    if not script_path.exists():
+        nested_script_path = ROOT_DIR / "ops" / "nas" / script_name
+        if nested_script_path.exists():
+            script_path = nested_script_path
     return subprocess.run(
-        ["bash", f"ops/{script_name}", *args],
+        ["bash", str(script_path.relative_to(ROOT_DIR)), *args],
         cwd=ROOT_DIR,
         env=merged_env,
         text=True,

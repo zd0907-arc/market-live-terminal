@@ -132,6 +132,25 @@ def _create_market_heat_artifacts(root, trade_date):
     cache_path.write_text('{"meta":{"end_date":"' + trade_date + '"},"snapshots":{}}', encoding="utf-8")
 
 
+def _stub_run_daily_dependencies(monkeypatch):
+    monkeypatch.setattr(daily, "resolve_windows_host", lambda: "fake-win")
+    monkeypatch.setattr(daily, "_resolve_windows_data_path", lambda candidates: str(next(iter(candidates), "")))
+    monkeypatch.setattr(daily, "_sync_required_windows_scripts", lambda: None)
+    monkeypatch.setattr(daily, "_ensure_windows_heat_reference_inputs", lambda: {})
+    monkeypatch.setattr(
+        daily,
+        "_run_windows_pipeline",
+        lambda *args, **kwargs: {"remote_deltas": {}, "remote_artifacts": {}},
+    )
+    monkeypatch.setattr(daily, "_tcp_reachable", lambda *args, **kwargs: False)
+    monkeypatch.setattr(daily, "_merge_local_deltas", lambda *args, **kwargs: {})
+    monkeypatch.setattr(daily, "_run_local_daily_candidates", lambda trade_date: {"trade_date": trade_date})
+    monkeypatch.setattr(daily, "_verify_full_local", lambda trade_date: {"trade_date": trade_date})
+    monkeypatch.setattr(daily, "_is_local_complete", lambda verify: True)
+    monkeypatch.setattr(daily, "_cleanup_sync_context", lambda sync_context: None)
+    monkeypatch.setattr(daily, "_write_report", lambda *args, **kwargs: None)
+
+
 def test_auto_detect_marks_date_missing_when_strategy_runs_are_absent(monkeypatch, tmp_path):
     trade_date = "2026-05-25"
     _wire_local_dbs(monkeypatch, tmp_path)
@@ -200,3 +219,79 @@ def test_auto_detect_marks_date_missing_when_heat_or_index_artifacts_absent(monk
     verify = report["checks"][0]["local_verify"]
     assert verify["market_index_daily"]["index_code_count"] == 0
     assert verify["market_heat"]["heat_row_count"] == 0
+
+
+def test_run_daily_runs_local_live_sync_before_nas_release(monkeypatch, tmp_path):
+    _wire_local_dbs(monkeypatch, tmp_path)
+    monkeypatch.setattr(daily, "LOCAL_MARKET_DB", tmp_path / "live" / "market_data.db")
+    _stub_run_daily_dependencies(monkeypatch)
+
+    calls = []
+
+    def _fake_live_sync(trade_date):
+        calls.append(("live_sync", trade_date))
+        return {"status": "ok", "postclose_l2": {"day_reports": []}}
+
+    def _fake_nas_postprocess(trade_date, local_live_sync_report):
+        calls.append(("nas_sync", trade_date, local_live_sync_report))
+        return {
+            "status": "done",
+            "live_sync": {"status": "synced"},
+            "research_release": {
+                "status": "skipped",
+                "reason": "daily_sync_focuses_on_live_and_backup",
+            },
+            "snapshot": {"status": "snapshotted"},
+        }
+
+    monkeypatch.setattr(daily, "_run_local_live_postprocess", _fake_live_sync)
+    monkeypatch.setattr(daily, "_run_nas_postprocess", _fake_nas_postprocess)
+
+    report = daily.run_daily("20260525", sync_nas=True)
+
+    assert report["status"] == "pass"
+    assert report["local_live_sync"]["status"] == "ok"
+    assert report["nas_live_sync"] == {"status": "synced"}
+    assert report["nas_release"] == {
+        "status": "skipped",
+        "reason": "daily_sync_focuses_on_live_and_backup",
+    }
+    assert report["nas_snapshot"] == {"status": "snapshotted"}
+    assert calls == [
+        ("live_sync", "20260525"),
+        ("nas_sync", "20260525", report["local_live_sync"]),
+    ]
+
+
+def test_run_daily_skip_live_sync_keeps_mainline_but_skips_postprocess(monkeypatch, tmp_path):
+    _wire_local_dbs(monkeypatch, tmp_path)
+    monkeypatch.setattr(daily, "LOCAL_MARKET_DB", tmp_path / "live" / "market_data.db")
+    _stub_run_daily_dependencies(monkeypatch)
+
+    calls = []
+
+    def _fake_nas_postprocess(trade_date, local_live_sync_report):
+        calls.append(("nas_sync", trade_date, local_live_sync_report))
+        return {
+            "status": "done",
+            "live_sync": {"status": "skipped", "reason": "missing_local_live_sync"},
+            "research_release": {
+                "status": "skipped",
+                "reason": "daily_sync_focuses_on_live_and_backup",
+            },
+            "snapshot": {"status": "snapshotted"},
+        }
+
+    monkeypatch.setattr(daily, "_run_nas_postprocess", _fake_nas_postprocess)
+
+    report = daily.run_daily("20260525", sync_nas=True, include_live_sync=False)
+
+    assert report["status"] == "pass"
+    assert report["local_live_sync"] == {"status": "skipped", "reason": "skip_live_sync"}
+    assert report["nas_live_sync"] == {"status": "skipped", "reason": "missing_local_live_sync"}
+    assert report["nas_release"] == {
+        "status": "skipped",
+        "reason": "daily_sync_focuses_on_live_and_backup",
+    }
+    assert report["nas_snapshot"] == {"status": "snapshotted"}
+    assert calls == [("nas_sync", "20260525", report["local_live_sync"])]

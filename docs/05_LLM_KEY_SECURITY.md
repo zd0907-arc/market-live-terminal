@@ -1,6 +1,7 @@
 # 05_LLM_KEY_SECURITY（LLM API Key 安全管理运维指南）
 
-> 本文档说明如何在**云端生产环境**和**本地开发环境**安全地配置大模型 API Key，确保 Key 永远不会出现在代码仓库、数据库和 AI 工具的扫描范围中。
+> 本文档说明如何在**线上服务环境（当前 NAS）**和**本地开发环境**安全地配置大模型 API Key，确保 Key 永远不会出现在代码仓库、数据库和 AI 工具的扫描范围中。
+> 旧腾讯云只按 legacy/emergency 环境理解，不再当默认生产入口。
 >
 > **边界提醒**：本文件只定义密钥与安全注入规范；业务规则以 `docs/02_BUSINESS_DOMAIN.md` 为准，接口字段以 `docs/03_DATA_CONTRACTS.md` 为准，发布/远控步骤以 `docs/04_OPS_AND_DEV.md` 为准。
 
@@ -12,9 +13,9 @@
 ┌─────────────────────────────────────────────────────────┐
 │                    安全隔离层                             │
 ├─────────────┬───────────────────┬───────────────────────┤
-│   云端生产    │   本地开发 (Mac)   │   前端浏览器           │
+│   线上服务(NAS) │   本地开发 (Mac)   │   前端浏览器           │
 ├─────────────┼───────────────────┼───────────────────────┤
-│ 宿主机 .env  │  .env.local 文件   │  ❌ 完全不接触 Key     │
+│ 宿主机 .env.nas-full │  .env.local 文件   │  ❌ 完全不接触 Key     │
 │ → Docker 透传│  → python 直读     │  只显示模型名称        │
 │             │  .gitignore 屏蔽   │  "测试连接"由后端执行   │
 │             │  .cursorignore 屏蔽│                       │
@@ -25,19 +26,19 @@
 
 ---
 
-## 二、云端生产环境配置
+## 二、线上服务环境配置（当前 NAS）
 
-### 步骤 1：SSH 登录云服务器
+### 步骤 1：SSH 登录 NAS
 
 ```bash
-ssh ubuntu@111.229.144.202
+ssh zhangdong@dxp4800pro
 ```
 
-### 步骤 2：在项目 deploy 目录下创建 `.env` 文件
+### 步骤 2：在 NAS 项目目录下创建 `.env.nas-full`
 
 ```bash
-cd ~/market-live-terminal/deploy
-nano .env
+cd /volume1/docker/market-live-terminal/app
+nano .env.nas-full
 ```
 
 写入以下内容（替换为你的真实 Key）：
@@ -65,21 +66,20 @@ ENABLE_CLOUD_COLLECTOR=false
 ### 步骤 3：设置文件权限（防止其他用户读取）
 
 ```bash
-chmod 600 .env
+chmod 600 .env.nas-full
 ```
 
 ### 步骤 4：重启 Docker 服务使环境变量生效
 
 ```bash
-cd ~/market-live-terminal/deploy
-sudo docker compose down
-sudo docker compose up -d
+cd /volume1/docker/market-live-terminal/app
+docker compose --env-file .env.nas-full -f deploy/docker-compose.nas-full.yml up -d --build backend frontend
 ```
 
 ### 步骤 5：验证 Key 已正确注入容器
 
 ```bash
-sudo docker exec market-backend env | grep LLM
+docker exec market-backend-nas env | grep LLM
 ```
 
 应输出：
@@ -89,7 +89,13 @@ LLM_API_KEY=sk-你的真实API密钥
 LLM_MODEL=qwen3-max
 ```
 
-> ⚠️ **注意**：`deploy/.env` 文件**不会**被 Git 追踪（已在 `.gitignore` 中排除），所以每次首次部署都需要手动创建这个文件。
+> ⚠️ **注意**：`.env.nas-full` 只存在于 NAS 宿主机，不进入 Git。
+
+### 旧 Cloud 兼容说明
+
+- 旧腾讯云如仍需保活，只按 `legacy/emergency only` 处理。
+- 旧 Cloud 相关脚本：`deploy_to_cloud.sh`、`sync_cloud_db.sh`、`sync_local_to_cloud.sh`
+- 不再把 `111.229.144.202` 当当前默认生产环境，也不再把旧 Cloud `data/market_data.db` 当默认正式真相。
 
 ---
 
@@ -151,20 +157,19 @@ python -m backend.app.main
 | 1 | `.env.local` 未被追踪 | `git check-ignore .env.local` | 输出 `.env.local` |
 | 2 | `.env` 未被追踪 | `git check-ignore .env` | 输出 `.env` |
 | 3 | 代码中无硬编码 Key | `grep -r "sk-" --include="*.py" --include="*.ts" --include="*.tsx" backend/ src/` | 无输出 |
-| 4 | 数据库中无敏感 LLM 配置 | `sqlite3 data/user_data.db "SELECT key,value FROM app_config WHERE key LIKE 'llm_%'"` | 允许存在 `llm_model`；不得出现 `llm_api_key / llm_base_url / llm_proxy` |
-| 5 | Config API 不泄露 Key | `curl localhost:8000/api/config \| python -m json.tool` | 输出中无 `llm_api_key` |
+| 4 | 数据库中无敏感 LLM 配置 | `sqlite3 "${USER_DB_PATH:-/Users/dong/Desktop/AIGC/market-data/live/user_data.db}" "SELECT key,value FROM app_config WHERE key LIKE 'llm_%'"` | 允许存在 `llm_model`；不得出现 `llm_api_key / llm_base_url / llm_proxy` |
+| 5 | Config API 不泄露 Key | `curl localhost:8001/api/config \| python -m json.tool` | 输出中无 `llm_api_key` |
 
 ---
 
 ## 五、更换 Key / 更换模型
 
-### 云端
+### NAS 线上服务
 ```bash
-ssh ubuntu@111.229.144.202
-cd ~/market-live-terminal/deploy
-nano .env              # 修改 Key 或模型名
-sudo docker compose down
-sudo docker compose up -d
+ssh zhangdong@dxp4800pro
+cd /volume1/docker/market-live-terminal/app
+nano .env.nas-full
+docker compose --env-file .env.nas-full -f deploy/docker-compose.nas-full.yml up -d --build backend frontend
 ```
 
 ### 本地
@@ -183,12 +188,12 @@ nano .env.local        # 修改 Key 或模型名
 ## 六、常见问题
 
 **Q: 发版后 LLM 功能不工作？**
-A: 检查云端 `deploy/.env` 是否存在。`deploy_to_cloud.sh` 使用 `git reset --hard`，这不会删除 `.env`（它不在 Git 中），但如果是首次部署或服务器重建，需要手动创建。
+A: 先检查 NAS 上的 `.env.nas-full` 是否存在，且 `docker-compose.nas-full.yml` 启动时确实带了 `--env-file .env.nas-full`。
 
 **Q: 从旧版本升级后，数据库中还有 `llm_api_key` 残留怎么办？**
 A: 无影响。新代码的 `get_app_config()` 已过滤掉 `llm_` 前缀的配置项，不会返回给前端。如需彻底清理：
 ```bash
-sqlite3 data/user_data.db "DELETE FROM app_config WHERE key LIKE 'llm_%'"
+sqlite3 "${USER_DB_PATH:-/Users/dong/Desktop/AIGC/market-data/live/user_data.db}" "DELETE FROM app_config WHERE key LIKE 'llm_%'"
 ```
 
 **Q: 本地 AI（Cursor/Copilot）是否还能看到 Key？**

@@ -16,11 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from backend.app.core.config import FORMAL_MARKET_DATA_ROOT, RESEARCH_CURRENT_ROOT
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MARKET_DATA_ROOT = Path("/Users/dong/Desktop/AIGC/market-data")
+DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", FORMAL_MARKET_DATA_ROOT))
+DEFAULT_RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
 DEFAULT_COMPACT_DB = (
-    DEFAULT_MARKET_DATA_ROOT
+    DEFAULT_RESEARCH_ROOT
     / "atomic_facts"
     / "shadow"
     / "market_atomic_mainboard_compact_20250102_20260514.db"

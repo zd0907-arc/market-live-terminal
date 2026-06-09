@@ -7,13 +7,15 @@
 当前正式日跑主路径是：
 1. Windows 产出原始包与正式跑数结果
 2. 通过新框架主链刷新 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main`
-3. 必要结果同步到 Mac；如需上线，则再通过 NAS release 链把正式研究库发布到 `research/current`
-4. `run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
+3. 必要结果同步到 Mac；自 `2026-06-09` 起，主链本地校验通过后还会继续补一次本地 `postclose_l2` L2 历史并刷新 `stock_universe_meta`
+4. 如需上线，则再通过 NAS release 链把正式研究库发布到 `research/current`
+5. `ops/legacy/run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
+6. `market_data_live_main` 的全市场历史底座同步不包含在 `--sync-nas`；它属于单独的 `live` 库同步/补库动作
 
 当前要区分两条链：
 
 1. **正式主链**：`ops/run_daily_new_framework.sh`
-2. **兼容旧链路**：`ops/run_postclose_l2.sh`
+2. **兼容旧链路**：`ops/legacy/run_postclose_l2.sh`
 
 ## 2. 当前正式入口
 ```bash
@@ -39,6 +41,11 @@ bash ops/run_daily_new_framework.sh --json
 
 只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
 
+补充边界：
+- `--sync-nas` 当前只发布 NAS `research/current`
+- 这条主链现在会自动补齐 Mac 本地 `live/market_data.db` 的 `history_daily_l2 / history_5m_l2` 与 `stock_universe_meta`
+- 若线上问题落在 `live/market_data.db` 的全市场历史底座，需要单独做 `live` 库同步或历史补库
+
 需要人工指定日期排障时才使用：
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
@@ -48,7 +55,7 @@ bash ops/run_daily_new_framework.sh --date 20260525 --json
 ## 2.1.0 兼容旧链路
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_postclose_l2.sh
+bash ops/legacy/run_postclose_l2.sh
 ```
 
 如果你只是要正常完成当前盘后正式日跑，不要执行这条旧链路。
@@ -118,7 +125,7 @@ bash ops/check_windows_new_framework_months_status.sh
 兼容旧链路状态：
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/check_postclose_l2_status.sh
+bash ops/legacy/check_postclose_l2_status.sh
 ```
 新框架与旧链路的状态文件不同，不要混用旧 `postclose_daily_run_*.log` 去判断新框架日跑是否失败。
 

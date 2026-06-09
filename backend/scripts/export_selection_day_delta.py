@@ -40,7 +40,6 @@ def _resolve_selection_db(explicit: str) -> Path:
     candidates = [
         Path(explicit) if explicit else None,
         Path(SELECTION_DB_FILE),
-        Path(str(SELECTION_DB_FILE).replace("selection_research.db", "selection_research_windows.db")),
     ]
     for item in candidates:
         if item and item.exists():

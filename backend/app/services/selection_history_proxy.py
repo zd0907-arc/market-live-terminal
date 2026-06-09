@@ -7,7 +7,16 @@ from backend.app.routers.analysis import _build_multiframe_rows
 
 SELECTION_CLOUD_API_BASE = os.getenv("SELECTION_CLOUD_API_BASE", "http://111.229.144.202/api").rstrip("/")
 SELECTION_CLOUD_TIMEOUT = float(os.getenv("SELECTION_CLOUD_TIMEOUT", "8"))
-SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK = os.getenv("SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_flag(name: str, default: str = "false") -> bool:
+    return str(os.getenv(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cloud_history_fallback_enabled() -> bool:
+    # 选股多周期页面在本地只有占位数据时，默认允许回退云端补齐；
+    # 如需强制关闭，可显式设置 SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK=false。
+    return _env_flag("SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK", "true")
 
 
 def _has_meaningful_rows(rows: List[Dict[str, object]]) -> bool:
@@ -94,7 +103,7 @@ def get_selection_multiframe_rows(
             "items": local_rows,
         }
 
-    if not SELECTION_ENABLE_CLOUD_HISTORY_FALLBACK:
+    if not _cloud_history_fallback_enabled():
         return {
             "symbol": symbol,
             "granularity": granularity,

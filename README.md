@@ -10,6 +10,7 @@
 - 当前 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
 - 当前临时公网入口：`https://dxp4800pro.tailfff556.ts.net/`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
+- 正式数据根按 `live / research/current / cache / artifacts / incoming` 收口；repo 内 `data/` 仅兼容/fallback
 - 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；当前线上运行节点是 NAS，研究页默认也按 NAS `research/current` 口径提供在线查询。
 - 当前探索中能力：热点板块 / 市场热度研究；本地研究站仍是主研究工作台，NAS 线上查询能力已经打通，但盘中 crawler 切换仍处观察期。
@@ -28,7 +29,7 @@
 
 - 私网运维默认走 `dxp4800pro`
 - 外部访客当前走 `https://dxp4800pro.tailfff556.ts.net/`
-- 正式自定义域名仍属于 D1，后续单独通过 `Cloudflare Tunnel + 自定义域名` 收口
+- 当前这条 `tailfff556.ts.net` 已可继续作为正式公网入口；只有在需要长期固定品牌域名时，才再单独切 `Cloudflare Tunnel + 自定义域名`
 - 所有 `Mac <-> NAS` 协作细节统一看：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/mac-nas-collaboration.md`
 
 ## 快速启动（本地）
@@ -67,6 +68,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 
 默认访问：`http://localhost:3001`  
 默认本地后端：`http://127.0.0.1:8001`
+端口规范：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/port-management.md`
 
 ### 5) 每日盘后正式跑数
 ```bash
@@ -111,9 +113,12 @@ bash ops/run_daily_new_framework.sh --json
 - 编号冻结规则见：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
 
 ## 发布与同步
-- 旧云端发布：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
+- 正式代码发布：`git push nas main`（如需外部备份，再补 `git push origin main`）
+- 正式研究数据发布：`bash ops/run_daily_new_framework.sh --json --sync-nas`
+- 注意：`--sync-nas` 当前只发布 `research/current`，不等于同步 `market-data/live/market_data.db` 的全市场历史底座
+- 旧云端发布（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
 - Windows 脚本同步：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_to_windows.sh`
-- 本地离线补数上云：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
+- 本地离线补数上云（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
 
 ## Git 仓库
 
@@ -131,7 +136,7 @@ bash ops/run_daily_new_framework.sh --json
 ## 最小自检
 ```bash
 cd /Users/dong/Desktop/AIGC/market-live-terminal
-npm run check:baseline
+bash scripts/check_baseline.sh
 ```
 
 ## 注意事项

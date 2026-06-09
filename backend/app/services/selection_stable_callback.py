@@ -137,6 +137,7 @@ def _row_to_candidate(row: pd.Series, rank: int) -> Dict[str, Any]:
     risk_count = _int(row.get("risk_count_R1_R5"))
     risk_labels = _split_labels(row.get("risk_labels"))
     entry_allowed = risk_count < 2
+    trade_date = _date(row.get("entry_signal_date")) or _date(row.get("pullback_confirm_date")) or ""
     setup_reason = f"发现日前资金/价格结构分 {_float(row.get('setup_score')):.2f}，前 20 日价格未过热。"
     launch_reason = f"启动窗口涨幅 {_float(row.get('launch3_return_pct')):.2f}% ，超大单净流入占比 {_float(row.get('launch3_super_net_ratio')):.4f}。"
     pullback_reason = "启动后回调承接确认" if row.get("pullback_confirm_reason") == "pullback_absorption_confirm" else str(row.get("pullback_confirm_reason") or "回调承接确认")
@@ -146,7 +147,7 @@ def _row_to_candidate(row: pd.Series, rank: int) -> Dict[str, Any]:
         "rank": rank,
         "symbol": str(row.get("symbol") or "").lower(),
         "name": str(row.get("symbol") or "").lower(),
-        "trade_date": _date(row.get("entry_signal_date")) or _date(row.get("pullback_confirm_date")) or "",
+        "trade_date": trade_date,
         "score": round(_float(row.get("setup_score")), 2),
         "signal": 1 if entry_allowed else 0,
         "signal_label": "stable_callback_buyable" if entry_allowed else "stable_callback_risk_filtered",
@@ -171,7 +172,7 @@ def _row_to_candidate(row: pd.Series, rank: int) -> Dict[str, Any]:
         "lifecycle_phase": "pullback_confirmed",
         "lifecycle_phase_label": "回调确认",
         "action_label": "可买入" if entry_allowed else "风险过滤",
-        "entry_signal_date": _date(row.get("entry_signal_date")),
+        "entry_signal_date": trade_date,
         "entry_date": _date(row.get("entry_date")),
         "discovery_date": _date(row.get("discovery_date")),
         "launch_start_date": _date(row.get("launch_start_date")),

@@ -4,7 +4,7 @@
 >
 > **边界提醒**：本文件只裁决“组件职责/数据流/部署边界”；业务规则与验收标准统一在 `docs/02_BUSINESS_DOMAIN.md`，接口字段约束统一在 `docs/03_DATA_CONTRACTS.md`，执行步骤统一在 `docs/04_OPS_AND_DEV.md`。
 >
-> **当前真相提醒（2026-06-06）**：当前正式架构已收口为 **Windows 数据主站 / Mac 开发与本地研究控制台 / NAS 在线运行节点**。旧 `Cloud` 叙事只按历史阶段理解；当前在线服务、`research/current` 发布与公网收口都以 NAS 线为准。本文件下半段仍保留少量早期演化背景，但当前判断一律先以本文件前 3 节 + `docs/changes/MOD-20260606-02-project-governance-master-plan.md` 为准。
+> **当前真相提醒（2026-06-06）**：当前正式架构已收口为 **Windows 数据主站 / Mac 开发与本地研究控制台 / NAS 在线运行节点**。旧 `Cloud` 叙事只按历史阶段理解；当前在线服务、`research/current` 发布与公网收口都以 NAS 线为准。本文件下半段仍保留少量早期演化背景，但当前判断一律先以本文件前 3 节 + `docs/archive/changes/MOD-20260606-02-project-governance-master-plan.md` 为准。
 
 ## 一、 系统角色与物理边界
 
@@ -13,11 +13,12 @@
 1. **司令部 (Mac 终端)**
    * **职责**：代码库唯一修改地；运行本地前后端；承接复盘、选股、策略研究、文档治理。
    * **本地正式数据**：从 Windows 同步处理后正式库到本机，主路径为：
-     - `market-data/market_data.db`（轻量盯盘消费库）
-     - `market-data/atomic_facts/market_atomic_mainboard_compact_current.db`（盘后明细底座，Mac 主读正式名）
-     - `market-data/selection/selection_research.db`（每日选股研究库，Mac 主读正式名）
-     - `market-data/selection/model_feature_store.db`（模型训练特征库，Mac 主读正式名）
-     - `market-data/user_data.db`
+     - `market-data/live/market_data.db`（轻量盯盘消费库）
+     - `market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`（盘后明细底座，Mac 主读正式名）
+     - `market-data/research/current/selection/selection_research.db`（每日选股研究库，Mac 主读正式名）
+     - `market-data/research/current/selection/model_feature_store.db`（模型训练特征库，Mac 主读正式名）
+     - `market-data/live/user_data.db`
+   * **补充说明**：当前 `market-data` 根目录旧兼容入口已经删除；默认口径直接固定为 `live/` 与 `research/current/`。
    * **红线**：
      - 不长期跑外采爬虫；
      - 不跨网络直接查询 Windows sqlite 主库；
@@ -33,9 +34,9 @@
    * **产出物**：
      - raw 原始包
      - `market_data.db`
-     - `atomic_compact_main`（Windows 当前实际主写物理名仍可能是 `compact_smoke_*`，正式语义不变）
-     - `selection_research_main`（Windows 主写文件名：`data/selection/selection_research_windows.db`）
-     - `model_feature_store_main`（Windows 当前实际主写物理名仍可能是 `model_feature_store_smoke_*`，正式语义不变）
+     - `atomic_compact_main`（当前按 `data/atomic_facts/market_atomic_mainboard_compact_current.db` 理解；旧 `compact_smoke_*` 已退休）
+     - `selection_research_main`（当前按 `data/selection/selection_research.db` 理解；旧 `selection_research_windows.db` 已退休）
+     - `model_feature_store_main`（当前按 `data/selection/model_feature_store.db` 理解；旧 `model_feature_store_smoke_*` 已退休）
      - Mac 所需日增量 / 全量同步产物
    * **红线**：
      - 不在 Windows 上做 Git 主仓日常开发；
@@ -58,7 +59,7 @@
      - 不在未完成观察期前下线 Windows 盘中 crawler。
 
 4. **影子 / 样本对象的边界说明**
-   * `backend/market.db`、`backend/app/market_data.db`、`backend/app/db/market_data.db` 只作为 shadow / sample / 排障对象存在，不承担正式主链职责。
+   * `backend/sample_data/shadow/market.db`、`backend/sample_data/shadow/market_data.db`、`backend/sample_data/examples/market_data_sample.db` 只作为 shadow / sample / 排障对象存在，不承担正式主链职责。
    * 这类对象的存在只用于排障、样本验证和局部兼容，不代表它们是正式架构中的主存储层。
 
 ## 二、 核心数据流转架构 (Data Flow)
@@ -106,7 +107,7 @@
 | 节点 | 当前正式存储 | 用途 |
 |------|------|------|
 | **Windows** | raw 原始包 + `market_data.db` + `atomic_compact_main` + `selection_research_main` + `model_feature_store_main` | 数据真相源 / 跑数主站 |
-| **Mac** | `market-data/market_data.db` + `market-data/atomic_facts/market_atomic_mainboard_compact_current.db` + `market-data/selection/selection_research.db` + `market-data/selection/model_feature_store.db` + `market-data/user_data.db` | 本地研究站主消费 |
+| **Mac** | `market-data/live/market_data.db` + `market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db` + `market-data/research/current/selection/selection_research.db` + `market-data/research/current/selection/model_feature_store.db` + `market-data/live/user_data.db` | 本地研究站主消费 |
 | **NAS** | `live/market_data.db` + `research/current/*` | 线上盯盘 / 在线查询 / 正式发布节点 |
 
 ### 数据一致性原则
@@ -118,13 +119,16 @@
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：
 
 ### 基础配置
-*   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认为 `data/market_data.db`。
-*   `USER_DB_PATH`: 用户配置数据库路径。默认 `data/user_data.db`。
+*   `FORMAL_MARKET_DATA_ROOT`: 当前正式数据根；默认 `/Users/dong/Desktop/AIGC/market-data`（Mac）或 `/runtime-data`（NAS）。
+*   `LIVE_DATA_ROOT`: 在线轻量库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/live` 推导。
+*   `RESEARCH_CURRENT_ROOT`: 正式研究库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/research/current` 推导。
+*   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认按 `LIVE_DATA_ROOT/market_data.db` 解释；repo `data/market_data.db` 只按兼容副本理解。
+*   `USER_DB_PATH`: 用户配置数据库路径。默认按 `LIVE_DATA_ROOT/user_data.db` 解释；repo `data/user_data.db` 只按兼容副本理解。
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。
-*   `CLOUD_API_URL`: Windows 节点专用的环境变量，指示它往哪里发数据 (如 `http://111.229.144.202`，由 Nginx 反代到后端)。
-*   `INGEST_TOKEN`: 控制云端高速穿透接口权限的秘钥，云端和 Windows 节点必须完全对齐（无默认值，未配置即拒绝写入）。
+*   `CLOUD_API_URL`: Windows 节点专用的历史环境变量名，用于指示它往哪里发数据；当前正式默认 ingest 目标应理解为 NAS 后端 (如 `http://dxp4800pro:8080`)。
+*   `INGEST_TOKEN`: 控制在线 ingest 接口权限的秘钥，目标后端与 Windows 节点必须完全对齐（无默认值，未配置即拒绝写入）。
 *   `WRITE_API_TOKEN`: 保护业务写接口（如 watchlist/config/sentiment 手动触发）的共享秘钥；**只允许保留在服务端环境变量中**。官方前端通过 Vite/Nginx 代理在服务端侧注入 `X-Write-Token`，浏览器端不得直接持有该值。
-*   `ENABLE_CLOUD_COLLECTOR`: 是否允许云端主动外采（默认 `false`，用于遵守“云端只被动 ingest”红线）。
+*   `ENABLE_CLOUD_COLLECTOR`: 是否允许旧 Cloud 兼容环境主动外采（默认 `false`，用于遵守“兼容环境只被动 ingest”红线）。
 
 ### LLM 大模型配置（🔴 仅通过服务端环境变量）
 > **安全红线**：以下配置**绝对禁止**存入数据库、前端代码或 Git 仓库。云端通过宿主机环境变量 → Docker Compose 透传。本地通过 `.env.local` 文件（已被 `.gitignore` 和 `.cursorignore` 隔离）。

@@ -25,7 +25,7 @@ ssh ${WIN_USER}@${WIN_IP} "if not exist \"${WIN_BASE_DIR}\\backend\\scripts\" mk
 echo "[2/4] 同步 crawler / task 注册脚本..."
 scp backend/scripts/live_crawler_win.py ${WIN_USER}@${WIN_IP}:${WIN_BASE_DIR}/backend/scripts/
 scp start_live_crawler.bat ${WIN_USER}@${WIN_IP}:${WIN_BASE_DIR}/
-scp ops/win_register_live_crawler_tasks.ps1 ${WIN_USER}@${WIN_IP}:${WIN_BASE_DIR}/ops/
+scp ops/windows/win_register_live_crawler_tasks.ps1 ${WIN_USER}@${WIN_IP}:${WIN_BASE_DIR}/ops/
 
 echo "[3/4] 在 Windows 上重建正式计划任务..."
 ssh ${WIN_USER}@${WIN_IP} "${REMOTE_POWERSHELL} -File \"${WIN_BASE_DIR}\\ops\\win_register_live_crawler_tasks.ps1\""
