@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：选股页市场趋势、市场环境门控研究与策略样本同源发布
-- 状态：RELEASE_READY
+- 状态：RELEASED_PENDING_SMOKE
 - 负责人：Codex
 - 关联 Task ID：`REQ-20260611-01-selection-market-trend-ui`
 - 关联 CAP：`CAP-SELECTION-RESEARCH`
@@ -41,7 +41,7 @@
 4. 补版本治理到 `v5.2.17`。
 5. 补业务域文档、接口契约、AI 短日志和待办状态。
 6. 发布基线修复并验证：DB schema 缓存、S01/S02 策略样本同源、股票事件覆盖测试日期锚定。
-7. 待发布到 NAS 生产后，将状态回填为 `RELEASED_PENDING_SMOKE`。
+7. 已发布到 NAS 生产，状态回填为 `RELEASED_PENDING_SMOKE`，等待用户生产业务冒烟后归档。
 
 ## 5. 验收标准
 - Given：访问 `http://127.0.0.1:3001/selection-research`，选择 `2026-06-10` 并查看候选。
@@ -72,7 +72,11 @@
   - `3001` 页面验证通过：显示“近期市场趋势”，不显示旧标题/说明句，hover 示例为 `2026-04-10 / 水位 63.8 / 攻击`。
   - `/usr/bin/python3 -m pytest backend/tests -q` 通过：212 passed，13 warnings。
 - 生产发布：
-  - 待执行。
+  - NAS Gitea 已推送并验真：`main` = `edfbd577831fd934e0940e1efe59c12fa2c41534`。
+  - NAS 生产已通过 `deploy/docker-compose.nas-full.yml` 重建并重启 `backend` / `frontend`。
+  - NAS 内网冒烟通过：`/api/health`、`/api/selection/health`、`/api/selection/market-environment?date=2026-06-08`、`/api/selection/daily-candidates?date=2026-06-08&include_exit_watchlist=true`。
+  - 市场水位生产数据可用：`2026-06-08` 返回 `available=true`、`recent.length=90`、状态 `防守-持续下跌`。
+  - 公开入口冒烟通过：`https://dxp4800pro.tailfff556.ts.net/api/health`、`/api/selection/market-environment?date=2026-06-08`、`/api/selection/daily-candidates?date=2026-06-08&include_exit_watchlist=true`、`/selection-research` 均返回 200。
 - 遗留问题：
   - 该模块仍是决策辅助，不改变选股策略本身的准确率。
 

@@ -5,7 +5,7 @@
 - CAP: `CAP-SELECTION-RESEARCH`
 - 结论: 已把选股页左侧市场水位从数字堆叠改成“近期市场趋势”90 日水位图，并压缩候选导航：日期、策略状态和候选分类整合为单行；删除独立“股票导航”标题、说明句和无用的候选处理图。趋势图支持鼠标悬停查看选中日期、水位分数和市场状态，弱势证据收进标题后的感叹号 hover。
 - 风险: 该能力是实盘前的市场环境辅助判断，不改变模型/策略本身的候选生成逻辑；生产 NAS 是否能完整显示取决于线上 selection 数据和市场环境研究数据是否齐备。
-- 验证: 本地 `3001` 已验证 `2026-06-10` 候选页可显示“近期市场趋势”，不再出现旧标题/说明句，hover 示例为 `2026-04-10 / 水位 63.8 / 攻击`；`/api/selection/daily-candidates` 经 `3001` 代理返回 `market_environment.recent.length=90`；`npm run build` 通过。
+- 验证: 本地 `3001` 已验证 `2026-06-10` 候选页可显示“近期市场趋势”，不再出现旧标题/说明句，hover 示例为 `2026-04-10 / 水位 63.8 / 攻击`；`/api/selection/daily-candidates` 经 `3001` 代理返回 `market_environment.recent.length=90`；`bash scripts/check_baseline.sh` 通过。2026-06-11 已发布 NAS 生产，`main=edfbd577831fd934e0940e1efe59c12fa2c41534`；公开入口 `/api/health`、`/api/selection/market-environment?date=2026-06-08`、`/api/selection/daily-candidates?date=2026-06-08&include_exit_watchlist=true`、`/selection-research` 均返回 200，其中市场水位 `available=true`、`recent.length=90`。
 - 链接: `docs/changes/REQ-20260611-01-selection-market-trend-ui.md`, `docs/domain/selection-research.md`, `src/components/selection/SelectionResearchPage.tsx`, `src/version.ts`
 
 ## 2026-06-09 每日主链收口到 NAS 生产库 | Codex
