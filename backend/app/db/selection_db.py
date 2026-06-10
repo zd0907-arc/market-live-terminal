@@ -7,6 +7,7 @@ from backend.app.core.config import RESEARCH_CURRENT_ROOT
 
 SELECTION_DATA_DIR = os.getenv("SELECTION_DATA_DIR", os.path.join(RESEARCH_CURRENT_ROOT, "selection"))
 SELECTION_DB_FILE = os.getenv("SELECTION_DB_PATH", os.path.join(SELECTION_DATA_DIR, "selection_research.db"))
+_SCHEMA_READY = False
 
 FeatureRow = Tuple[
     str, str, str, str, float, Optional[float], Optional[float], Optional[float], Optional[float],
@@ -45,6 +46,9 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
 
 
 def ensure_selection_schema() -> None:
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return
     conn = get_selection_connection()
     try:
         conn.executescript(
@@ -325,6 +329,7 @@ def ensure_selection_schema() -> None:
         _ensure_column(conn, "selection_backtest_summary", "avg_max_runup_pct", "REAL DEFAULT 0")
         _ensure_column(conn, "selection_backtest_summary", "median_max_runup_pct", "REAL DEFAULT 0")
         conn.commit()
+        _SCHEMA_READY = True
     finally:
         conn.close()
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+import time
 from bisect import bisect_right
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -26,6 +27,12 @@ SOURCE_PRIORITY = {
 }
 MAX_TRADE_DATE_WINDOW_DAYS = 540
 DEFAULT_EXIT_POLICY_ID = DEFAULT_DUAL_POLICY_ID
+_TRADE_DATE_CACHE_TTL_SECONDS = 60
+_TRADE_DATE_CACHE: Dict[tuple, tuple[float, Dict[str, Any]]] = {}
+
+
+def invalidate_daily_trade_dates_cache() -> None:
+    _TRADE_DATE_CACHE.clear()
 
 
 def _json_dump(value: Any) -> str:
@@ -642,6 +649,7 @@ def rebuild_daily_candidates(trade_date: str) -> int:
         return len(merged)
     finally:
         conn.close()
+        invalidate_daily_trade_dates_cache()
 
 
 def _daily_row_to_candidate(row: Any, next_trade_date_by_date: Optional[Dict[str, Optional[str]]] = None) -> Dict[str, Any]:
@@ -763,6 +771,11 @@ def query_daily_candidates(trade_date: Optional[str] = None, *, limit: int = 50,
 
 def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
     ensure_selection_schema()
+    cache_key = (str(start_date or ""), str(end_date or ""))
+    cached = _TRADE_DATE_CACHE.get(cache_key)
+    now = time.time()
+    if cached and now - cached[0] < _TRADE_DATE_CACHE_TTL_SECONDS:
+        return cached[1]
     conn = get_selection_connection()
     try:
         bounds = conn.execute(
@@ -877,7 +890,7 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
                 "disabled_reason": disabled_reason,
             }
         )
-    return {
+    payload = {
         "start_date": resolved_start,
         "end_date": end_dt.strftime("%Y-%m-%d"),
         "strategy": "daily_candidate_pool",
@@ -885,6 +898,8 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
         "window_days": (end_dt - start_dt).days + 1,
         "items": items,
     }
+    _TRADE_DATE_CACHE[cache_key] = (now, payload)
+    return payload
 
 
 def query_daily_candidate_profile(symbol: str, trade_date: str) -> Optional[Dict[str, Any]]:

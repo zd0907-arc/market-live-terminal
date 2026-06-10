@@ -4,6 +4,7 @@ import { fetchFineHeatDashboard, fetchFineHeatDates, fetchFineThemeForecast, fet
 import * as StockService from '../../services/stockService';
 import { HistoryMultiframeGranularity, SearchResult } from '../../types';
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
+import MiniKlineChart from '../common/MiniKlineChart';
 import { APP_VERSION } from '../../version';
 
 const fmt = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -217,89 +218,6 @@ const stockSignalClass = (tone?: string) => {
   return 'border-slate-700 bg-slate-800/60 text-slate-300';
 };
 
-const movingAverage = (values: number[], windowSize: number) => values.map((_, index) => {
-  if (index + 1 < windowSize) return null;
-  const slice = values.slice(index + 1 - windowSize, index + 1);
-  return slice.reduce((sum, value) => sum + value, 0) / windowSize;
-});
-
-const MiniKlineSvg: React.FC<{ stock: FineHeatStock }> = ({ stock }) => {
-  const points = (stock.history || []).slice(-45);
-  if (points.length < 2) {
-    return <div className="flex h-[86px] items-center justify-center text-[10px] text-slate-600">暂无K线</div>;
-  }
-  const width = 360;
-  const height = 86;
-  const top = 4;
-  const bottom = 4;
-  const left = 4;
-  const right = 4;
-  const innerW = width - left - right;
-  const innerH = height - top - bottom;
-  const closes = points.map((point) => Number(point.close || 0));
-  const ma5 = movingAverage(closes, 5);
-  const ma10 = movingAverage(closes, 10);
-  const allValues = [
-    ...points.flatMap((point) => [Number(point.high || 0), Number(point.low || 0)]),
-    ...ma5.filter((value): value is number => value != null),
-    ...ma10.filter((value): value is number => value != null),
-  ].filter((value) => Number.isFinite(value) && value > 0);
-  if (!allValues.length) {
-    return <div className="flex h-[86px] items-center justify-center text-[10px] text-slate-600">暂无K线</div>;
-  }
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const span = max > min ? max - min : Math.max(1, max * 0.04);
-  const y = (value: number) => top + (max - value) / span * innerH;
-  const step = innerW / Math.max(1, points.length - 1);
-  const candleW = Math.max(2.2, Math.min(4.2, step * 0.5));
-  const linePath = (values: Array<number | null>) => values
-    .map((value, index) => value == null ? null : `${index === values.findIndex((v) => v != null) ? 'M' : 'L'} ${left + index * step} ${y(value)}`)
-    .filter(Boolean)
-    .join(' ');
-  const ma5Path = linePath(ma5);
-  const ma10Path = linePath(ma10);
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" shapeRendering="geometricPrecision" className="h-[86px] w-full overflow-hidden">
-      <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="#1e293b" strokeWidth="0.8" />
-      {points.map((point, index) => {
-        const open = Number(point.open || 0);
-        const close = Number(point.close || 0);
-        const high = Number(point.high || 0);
-        const low = Number(point.low || 0);
-        const up = close >= open;
-        const color = up ? '#fb7185' : '#22c55e';
-        const wickColor = up ? '#f87171' : '#34d399';
-        const x = left + index * step;
-        const yOpen = y(open);
-        const yClose = y(close);
-        const bodyY = Math.min(yOpen, yClose);
-        const bodyH = Math.max(1.5, Math.abs(yClose - yOpen));
-        const isLast = index === points.length - 1;
-        return (
-          <g key={`${stock.symbol}-${point.trade_date}`}>
-            <line x1={x} x2={x} y1={y(high)} y2={y(low)} stroke={wickColor} strokeWidth={isLast ? 1.1 : 0.8} opacity={isLast ? 0.95 : 0.78} />
-            <rect
-              x={x - candleW / 2}
-              y={bodyY}
-              width={candleW}
-              height={bodyH}
-              rx={0}
-              fill={color}
-              stroke="none"
-              opacity={isLast ? 1 : 0.9}
-            />
-            {isLast ? <circle cx={x} cy={y(close)} r="1.9" fill="#38bdf8" stroke="#0f172a" strokeWidth="0.8" /> : null}
-          </g>
-        );
-      })}
-      {ma10Path ? <path d={ma10Path} fill="none" stroke="#a78bfa" strokeWidth="1.25" opacity="0.9" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {ma5Path ? <path d={ma5Path} fill="none" stroke="#fbbf24" strokeWidth="1.25" opacity="0.95" strokeLinecap="round" strokeLinejoin="round" /> : null}
-    </svg>
-  );
-};
-
 const StockTrendCard: React.FC<{
   stock: FineHeatStock;
   index: number;
@@ -327,7 +245,7 @@ const StockTrendCard: React.FC<{
         <span className={`${mono} ${Number(stock.l2_net_inflow_3d_yi ?? stock.l2_net_inflow_yi ?? 0) >= 0 ? 'text-red-200' : 'text-emerald-200'}`}>L2 {fmt(stock.l2_net_inflow_3d_yi ?? stock.l2_net_inflow_yi, 1)}亿</span>
       </div>
       <div className="-mx-1 mt-1">
-        <MiniKlineSvg stock={stock} />
+        <MiniKlineChart points={stock.history || []} pointKeyPrefix={stock.symbol} />
       </div>
     </button>
   );

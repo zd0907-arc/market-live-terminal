@@ -15,6 +15,11 @@ from backend.app.services.selection_candidate_store import (
     replace_source_candidates,
     upsert_strategy_registry,
 )
+from backend.app.services.selection_market_environment_gate import (
+    apply_market_gate_to_candidates,
+    build_candidate_market_gate,
+    get_market_environment,
+)
 from backend.app.services.selection_research import get_profile
 from backend.app.services.selection_stable_callback import (
     STRATEGY_DISPLAY_NAME as STABLE_SOURCE_NAME,
@@ -287,6 +292,9 @@ def get_daily_selection_candidates(
     ensure_daily_source_registry()
     payload = query_daily_candidates(trade_date, limit=limit, source_type=source_type)
     target_date = str(payload.get("trade_date") or trade_date or "")
+    market_environment = get_market_environment(target_date)
+    payload["market_environment"] = market_environment
+    payload["items"] = apply_market_gate_to_candidates(payload.get("items") or [], market_environment)
     if not include_exit_watchlist:
         payload["exit_watchlist"] = {
             "trade_date": target_date,
@@ -401,6 +409,8 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
         }
     candidate_payload = daily_candidate or exit_watch_item
     if candidate_payload:
+        market_environment = get_market_environment(trade_date)
+        market_gate = build_candidate_market_gate(candidate_payload, market_environment)
         trade_plan = dict(profile.get("trade_plan") or {})
         if not trade_plan and candidate_payload.get("entry_signal_date"):
             trade_plan = {"signal_date": candidate_payload.get("entry_signal_date")}
@@ -410,6 +420,31 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
                 "strategy_display_name": "每日综合候选池",
                 "strategy_internal_id": DAILY_POOL_ID,
                 "daily_candidate": candidate_payload,
+                "market_environment_snapshot": market_environment,
+                "entry_decision_summary": _entry_decision_summary(candidate_payload, market_gate),
+                "entry_decision_breakdown": {
+                    "market_gate": {
+                        "status": market_gate.get("market_gate_status"),
+                        "label": market_gate.get("market_gate_label"),
+                        "reasons": market_gate.get("market_gate_reasons") or [],
+                    },
+                    "stock_rule": {
+                        "status": "allowed" if candidate_payload.get("entry_allowed") is not False else "blocked",
+                        "label": candidate_payload.get("action_label") or "",
+                        "buy_rule": candidate_payload.get("buy_rule") or candidate_payload.get("exit_plan_summary") or "",
+                    },
+                    "final_action": {
+                        "status": "allowed" if market_gate.get("final_entry_allowed") else "watch_only",
+                        "label": market_gate.get("final_action_label") or "",
+                    },
+                },
+                "market_gate_evidence": {
+                    "primary_window": "5d",
+                    "warning_window": "3d",
+                    "confirm_window": "10d",
+                    "policy_id": market_gate.get("gate_policy_id"),
+                    "policy_version": market_gate.get("gate_policy_version"),
+                },
                 "daily_source_details": candidate_payload.get("source_details") or [],
                 "source_count": candidate_payload.get("source_count"),
                 "source_ids": candidate_payload.get("source_ids") or [],
@@ -438,3 +473,14 @@ def get_daily_selection_profile(symbol: str, trade_date: str) -> Dict[str, Any]:
         latest_available_trade_date = profile.get("trade_date")
     profile["latest_available_trade_date"] = latest_available_trade_date
     return profile
+
+
+def _entry_decision_summary(candidate_payload: Dict[str, Any], market_gate: Dict[str, Any]) -> str:
+    final_label = str(market_gate.get("final_action_label") or "")
+    gate_label = str(market_gate.get("market_gate_label") or "")
+    source_label = str(candidate_payload.get("action_label") or "")
+    if market_gate.get("final_entry_allowed"):
+        return f"环境允许，仍需按来源买点执行：{source_label or '明日可买'}。"
+    if market_gate.get("entry_decision_source") == "market_gate":
+        return f"{gate_label or '市场环境偏弱'}，来源动作降级为{final_label or '仅观察'}。"
+    return f"来源规则当前为{source_label or '观察'}，市场环境不覆盖原规则判断。"

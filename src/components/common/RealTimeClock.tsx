@@ -26,10 +26,12 @@ const RealTimeClock: React.FC = () => {
     };
 
     return (
-        <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3 text-slate-600" />
-            <span>{formatDate(time)}</span>
-            <span className="font-mono w-[60px]">{formatTime(time)}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap">
+            <Clock className="h-3 w-3 shrink-0 text-slate-600" />
+            <span className="inline-flex gap-x-1">
+                <span>{formatDate(time)}</span>
+                <span className="font-mono tabular-nums">{formatTime(time)}</span>
+            </span>
         </span>
     );
 };

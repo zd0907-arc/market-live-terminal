@@ -329,6 +329,57 @@ export interface SelectionTradeDatesData {
   items: SelectionTradeDateItem[];
 }
 
+export type SelectionMarketGateStatus = 'allowed' | 'watch_only' | 'blocked' | 'exception_failed' | (string & {});
+
+export interface SelectionMarketEnvironment {
+  trade_date?: string | null;
+  water_score?: number | null;
+  market_regime?: string | null;
+  market_detail?: string | null;
+  market_detail_label?: string | null;
+  default_action?: string | null;
+  reason_top3?: string[];
+  metrics?: Record<string, number | null | undefined>;
+  recent?: Array<{
+    trade_date?: string | null;
+    water_score?: number | null;
+    market_regime?: string | null;
+    market_detail_label?: string | null;
+    default_action?: string | null;
+    action_code?: string | null;
+    all_up_ratio_5d?: number | null;
+    small_up_ratio_5d?: number | null;
+    all_med_ret_5d?: number | null;
+    csi1000_return_5d_pct?: number | null;
+  }>;
+  [key: string]: any;
+}
+
+export interface SelectionEntryDecisionBreakdown {
+  market_gate?: {
+    status?: SelectionMarketGateStatus | null;
+    label?: string | null;
+    reasons?: string[];
+  };
+  stock_rule?: {
+    status?: string | null;
+    label?: string | null;
+    buy_rule?: string | null;
+  };
+  final_action?: {
+    status?: string | null;
+    label?: string | null;
+  };
+  [key: string]: any;
+}
+
+export interface SelectionMarketGateEvidence {
+  primary_window?: string | null;
+  warning_window?: string | null;
+  confirm_window?: string | null;
+  [key: string]: any;
+}
+
 export interface SelectionCandidateItem {
   rank?: number;
   symbol: string;
@@ -361,6 +412,20 @@ export interface SelectionCandidateItem {
   intent_profile?: Record<string, any>;
   entry_allowed?: boolean;
   entry_block_reasons?: string[];
+  market_environment?: SelectionMarketEnvironment | null;
+  market_environment_snapshot?: SelectionMarketEnvironment | null;
+  source_action_label?: string | null;
+  market_gate_status?: SelectionMarketGateStatus | null;
+  market_gate_reasons?: string[];
+  market_default_action?: string | null;
+  final_entry_allowed?: boolean | null;
+  final_action_label?: string | null;
+  entry_decision_source?: string | null;
+  gate_policy_id?: string | null;
+  gate_policy_version?: string | null;
+  entry_decision_summary?: string | null;
+  entry_decision_breakdown?: SelectionEntryDecisionBreakdown | null;
+  market_gate_evidence?: SelectionMarketGateEvidence | null;
   candidate_types?: string[];
   selection_rank_score?: number | null;
   selection_rank_mode?: string;
@@ -435,6 +500,7 @@ export interface SelectionCandidatesResponse {
   trade_date: string;
   strategy: SelectionStrategy;
   rank_mode?: string;
+  market_environment?: SelectionMarketEnvironment | null;
   items: SelectionCandidateItem[];
   source_runs?: Array<{
     source_id: string;
@@ -732,6 +798,20 @@ export interface SelectionProfileData {
   event_timeline?: SelectionEventTimelineItem[];
   entry_allowed?: boolean;
   entry_block_reasons?: string[];
+  market_environment?: SelectionMarketEnvironment | null;
+  market_environment_snapshot?: SelectionMarketEnvironment | null;
+  source_action_label?: string | null;
+  market_gate_status?: SelectionMarketGateStatus | null;
+  market_gate_reasons?: string[];
+  market_default_action?: string | null;
+  final_entry_allowed?: boolean | null;
+  final_action_label?: string | null;
+  entry_decision_source?: string | null;
+  gate_policy_id?: string | null;
+  gate_policy_version?: string | null;
+  entry_decision_summary?: string | null;
+  entry_decision_breakdown?: SelectionEntryDecisionBreakdown | null;
+  market_gate_evidence?: SelectionMarketGateEvidence | null;
   intent_profile?: Record<string, any>;
   candidate_types?: string[];
   research?: Record<string, any>;

@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
 
 import {
   SelectionBacktestDetail,
   SelectionBacktestRunItem,
   SelectionCandidateItem,
   SelectionHealthData,
+  HistoryMultiframeItem,
+  SelectionMarketEnvironment,
   SelectionProfileData,
   SelectionStrategy,
   SelectionTradeDateItem,
@@ -18,6 +20,7 @@ import {
   fetchSelectionBacktestDetail,
   fetchSelectionBacktests,
   fetchSelectionHealth,
+  fetchSelectionHistoryMultiframeBatch,
   fetchSelectionV2Evaluation,
   fetchStableCallbackEvaluation,
   fetchTrendContinuationEvaluation,
@@ -30,14 +33,16 @@ import * as StockService from '../../services/stockService';
 import QuoteMetaRow from '../common/QuoteMetaRow';
 import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
 import { Metric, SectionCard } from '../common/ResearchCard';
+import MiniKlineChart, { type MiniKlineMarker } from '../common/MiniKlineChart';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
-import MarketTopHeader from '../common/MarketTopHeader';
 import { APP_VERSION } from '../../version';
 import { SPARK_PATTERN_RESEARCH_PAGES } from './sparkPatternResearchRegistry';
+import { MARKET_ENVIRONMENT_GATE_RESEARCH_PAGE } from './marketEnvironmentGateResearchRegistry';
 
 const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
 const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
 const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
+const HOLDING_HISTORY_TIMEOUT_MS = 22000;
 type ActiveStrategy = Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
 
 const STRATEGY_OPTIONS: Array<{ value: ActiveStrategy; label: string }> = [
@@ -56,6 +61,52 @@ const STRATEGY_LABELS: Record<string, string> = {
   v2: '旧策略对照',
 };
 type CandidateEmptyState = 'idle' | 'not_run' | 'completed_empty' | 'failed';
+type NavigatorGroup = 'all' | 'source_buy' | 'watch' | 'blocked' | 'holdings' | 'sell' | 'actionable';
+
+const NAVIGATOR_GROUP_CONFIG: Record<NavigatorGroup, { label: string; shortLabel: string; tone: string; emptyText: string }> = {
+  all: {
+    label: '全部候选',
+    shortLabel: '全部',
+    tone: 'text-slate-100',
+    emptyText: '当前日期没有每日候选票。',
+  },
+  source_buy: {
+    label: '策略买点',
+    shortLabel: '买点',
+    tone: 'text-amber-200',
+    emptyText: '当前日期没有策略原始买点票。',
+  },
+  watch: {
+    label: '观察池',
+    shortLabel: '观察',
+    tone: 'text-cyan-200',
+    emptyText: '当前日期没有观察池票。',
+  },
+  blocked: {
+    label: '市场拦截',
+    shortLabel: '拦截',
+    tone: 'text-rose-200',
+    emptyText: '当前日期没有被市场水位拦截的候选票。',
+  },
+  holdings: {
+    label: '当前持仓',
+    shortLabel: '持仓',
+    tone: 'text-sky-200',
+    emptyText: '当前日期没有持仓跟踪票。',
+  },
+  sell: {
+    label: '次日卖出',
+    shortLabel: '卖出',
+    tone: 'text-fuchsia-200',
+    emptyText: '当前日期没有次日卖出票。',
+  },
+  actionable: {
+    label: '明日可操作',
+    shortLabel: '可操作',
+    tone: 'text-emerald-200',
+    emptyText: '当前日期没有明日可操作票。',
+  },
+};
 
 const fmtPct = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : `${Number(value).toFixed(digits)}%`);
 const fmtNum = (value?: number | null, digits = 2) => (value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(digits));
@@ -81,6 +132,160 @@ const fmtSortScoreLabel = (item: SelectionCandidateItem) => {
     return `排序分｜源分${fmtNum(sourceScore)}`;
   }
   return '综合分';
+};
+
+const marketGateToneClass = (status?: string | null, label?: string | null) => {
+  const text = `${status || ''} ${label || ''}`.toLowerCase();
+  if (text.includes('block') || text.includes('pause') || text.includes('暂停') || text.includes('拦截')) {
+    return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  }
+  if (text.includes('watch') || text.includes('观察') || text.includes('谨慎') || text.includes('例外未通过')) {
+    return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  }
+  if (text.includes('allow') || text.includes('pass') || text.includes('允许') || text.includes('可买')) {
+    return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  }
+  return 'border-slate-700 bg-slate-950 text-slate-300';
+};
+
+const marketGateStatusText = (status?: string | null) => {
+  if (!status) return '';
+  if (status === 'allowed') return '环境允许';
+  if (status === 'watch_only') return '仅观察';
+  if (status === 'blocked') return '暂停新开仓';
+  if (status === 'exception_failed') return '例外未通过';
+  return status;
+};
+
+const getCandidateMarketGate = (item: SelectionCandidateItem) => {
+  const environment = item.market_environment || item.market_environment_snapshot || null;
+  const environmentLabel = environment?.market_detail_label || environment?.market_detail || environment?.market_regime || '';
+  const sourceActionLabel = item.source_action_label || item.action_label || '';
+  const gateActionLabel = item.market_default_action || marketGateStatusText(item.market_gate_status) || '';
+  const finalActionLabel = item.final_action_label || (item.final_entry_allowed === false ? '仅观察' : '');
+  const reasons = item.market_gate_reasons || [];
+  const hasGate = Boolean(
+    environmentLabel
+    || item.market_gate_status
+    || item.market_default_action
+    || item.final_action_label
+    || item.final_entry_allowed != null
+    || reasons.length > 0
+  );
+  return { hasGate, environmentLabel, sourceActionLabel, gateActionLabel, finalActionLabel, reasons };
+};
+
+const getMarketMetric = (environment: SelectionMarketEnvironment | null, key: string) => {
+  const value = environment?.metrics?.[key];
+  return value == null || Number.isNaN(Number(value)) ? null : Number(value);
+};
+
+const marketRegimeColor = (regime?: string | null, actionCode?: string | null) => {
+  if (regime === 'attack' || actionCode === 'allowed') return '#34d399';
+  if (regime === 'caution' || actionCode === 'watch_only') return '#fbbf24';
+  if (regime === 'defense' || actionCode === 'blocked') return '#fb7185';
+  return '#94a3b8';
+};
+
+const marketTrendLabel = (points: SelectionMarketEnvironment['recent']) => {
+  const valid = (points || []).filter((point) => Number.isFinite(Number(point.water_score)));
+  if (valid.length < 2) return '近期走势不足';
+  const first = Number(valid[0].water_score);
+  const last = Number(valid[valid.length - 1].water_score);
+  const delta = last - first;
+  if (delta >= 8) return '水位抬升';
+  if (delta <= -8) return '水位走低';
+  return last < 30 ? '低位震荡' : '区间震荡';
+};
+
+const MarketWaterTrendChart: React.FC<{ points: SelectionMarketEnvironment['recent'] }> = ({ points = [] }) => {
+  const valid = points.filter((point) => Number.isFinite(Number(point.water_score)));
+  if (valid.length < 2) {
+    return (
+      <div className="flex h-16 items-center justify-center text-xs text-slate-500">
+        暂无近期水位走势
+      </div>
+    );
+  }
+  const width = 320;
+  const height = 78;
+  const padX = 14;
+  const top = 8;
+  const bottom = 55;
+  const yFor = (score: number) => top + (100 - Math.max(0, Math.min(100, score))) / 100 * (bottom - top);
+  const xFor = (index: number) => padX + (valid.length <= 1 ? 0 : index / (valid.length - 1) * (width - padX * 2));
+  const path = valid.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(Number(point.water_score)).toFixed(1)}`).join(' ');
+  const last = valid[valid.length - 1];
+  const first = valid[0];
+  const lastX = xFor(valid.length - 1);
+  const lastY = yFor(Number(last.water_score));
+  return (
+    <div className="mt-2">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[84px] w-full" role="img" aria-label="近90日市场水位走势">
+        <rect x="10" y={yFor(100)} width={width - 20} height={yFor(55) - yFor(100)} fill="#064e3b" opacity="0.16" />
+        <rect x="10" y={yFor(55)} width={width - 20} height={yFor(30) - yFor(55)} fill="#78350f" opacity="0.14" />
+        <rect x="10" y={yFor(30)} width={width - 20} height={yFor(0) - yFor(30)} fill="#7f1d1d" opacity="0.18" />
+        <line x1="10" y1={yFor(55)} x2={width - 10} y2={yFor(55)} stroke="#475569" strokeDasharray="3 4" opacity="0.55" />
+        <line x1="10" y1={yFor(30)} x2={width - 10} y2={yFor(30)} stroke="#475569" strokeDasharray="3 4" opacity="0.55" />
+        <text x="14" y={yFor(72)} fill="#86efac" fontSize="9">进攻</text>
+        <text x="14" y={yFor(43)} fill="#fde68a" fontSize="9">观察</text>
+        <text x="14" y={yFor(15)} fill="#fecdd3" fontSize="9">防守</text>
+        <path d={path} fill="none" stroke="#e2e8f0" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+        {valid.map((point, index) => (
+          <circle
+            key={`${point.trade_date || index}-${index}`}
+            cx={xFor(index)}
+            cy={yFor(Number(point.water_score))}
+            r={index === valid.length - 1 ? 3.8 : 1.5}
+            fill={marketRegimeColor(point.market_regime, point.action_code)}
+            opacity={index === valid.length - 1 ? 1 : 0.8}
+          />
+        ))}
+        <line x1={lastX} y1={lastY} x2={lastX} y2={bottom + 7} stroke="#94a3b8" strokeDasharray="2 3" opacity="0.6" />
+        <text x={padX} y="72" fill="#64748b" fontSize="9">{compactDateText(first.trade_date).slice(5)}</text>
+        <text x={width - padX} y="72" fill="#cbd5e1" fontSize="9" textAnchor="end">{compactDateText(last.trade_date).slice(5)}</text>
+      </svg>
+    </div>
+  );
+};
+
+const MarketEnvironmentSummaryCard: React.FC<{
+  environment: SelectionMarketEnvironment | null;
+}> = ({ environment }) => {
+  if (!environment?.available) return null;
+  const label = environment.market_detail_label || environment.market_detail || environment.market_regime || '市场环境';
+  const actionLabel = environment.default_action || marketGateStatusText(environment.action_code) || '--';
+  const reasons = environment.reason_top3 || [];
+  const trendText = marketTrendLabel(environment.recent);
+  const reasonText = reasons[0] || `全市场5日上涨 ${fmtPct(getMarketMetric(environment, 'all_up_ratio_5d'), 1)}`;
+  return (
+    <div className="border-b border-slate-800/80 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-bold text-white">
+            <ShieldAlert className="h-4 w-4 text-amber-300" />
+            今日市场水位
+          </div>
+          <div className="mt-1 truncate text-xs text-slate-400">{environment.trade_date || '--'} · {label} · 90日{trendText}</div>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className={`inline-flex rounded border px-2 py-1 text-[11px] font-semibold ${marketGateToneClass(environment.action_code, actionLabel)}`}>
+            {actionLabel}
+          </span>
+          <div className="mt-1 font-mono text-xs text-slate-400">水位 {fmtNum(environment.water_score, 1)}</div>
+        </div>
+      </div>
+      <MarketWaterTrendChart points={environment.recent} />
+      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] leading-5 text-slate-500">
+        <span className="line-clamp-1">{reasonText}</span>
+        <div className="shrink-0 text-slate-400">
+          <span>小盘5日 {fmtPct(getMarketMetric(environment, 'small_up_ratio_5d'), 1)}</span>
+          <span className="mx-1 text-slate-700">/</span>
+          <span>中证1000 {fmtPct(getMarketMetric(environment, 'csi1000_return_5d_pct'), 1)}</span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const dualTrackToneClass = (status?: string) => {
@@ -109,6 +314,16 @@ const maxDateText = (...values: Array<string | null | undefined>) => {
   const valid = values.map((item) => String(item || '').slice(0, 10)).filter(Boolean);
   return valid.sort().pop() || '';
 };
+
+const compactDateText = (value?: string | null) => String(value || '').slice(0, 10) || '--';
+
+const withTimeoutFallback = async <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => new Promise((resolve) => {
+  const timer = window.setTimeout(() => resolve(fallback), timeoutMs);
+  promise
+    .then(resolve)
+    .catch(() => resolve(fallback))
+    .finally(() => window.clearTimeout(timer));
+});
 
 const fmtMarketCap = (value?: number | null) => {
   if (value == null || Number.isNaN(Number(value)) || Number(value) <= 0) return '--';
@@ -320,6 +535,121 @@ const TradeDatePicker: React.FC<{
   );
 };
 
+const SelectionTrendNavCard: React.FC<{
+  item: SelectionCandidateItem & { displayName?: string };
+  index: number;
+  group: NavigatorGroup;
+  active: boolean;
+  history?: HistoryMultiframeItem[];
+  loading?: boolean;
+  onClick: () => void;
+}> = ({ item, index, group, active, history = [], loading = false, onClick }) => {
+  const dualTracks = item.dual_exit_tracks || [];
+  const holdTrack = dualTracks.find((track) => track.status === 'hold') || dualTracks[0];
+  const marketGate = getCandidateMarketGate(item);
+  const latest = history[history.length - 1];
+  const prevClose = Number(latest?.prev_close ?? history[history.length - 2]?.close ?? 0);
+  const latestClose = Number(latest?.close ?? item.close ?? 0);
+  const latestPct = prevClose > 0 && latestClose > 0 ? (latestClose / prevClose - 1) * 100 : null;
+  const latestTone = Number(latestPct ?? item.return_5d_pct ?? 0) >= 0 ? 'text-red-300' : 'text-emerald-300';
+  const score = Number(item.selection_rank_score ?? item.score);
+  const sourceId = item.strategy_internal_id || item.primary_source_id || 'daily_candidate_pool';
+  const isExitGroup = group === 'holdings' || group === 'sell';
+  const buyDate = item.entry_date || item.replay_entry_date || item.entry_signal_date || item.trade_date || '';
+  const signalDate = item.trade_date || buyDate;
+  const trackExitDate = dualTracks
+    .map((track) => track.exit_signal_date)
+    .filter((date): date is string => Boolean(date))
+    .sort()[0] || '';
+  const sellDate = item.exit_signal_date || trackExitDate || item.replay_exit_signal_date || item.exit_date || '';
+  const sourceAction = marketGate.sourceActionLabel || item.action_label || item.lifecycle_phase_label || '策略候选';
+  const statusLabel = isExitGroup
+    ? (holdTrack?.current_judgement || item.current_judgement || item.action_label || '继续持有')
+    : group === 'source_buy'
+      ? sourceAction
+      : group === 'watch'
+        ? (item.action_label || item.lifecycle_phase_label || '观察')
+        : group === 'blocked'
+          ? (marketGate.finalActionLabel || marketGate.gateActionLabel || '市场拦截')
+          : (marketGate.finalActionLabel || item.final_action_label || item.action_label || '策略候选');
+  const statusClass = isExitGroup
+    ? dualTrackToneClass(holdTrack?.status)
+    : marketGateToneClass(item.market_gate_status, statusLabel);
+  const sourceCount = Number(item.source_count || item.source_details?.length || 1);
+  const chartMarkers = isExitGroup
+    ? [
+      buyDate ? { date: buyDate, label: '买', tone: 'buy' as const } : null,
+      sellDate ? { date: sellDate, label: '卖', tone: 'sell' as const } : null,
+    ].filter((marker): marker is MiniKlineMarker => Boolean(marker))
+    : [
+      signalDate ? { date: signalDate, label: group === 'source_buy' ? '买' : '荐', tone: 'buy' as const } : null,
+    ].filter((marker): marker is MiniKlineMarker => Boolean(marker));
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-lg border p-2 text-left transition ${active ? 'border-sky-400/70 bg-sky-500/15' : 'border-slate-800 bg-slate-950/35 hover:border-slate-600 hover:bg-slate-950/70'}`}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-[11px] text-slate-500">#{index + 1}</span>
+            <span className="truncate text-sm font-bold leading-4 text-white">{item.displayName || item.name || item.symbol}</span>
+            <span className="shrink-0 font-mono text-[10px] text-slate-500">{item.symbol}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span className={`rounded border px-1.5 py-0.5 ${sourceBadgeClass(sourceId)}`}>
+              {item.primary_source_name || item.strategy_display_name || STRATEGY_LABELS[sourceId] || sourceId}
+            </span>
+            <span className={`rounded border px-1.5 py-0.5 ${statusClass}`}>
+              {statusLabel}
+            </span>
+          </div>
+        </div>
+        <div className="shrink-0 text-right font-mono">
+          <div className="text-sm font-bold text-sky-200">{Number.isFinite(score) ? fmtNum(score) : '--'}</div>
+          <div className={`text-[11px] font-semibold ${latestTone}`}>
+            {latestPct != null ? `${latestPct >= 0 ? '+' : ''}${fmtPct(latestPct, 2)}` : fmtPct(item.return_5d_pct)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-4 gap-2 text-[10px]">
+        <div>
+          <div className="text-slate-500">{isExitGroup ? '买点' : '推荐'}</div>
+          <div className="truncate font-mono text-sky-200">{compactDateText(isExitGroup ? buyDate : signalDate)}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">{isExitGroup ? '卖点' : '动作'}</div>
+          <div className={`truncate font-mono ${isExitGroup && sellDate ? 'text-rose-200' : 'text-slate-300'}`}>
+            {isExitGroup ? (sellDate ? compactDateText(sellDate) : '持有中') : statusLabel}
+          </div>
+        </div>
+        <div>
+          <div className="text-slate-500">{isExitGroup ? '持有' : '来源'}</div>
+          <div className="truncate font-mono text-slate-300">{isExitGroup ? (holdTrack?.holding_days != null ? `${holdTrack.holding_days}天` : '--') : `${sourceCount}源`}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">5/20日</div>
+          <div className={`truncate font-mono ${Number(item.return_5d_pct ?? item.return_20d_pct ?? 0) >= 0 ? 'text-red-200' : 'text-emerald-200'}`}>
+            {fmtPct(item.return_5d_pct, 1)} / {fmtPct(item.return_20d_pct, 1)}
+          </div>
+        </div>
+      </div>
+
+      <div className="-mx-1 mt-2">
+        <MiniKlineChart points={history} height={112} pointKeyPrefix={item.symbol} emptyText={loading ? 'K线加载中' : '暂无K线'} markers={chartMarkers} maxPoints={90} />
+      </div>
+
+      <div className="mt-1 truncate text-[11px] text-slate-500">
+        {isExitGroup
+          ? (holdTrack?.summary || item.reason_summary || item.pullback_reason || '暂无持仓说明')
+          : (item.reason_summary || item.pullback_reason || marketGate.environmentLabel || '暂无来源解释')}
+      </div>
+    </button>
+  );
+};
+
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
   const [activeStrategy, setActiveStrategy] = useState<ActiveStrategy>(STABLE_CALLBACK_STRATEGY);
@@ -327,6 +657,7 @@ const SelectionResearchPage: React.FC = () => {
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
   const [exitWatchlist, setExitWatchlist] = useState<SelectionCandidateItem[]>([]);
+  const [marketEnvironment, setMarketEnvironment] = useState<SelectionMarketEnvironment | null>(null);
   const [sourceRuns, setSourceRuns] = useState<Array<{
     source_id: string;
     label: string;
@@ -336,9 +667,11 @@ const SelectionResearchPage: React.FC = () => {
     finished_at?: string | null;
   }>>([]);
   const [selected, setSelected] = useState<SelectionCandidateItem | null>(null);
+  const [navigatorGroup, setNavigatorGroup] = useState<NavigatorGroup>('all');
   const [profile, setProfile] = useState<SelectionProfileData | null>(null);
   const [quote, setQuote] = useState<any | null>(null);
   const [turnoverRate, setTurnoverRate] = useState<number | null>(null);
+  const [trendHistoryBySymbol, setTrendHistoryBySymbol] = useState<Record<string, HistoryMultiframeItem[]>>({});
   const [backendStatus, setBackendStatus] = useState(true);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
   const [backtestRuns, setBacktestRuns] = useState<SelectionBacktestRunItem[]>([]);
@@ -349,6 +682,7 @@ const SelectionResearchPage: React.FC = () => {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidateEmptyStateByDate, setCandidateEmptyStateByDate] = useState<Record<string, CandidateEmptyState>>({});
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [loadingTrendHistory, setLoadingTrendHistory] = useState(false);
   const [runningBacktest, setRunningBacktest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [researchMenuOpen, setResearchMenuOpen] = useState(false);
@@ -507,6 +841,7 @@ const SelectionResearchPage: React.FC = () => {
     if (selectedRef.current?.trade_date !== targetDate) {
       setCandidates([]);
       setExitWatchlist([]);
+      setMarketEnvironment(null);
       setSourceRuns([]);
       setSelected(null);
       setProfile(null);
@@ -520,6 +855,7 @@ const SelectionResearchPage: React.FC = () => {
       const nextDate = targetDate || data?.trade_date || '';
       setCandidates(items);
       setExitWatchlist(watchItems);
+      setMarketEnvironment(data?.market_environment || null);
       setSourceRuns(runs);
       setCandidateEmptyStateByDate((prev) => {
         if (items.length > 0) return { ...prev, [targetDate]: 'idle' };
@@ -542,6 +878,7 @@ const SelectionResearchPage: React.FC = () => {
       if (requestSeq === candidatesRequestSeqRef.current) {
         lastLoadedKeyRef.current = '';
         setError('候选加载失败');
+        setMarketEnvironment(null);
       }
     } finally {
       if (requestSeq === candidatesRequestSeqRef.current) setLoadingCandidates(false);
@@ -773,17 +1110,38 @@ const SelectionResearchPage: React.FC = () => {
   }, [exitWatchlist, nameOverrides]);
 
   const dailyGroups = useMemo(() => {
-    const isWatch = (item: SelectionCandidateItem) => item.entry_allowed === false && (
+    const isFinalAllowed = (item: SelectionCandidateItem) => (
+      item.final_entry_allowed != null ? item.final_entry_allowed !== false : item.entry_allowed !== false
+    );
+    const isSourceBuy = (item: SelectionCandidateItem) => (
+      item.entry_allowed !== false
+      || item.action_label?.includes('买')
+      || item.lifecycle_phase === 'candidate_buy'
+      || item.candidate_types?.some((type) => String(type).includes('buy'))
+    );
+    const isMarketBlocked = (item: SelectionCandidateItem) => (
+      item.market_gate_status === 'blocked'
+      || item.market_default_action?.includes('暂停')
+      || item.final_action_label === '仅观察'
+      || item.final_entry_allowed === false
+    );
+    const isWatch = (item: SelectionCandidateItem) => !isSourceBuy(item) && (
+      item.market_gate_status === 'watch_only' ||
       item.lifecycle_phase === 'watch' ||
       item.lifecycle_phase === 'trend_observation_pool' ||
-      item.candidate_types?.some((type) => String(type).includes('observe')) ||
+      item.candidate_types?.some((type) => {
+        const text = String(type);
+        return text.includes('observe') || text.includes('watch') || text.includes('probe');
+      }) ||
       item.action_label === '观察中' ||
       item.action_label === '观察'
     );
     return {
-      actionable: displayCandidates.filter((item) => item.entry_allowed !== false),
+      all: displayCandidates,
+      actionable: displayCandidates.filter((item) => isFinalAllowed(item)),
+      sourceBuy: displayCandidates.filter((item) => isSourceBuy(item)),
       watch: displayCandidates.filter((item) => isWatch(item)),
-      blocked: displayCandidates.filter((item) => item.entry_allowed === false && !isWatch(item)),
+      blocked: displayCandidates.filter((item) => isMarketBlocked(item) || !isFinalAllowed(item)),
     };
   }, [displayCandidates]);
 
@@ -793,6 +1151,100 @@ const SelectionResearchPage: React.FC = () => {
       hold: displayExitWatchlist.filter((item) => !item.exit_signal_date),
     };
   }, [displayExitWatchlist]);
+  const navigationGroupItems = useMemo<Record<NavigatorGroup, Array<SelectionCandidateItem & { displayName?: string }>>>(() => ({
+    all: dailyGroups.all,
+    source_buy: dailyGroups.sourceBuy,
+    watch: dailyGroups.watch,
+    blocked: dailyGroups.blocked,
+    holdings: exitGroups.hold,
+    sell: exitGroups.sell,
+    actionable: dailyGroups.actionable,
+  }), [dailyGroups.actionable, dailyGroups.all, dailyGroups.blocked, dailyGroups.sourceBuy, dailyGroups.watch, exitGroups.hold, exitGroups.sell]);
+  const resolvedNavigatorGroup = navigationGroupItems[navigatorGroup]?.length
+    ? navigatorGroup
+    : dailyGroups.all.length > 0
+      ? 'all'
+      : exitGroups.hold.length > 0
+        ? 'holdings'
+        : navigatorGroup;
+  const activeNavigatorItems = navigationGroupItems[resolvedNavigatorGroup] || [];
+  const navigatorGroupTabs = useMemo(() => ([
+    { id: 'all' as const, count: dailyGroups.all.length },
+    { id: 'source_buy' as const, count: dailyGroups.sourceBuy.length },
+    { id: 'watch' as const, count: dailyGroups.watch.length },
+    { id: 'blocked' as const, count: dailyGroups.blocked.length },
+    { id: 'holdings' as const, count: exitGroups.hold.length },
+    { id: 'sell' as const, count: exitGroups.sell.length },
+    { id: 'actionable' as const, count: dailyGroups.actionable.length },
+  ]), [
+    dailyGroups.actionable.length,
+    dailyGroups.all.length,
+    dailyGroups.blocked.length,
+    dailyGroups.sourceBuy.length,
+    dailyGroups.watch.length,
+    exitGroups.hold.length,
+    exitGroups.sell.length,
+  ]);
+  const activeNavigatorKey = activeNavigatorItems.map((item) => `${item.symbol}:${item.trade_date}:${item.rank}`).join('|');
+  const activeNavigatorSymbols = useMemo(() => (
+    Array.from(new Set(activeNavigatorItems.map((item) => item.symbol.toLowerCase()))).sort()
+  ), [activeNavigatorKey]);
+  const activeNavigatorSymbolsKey = activeNavigatorSymbols.join('|');
+
+  useEffect(() => {
+    if (resolvedNavigatorGroup !== navigatorGroup) {
+      setNavigatorGroup(resolvedNavigatorGroup);
+    }
+  }, [navigatorGroup, resolvedNavigatorGroup]);
+
+  useEffect(() => {
+    if (!activeNavigatorItems.length) return;
+    const selectedInGroup = selected
+      ? activeNavigatorItems.some((item) => item.symbol === selected.symbol && item.trade_date === selected.trade_date)
+      : false;
+    if (!selectedInGroup) {
+      setSelected(activeNavigatorItems[0]);
+    }
+  }, [activeNavigatorKey, selected?.symbol, selected?.trade_date]);
+
+  useEffect(() => {
+    if (!activeNavigatorSymbols.length) return undefined;
+    const missing = activeNavigatorSymbols.filter((symbol) => !trendHistoryBySymbol[symbol]);
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    setLoadingTrendHistory(true);
+    withTimeoutFallback(
+      fetchSelectionHistoryMultiframeBatch(missing, {
+        days: 90,
+        granularity: '1d',
+        includeTodayPreview: false,
+        allowCloudFallback: false,
+      }),
+      HOLDING_HISTORY_TIMEOUT_MS,
+      {},
+    )
+      .then((rowsBySymbol) => {
+        if (cancelled) return;
+        setTrendHistoryBySymbol((prev) => {
+          const next = { ...prev };
+          missing.forEach((symbol) => {
+            if (!next[symbol] && Object.prototype.hasOwnProperty.call(rowsBySymbol, symbol)) {
+              next[symbol] = rowsBySymbol[symbol] || [];
+            }
+          });
+          return next;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTrendHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // trendHistoryBySymbol intentionally stays out: the batch marks missing symbols as loaded when it completes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNavigatorSymbolsKey, activeNavigatorSymbols]);
 
   const candidateListDate = tradeDate || pendingTradeDate;
   const candidateDateMeta = candidateListDate ? tradeDateMetaByDate[candidateListDate] : undefined;
@@ -874,11 +1326,16 @@ const SelectionResearchPage: React.FC = () => {
     const active = selected?.symbol === item.symbol && selected?.trade_date === item.trade_date;
     const sourceLabels = (item.source_details?.length ? item.source_details : [{ source_id: strategyId, source_name: item.strategy_display_name || STRATEGY_LABELS[String(strategyId)] || strategyId }]).slice(0, 3);
     const dualTracks = item.dual_exit_tracks || [];
+    const marketGate = getCandidateMarketGate(item);
+    const finalAllowed = item.final_entry_allowed != null ? item.final_entry_allowed !== false : item.entry_allowed !== false;
+    const displayActionLabel = item.final_action_label || item.action_label || '--';
     return (
       <button
         key={`daily_candidate_pool-${item.symbol}-${item.trade_date}-${item.rank}`}
         type="button"
-        onClick={() => setSelected(item)}
+        onClick={() => {
+          setSelected(item);
+        }}
         className={`w-full px-4 py-3 text-left transition ${active ? 'bg-sky-500/10' : 'hover:bg-slate-950/35'}`}
       >
         <div className="flex items-start justify-between gap-3">
@@ -907,6 +1364,30 @@ const SelectionResearchPage: React.FC = () => {
                 ))}
               </div>
             ) : null}
+            {marketGate.hasGate ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                {marketGate.environmentLabel ? (
+                  <span className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-300">
+                    市场：{marketGate.environmentLabel}
+                  </span>
+                ) : null}
+                {marketGate.sourceActionLabel ? (
+                  <span className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-400">
+                    来源：{marketGate.sourceActionLabel}
+                  </span>
+                ) : null}
+                {marketGate.gateActionLabel ? (
+                  <span className={`rounded border px-1.5 py-0.5 ${marketGateToneClass(item.market_gate_status, marketGate.gateActionLabel)}`}>
+                    环境：{marketGate.gateActionLabel}
+                  </span>
+                ) : null}
+                {marketGate.finalActionLabel ? (
+                  <span className={`rounded border px-1.5 py-0.5 ${marketGateToneClass(item.market_gate_status, marketGate.finalActionLabel)}`}>
+                    最终：{marketGate.finalActionLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="grid min-w-[132px] shrink-0 grid-cols-2 gap-2 text-right text-[10px]">
             <div>
@@ -914,8 +1395,8 @@ const SelectionResearchPage: React.FC = () => {
               <div className="whitespace-nowrap text-slate-500">{fmtSortScoreLabel(item)}</div>
             </div>
             <div>
-              <div className={`text-sm font-semibold ${item.entry_allowed === false ? 'text-amber-200' : 'text-emerald-200'}`}>{item.action_label || '--'}</div>
-              <div className="text-slate-500">{dualTracks.length > 0 ? '双轨判断' : '动作'}</div>
+              <div className={`text-sm font-semibold ${finalAllowed ? 'text-emerald-200' : 'text-amber-200'}`}>{displayActionLabel}</div>
+              <div className="text-slate-500">{marketGate.hasGate ? '最终动作' : dualTracks.length > 0 ? '双轨判断' : '动作'}</div>
             </div>
           </div>
         </div>
@@ -941,23 +1422,6 @@ const SelectionResearchPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#0a0f1c] text-slate-200">
-      <MarketTopHeader
-        routeHref="/"
-        routeLabel="回到首页"
-        routeTitle="返回首页"
-        searchValue=""
-        isSearchFocused={false}
-        searchResults={[]}
-        searchHistory={[]}
-        onSearchChange={() => {}}
-        onSearchFocus={() => {}}
-        onSearchBlur={() => {}}
-        onSearchKeyDown={() => {}}
-        onClearSearch={() => {}}
-        onSelectSearchResult={() => {}}
-        onSelectHistory={() => {}}
-        rightSlot={null}
-      />
       <div className="sticky top-0 z-40 border-b border-slate-800 bg-[#0f1623]/95 shadow-md backdrop-blur">
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-4 py-3 md:px-6">
           <a
@@ -1029,7 +1493,7 @@ const SelectionResearchPage: React.FC = () => {
             </button>
             {researchMenuOpen ? (
               <div className="absolute right-0 top-full z-[120] mt-2 w-[420px] overflow-hidden rounded-xl border border-slate-600 bg-[#020617] p-2 shadow-[0_24px_60px_rgba(2,6,23,0.82)]">
-                {SPARK_PATTERN_RESEARCH_PAGES.map((item) => (
+                {[MARKET_ENVIRONMENT_GATE_RESEARCH_PAGE, ...SPARK_PATTERN_RESEARCH_PAGES].map((item) => (
                   item.enabled ? (
                     <a
                       key={item.id}
@@ -1055,37 +1519,13 @@ const SelectionResearchPage: React.FC = () => {
       <div className="mx-auto max-w-[1800px] space-y-4 px-4 py-4 md:px-6">
         {error && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
-        {selected ? (
-          <StockQuoteHeroCard
-            name={heroName}
-            symbol={selected.symbol.toUpperCase()}
-            price={heroPrice}
-            previousClose={previousClose}
-            open={open}
-            high={high}
-            low={low}
-            volume={quote?.volume}
-            amount={quote?.amount}
-            turnoverRate={turnoverRate}
-            latestLabel={`最新 ${latestDataTradeDate || selected.trade_date}`}
-            marketCapLabel={fmtMarketCap(profile?.market_cap ?? selected.market_cap)}
-            metaRow={
-              <QuoteMetaRow
-                isWatchlisted={isWatchlisted}
-                onToggleWatchlist={handleToggleWatchlist}
-                backendStatus={backendStatus}
-              />
-            }
-          />
-        ) : null}
-
-        <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(600px,1.06fr)_minmax(600px,0.94fr)] xl:items-start">
+          <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/70 xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)]">
+            <div className="shrink-0 flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-4">
               <div>
                 <div className="flex items-center gap-2 text-lg font-bold text-white">
                   <TrendingUp className="h-5 w-5 text-amber-400" />
-                  每日综合候选
+                  股票导航
                   {sourceRuns.length > 0 ? (
                     <div className="group relative">
                       <button
@@ -1113,27 +1553,101 @@ const SelectionResearchPage: React.FC = () => {
                   ) : null}
                   <span className="text-xs font-medium text-slate-500">{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}</span>
                 </div>
+                <div className="mt-1 text-xs text-slate-500">左侧扫走势，点击卡片后右侧查看单票详情。</div>
               </div>
               {loadingCandidates ? <span className="text-xs text-slate-500">加载中...</span> : null}
             </div>
-            <div>
-              {renderCandidateSection('明日可操作', dailyGroups.actionable, 'text-emerald-300')}
-              {renderCandidateSection('次日卖出', exitGroups.sell, 'text-rose-300')}
-              {renderCandidateSection('持仓跟踪', exitGroups.hold, 'text-sky-300')}
-              {renderCandidateSection('观察中', dailyGroups.watch, 'text-amber-300')}
-              {renderCandidateSection('已拦截 / 风险提示', dailyGroups.blocked, 'text-red-300')}
-              {!loadingCandidates && displayCandidates.length === 0 && displayExitWatchlist.length === 0 && (
+            <div className="min-h-0 xl:overflow-y-auto">
+              <div className="border-b border-slate-800 px-4 py-2.5">
+                <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto whitespace-nowrap text-[11px]">
+                  {navigatorGroupTabs.map((group) => {
+                    const config = NAVIGATOR_GROUP_CONFIG[group.id];
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() => setNavigatorGroup(group.id)}
+                        aria-pressed={resolvedNavigatorGroup === group.id}
+                        className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 font-medium transition ${
+                          resolvedNavigatorGroup === group.id
+                            ? 'border-sky-400/70 bg-sky-500/20 text-white'
+                            : 'border-slate-800 bg-slate-950/35 text-slate-400 hover:border-slate-600 hover:bg-slate-950/70 hover:text-slate-100'
+                        }`}
+                      >
+                        <span className={resolvedNavigatorGroup === group.id ? config.tone : ''}>{config.shortLabel}</span>
+                        <span className="font-mono text-[10px] text-slate-500">{group.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <MarketEnvironmentSummaryCard
+                environment={marketEnvironment}
+              />
+              {activeNavigatorItems.length > 0 ? (
+                <div className="space-y-2 px-3 pb-3">
+                  <div className="flex items-center justify-between gap-2 px-1 pt-3">
+                    <div className="text-sm font-bold text-white">{NAVIGATOR_GROUP_CONFIG[resolvedNavigatorGroup].label}</div>
+                    <div className="flex items-center gap-2">
+                      {loadingTrendHistory ? <span className="text-[11px] text-slate-500">加载走势...</span> : null}
+                      <span className="font-mono text-[11px] text-slate-500">{activeNavigatorItems.length} 只</span>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {activeNavigatorItems.map((item, index) => {
+                      const symbol = item.symbol.toLowerCase();
+                      const historyLoaded = Object.prototype.hasOwnProperty.call(trendHistoryBySymbol, symbol);
+                      return (
+                        <SelectionTrendNavCard
+                          key={`trend-nav-${resolvedNavigatorGroup}-${symbol}-${item.trade_date}-${index}`}
+                          item={item}
+                          index={index}
+                          group={resolvedNavigatorGroup}
+                          active={selected?.symbol === item.symbol && selected?.trade_date === item.trade_date}
+                          history={trendHistoryBySymbol[symbol]}
+                          loading={loadingTrendHistory && !historyLoaded}
+                          onClick={() => setSelected(item)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : !loadingCandidates && displayCandidates.length === 0 && displayExitWatchlist.length === 0 ? (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
                   {candidateEmptyMessage}
+                </div>
+              ) : (
+                <div className="px-4 py-10 text-center text-sm text-slate-500">
+                  {NAVIGATOR_GROUP_CONFIG[resolvedNavigatorGroup].emptyText}
                 </div>
               )}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-2">
-            {loadingProfile && !profileMatchesSelected ? (
-              <div className="mb-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
-                基础详情已先展示，画像和研究资料正在后台补充。
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-2 xl:max-h-[calc(100vh-88px)] xl:overflow-y-auto">
+            {selected ? (
+              <div className="mb-2">
+                <StockQuoteHeroCard
+                  name={heroName}
+                  symbol={selected.symbol.toUpperCase()}
+                  price={heroPrice}
+                  previousClose={previousClose}
+                  open={open}
+                  high={high}
+                  low={low}
+                  volume={quote?.volume}
+                  amount={quote?.amount}
+                  turnoverRate={turnoverRate}
+                  latestLabel={`最新 ${latestDataTradeDate || selected.trade_date}`}
+                  marketCapLabel={fmtMarketCap(profile?.market_cap ?? selected.market_cap)}
+                  metaRow={
+                    <QuoteMetaRow
+                      isWatchlisted={isWatchlisted}
+                      onToggleWatchlist={handleToggleWatchlist}
+                      backendStatus={backendStatus}
+                    />
+                  }
+                />
               </div>
             ) : null}
             <SelectionDecisionPanel
