@@ -12,8 +12,10 @@ COPY backend/requirements.txt /app/requirements.txt
 # 2. 安装依赖 (使用清华源加速)
 RUN pip install --no-cache-dir -r /app/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 3. 复制后端代码
+# 3. 复制后端代码和运行时研究产物
 COPY backend /app/backend
+COPY docs/selection/market_environment_gate_2026-06-10 /app/docs/selection/market_environment_gate_2026-06-10
+COPY docs/strategy-rework /app/docs/strategy-rework
 
 # 4. 设置环境变量，确保 Python 能找到 backend 包
 ENV PYTHONPATH=/app
