@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, Target, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Newspaper, ShieldAlert, Sparkles, Target, TrendingUp } from 'lucide-react';
 
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
+import IntradaySingleDayPanel from '../dashboard/IntradaySingleDayPanel';
 import { Metric } from '../common/ResearchCard';
 import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
 import {
@@ -94,6 +95,15 @@ const minDateText = (...values: Array<string | null | undefined>) => {
   return valid.sort()[0];
 };
 
+const findAdjacentDate = (dates: string[], current: string, direction: -1 | 1) => {
+  const sorted = [...new Set(dates.filter(Boolean))].sort();
+  if (!sorted.length || !current) return '';
+  const exactIndex = sorted.indexOf(current);
+  if (exactIndex >= 0) return sorted[exactIndex + direction] || '';
+  if (direction < 0) return [...sorted].reverse().find((date) => date < current) || '';
+  return sorted.find((date) => date > current) || '';
+};
+
 interface Props {
   candidate: SelectionCandidateItem | null;
   profile: SelectionProfileData | null;
@@ -105,6 +115,7 @@ interface Props {
 const compactTime = (value?: string | null) => (value ? String(value).slice(0, 16) : '--');
 
 const COVERAGE_DAY_OPTIONS = [30, 60, 90, 120, 180] as const;
+type DetailChartMode = 'multi' | 'single';
 
 type StrategyInsight = React.ComponentProps<typeof HistoryMultiframeFusionView>['strategyInsight'];
 
@@ -145,9 +156,34 @@ const pctFromRate = (value?: number | null) => {
   return `${(Number(value) * 100).toFixed(0)}%`;
 };
 
+const marketGateStatusText = (status?: string | null) => {
+  if (!status) return '';
+  if (status === 'allowed') return '环境允许';
+  if (status === 'watch_only') return '仅观察';
+  if (status === 'blocked') return '暂停新开仓';
+  if (status === 'exception_failed') return '例外未通过';
+  return status;
+};
+
+const marketGateToneClass = (status?: string | null, label?: string | null) => {
+  const text = `${status || ''} ${label || ''}`.toLowerCase();
+  if (text.includes('block') || text.includes('pause') || text.includes('暂停') || text.includes('拦截')) {
+    return 'border-rose-500/30 bg-rose-500/10 text-rose-100';
+  }
+  if (text.includes('watch') || text.includes('观察') || text.includes('谨慎') || text.includes('例外未通过')) {
+    return 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+  }
+  if (text.includes('allow') || text.includes('pass') || text.includes('允许') || text.includes('可买')) {
+    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+  }
+  return 'border-slate-800 bg-slate-950/35 text-slate-100';
+};
+
 const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayName, backendStatus, latestTradeDate }) => {
   const [granularity, setGranularity] = useState<HistoryMultiframeGranularity>('1d');
   const [coverageDays, setCoverageDays] = useState<number>(90);
+  const [chartMode, setChartMode] = useState<DetailChartMode>('multi');
+  const [singleDayDate, setSingleDayDate] = useState('');
   const [chartStatus, setChartStatus] = useState({
     hasData: false,
     hasFormalL2History: false,
@@ -174,6 +210,55 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
   const contextTradeDate = candidate?.trade_date || profile?.requested_trade_date || profile?.trade_date;
   const contextStrategy = normalizeStrategy(candidate?.strategy_internal_id || profile?.strategy_internal_id);
+  const defaultSingleDayDate = candidate?.trade_date || profile?.requested_trade_date || profile?.trade_date || '';
+  const currentSingleDayDate = singleDayDate || defaultSingleDayDate;
+  const singleDayTradeDates = useMemo(() => {
+    const dates = new Set<string>();
+    (profile?.series || []).forEach((item) => {
+      const date = String(item.trade_date || '').slice(0, 10);
+      if (date) dates.add(date);
+    });
+    [
+      candidate?.observe_date,
+      profile?.discovery_date,
+      candidate?.discovery_date,
+      profile?.entry_signal_date,
+      candidate?.entry_signal_date,
+      profile?.trade_plan?.entry_date,
+      profile?.entry_date,
+      candidate?.entry_date,
+      profile?.trade_date,
+      candidate?.trade_date,
+    ].forEach((value) => {
+      const date = String(value || '').slice(0, 10);
+      if (date) dates.add(date);
+    });
+    return Array.from(dates).sort();
+  }, [
+    candidate?.discovery_date,
+    candidate?.entry_date,
+    candidate?.entry_signal_date,
+    candidate?.observe_date,
+    candidate?.trade_date,
+    profile?.discovery_date,
+    profile?.entry_date,
+    profile?.entry_signal_date,
+    profile?.series,
+    profile?.trade_date,
+    profile?.trade_plan?.entry_date,
+  ]);
+  const prevSingleDayDate = useMemo(
+    () => findAdjacentDate(singleDayTradeDates, currentSingleDayDate, -1),
+    [currentSingleDayDate, singleDayTradeDates],
+  );
+  const nextSingleDayDate = useMemo(
+    () => findAdjacentDate(singleDayTradeDates, currentSingleDayDate, 1),
+    [currentSingleDayDate, singleDayTradeDates],
+  );
+
+  useEffect(() => {
+    setSingleDayDate(defaultSingleDayDate);
+  }, [candidate?.symbol, defaultSingleDayDate]);
 
   useEffect(() => {
     if (!candidate) {
@@ -380,6 +465,67 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
   const isSparkHoldingTracked = isSparkModel && (hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'hold') : (activeProfile.entry_allowed === false && Boolean(displayedEntryDate)));
   const isSparkExitTracked = isSparkModel && (hasDualExitTracks ? dualExitTracks.some((track) => track.status === 'sell') : Boolean(activeProfile.trade_plan?.exit_signal_date || activeProfile.exit_signal_date || candidate.exit_signal_date));
   const isProductStrategy = isStableCallback || isTrendContinuation;
+  const entryDecisionBreakdown = activeProfile.entry_decision_breakdown || candidate.entry_decision_breakdown || null;
+  const marketEnvironment = activeProfile.market_environment_snapshot
+    || activeProfile.market_environment
+    || candidate.market_environment_snapshot
+    || candidate.market_environment
+    || null;
+  const marketGate = entryDecisionBreakdown?.market_gate || {};
+  const stockRule = entryDecisionBreakdown?.stock_rule || {};
+  const finalAction = entryDecisionBreakdown?.final_action || {};
+  const marketEnvironmentLabel = marketEnvironment?.market_detail_label || marketEnvironment?.market_detail || marketEnvironment?.market_regime || '';
+  const marketDefaultAction = activeProfile.market_default_action || candidate.market_default_action || marketEnvironment?.default_action || '';
+  const marketGateStatus = activeProfile.market_gate_status || candidate.market_gate_status || marketGate.status || '';
+  const marketGateActionLabel = marketGate.label || marketDefaultAction || marketGateStatusText(marketGateStatus);
+  const finalActionLabel = finalAction.label
+    || activeProfile.final_action_label
+    || candidate.final_action_label
+    || (activeProfile.final_entry_allowed === false || candidate.final_entry_allowed === false ? '仅观察' : '');
+  const sourceActionLabel = stockRule.label || activeProfile.source_action_label || candidate.source_action_label || candidate.action_label || '';
+  const marketGateReasons = activeProfile.market_gate_reasons || candidate.market_gate_reasons || marketGate.reasons || [];
+  const marketGateSummary = activeProfile.entry_decision_summary || candidate.entry_decision_summary || marketGateReasons.join('；');
+  const hasMarketGateDecision = Boolean(
+    marketEnvironmentLabel
+    || marketGateStatus
+    || marketGateActionLabel
+    || finalActionLabel
+    || activeProfile.final_entry_allowed != null
+    || candidate.final_entry_allowed != null
+    || marketGateReasons.length > 0
+    || entryDecisionBreakdown
+  );
+  const finalEntryAllowed = activeProfile.final_entry_allowed != null
+    ? activeProfile.final_entry_allowed !== false
+    : candidate.final_entry_allowed != null
+      ? candidate.final_entry_allowed !== false
+      : activeProfile.entry_allowed !== false;
+  const legacyEntryConclusionLabel = activeProfile.entry_allowed === false
+    ? hasDualExitTracks
+      ? (activeProfile.current_judgement || candidate.current_judgement || '持仓跟踪')
+      : isSparkExitTracked
+        ? '次日卖出'
+        : isSparkHoldingTracked
+          ? '继续持有'
+          : (isTrendContinuation ? '观察中' : '已拦截')
+    : isProductStrategy ? '可买入' : '允许进场';
+  const entryConclusionLabel = hasMarketGateDecision && finalActionLabel
+    ? finalActionLabel
+    : legacyEntryConclusionLabel;
+  const legacyEntryConclusionDesc = (activeProfile.entry_block_reasons || []).length > 0
+    ? activeProfile.entry_block_reasons?.join('；')
+    : hasDualExitTracks
+      ? (activeProfile.reason_summary || candidate.reason_summary || '同一持仓展示两套卖点模型判断。')
+      : isSparkExitTracked
+        ? '该票已进入星火持仓跟踪池，盘后触发卖点，计划下一交易日执行'
+        : isSparkHoldingTracked
+          ? '该票已进入星火持仓跟踪池，当前盘后判断为继续持有'
+          : (isProductStrategy || isSparkModel)
+            ? '确认日收盘识别，计划次日开盘买入'
+            : '当前未触发入场拦截';
+  const entryConclusionDesc = hasMarketGateDecision && (marketGateSummary || marketGateActionLabel || marketEnvironmentLabel)
+    ? (marketGateSummary || [marketEnvironmentLabel, marketGateActionLabel].filter(Boolean).join('：'))
+    : legacyEntryConclusionDesc;
   const eventInterpretation = researchContext?.event_interpretation as SelectionEventInterpretation | undefined;
   const decisionBrief = researchContext?.decision_brief;
   const companyOverviewText = decisionBrief?.company_overview
@@ -565,6 +711,58 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
 
     return null;
   })();
+  const chartModeControls = (
+    <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+      <button
+        type="button"
+        onClick={() => setChartMode('multi')}
+        className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${chartMode === 'multi' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+      >
+        多日走势
+      </button>
+      <button
+        type="button"
+        onClick={() => setChartMode('single')}
+        className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${chartMode === 'single' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+      >
+        查看单日
+      </button>
+    </div>
+  );
+  const singleDayDateControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      {chartModeControls}
+      <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+        <button
+          type="button"
+          onClick={() => prevSingleDayDate && setSingleDayDate(prevSingleDayDate)}
+          disabled={!prevSingleDayDate}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="前一交易日"
+          title="前一交易日"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <input
+          type="date"
+          value={currentSingleDayDate}
+          onChange={(event) => setSingleDayDate(event.target.value)}
+          className="h-7 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs text-slate-100 outline-none hover:border-slate-500 focus:border-sky-500"
+          aria-label="选择单日走势日期"
+        />
+        <button
+          type="button"
+          onClick={() => nextSingleDayDate && setSingleDayDate(nextSingleDayDate)}
+          disabled={!nextSingleDayDate}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="后一交易日"
+          title="后一交易日"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-3">
@@ -575,42 +773,61 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
       ) : null}
 
       <section>
-        <div>
-          <HistoryMultiframeFusionView
+        {chartMode === 'multi' ? (
+          <div>
+            <HistoryMultiframeFusionView
+              activeStock={activeStock}
+              backendStatus={backendStatus}
+              granularity={granularity}
+              onGranularityChange={setGranularity}
+              startDate={effectiveStartDate}
+              endDate={effectiveEndDate}
+              signalDate={candidate.entry_signal_date || candidate.trade_date}
+              signalLabel="推荐日"
+              defaultAnchorDate={anchorDate}
+              tradeMarkers={tradePlanMarkers}
+              tradeSummaryText={tradeSummary.text}
+              tradeSummaryTone={tradeSummary.tone}
+              strategyInsight={strategyInsight}
+              includeTodayPreview={false}
+              headerRightSlot={(
+                <div className="flex flex-wrap items-center gap-2">
+                  {chartModeControls}
+                  <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
+                    {COVERAGE_DAY_OPTIONS.map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setCoverageDays(days)}
+                        className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${coverageDays === days ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
+                      >
+                        {days}天
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              fetchRows={fetchHistoryRows}
+              onDataStatusChange={setChartStatus}
+            />
+          </div>
+        ) : (
+          <IntradaySingleDayPanel
             activeStock={activeStock}
-            backendStatus={backendStatus}
-            granularity={granularity}
-            onGranularityChange={setGranularity}
-            startDate={effectiveStartDate}
-            endDate={effectiveEndDate}
-            signalDate={candidate.entry_signal_date || candidate.trade_date}
-            signalLabel="推荐日"
-            defaultAnchorDate={anchorDate}
-            tradeMarkers={tradePlanMarkers}
-            tradeSummaryText={tradeSummary.text}
-            tradeSummaryTone={tradeSummary.tone}
-            strategyInsight={strategyInsight}
-            includeTodayPreview={false}
-            headerRightSlot={(
-              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/50 p-1">
-                {COVERAGE_DAY_OPTIONS.map((days) => (
-                  <button
-                    key={days}
-                    type="button"
-                    onClick={() => setCoverageDays(days)}
-                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-colors ${coverageDays === days ? 'bg-sky-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}
-                  >
-                    {days}天
-                  </button>
-                ))}
-              </div>
-            )}
-            fetchRows={fetchHistoryRows}
-            onDataStatusChange={setChartStatus}
+            focusMode="normal"
+            enableRealtime={false}
+            selectedDate={currentSingleDayDate}
+            onSelectedDateChange={setSingleDayDate}
+            showDateControls={false}
+            showReturnToday={false}
+            title="主力动态（单日）"
+            chartHeightClassName="h-[760px] md:h-[520px]"
+            syncId={`selectionSingleDay-${candidate.symbol}`}
+            dateControlSlot={singleDayDateControls}
           />
-        </div>
+        )}
 
-        {granularity === '1d' && !chartStatus.hasData && chartStatus.rowCount === 0 ? (
+        {chartMode === 'multi' && granularity === '1d' && !chartStatus.hasData && chartStatus.rowCount === 0 ? (
           <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/20 px-3 py-2 text-xs text-slate-500">
             暂无本地历史图表数据。
           </div>
@@ -682,32 +899,49 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
           <div className="rounded-lg border border-slate-800 bg-slate-950/35 px-3 py-2">
             <div className="text-[11px] text-slate-500">入场结论</div>
-            <div className={`mt-1 text-sm font-semibold ${activeProfile.entry_allowed === false ? (isSparkHoldingTracked || isSparkExitTracked ? 'text-sky-300' : 'text-amber-300') : 'text-emerald-300'}`}>
-              {activeProfile.entry_allowed === false
-                ? hasDualExitTracks
-                  ? (activeProfile.current_judgement || candidate.current_judgement || '持仓跟踪')
-                  : isSparkExitTracked
-                    ? '次日卖出'
-                    : isSparkHoldingTracked
-                      ? '继续持有'
-                      : (isTrendContinuation ? '观察中' : '已拦截')
-                : isProductStrategy ? '可买入' : '允许进场'}
+            <div className={`mt-1 text-sm font-semibold ${finalEntryAllowed ? 'text-emerald-300' : (isSparkHoldingTracked || isSparkExitTracked ? 'text-sky-300' : 'text-amber-300')}`}>
+              {entryConclusionLabel}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              {(activeProfile.entry_block_reasons || []).length > 0
-                ? activeProfile.entry_block_reasons?.join('；')
-                : hasDualExitTracks
-                  ? (activeProfile.reason_summary || candidate.reason_summary || '同一持仓展示两套卖点模型判断。')
-                  : isSparkExitTracked
-                  ? '该票已进入星火持仓跟踪池，盘后触发卖点，计划下一交易日执行'
-                  : isSparkHoldingTracked
-                    ? '该票已进入星火持仓跟踪池，当前盘后判断为继续持有'
-                    : (isProductStrategy || isSparkModel)
-                      ? '确认日收盘识别，计划次日开盘买入'
-                      : '当前未触发入场拦截'}
+              {entryConclusionDesc}
             </div>
           </div>
         </div>
+        {hasMarketGateDecision ? (
+          <div className={`mt-3 rounded-lg border px-3 py-3 ${marketGateToneClass(marketGateStatus, finalActionLabel || marketGateActionLabel)}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                <ShieldAlert className="h-4 w-4" />
+                入场结论 / 市场环境
+              </div>
+              {marketEnvironment?.water_score != null ? (
+                <span className="font-mono text-[11px] text-slate-300">水位 {fmtNum(marketEnvironment.water_score)}</span>
+              ) : null}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-800/80 bg-slate-950/35 px-3 py-2">
+                <div className="text-[11px] text-slate-500">环境层</div>
+                <div className="mt-1 text-sm font-semibold text-slate-100">{marketEnvironmentLabel || '--'}</div>
+                <div className="mt-1 text-xs text-slate-400">{marketGateActionLabel || marketDefaultAction || '--'}</div>
+              </div>
+              <div className="rounded-lg border border-slate-800/80 bg-slate-950/35 px-3 py-2">
+                <div className="text-[11px] text-slate-500">来源层</div>
+                <div className="mt-1 text-sm font-semibold text-slate-100">{sourceActionLabel || '--'}</div>
+                <div className="mt-1 text-xs text-slate-400">{stockRule.buy_rule || activeProfile.exit_plan_summary || candidate.exit_plan_summary || '按来源买点执行'}</div>
+              </div>
+              <div className="rounded-lg border border-slate-800/80 bg-slate-950/35 px-3 py-2">
+                <div className="text-[11px] text-slate-500">最终动作</div>
+                <div className="mt-1 text-sm font-semibold text-slate-100">{finalActionLabel || marketGateStatusText(finalAction.status) || '--'}</div>
+                <div className="mt-1 text-xs text-slate-400">{activeProfile.entry_decision_source || candidate.entry_decision_source || finalAction.status || marketGateStatus || '--'}</div>
+              </div>
+            </div>
+            {(marketGateSummary || marketGateReasons.length > 0) ? (
+              <div className="mt-3 text-xs leading-5 text-slate-300">
+                {marketGateSummary || marketGateReasons.join('；')}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {hasDualExitTracks ? (

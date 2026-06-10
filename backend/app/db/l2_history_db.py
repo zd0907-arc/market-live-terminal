@@ -65,6 +65,8 @@ HistoryDailyRow = Tuple[
     Optional[str],  # quality_info
 ]
 
+_L2_HISTORY_SCHEMA_READY = False
+
 
 def get_l2_history_connection() -> sqlite3.Connection:
     db_path = os.getenv("DB_PATH", DB_FILE)
@@ -106,6 +108,9 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
 
 
 def ensure_l2_history_schema() -> None:
+    global _L2_HISTORY_SCHEMA_READY
+    if _L2_HISTORY_SCHEMA_READY:
+        return
     conn = get_l2_history_connection()
     try:
         conn.executescript(
@@ -238,6 +243,7 @@ def ensure_l2_history_schema() -> None:
             """
         )
         conn.commit()
+        _L2_HISTORY_SCHEMA_READY = True
     finally:
         conn.close()
 

@@ -464,6 +464,8 @@ def _build_multiframe_rows(
             primary_rows=[_map_finalized_daily_row(row) for row in finalized_daily_rows],
             fallback_rows=legacy_daily_rows,
         )
+        if not start_date and not end_date and days > 0:
+            rows = rows[-int(days):]
     else:
         finalized_5m_rows = query_l2_history_5m_rows(
             symbol,

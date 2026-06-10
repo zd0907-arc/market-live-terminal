@@ -29,7 +29,16 @@ from backend.app.services.selection_research_context import (
     prewarm_selection_research_contexts,
     quick_judge_selection_event,
 )
-from backend.app.services.selection_history_proxy import get_selection_multiframe_rows
+from backend.app.services.selection_history_proxy import (
+    get_selection_daily_kline_batch,
+    get_selection_multiframe_batch,
+    get_selection_multiframe_rows,
+)
+from backend.app.services.selection_market_environment_gate import (
+    get_market_environment,
+    get_market_environment_backtest_summary,
+    get_market_environment_source_summary,
+)
 from backend.app.services.selection_strategy_v2 import (
     evaluate_strategy_range_v2,
     get_candidates_v2_api,
@@ -138,6 +147,32 @@ def selection_daily_candidates(
         )
     except Exception as exc:
         return APIResponse(code=500, message=f"每日选股候选查询失败: {exc}", data=None)
+
+
+@router.get("/selection/market-environment", response_model=APIResponse)
+def selection_market_environment(
+    date: str = Query(None, description="交易日 YYYY-MM-DD，缺省为最新市场环境日"),
+):
+    try:
+        return APIResponse(code=200, data=get_market_environment(date))
+    except Exception as exc:
+        return APIResponse(code=500, message=f"市场环境水位查询失败: {exc}", data=None)
+
+
+@router.get("/selection/market-environment/backtest-summary", response_model=APIResponse)
+def selection_market_environment_backtest_summary():
+    try:
+        return APIResponse(code=200, data=get_market_environment_backtest_summary())
+    except Exception as exc:
+        return APIResponse(code=500, message=f"市场环境门控回测摘要查询失败: {exc}", data=None)
+
+
+@router.get("/selection/market-environment/source-regime-summary", response_model=APIResponse)
+def selection_market_environment_source_regime_summary():
+    try:
+        return APIResponse(code=200, data=get_market_environment_source_summary())
+    except Exception as exc:
+        return APIResponse(code=500, message=f"市场环境来源矩阵查询失败: {exc}", data=None)
 
 
 @router.get("/selection/daily-trade-dates", response_model=APIResponse)
@@ -312,6 +347,51 @@ def selection_history_multiframe(
         return APIResponse(code=200, data=payload)
     except Exception as exc:
         return APIResponse(code=500, message=f"选股历史多维查询失败: {exc}", data=None)
+
+
+@router.get("/selection/history/multiframe/batch", response_model=APIResponse)
+def selection_history_multiframe_batch(
+    symbols: str = Query(..., description="逗号分隔股票代码，如 sh600000,sz000001"),
+    granularity: str = Query("1d"),
+    days: int = Query(20, ge=1, le=400),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
+    include_today_preview: bool = Query(True),
+    allow_cloud_fallback: bool = Query(False),
+):
+    try:
+        symbol_list = [item.strip() for item in str(symbols or "").split(",") if item.strip()]
+        if not symbol_list:
+            return APIResponse(code=400, message="symbols 不能为空", data=None)
+        normalized_granularity = str(granularity or "").strip().lower()
+        if (
+            normalized_granularity in {"1d", "day", "daily", "d"}
+            and include_today_preview is False
+            and allow_cloud_fallback is False
+        ):
+            return APIResponse(
+                code=200,
+                data=get_selection_daily_kline_batch(
+                    symbols=symbol_list,
+                    days=days,
+                    start_date=start_date,
+                    end_date=end_date,
+                ),
+            )
+        return APIResponse(
+            code=200,
+            data=get_selection_multiframe_batch(
+                symbols=symbol_list,
+                granularity=granularity,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                include_today_preview=include_today_preview,
+                allow_cloud_fallback=allow_cloud_fallback,
+            ),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"选股历史多维批量查询失败: {exc}", data=None)
 
 
 @router.get("/selection/backtests", response_model=APIResponse)

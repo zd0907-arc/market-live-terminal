@@ -3,7 +3,8 @@ from typing import Dict, List, Optional
 
 import requests
 
-from backend.app.routers.analysis import _build_multiframe_rows
+from backend.app.db.l2_history_db import query_l2_history_daily_rows
+from backend.app.routers.analysis import _annotate_multiframe_change_pct, _build_multiframe_rows, _map_finalized_daily_row
 
 SELECTION_CLOUD_API_BASE = os.getenv("SELECTION_CLOUD_API_BASE", "http://111.229.144.202/api").rstrip("/")
 SELECTION_CLOUD_TIMEOUT = float(os.getenv("SELECTION_CLOUD_TIMEOUT", "8"))
@@ -83,6 +84,7 @@ def get_selection_multiframe_rows(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     include_today_preview: bool = True,
+    allow_cloud_fallback: Optional[bool] = None,
 ) -> Dict[str, object]:
     local_rows = _build_multiframe_rows(
         symbol=symbol,
@@ -103,7 +105,8 @@ def get_selection_multiframe_rows(
             "items": local_rows,
         }
 
-    if not _cloud_history_fallback_enabled():
+    cloud_enabled = _cloud_history_fallback_enabled() if allow_cloud_fallback is None else bool(allow_cloud_fallback)
+    if not cloud_enabled:
         return {
             "symbol": symbol,
             "granularity": granularity,
@@ -153,4 +156,128 @@ def get_selection_multiframe_rows(
         "days": max(1, int(days)),
         "data_origin": "none",
         "items": local_rows,
+    }
+
+
+def get_selection_multiframe_batch(
+    symbols: List[str],
+    granularity: str = "1d",
+    days: int = 20,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    include_today_preview: bool = True,
+    allow_cloud_fallback: bool = False,
+) -> Dict[str, object]:
+    normalized_symbols: List[str] = []
+    seen = set()
+    for symbol in symbols:
+        normalized = str(symbol or "").strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_symbols.append(normalized)
+
+    items_by_symbol: Dict[str, Dict[str, object]] = {}
+    errors: Dict[str, str] = {}
+    for symbol in normalized_symbols:
+        try:
+            items_by_symbol[symbol] = get_selection_multiframe_rows(
+                symbol=symbol,
+                granularity=granularity,
+                days=days,
+                start_date=start_date,
+                end_date=end_date,
+                include_today_preview=include_today_preview,
+                allow_cloud_fallback=allow_cloud_fallback,
+            )
+        except Exception as exc:
+            errors[symbol] = str(exc)
+            items_by_symbol[symbol] = {
+                "symbol": symbol,
+                "granularity": granularity,
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": max(1, int(days)),
+                "data_origin": "error",
+                "items": [],
+                "warning": str(exc),
+            }
+
+    return {
+        "symbols": normalized_symbols,
+        "granularity": granularity,
+        "start_date": start_date,
+        "end_date": end_date,
+        "days": max(1, int(days)),
+        "include_today_preview": include_today_preview,
+        "allow_cloud_fallback": allow_cloud_fallback,
+        "items_by_symbol": items_by_symbol,
+        "errors": errors,
+    }
+
+
+def get_selection_daily_kline_batch(
+    symbols: List[str],
+    days: int = 90,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Dict[str, object]:
+    normalized_symbols: List[str] = []
+    seen = set()
+    for symbol in symbols:
+        normalized = str(symbol or "").strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_symbols.append(normalized)
+
+    items_by_symbol: Dict[str, Dict[str, object]] = {}
+    errors: Dict[str, str] = {}
+    normalized_days = max(1, int(days))
+    limit_days = None if (start_date or end_date) else normalized_days
+    for symbol in normalized_symbols:
+        try:
+            rows = query_l2_history_daily_rows(
+                symbol,
+                start_date=start_date,
+                end_date=end_date,
+                limit_days=limit_days,
+            )
+            mapped_rows = [_map_finalized_daily_row(row) for row in rows]
+            if not start_date and not end_date:
+                mapped_rows = mapped_rows[-normalized_days:]
+            mapped_rows.sort(key=lambda item: str(item["datetime"]))
+            mapped_rows = _annotate_multiframe_change_pct(mapped_rows, "1d")
+            items_by_symbol[symbol] = {
+                "symbol": symbol,
+                "granularity": "1d",
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": normalized_days,
+                "data_origin": "local" if _has_meaningful_rows(mapped_rows) else "none",
+                "items": mapped_rows,
+            }
+        except Exception as exc:
+            errors[symbol] = str(exc)
+            items_by_symbol[symbol] = {
+                "symbol": symbol,
+                "granularity": "1d",
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": normalized_days,
+                "data_origin": "error",
+                "items": [],
+                "warning": str(exc),
+            }
+
+    return {
+        "symbols": normalized_symbols,
+        "granularity": "1d",
+        "start_date": start_date,
+        "end_date": end_date,
+        "days": normalized_days,
+        "include_today_preview": False,
+        "allow_cloud_fallback": False,
+        "items_by_symbol": items_by_symbol,
+        "errors": errors,
     }

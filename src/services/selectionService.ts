@@ -397,6 +397,39 @@ export const fetchSelectionHistoryMultiframe = async (
   }
 };
 
+export const fetchSelectionHistoryMultiframeBatch = async (
+  symbols: string[],
+  options: {
+    days?: number;
+    granularity?: HistoryMultiframeGranularity;
+    startDate?: string;
+    endDate?: string;
+    includeTodayPreview?: boolean;
+    allowCloudFallback?: boolean;
+  } = {}
+): Promise<Record<string, HistoryMultiframeItem[]>> => {
+  const cleanSymbols = Array.from(new Set(symbols.map((symbol) => String(symbol || '').trim().toLowerCase()).filter(Boolean)));
+  if (!cleanSymbols.length) return {};
+  try {
+    const params = new URLSearchParams({
+      symbols: cleanSymbols.join(','),
+      granularity: options.granularity || '1d',
+      days: String(options.days || 20),
+      include_today_preview: options.includeTodayPreview === false ? 'false' : 'true',
+      allow_cloud_fallback: options.allowCloudFallback ? 'true' : 'false',
+    });
+    if (options.startDate) params.set('start_date', options.startDate);
+    if (options.endDate) params.set('end_date', options.endDate);
+    const res = await fetch(`${API_BASE_URL}/selection/history/multiframe/batch?${params.toString()}`);
+    const data = await parseApiData<{ items_by_symbol?: Record<string, { items?: HistoryMultiframeItem[] }> }>(res);
+    const bySymbol = data?.items_by_symbol || {};
+    return Object.fromEntries(cleanSymbols.map((symbol) => [symbol, bySymbol[symbol]?.items || []]));
+  } catch (e) {
+    console.error('Fetch selection history multiframe batch error:', e);
+    return {};
+  }
+};
+
 export const fetchSelectionPpoBacktestReport = async (reportPath?: string): Promise<PpoBacktestReport | null> => {
   try {
     const params = new URLSearchParams();

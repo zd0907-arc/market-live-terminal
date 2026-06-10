@@ -1,0 +1,9 @@
+business_source_name,source_id,suggested_action,entry_allowed,n,min_trade_date,max_trade_date
+星火机会模型,spark_opportunity_selector,candidate_buy,1,190,2026-03-02,2026-06-10
+星火机会模型,spark_opportunity_selector,watch,0,11,2026-03-02,2026-06-04
+试盘识别-三日确认,probe_d3_confirmed,candidate_buy,1,14,2026-04-09,2026-06-10
+试盘识别-三日确认,probe_d3_confirmed,watch,0,63,2026-04-07,2026-06-10
+试盘识别-当日观察,probe_day0_watch,watch,0,152,2026-04-01,2026-06-10
+资金流回调稳健策略,stable_capital_callback,candidate_buy,1,78,2026-03-10,2026-06-10
+趋势延续策略,trend_continuation_callback,candidate_buy,1,13,2026-03-11,2026-04-24
+趋势延续策略,trend_continuation_callback,watch,0,129,2026-03-02,2026-04-24
