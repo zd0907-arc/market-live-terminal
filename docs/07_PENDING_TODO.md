@@ -91,10 +91,10 @@
 - 关联任务：`MOD-20260608-01-windows-nas-runtime-storage-and-public-entry-audit`
 
 ## T-038 基线版本面一致性收口
-- 状态：`ACTIVE`
-- 当前事实：`2026-06-09` 已把高曝光文档和 skill 中错误的 baseline 入口从 `npm run check:baseline` 收口到真实存在的 `bash scripts/check_baseline.sh`。脚本现可真实执行，但当前会失败在版本一致性 gate：`package.json=1.16.0`，而 `README.md`、`src/version.ts`、`backend/app/main.py` 都是 `5.2.2`。这说明现在的问题已不是“命令写错”，而是“当前到底哪一处才是正式版本面”没有完全收口。
+- 状态：`DONE`
+- 当前事实：`2026-06-11` 发布准备已把 `README.md`、`package.json`、`package-lock.json`、`src/version.ts`、`backend/app/main.py` 统一到 `v5.2.17`，并通过 `python3 scripts/check_version_consistency.py`。基线入口继续以 `bash scripts/check_baseline.sh` 为准。
 - 下一步：
-  1. 明确 `package.json` 是否仍属于当前正式版本面；
-  2. 若属于，统一把它与 `README.md`、`src/version.ts`、`backend/app/main.py` 收成同一版本；
-  3. 若不属于，调整 `scripts/check_baseline.sh` 与相关 skill / 文档口径，避免继续把它当 hard gate。
+  1. 维持 `package.json` 属于正式版本面；
+  2. 后续发布继续先跑版本一致性，再跑 governance、后端测试和前端 build；
+  3. 若未来拆分前后端版本，再另立版本策略变更卡，不在发布中临时改口径。
 - 关联任务：`MOD-20260609-06-ai-skill-routing-and-governance-alignment`

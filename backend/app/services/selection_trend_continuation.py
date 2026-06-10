@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -16,6 +17,27 @@ STRATEGY_DISPLAY_NAME = "趋势中继高质量回踩"
 STRATEGY_VERSION = "S02-current-candidate-20260427"
 MAX_LOOKBACK_DAYS = 200
 MIN_FUTURE_DAYS = 10
+TREND_ARTIFACT_DIR = Path(
+    "docs/strategy-rework/strategies/S02-capital-breakout-continuation/"
+    "experiments/EXP-20260427-trend-continuation-current-candidate"
+)
+TREND_BUY_SIGNALS_PATH = TREND_ARTIFACT_DIR / "current_buy_signals.csv"
+TREND_OBSERVATION_PATH = TREND_ARTIFACT_DIR / "observation_pool.csv"
+TREND_MATURE_TRADES_PATH = TREND_ARTIFACT_DIR / "mature_trades.csv"
+TREND_TRADES_PATH = TREND_ARTIFACT_DIR / "trades.csv"
+
+
+@lru_cache(maxsize=1)
+def _load_trend_artifacts() -> Dict[str, pd.DataFrame]:
+    def read(path: Path) -> pd.DataFrame:
+        return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+    return {
+        "buy": read(TREND_BUY_SIGNALS_PATH),
+        "observe": read(TREND_OBSERVATION_PATH),
+        "mature": read(TREND_MATURE_TRADES_PATH),
+        "trades": read(TREND_TRADES_PATH),
+    }
 
 
 def _clean_value(value: Any) -> Any:
@@ -155,6 +177,232 @@ def _row_to_candidate(row: pd.Series, rank: int, status: str) -> Dict[str, Any]:
     }
 
 
+def _summarize_trend_rows(trades_df: pd.DataFrame) -> Dict[str, Any]:
+    valid = trades_df[trades_df.get("net_return_pct").notna()] if not trades_df.empty else pd.DataFrame()
+    returns = pd.to_numeric(valid.get("net_return_pct"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    holding = pd.to_numeric(valid.get("holding_days"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    return {
+        "trade_count": int(len(valid)),
+        "win_rate": round(float((returns > 0).mean() * 100.0), 2) if not returns.empty else 0.0,
+        "avg_return_pct": round(float(returns.mean()), 2) if not returns.empty else 0.0,
+        "median_return_pct": round(float(returns.median()), 2) if not returns.empty else 0.0,
+        "max_return_pct": round(float(returns.max()), 2) if not returns.empty else 0.0,
+        "max_loss_pct": round(float(returns.min()), 2) if not returns.empty else 0.0,
+        "avg_holding_days": round(float(holding.mean()), 2) if not holding.empty else 0.0,
+        "big_loss_count": int((returns <= -8.0).sum()) if not returns.empty else 0,
+    }
+
+
+def _artifact_date_bounds() -> tuple[Optional[str], Optional[str]]:
+    artifacts = _load_trend_artifacts()
+    dates: List[str] = []
+    buy = artifacts["buy"]
+    observe = artifacts["observe"]
+    if not buy.empty and "entry_signal_date" in buy.columns:
+        dates.extend(buy["entry_signal_date"].dropna().astype(str).tolist())
+    if not observe.empty and "signal_date" in observe.columns:
+        dates.extend(observe["signal_date"].dropna().astype(str).tolist())
+    return (min(dates), max(dates)) if dates else (None, None)
+
+
+def _artifact_candidates_for_date(trade_date: Optional[str], limit: int) -> Optional[Dict[str, Any]]:
+    artifacts = _load_trend_artifacts()
+    buy = artifacts["buy"].copy()
+    observe = artifacts["observe"].copy()
+    start, end = _artifact_date_bounds()
+    if not start or not end:
+        return None
+    target = str(trade_date or end)
+    if target < start or target > end:
+        return None
+
+    items: List[Dict[str, Any]] = []
+    buy_symbols = set()
+    if not buy.empty and "entry_signal_date" in buy.columns:
+        buy["entry_signal_date"] = buy["entry_signal_date"].astype(str)
+        buy_day = buy[buy["entry_signal_date"] == target].copy()
+        if not buy_day.empty:
+            buy_day = buy_day.sort_values(["rank", "score", "symbol"], ascending=[True, False, True])
+            buy_day = buy_day.drop_duplicates(subset=["symbol"], keep="first")
+            for _, row in buy_day.iterrows():
+                buy_symbols.add(str(row.get("symbol") or "").lower())
+                items.append(_row_to_candidate(row, len(items) + 1, "buy_signal"))
+    if not observe.empty and "signal_date" in observe.columns and len(items) < max(1, int(limit)):
+        observe["signal_date"] = observe["signal_date"].astype(str)
+        observe_day = observe[observe["signal_date"] == target].copy()
+        if not observe_day.empty:
+            observe_day["symbol_norm"] = observe_day["symbol"].astype(str).str.lower()
+            observe_day = observe_day[~observe_day["symbol_norm"].isin(buy_symbols)]
+            observe_day = observe_day.sort_values(["rank", "score", "symbol"], ascending=[True, False, True])
+            observe_day = observe_day.drop_duplicates(subset=["symbol_norm"], keep="first")
+            for _, row in observe_day.head(max(0, int(limit) - len(items))).iterrows():
+                items.append(_row_to_candidate(row, len(items) + 1, "observe"))
+
+    return {
+        "trade_date": target,
+        "strategy": STRATEGY_INTERNAL_ID,
+        "strategy_display_name": STRATEGY_DISPLAY_NAME,
+        "strategy_internal_id": STRATEGY_INTERNAL_ID,
+        "strategy_version": STRATEGY_VERSION,
+        "rank_mode": "trend_continuation_artifact_signal_rank",
+        "source_snapshot": str(TREND_ARTIFACT_DIR),
+        "items": items[: max(1, int(limit))],
+    }
+
+
+def _artifact_trade_payload(row: pd.Series, idx: int) -> Dict[str, Any]:
+    return {
+        "id": idx,
+        "symbol": str(row.get("symbol") or "").lower(),
+        "rank": _int(row.get("rank")),
+        "signal_date": _date(row.get("entry_signal_date")),
+        "entry_signal_date": _date(row.get("entry_signal_date")),
+        "entry_date": _date(row.get("entry_date")),
+        "exit_signal_date": _date(row.get("exit_signal_date")),
+        "exit_date": _date(row.get("exit_date")),
+        "entry_price": _clean_value(row.get("entry_price")),
+        "exit_price": _clean_value(row.get("exit_price")),
+        "return_pct": _clean_value(row.get("return_pct")),
+        "net_return_pct": _clean_value(row.get("net_return_pct")),
+        "max_drawdown_pct": _clean_value(row.get("max_drawdown_pct")),
+        "holding_days": _int(row.get("holding_days")),
+        "exit_reason": _clean_value(row.get("exit_reason")),
+        "selection_rank_score": _clean_value(row.get("score")),
+        "risk_count": 0,
+        "risk_labels": [],
+        "lifecycle_phase_label": "回踩确认",
+        "action_label": "可买入",
+        "future_days_available": _int(row.get("future_days_available")),
+        "is_mature_trade": bool(row.get("is_mature_trade")),
+    }
+
+
+def _evaluate_trend_artifact(start_date: str, end_date: str, top_n: int) -> Optional[Dict[str, Any]]:
+    mature = _load_trend_artifacts()["mature"].copy()
+    if mature.empty or "entry_signal_date" not in mature.columns:
+        return None
+    mature["entry_signal_date"] = mature["entry_signal_date"].astype(str)
+    scoped = mature[(mature["entry_signal_date"] >= start_date) & (mature["entry_signal_date"] <= end_date)].copy()
+    if not scoped.empty:
+        scoped = scoped.sort_values(["entry_signal_date", "rank", "symbol"], ascending=[True, True, True])
+    trades = [_artifact_trade_payload(row, idx) for idx, (_, row) in enumerate(scoped.iterrows(), start=1)]
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "strategy_version": STRATEGY_VERSION,
+        "strategy_display_name": STRATEGY_DISPLAY_NAME,
+        "strategy_internal_id": STRATEGY_INTERNAL_ID,
+        "rank_mode": "trend_continuation_artifact_signal_rank",
+        "top_n": int(top_n),
+        "summary": _summarize_trend_rows(scoped),
+        "daily_results": [],
+        "trades": trades,
+        "source_snapshot": str(TREND_MATURE_TRADES_PATH),
+    }
+
+
+def _artifact_profile(symbol: str, trade_date: Optional[str]) -> Optional[Dict[str, Any]]:
+    artifacts = _load_trend_artifacts()
+    target_symbol = str(symbol).lower()
+    frames = [
+        (artifacts["trades"], "buy_signal"),
+        (artifacts["buy"], "buy_signal"),
+        (artifacts["observe"], "observe"),
+    ]
+    for frame, status in frames:
+        if frame.empty or "symbol" not in frame.columns:
+            continue
+        scoped = frame[frame["symbol"].astype(str).str.lower() == target_symbol].copy()
+        if scoped.empty:
+            continue
+        if trade_date:
+            date_text = str(trade_date)
+            masks = []
+            for col in ["entry_signal_date", "signal_date", "observe_date"]:
+                if col in scoped.columns:
+                    masks.append(scoped[col].astype(str).eq(date_text))
+            if masks:
+                mask = masks[0]
+                for item in masks[1:]:
+                    mask = mask | item
+                scoped = scoped[mask].copy()
+            if scoped.empty:
+                continue
+        sort_cols = [col for col in ["entry_signal_date", "signal_date", "rank"] if col in scoped.columns]
+        if sort_cols:
+            scoped = scoped.sort_values(sort_cols, ascending=[False] * len(sort_cols))
+        row = scoped.iloc[0]
+        candidate = _row_to_candidate(row, _int(row.get("rank")), status)
+        return {
+            "symbol": candidate["symbol"],
+            "trade_date": candidate["trade_date"],
+            "latest_available_trade_date": _date(row.get("exit_date")) or candidate["trade_date"],
+            "requested_trade_date": trade_date or candidate["trade_date"],
+            "profile_date_fallback_used": bool(trade_date and trade_date != candidate["trade_date"]),
+            "name": candidate["symbol"],
+            "feature_version": STRATEGY_VERSION,
+            "strategy_version": STRATEGY_VERSION,
+            "strategy_display_name": STRATEGY_DISPLAY_NAME,
+            "strategy_internal_id": STRATEGY_INTERNAL_ID,
+            "stealth_score": candidate["stealth_score"],
+            "breakout_score": candidate["breakout_score"],
+            "distribution_score": candidate["distribution_score"],
+            "confirm_signal": 1 if status == "buy_signal" else 0,
+            "exit_signal": 1 if row.get("exit_reason") else 0,
+            "close": _clean_value(row.get("gross_entry_price")),
+            "return_20d_pct": candidate["return_20d_pct"],
+            "current_judgement": candidate["current_judgement"],
+            "breakout_reason_summary": "；".join([candidate["setup_reason"], candidate["launch_reason"], candidate["pullback_reason"]]),
+            "distribution_reason_summary": "趋势中继风险控制：买入后若单日大额超大单派发或累计超大单峰值回撤，则退出。",
+            "trade_plan": {
+                "signal_date": candidate.get("entry_signal_date"),
+                "entry_date": candidate.get("entry_date"),
+                "exit_signal_date": candidate.get("exit_signal_date"),
+                "exit_date": candidate.get("exit_date"),
+                "exit_reason": candidate.get("replay_exit_reason"),
+                "return_pct": candidate.get("replay_return_pct"),
+                "exit_is_simulated": True,
+            },
+            "series": [],
+            "event_timeline": [],
+            "entry_allowed": candidate["entry_allowed"],
+            "entry_block_reasons": candidate["entry_block_reasons"],
+            "intent_profile": {
+                "intent_label": candidate["lifecycle_phase"],
+                "trend_score": candidate.get("trend_score"),
+                "fund_score": candidate.get("fund_score"),
+                "repair_score": candidate.get("repair_score"),
+                "confirm_active_buy_strength": candidate.get("confirm_active_buy_strength"),
+                "confirm_main_net_ratio": candidate.get("confirm_main_net_ratio"),
+            },
+            "candidate_types": candidate["candidate_types"],
+            "entry_signal_date": candidate.get("entry_signal_date"),
+            "entry_date": candidate.get("entry_date"),
+            "observe_date": candidate.get("observe_date"),
+            "launch_start_date": candidate.get("observe_date"),
+            "launch_end_date": candidate.get("entry_signal_date") or candidate.get("observe_date"),
+            "exit_signal_date": candidate.get("exit_signal_date"),
+            "exit_date": candidate.get("exit_date"),
+            "risk_count": 0,
+            "risk_labels": [],
+            "setup_reason": candidate["setup_reason"],
+            "launch_reason": candidate["launch_reason"],
+            "pullback_reason": candidate["pullback_reason"],
+            "exit_plan_summary": candidate["exit_plan_summary"],
+            "research": {
+                "strategy_explanation": [
+                    "先进入趋势中继观察池，不直接买。",
+                    "只有出现严格高质量回踩，且确认日主动买入和主力资金为正，才给可买入信号。",
+                    "买入后重点防单日大额超大单派发。",
+                ],
+                "final_cum_super_amount": _clean_value(row.get("final_cum_super_amount")),
+                "final_super_peak_drawdown_pct": _clean_value(row.get("final_super_peak_drawdown_pct")),
+                "source_snapshot": str(TREND_ARTIFACT_DIR),
+            },
+        }
+    return None
+
+
 def _find_row(symbol: str, trade_date: Optional[str]) -> tuple[Optional[pd.Series], str]:
     target = str(symbol).lower()
     metrics = _cached_metrics(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
@@ -204,6 +452,10 @@ def get_trend_continuation_trade_dates(start_date: Optional[str], end_date: Opti
 
 
 def get_trend_continuation_candidates(trade_date: Optional[str], limit: int = 20) -> Dict[str, Any]:
+    artifact_payload = _artifact_candidates_for_date(trade_date, limit)
+    if artifact_payload is not None:
+        return artifact_payload
+
     metrics = _cached_metrics(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
     target = _select_trade_date(trade_date, metrics)
     day = _build_candidates_for_date(metrics, target, limit=limit)
@@ -232,6 +484,10 @@ def get_trend_continuation_candidates(trade_date: Optional[str], limit: int = 20
 
 
 def get_trend_continuation_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, Any]:
+    artifact_payload = _artifact_profile(symbol, trade_date)
+    if artifact_payload is not None:
+        return artifact_payload
+
     row, status = _find_row(symbol, trade_date)
     target = trade_date or pd.Timestamp.today().strftime("%Y-%m-%d")
     if row is None:
@@ -308,6 +564,10 @@ def get_trend_continuation_profile(symbol: str, trade_date: Optional[str]) -> Di
 
 
 def evaluate_trend_continuation_range(start_date: str, end_date: str, top_n: int = 20) -> Dict[str, Any]:
+    artifact_payload = _evaluate_trend_artifact(start_date, end_date, top_n)
+    if artifact_payload is not None:
+        return artifact_payload
+
     metrics = _cached_metrics(end_date)
     if metrics.empty:
         return {

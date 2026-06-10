@@ -942,6 +942,14 @@ def test_stock_event_coverage_summary(monkeypatch, tmp_path):
     finally:
         conn.close()
 
+    from datetime import datetime as real_datetime
+
+    class FrozenDateTime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 4, 13, 12, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(stock_events, "datetime", FrozenDateTime)
     payload = stock_events.get_stock_event_coverage("sz000833", days=30)
 
     assert payload["coverage_status"] == "covered"

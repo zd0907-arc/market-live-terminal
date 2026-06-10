@@ -1,5 +1,13 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-11 选股页近期市场趋势 UI 发布准备 | Codex
+- Task ID: `REQ-20260611-01-selection-market-trend-ui`
+- CAP: `CAP-SELECTION-RESEARCH`
+- 结论: 已把选股页左侧市场水位从数字堆叠改成“近期市场趋势”90 日水位图，并压缩候选导航：日期、策略状态和候选分类整合为单行；删除独立“股票导航”标题、说明句和无用的候选处理图。趋势图支持鼠标悬停查看选中日期、水位分数和市场状态，弱势证据收进标题后的感叹号 hover。
+- 风险: 该能力是实盘前的市场环境辅助判断，不改变模型/策略本身的候选生成逻辑；生产 NAS 是否能完整显示取决于线上 selection 数据和市场环境研究数据是否齐备。
+- 验证: 本地 `3001` 已验证 `2026-06-10` 候选页可显示“近期市场趋势”，不再出现旧标题/说明句，hover 示例为 `2026-04-10 / 水位 63.8 / 攻击`；`/api/selection/daily-candidates` 经 `3001` 代理返回 `market_environment.recent.length=90`；`npm run build` 通过。
+- 链接: `docs/changes/REQ-20260611-01-selection-market-trend-ui.md`, `docs/domain/selection-research.md`, `src/components/selection/SelectionResearchPage.tsx`, `src/version.ts`
+
 ## 2026-06-09 每日主链收口到 NAS 生产库 | Codex
 - Task ID: `MOD-20260609-07-daily-live-nas-sync-closeout`
 - CAP: `CAP-NAS-OPS`, `CAP-L2-HISTORY-FOUNDATION`

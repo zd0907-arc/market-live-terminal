@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -9,6 +10,7 @@ from backend.app.services.selection_strategy_v2 import compute_v2_metrics, load_
 from backend.scripts.research_combined_risk_stack_robustness import enrich_one
 from backend.scripts.run_strategy_v1_2_exit_grid import V12ExitParams, build_v1_candidates, simulate_trade_v1_2
 from backend.scripts.run_strategy_v1_3_orderbook_filter import launch_cancel_buy_vs_hist
+from backend.scripts.run_strategy_v1_4_modes import filter_reason as stable_mode_filter_reason
 from backend.scripts.run_strategy_v1_trend_reversal import add_ma
 
 STRATEGY_INTERNAL_ID = "stable_capital_callback"
@@ -16,6 +18,17 @@ STRATEGY_DISPLAY_NAME = "资金流回调稳健"
 STRATEGY_VERSION = "S01-M05-conservative-combined-risk"
 MAX_LOOKBACK_DAYS = 200
 MIN_FUTURE_DAYS = 10
+S01_M05_TRADES_PATH = Path(
+    "docs/strategy-rework/strategies/S01-capital-trend-reversal/"
+    "experiments/EXP-20260426-S01-M05-conservative-combined-risk/s01_m05_trades.csv"
+)
+
+
+@lru_cache(maxsize=1)
+def _load_s01_m05_artifact_trades() -> pd.DataFrame:
+    if not S01_M05_TRADES_PATH.exists():
+        return pd.DataFrame()
+    return pd.read_csv(S01_M05_TRADES_PATH)
 
 
 def _clean_value(value: Any) -> Any:
@@ -131,6 +144,215 @@ def _build_candidates_for_date(metrics: pd.DataFrame, target_date: str, limit: i
     df = df.sort_values(["rank", "setup_score", "symbol"], ascending=[True, False, True]).drop_duplicates(subset=["symbol"], keep="first")
     df = df.sort_values(["rank", "setup_score", "symbol"], ascending=[True, False, True]).head(max(1, int(limit)))
     return df.reset_index(drop=True)
+
+
+def _future_days_after_entry(g: pd.DataFrame, entry_date: Optional[str]) -> int:
+    if not entry_date:
+        return 0
+    return int((g.trade_date >= str(entry_date)).sum())
+
+
+def _summarize_trade_rows(trades_df: pd.DataFrame) -> Dict[str, Any]:
+    valid = trades_df[trades_df.get("net_return_pct").notna()] if not trades_df.empty else pd.DataFrame()
+    returns = pd.to_numeric(valid.get("net_return_pct"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    holding = pd.to_numeric(valid.get("holding_days"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
+    return {
+        "trade_count": int(len(valid)),
+        "win_rate": round(float((returns > 0).mean() * 100.0), 2) if not returns.empty else 0.0,
+        "avg_return_pct": round(float(returns.mean()), 2) if not returns.empty else 0.0,
+        "median_return_pct": round(float(returns.median()), 2) if not returns.empty else 0.0,
+        "max_return_pct": round(float(returns.max()), 2) if not returns.empty else 0.0,
+        "max_loss_pct": round(float(returns.min()), 2) if not returns.empty else 0.0,
+        "avg_holding_days": round(float(holding.mean()), 2) if not holding.empty else 0.0,
+        "big_loss_count": int((returns <= -8.0).sum()) if not returns.empty else 0,
+    }
+
+
+def _row_to_trade_payload(row: pd.Series, idx: int) -> Dict[str, Any]:
+    return {
+        "id": idx,
+        "symbol": str(row.get("symbol") or "").lower(),
+        "rank": _int(row.get("rank")),
+        "signal_date": _date(row.get("entry_signal_date")),
+        "entry_signal_date": _date(row.get("entry_signal_date")),
+        "entry_date": _date(row.get("entry_date")),
+        "exit_signal_date": _date(row.get("exit_signal_date")),
+        "exit_date": _date(row.get("exit_date")),
+        "entry_price": _clean_value(row.get("entry_price")),
+        "exit_price": _clean_value(row.get("exit_price")),
+        "return_pct": _clean_value(row.get("return_pct")),
+        "net_return_pct": _clean_value(row.get("net_return_pct")),
+        "max_drawdown_pct": _clean_value(row.get("max_drawdown_pct")),
+        "holding_days": _int(row.get("holding_days")),
+        "exit_reason": _clean_value(row.get("exit_reason")),
+        "selection_rank_score": _clean_value(row.get("setup_score")),
+        "risk_count": _int(row.get("risk_count_R1_R5")),
+        "risk_labels": _split_labels(row.get("risk_labels")),
+        "future_days_available": _int(row.get("future_days_available")),
+        "is_mature_trade": bool(row.get("is_mature_trade")),
+        "lifecycle_phase_label": "回调确认",
+        "action_label": "可买入",
+    }
+
+
+def _evaluate_stable_callback_artifact(start_date: str, end_date: str, top_n: int) -> Optional[Dict[str, Any]]:
+    df = _load_s01_m05_artifact_trades()
+    if df.empty or "entry_signal_date" not in df.columns:
+        return None
+    df["entry_signal_date"] = df["entry_signal_date"].astype(str)
+    mature_mask = df.get("is_mature_trade", pd.Series([True] * len(df))).astype(bool)
+    scoped = df[
+        mature_mask
+        & (df["entry_signal_date"] >= start_date)
+        & (df["entry_signal_date"] <= end_date)
+    ].copy()
+    if scoped.empty:
+        trades: List[Dict[str, Any]] = []
+    else:
+        scoped = scoped.sort_values(["entry_signal_date", "rank", "symbol"], ascending=[True, True, True])
+        trades = [_row_to_trade_payload(row, idx) for idx, (_, row) in enumerate(scoped.iterrows(), start=1)]
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "strategy_version": STRATEGY_VERSION,
+        "strategy_display_name": STRATEGY_DISPLAY_NAME,
+        "strategy_internal_id": STRATEGY_INTERNAL_ID,
+        "rank_mode": "stable_callback_setup_rank",
+        "top_n": int(top_n),
+        "summary": _summarize_trade_rows(scoped),
+        "daily_results": [],
+        "trades": trades,
+        "source_snapshot": str(S01_M05_TRADES_PATH),
+    }
+
+
+def _artifact_candidates_for_date(trade_date: Optional[str], limit: int) -> Optional[Dict[str, Any]]:
+    df = _load_s01_m05_artifact_trades()
+    if df.empty or "entry_signal_date" not in df.columns:
+        return None
+    df = df.copy()
+    df["entry_signal_date"] = df["entry_signal_date"].astype(str)
+    dates = sorted(df["entry_signal_date"].dropna().unique().tolist())
+    if not dates:
+        return None
+    target = str(trade_date or dates[-1])
+    if target < dates[0] or target > dates[-1]:
+        return None
+    mature_mask = df.get("is_mature_trade", pd.Series([True] * len(df))).astype(bool)
+    scoped = df[mature_mask & (df["entry_signal_date"] == target)].copy()
+    if not scoped.empty:
+        scoped = scoped.sort_values(["rank", "setup_score", "symbol"], ascending=[True, False, True])
+        scoped = scoped.drop_duplicates(subset=["symbol"], keep="first").head(max(1, int(limit)))
+    items = [_row_to_candidate(row, idx) for idx, (_, row) in enumerate(scoped.iterrows(), start=1)]
+    return {
+        "trade_date": target,
+        "strategy": STRATEGY_INTERNAL_ID,
+        "strategy_display_name": STRATEGY_DISPLAY_NAME,
+        "strategy_internal_id": STRATEGY_INTERNAL_ID,
+        "strategy_version": STRATEGY_VERSION,
+        "rank_mode": "stable_callback_artifact_entry_signal_rank",
+        "source_snapshot": str(S01_M05_TRADES_PATH),
+        "items": items,
+    }
+
+
+def _artifact_profile(symbol: str, trade_date: Optional[str]) -> Optional[Dict[str, Any]]:
+    df = _load_s01_m05_artifact_trades()
+    if df.empty or "symbol" not in df.columns:
+        return None
+    target_symbol = str(symbol).lower()
+    scoped = df[df["symbol"].astype(str).str.lower() == target_symbol].copy()
+    if scoped.empty:
+        return None
+    if trade_date:
+        date_text = str(trade_date)
+        date_mask = (
+            scoped.get("entry_signal_date", pd.Series(dtype=str)).astype(str).eq(date_text)
+            | scoped.get("pullback_confirm_date", pd.Series(dtype=str)).astype(str).eq(date_text)
+            | scoped.get("discovery_date", pd.Series(dtype=str)).astype(str).eq(date_text)
+        )
+        scoped = scoped[date_mask].copy()
+        if scoped.empty:
+            return None
+    scoped = scoped.sort_values(["entry_signal_date", "rank"], ascending=[False, True])
+    row = scoped.iloc[0]
+    candidate = _row_to_candidate(row, _int(row.get("rank"), 0))
+    risk_labels = candidate["risk_labels"]
+    profile_date = candidate["trade_date"]
+    return {
+        "symbol": candidate["symbol"],
+        "trade_date": profile_date,
+        "latest_available_trade_date": _date(row.get("exit_date")) or profile_date,
+        "requested_trade_date": trade_date or profile_date,
+        "profile_date_fallback_used": bool(trade_date and trade_date != profile_date),
+        "name": candidate["symbol"],
+        "feature_version": STRATEGY_VERSION,
+        "strategy_version": STRATEGY_VERSION,
+        "strategy_display_name": STRATEGY_DISPLAY_NAME,
+        "strategy_internal_id": STRATEGY_INTERNAL_ID,
+        "stealth_score": _float(row.get("setup_score")),
+        "breakout_score": _float(row.get("launch3_return_pct")),
+        "distribution_score": _float(row.get("confirm_distribution_score")),
+        "confirm_signal": 1,
+        "exit_signal": 1 if row.get("exit_reason") else 0,
+        "close": _float(row.get("gross_entry_price")),
+        "return_20d_pct": _clean_value(row.get("pre20_return_pct")),
+        "breakout_vs_prev20_high_pct": _clean_value(row.get("launch3_return_pct")),
+        "l2_vs_l1_strength": _clean_value(row.get("launch3_main_net_ratio")),
+        "l2_order_event_available": 1 if bool(row.get("order_filter_available")) else 0,
+        "current_judgement": candidate["current_judgement"],
+        "breakout_reason_summary": "；".join([candidate["setup_reason"], candidate["launch_reason"], candidate["pullback_reason"]]),
+        "distribution_reason_summary": "；".join(risk_labels) if risk_labels else "组合风险标签未达到过滤阈值。",
+        "trade_plan": {
+            "signal_date": candidate["entry_signal_date"],
+            "entry_date": candidate["entry_date"],
+            "entry_price": _clean_value(row.get("entry_price")),
+            "exit_signal_date": _date(row.get("exit_signal_date")),
+            "exit_date": _date(row.get("exit_date")),
+            "exit_price": _clean_value(row.get("exit_price")),
+            "exit_reason": _clean_value(row.get("exit_reason")),
+            "exit_is_simulated": True,
+            "return_pct": _clean_value(row.get("net_return_pct")),
+        },
+        "series": [],
+        "event_timeline": [],
+        "entry_allowed": candidate["entry_allowed"],
+        "entry_block_reasons": candidate["entry_block_reasons"],
+        "intent_profile": {
+            "intent_label": "pullback_absorption_confirm",
+            "setup_score": _clean_value(row.get("setup_score")),
+            "launch3_return_pct": _clean_value(row.get("launch3_return_pct")),
+            "pullback_support_spread_avg": _clean_value(row.get("pullback_support_spread_avg")),
+            "risk_count": candidate["risk_count"],
+            "risk_labels": risk_labels,
+        },
+        "candidate_types": candidate["candidate_types"],
+        "entry_signal_date": candidate["entry_signal_date"],
+        "entry_date": candidate["entry_date"],
+        "discovery_date": candidate["discovery_date"],
+        "launch_start_date": candidate["launch_start_date"],
+        "launch_end_date": candidate["launch_end_date"],
+        "pullback_confirm_date": candidate["pullback_confirm_date"],
+        "exit_signal_date": candidate["exit_signal_date"],
+        "exit_date": candidate["exit_date"],
+        "risk_count": candidate["risk_count"],
+        "risk_labels": risk_labels,
+        "setup_reason": candidate["setup_reason"],
+        "launch_reason": candidate["launch_reason"],
+        "pullback_reason": candidate["pullback_reason"],
+        "exit_plan_summary": candidate["exit_plan_summary"],
+        "research": {
+            "strategy_explanation": [
+                "这不是追涨停策略，而是先发现资金异动。",
+                "启动后等待回调承接确认，确认日收盘识别，次日开盘买入。",
+                "买入后主要看累计超大单是否从峰值明显撤退。",
+                "多个风险信号同时出现时过滤。",
+            ],
+            "final_cum_super_amount": _clean_value(row.get("final_cum_super_amount")),
+            "final_super_peak_drawdown_pct": _clean_value(row.get("final_super_peak_drawdown_pct")),
+            "source_snapshot": str(S01_M05_TRADES_PATH),
+        },
+    }
 
 
 def _row_to_candidate(row: pd.Series, rank: int) -> Dict[str, Any]:
@@ -253,6 +475,10 @@ def get_stable_callback_trade_dates(start_date: Optional[str], end_date: Optiona
 
 
 def get_stable_callback_candidates(trade_date: Optional[str], limit: int = 10) -> Dict[str, Any]:
+    artifact_payload = _artifact_candidates_for_date(trade_date, limit)
+    if artifact_payload is not None:
+        return artifact_payload
+
     metrics = _cached_metrics(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
     target = _select_trade_date(trade_date, metrics)
     day = _build_candidates_for_date(metrics, target, limit=limit)
@@ -278,6 +504,10 @@ def get_stable_callback_candidates(trade_date: Optional[str], limit: int = 10) -
 
 
 def get_stable_callback_profile(symbol: str, trade_date: Optional[str]) -> Dict[str, Any]:
+    artifact_payload = _artifact_profile(symbol, trade_date)
+    if artifact_payload is not None:
+        return artifact_payload
+
     row = _find_trade_row(symbol, trade_date)
     target = trade_date or pd.Timestamp.today().strftime("%Y-%m-%d")
     if row is None:
@@ -391,6 +621,10 @@ def get_stable_callback_profile(symbol: str, trade_date: Optional[str]) -> Dict[
 
 
 def evaluate_stable_callback_range(start_date: str, end_date: str, top_n: int = 10) -> Dict[str, Any]:
+    artifact_payload = _evaluate_stable_callback_artifact(start_date, end_date, top_n)
+    if artifact_payload is not None:
+        return artifact_payload
+
     metrics = _cached_metrics(end_date)
     if metrics.empty:
         return {
@@ -405,7 +639,7 @@ def evaluate_stable_callback_range(start_date: str, end_date: str, top_n: int = 
             "daily_results": [],
             "trades": [],
         }
-    candidates, by_symbol = build_v1_candidates(metrics, start_date, end_date, top_n=max(1, int(top_n) * 3))
+    candidates, by_symbol = build_v1_candidates(metrics, start_date, end_date, top_n=max(1, int(top_n)))
     trades: List[Dict[str, Any]] = []
     if candidates:
         exit_params = V12ExitParams(stop_loss_pct=-8.0, super_peak_drawdown_pct=0.20, super_decline_days=3)
@@ -417,16 +651,29 @@ def evaluate_stable_callback_range(start_date: str, end_date: str, top_n: int = 
             g = by_symbol.get(str(rec["symbol"]).lower())
             if g is None or g.empty:
                 continue
+            orderbook = launch_cancel_buy_vs_hist(g, str(rec.get("launch_start_date")), str(rec.get("launch_end_date")))
+            enriched = {**rec, **orderbook}
+            if stable_mode_filter_reason(enriched, "v1.4-balanced"):
+                continue
             trade = simulate_trade_v1_2(g, str(pull_date), exit_params, trade_cost_params)
             if trade and not trade.get("skipped"):
+                signal_date = _date(trade.get("entry_signal_date")) or _date(pull_date)
+                entry_date = _date(trade.get("entry_date"))
+                future_days_available = _future_days_after_entry(g, entry_date)
+                if future_days_available < MIN_FUTURE_DAYS:
+                    continue
+                risk_payload = enrich_one(g, pd.Series({**enriched, **trade, "entry_signal_date": signal_date}))
+                risk_count = _int(risk_payload.get("risk_count_R1_R5"))
+                if risk_count >= 2:
+                    continue
                 trades.append(
                     {
                         "id": len(trades) + 1,
                         "symbol": str(rec.get("symbol") or "").lower(),
                         "rank": _int(rec.get("rank")),
-                        "signal_date": _date(rec.get("entry_signal_date")),
-                        "entry_signal_date": _date(rec.get("entry_signal_date")),
-                        "entry_date": _date(trade.get("entry_date")),
+                        "signal_date": signal_date,
+                        "entry_signal_date": signal_date,
+                        "entry_date": entry_date,
                         "exit_signal_date": _date(trade.get("exit_signal_date")),
                         "exit_date": _date(trade.get("exit_date")),
                         "entry_price": _clean_value(trade.get("entry_price")),
@@ -437,8 +684,10 @@ def evaluate_stable_callback_range(start_date: str, end_date: str, top_n: int = 
                         "holding_days": _int(trade.get("holding_days")),
                         "exit_reason": _clean_value(trade.get("exit_reason")),
                         "selection_rank_score": _clean_value(rec.get("setup_score")),
-                        "risk_count": _int(rec.get("risk_count_R1_R5")),
-                        "risk_labels": _split_labels(rec.get("risk_labels")),
+                        "risk_count": risk_count,
+                        "risk_labels": _split_labels(risk_payload.get("risk_labels")),
+                        "future_days_available": future_days_available,
+                        "is_mature_trade": True,
                         "lifecycle_phase_label": "回调确认",
                         "action_label": "可买入",
                     }
@@ -447,19 +696,7 @@ def evaluate_stable_callback_range(start_date: str, end_date: str, top_n: int = 
     if not trades_df.empty:
         trades_df = trades_df[(trades_df["entry_signal_date"] >= start_date) & (trades_df["entry_signal_date"] <= end_date)].copy()
         trades_df = trades_df.sort_values(["entry_signal_date", "rank", "symbol"], ascending=[True, True, True])
-    valid = trades_df[trades_df.get("net_return_pct").notna()] if not trades_df.empty else pd.DataFrame()
-    returns = pd.to_numeric(valid.get("net_return_pct"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
-    holding = pd.to_numeric(valid.get("holding_days"), errors="coerce").fillna(0.0) if not valid.empty else pd.Series(dtype=float)
-    summary = {
-        "trade_count": int(len(valid)),
-        "win_rate": round(float((returns > 0).mean() * 100.0), 2) if not returns.empty else 0.0,
-        "avg_return_pct": round(float(returns.mean()), 2) if not returns.empty else 0.0,
-        "median_return_pct": round(float(returns.median()), 2) if not returns.empty else 0.0,
-        "max_return_pct": round(float(returns.max()), 2) if not returns.empty else 0.0,
-        "max_loss_pct": round(float(returns.min()), 2) if not returns.empty else 0.0,
-        "avg_holding_days": round(float(holding.mean()), 2) if not holding.empty else 0.0,
-        "big_loss_count": int((returns <= -8.0).sum()) if not returns.empty else 0,
-    }
+    summary = _summarize_trade_rows(trades_df)
     return {
         "start_date": start_date,
         "end_date": end_date,
