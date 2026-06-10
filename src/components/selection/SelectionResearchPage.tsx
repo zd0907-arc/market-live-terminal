@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck } from 'lucide-react';
 
 import {
   SelectionBacktestDetail,
@@ -198,20 +198,21 @@ const marketTrendLabel = (points: SelectionMarketEnvironment['recent']) => {
   return last < 30 ? '低位震荡' : '区间震荡';
 };
 
-const MarketWaterTrendChart: React.FC<{ points: SelectionMarketEnvironment['recent'] }> = ({ points = [] }) => {
+const MarketWaterTrendChart: React.FC<{ points: SelectionMarketEnvironment['recent']; className?: string }> = ({ points = [], className = '' }) => {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const valid = points.filter((point) => Number.isFinite(Number(point.water_score)));
   if (valid.length < 2) {
     return (
-      <div className="flex h-16 items-center justify-center text-xs text-slate-500">
+      <div className={`flex items-center justify-center text-xs text-slate-500 ${className || 'h-28'}`}>
         暂无近期水位走势
       </div>
     );
   }
-  const width = 320;
-  const height = 78;
-  const padX = 14;
-  const top = 8;
-  const bottom = 55;
+  const width = 640;
+  const height = 172;
+  const padX = 18;
+  const top = 18;
+  const bottom = 148;
   const yFor = (score: number) => top + (100 - Math.max(0, Math.min(100, score))) / 100 * (bottom - top);
   const xFor = (index: number) => padX + (valid.length <= 1 ? 0 : index / (valid.length - 1) * (width - padX * 2));
   const path = valid.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index).toFixed(1)} ${yFor(Number(point.water_score)).toFixed(1)}`).join(' ');
@@ -219,33 +220,67 @@ const MarketWaterTrendChart: React.FC<{ points: SelectionMarketEnvironment['rece
   const first = valid[0];
   const lastX = xFor(valid.length - 1);
   const lastY = yFor(Number(last.water_score));
+  const hoverPoint = hoverIndex == null ? null : valid[hoverIndex];
+  const hoverX = hoverIndex == null ? null : xFor(hoverIndex);
+  const hoverY = hoverPoint ? yFor(Number(hoverPoint.water_score)) : null;
+  const hoverTooltipX = hoverX == null ? 0 : Math.min(Math.max(hoverX - 78, 8), width - 164);
+  const hoverTooltipY = hoverY == null ? 0 : Math.max(12, hoverY - 54);
+  const handleMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const rawX = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * width;
+    const ratio = (rawX - padX) / Math.max(width - padX * 2, 1);
+    const nextIndex = Math.min(valid.length - 1, Math.max(0, Math.round(ratio * (valid.length - 1))));
+    setHoverIndex(nextIndex);
+  };
   return (
-    <div className="mt-2">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-[84px] w-full" role="img" aria-label="近90日市场水位走势">
-        <rect x="10" y={yFor(100)} width={width - 20} height={yFor(55) - yFor(100)} fill="#064e3b" opacity="0.16" />
-        <rect x="10" y={yFor(55)} width={width - 20} height={yFor(30) - yFor(55)} fill="#78350f" opacity="0.14" />
-        <rect x="10" y={yFor(30)} width={width - 20} height={yFor(0) - yFor(30)} fill="#7f1d1d" opacity="0.18" />
-        <line x1="10" y1={yFor(55)} x2={width - 10} y2={yFor(55)} stroke="#475569" strokeDasharray="3 4" opacity="0.55" />
-        <line x1="10" y1={yFor(30)} x2={width - 10} y2={yFor(30)} stroke="#475569" strokeDasharray="3 4" opacity="0.55" />
-        <text x="14" y={yFor(72)} fill="#86efac" fontSize="9">进攻</text>
-        <text x="14" y={yFor(43)} fill="#fde68a" fontSize="9">观察</text>
-        <text x="14" y={yFor(15)} fill="#fecdd3" fontSize="9">防守</text>
-        <path d={path} fill="none" stroke="#e2e8f0" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className={`h-full w-full cursor-crosshair ${className}`}
+      role="img"
+      aria-label="近90日市场水位走势"
+      preserveAspectRatio="none"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverIndex(null)}
+    >
+        <rect x="0" y="0" width={width} height={height} fill="#020617" opacity="0.95" />
+        <rect x="0" y={yFor(100)} width={width} height={yFor(55) - yFor(100)} fill="#064e3b" opacity="0.18" />
+        <rect x="0" y={yFor(55)} width={width} height={yFor(30) - yFor(55)} fill="#78350f" opacity="0.16" />
+        <rect x="0" y={yFor(30)} width={width} height={yFor(0) - yFor(30)} fill="#7f1d1d" opacity="0.2" />
+        <line x1="0" y1={yFor(55)} x2={width} y2={yFor(55)} stroke="#64748b" strokeDasharray="4 7" opacity="0.42" />
+        <line x1="0" y1={yFor(30)} x2={width} y2={yFor(30)} stroke="#64748b" strokeDasharray="4 7" opacity="0.42" />
+        <text x="18" y={yFor(72)} fill="#86efac" fontSize="11" opacity="0.86">进攻</text>
+        <text x="18" y={yFor(43)} fill="#fde68a" fontSize="11" opacity="0.86">观察</text>
+        <text x="18" y={yFor(15)} fill="#fecdd3" fontSize="11" opacity="0.86">防守</text>
+        <path d={path} fill="none" stroke="#0f172a" strokeWidth="5.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.58" />
+        <path d={path} fill="none" stroke="#e2e8f0" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         {valid.map((point, index) => (
           <circle
             key={`${point.trade_date || index}-${index}`}
             cx={xFor(index)}
             cy={yFor(Number(point.water_score))}
-            r={index === valid.length - 1 ? 3.8 : 1.5}
+            r={index === valid.length - 1 ? 5.5 : index % 8 === 0 ? 2.2 : 1.4}
             fill={marketRegimeColor(point.market_regime, point.action_code)}
             opacity={index === valid.length - 1 ? 1 : 0.8}
           />
         ))}
-        <line x1={lastX} y1={lastY} x2={lastX} y2={bottom + 7} stroke="#94a3b8" strokeDasharray="2 3" opacity="0.6" />
-        <text x={padX} y="72" fill="#64748b" fontSize="9">{compactDateText(first.trade_date).slice(5)}</text>
-        <text x={width - padX} y="72" fill="#cbd5e1" fontSize="9" textAnchor="end">{compactDateText(last.trade_date).slice(5)}</text>
-      </svg>
-    </div>
+        <line x1={lastX} y1={lastY} x2={lastX} y2={bottom + 10} stroke="#cbd5e1" strokeDasharray="3 5" opacity="0.5" />
+        {hoverPoint && hoverX != null && hoverY != null ? (
+          <g>
+            <line x1={hoverX} y1={top} x2={hoverX} y2={bottom + 10} stroke="#f8fafc" strokeDasharray="3 4" opacity="0.72" />
+            <circle cx={hoverX} cy={hoverY} r="6.5" fill="none" stroke="#f8fafc" strokeWidth="1.4" />
+            <circle cx={hoverX} cy={hoverY} r="3.8" fill={marketRegimeColor(hoverPoint.market_regime, hoverPoint.action_code)} />
+            <rect x={hoverTooltipX} y={hoverTooltipY} width="156" height="44" rx="6" fill="#020617" opacity="0.92" stroke="#475569" />
+            <text x={hoverTooltipX + 10} y={hoverTooltipY + 17} fill="#e2e8f0" fontSize="11" fontWeight="700">
+              {compactDateText(hoverPoint.trade_date)}
+            </text>
+            <text x={hoverTooltipX + 10} y={hoverTooltipY + 34} fill="#cbd5e1" fontSize="11">
+              水位 {fmtNum(hoverPoint.water_score, 1)} · {hoverPoint.market_detail_label || hoverPoint.market_regime || '--'}
+            </text>
+          </g>
+        ) : null}
+        <text x={padX} y="163" fill="#94a3b8" fontSize="11">{compactDateText(first.trade_date).slice(5)}</text>
+        <text x={width - padX} y="163" fill="#cbd5e1" fontSize="11" textAnchor="end">{compactDateText(last.trade_date).slice(5)}</text>
+    </svg>
   );
 };
 
@@ -255,33 +290,35 @@ const MarketEnvironmentSummaryCard: React.FC<{
   if (!environment?.available) return null;
   const label = environment.market_detail_label || environment.market_detail || environment.market_regime || '市场环境';
   const actionLabel = environment.default_action || marketGateStatusText(environment.action_code) || '--';
-  const reasons = environment.reason_top3 || [];
   const trendText = marketTrendLabel(environment.recent);
-  const reasonText = reasons[0] || `全市场5日上涨 ${fmtPct(getMarketMetric(environment, 'all_up_ratio_5d'), 1)}`;
+  const statusLabel = `${label.replace(/[-_/]/g, '')} · 90日${trendText}`;
+  const evidenceLabel = environment.action_code === 'blocked'
+    ? '弱势证据'
+    : environment.action_code === 'watch_only'
+      ? '观察证据'
+      : '环境证据';
+  const evidenceText = `${evidenceLabel}：全市场5日上涨 ${fmtPct(getMarketMetric(environment, 'all_up_ratio_5d'), 1)}，小盘5日 ${fmtPct(getMarketMetric(environment, 'small_up_ratio_5d'), 1)}，中证1000 5日 ${fmtPct(getMarketMetric(environment, 'csi1000_return_5d_pct'), 1)}`;
   return (
-    <div className="border-b border-slate-800/80 px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-bold text-white">
-            <ShieldAlert className="h-4 w-4 text-amber-300" />
-            今日市场水位
+    <div className="relative h-[172px] overflow-hidden border-b border-slate-800/80 bg-slate-950">
+      <MarketWaterTrendChart points={environment.recent} className="absolute inset-0" />
+      <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-4 pt-3">
+        <div className="min-w-0 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-xs font-semibold text-white">近期市场趋势</span>
+            <span className="pointer-events-auto group relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-amber-300">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span className="absolute left-0 top-full z-30 mt-1 hidden w-[340px] rounded-md border border-amber-400/30 bg-slate-950/95 px-2.5 py-2 text-[11px] font-normal leading-5 text-amber-50 shadow-xl group-hover:block">
+                {evidenceText}
+              </span>
+            </span>
+            <span className="truncate whitespace-nowrap text-xs font-semibold text-slate-200">{statusLabel}</span>
           </div>
-          <div className="mt-1 truncate text-xs text-slate-400">{environment.trade_date || '--'} · {label} · 90日{trendText}</div>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-right drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
           <span className={`inline-flex rounded border px-2 py-1 text-[11px] font-semibold ${marketGateToneClass(environment.action_code, actionLabel)}`}>
             {actionLabel}
           </span>
           <div className="mt-1 font-mono text-xs text-slate-400">水位 {fmtNum(environment.water_score, 1)}</div>
-        </div>
-      </div>
-      <MarketWaterTrendChart points={environment.recent} />
-      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] leading-5 text-slate-500">
-        <span className="line-clamp-1">{reasonText}</span>
-        <div className="shrink-0 text-slate-400">
-          <span>小盘5日 {fmtPct(getMarketMetric(environment, 'small_up_ratio_5d'), 1)}</span>
-          <span className="mx-1 text-slate-700">/</span>
-          <span>中证1000 {fmtPct(getMarketMetric(environment, 'csi1000_return_5d_pct'), 1)}</span>
         </div>
       </div>
     </div>
@@ -1521,16 +1558,17 @@ const SelectionResearchPage: React.FC = () => {
 
         <div className="grid gap-4 xl:grid-cols-[minmax(600px,1.06fr)_minmax(600px,0.94fr)] xl:items-start">
           <div className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/70 xl:sticky xl:top-[72px] xl:max-h-[calc(100vh-88px)]">
-            <div className="shrink-0 flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-4">
-              <div>
-                <div className="flex items-center gap-2 text-lg font-bold text-white">
-                  <TrendingUp className="h-5 w-5 text-amber-400" />
-                  股票导航
+            <div className="min-h-0 xl:overflow-y-auto">
+              <div className="border-b border-slate-800 px-4 py-2.5">
+                <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto whitespace-nowrap text-[11px]">
+                  <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-slate-800 bg-slate-950/50 px-2.5 font-mono text-[11px] text-slate-400">
+                    {tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}
+                  </span>
                   {sourceRuns.length > 0 ? (
-                    <div className="group relative">
+                    <div className="group relative shrink-0">
                       <button
                         type="button"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-950/80 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-100"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-800 bg-slate-950/50 text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-100"
                         aria-label="查看当日策略状态"
                       >
                         <AlertCircle className="h-3.5 w-3.5" />
@@ -1551,15 +1589,6 @@ const SelectionResearchPage: React.FC = () => {
                       </div>
                     </div>
                   ) : null}
-                  <span className="text-xs font-medium text-slate-500">{tradeDate || pendingTradeDate || health?.latest_signal_date || '--'}</span>
-                </div>
-                <div className="mt-1 text-xs text-slate-500">左侧扫走势，点击卡片后右侧查看单票详情。</div>
-              </div>
-              {loadingCandidates ? <span className="text-xs text-slate-500">加载中...</span> : null}
-            </div>
-            <div className="min-h-0 xl:overflow-y-auto">
-              <div className="border-b border-slate-800 px-4 py-2.5">
-                <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto whitespace-nowrap text-[11px]">
                   {navigatorGroupTabs.map((group) => {
                     const config = NAVIGATOR_GROUP_CONFIG[group.id];
                     return (
@@ -1579,6 +1608,7 @@ const SelectionResearchPage: React.FC = () => {
                       </button>
                     );
                   })}
+                  {loadingCandidates ? <span className="shrink-0 px-1 text-[11px] text-slate-500">加载中...</span> : null}
                 </div>
               </div>
               <MarketEnvironmentSummaryCard
