@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：每日主链补齐选股页近期市场水位刷新
-- 状态：LOCAL_READY_PENDING_PROD
+- 状态：RELEASED
 - 负责人：Codex
 - 关联 Task ID：`REQ-20260612-01-market-water-daily-refresh`
 - 关联 CAP：`CAP-SELECTION-RESEARCH`, `CAP-NAS-OPS`
@@ -52,12 +52,14 @@
 - 页面入口补充验证：`daily-trade-dates` 会把 `has_market_environment=true` 的日期标为可选；`2026-06-11` 本地真实数据返回 `selectable=True`、`market_environment.available=True`、`water_score=17.1262`。
 - 定向回归：`/usr/bin/python3 -m pytest backend/tests/test_selection_daily_workbench.py backend/tests/test_selection_market_environment_gate.py -q` 通过：13 passed。
 - 前端构建：`npm run build` 通过。
+- 生产发布验证：NAS `main=b67c45a49b3929271f526af8394eee77b1efeafc`；Docker backend/frontend 重新构建并启动；公开 `/api/selection/market-environment?date=2026-06-11` 返回 `available=True, recent=90, water=17.1262`。
+- 页面冒烟验证：公开 `/selection-research?waterfix=b67c45a` 默认日期为 `2026-06-11`，显示“近期市场趋势”、`防守弱势承压`、`水位 17.1`、`暂停新开仓`，候选为空时显示“当日没有候选票，已显示市场水位”。
 
 ## 7. 风险与后续
 - 当前水位刷新仍是全量重算，耗时约十几秒；短期可接受，后续若数据量继续扩大再做增量化。
-- 生产需要部署服务读取路径改造、日期入口补丁，并同步运行态水位目录到 NAS 数据卷。
+- 生产当前 2026-06-11 候选池为空，但页面已能显示水位；这属于候选库数据覆盖问题，不影响市场水位显示。
 - 仓库 docs 下的研究目录保留为历史兜底，不再作为每日运行态真相源。
 
 ## 8. 归档信息
-- 当前状态：未归档。
-- 归档条件：生产部署并验证 2026-06-11 水位在选股工作台可见后归档。
+- 当前状态：已发布，未归档。
+- 归档条件：下一交易日单日报数自动生成并同步水位后，可归档。
