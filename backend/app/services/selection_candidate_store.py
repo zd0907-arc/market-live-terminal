@@ -835,8 +835,21 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
         for row in run_rows
         if row["last_finished_at"]
     }
+    try:
+        from backend.app.services.selection_market_environment_gate import market_state_by_date
+
+        market_environment_dates = {
+            date
+            for date in market_state_by_date()
+            if (not start_date or date >= start_date) and (not end_date or date <= end_date)
+        }
+    except Exception:
+        market_environment_dates = set()
     resolved_start = start_date or (str(bounds["min_date"]) if bounds and bounds["min_date"] else None)
     resolved_end = end_date or (str(bounds["max_date"]) if bounds and bounds["max_date"] else None)
+    if market_environment_dates:
+        resolved_start = min([item for item in [resolved_start, min(market_environment_dates)] if item])
+        resolved_end = max([item for item in [resolved_end, max(market_environment_dates)] if item])
     if not resolved_start or not resolved_end:
         return {"start_date": resolved_start, "end_date": resolved_end, "strategy": "daily_candidate_pool", "items": []}
     if resolved_start > resolved_end:
@@ -860,10 +873,13 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
         run_count = run_counts.get(day, 0)
         success_count = success_counts.get(day, 0)
         failed_count = failed_counts.get(day, 0)
-        is_trade_day = has_feature or datetime.strptime(day, "%Y-%m-%d").weekday() < 5
-        selectable = bool(has_feature)
+        has_market_environment = day in market_environment_dates
+        is_trade_day = has_feature or has_market_environment or datetime.strptime(day, "%Y-%m-%d").weekday() < 5
+        selectable = bool(has_feature or has_market_environment)
         if not is_trade_day:
             disabled_reason = "休市"
+        elif has_market_environment and not has_feature:
+            disabled_reason = "仅市场水位"
         elif not has_feature:
             disabled_reason = "无行情/评分数据"
         elif signal_count <= 0:
@@ -879,6 +895,8 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
                 "feature_count": feature_count,
                 "has_feature": has_feature,
                 "has_candidates": signal_count > 0,
+                "has_market_environment": has_market_environment,
+                "market_environment_only": has_market_environment and not has_feature,
                 "can_generate": has_feature and signal_count <= 0,
                 "has_run": run_count > 0,
                 "run_count": run_count,

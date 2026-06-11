@@ -1,12 +1,14 @@
 import backend.app.db.selection_db as selection_db_module
 from backend.app.routers.selection import selection_daily_candidates, selection_daily_trade_dates
 from backend.app.services.selection_candidate_store import (
+    invalidate_daily_trade_dates_cache,
     rebuild_daily_candidates,
     replace_daily_exit_watchlist,
     replace_source_candidates,
     upsert_strategy_registry,
 )
 from backend.app.services.selection_daily_workbench import run_daily_selection_sources
+from backend.app.services import selection_market_environment_gate
 from backend.app.services.selection_candidate_store import query_daily_exit_watchlist
 from backend.app.services.spark_opportunity_exit import DEFAULT_DUAL_POLICY_ID, DEFAULT_DUAL_POLICY_NAME
 
@@ -179,6 +181,45 @@ def test_daily_trade_dates_are_selectable_with_features_even_without_candidates(
     assert resp.data["items"][0]["has_candidates"] is False
     assert resp.data["items"][0]["can_generate"] is True
     assert resp.data["items"][0]["disabled_reason"] == "当天无候选"
+
+
+def test_daily_trade_dates_include_market_environment_only_day(monkeypatch, tmp_path):
+    selection_db_path = tmp_path / "selection_research.db"
+    market_dir = tmp_path / "market_environment_gate_2026-06-10"
+    market_dir.mkdir()
+    (market_dir / "market_state_daily.csv").write_text(
+        "\n".join(
+            [
+                "trade_date,water_score,market_regime,market_detail,market_detail_label,default_action,reason_top3",
+                "2026-06-11,17.1262,defense,defense_pressure,防守-弱势承压,暂停新开仓,5日全市场上涨占比19.3%",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SELECTION_DB_PATH", str(selection_db_path))
+    monkeypatch.setenv("MARKET_ENVIRONMENT_GATE_DIR", str(market_dir))
+    selection_market_environment_gate._read_csv_cached.cache_clear()
+    invalidate_daily_trade_dates_cache()
+    selection_db_module.SELECTION_DB_FILE = str(selection_db_path)
+    selection_db_module.ensure_selection_schema()
+
+    resp = selection_daily_trade_dates(start_date="2026-06-11", end_date="2026-06-11")
+    assert resp.code == 200
+    item = resp.data["items"][0]
+    assert item["date"] == "2026-06-11"
+    assert item["selectable"] is True
+    assert item["has_feature"] is False
+    assert item["has_candidates"] is False
+    assert item["has_market_environment"] is True
+    assert item["market_environment_only"] is True
+    assert item["can_generate"] is False
+    assert item["disabled_reason"] == "仅市场水位"
+
+    candidates = selection_daily_candidates(date="2026-06-11", limit=10)
+    assert candidates.code == 200
+    assert candidates.data["items"] == []
+    assert candidates.data["market_environment"]["available"] is True
+    assert candidates.data["market_environment"]["water_score"] == 17.1262
 
 
 def test_daily_trade_dates_truncates_to_recent_window(monkeypatch, tmp_path):

@@ -309,6 +309,8 @@ export interface SelectionTradeDateItem {
   feature_count?: number;
   has_feature?: boolean;
   has_candidates?: boolean;
+  has_market_environment?: boolean;
+  market_environment_only?: boolean;
   can_generate?: boolean;
   has_run?: boolean;
   run_count?: number;

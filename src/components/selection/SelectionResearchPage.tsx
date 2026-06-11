@@ -21,6 +21,7 @@ import {
   fetchSelectionBacktests,
   fetchSelectionHealth,
   fetchSelectionHistoryMultiframeBatch,
+  fetchSelectionMarketEnvironment,
   fetchSelectionV2Evaluation,
   fetchStableCallbackEvaluation,
   fetchTrendContinuationEvaluation,
@@ -60,7 +61,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   probe_d3_confirmed: '试盘D3确认池',
   v2: '旧策略对照',
 };
-type CandidateEmptyState = 'idle' | 'not_run' | 'completed_empty' | 'failed';
+type CandidateEmptyState = 'idle' | 'not_run' | 'completed_empty' | 'failed' | 'market_only';
 type NavigatorGroup = 'all' | 'source_buy' | 'watch' | 'blocked' | 'holdings' | 'sell' | 'actionable';
 
 const NAVIGATOR_GROUP_CONFIG: Record<NavigatorGroup, { label: string; shortLabel: string; tone: string; emptyText: string }> = {
@@ -378,6 +379,8 @@ const mergeTradeDateItems = (datasets: Array<SelectionTradeDatesData | null | un
       feature_count: Math.max(prev?.feature_count || 0, item.feature_count || 0),
       has_feature: Boolean(prev?.has_feature || item.has_feature),
       has_candidates: Boolean(prev?.has_candidates || item.has_candidates),
+      has_market_environment: Boolean(prev?.has_market_environment || item.has_market_environment),
+      market_environment_only: Boolean(prev?.market_environment_only || item.market_environment_only),
       can_generate: Boolean(prev?.can_generate || item.can_generate),
       has_run: Boolean(prev?.has_run || item.has_run),
       run_count: (prev?.run_count || 0) + (item.run_count || 0),
@@ -395,6 +398,7 @@ const mergeTradeDateItems = (datasets: Array<SelectionTradeDatesData | null | un
 const candidateEmptyStateForMeta = (meta?: SelectionTradeDateItem): CandidateEmptyState => {
   if (!meta) return 'idle';
   if (meta.has_candidates || (meta.candidate_count || meta.signal_count || 0) > 0) return 'idle';
+  if (meta.market_environment_only || (meta.has_market_environment && !meta.has_feature)) return 'market_only';
   if (meta.has_run) return (meta.successful_run_count || 0) > 0 ? 'completed_empty' : 'failed';
   if (meta.can_generate || meta.has_feature) return 'not_run';
   return 'idle';
@@ -725,6 +729,7 @@ const SelectionResearchPage: React.FC = () => {
   const [researchMenuOpen, setResearchMenuOpen] = useState(false);
   const [backtestStartDate, setBacktestStartDate] = useState('2026-03-02');
   const [backtestEndDate, setBacktestEndDate] = useState('2026-04-24');
+  const [latestMarketEnvironmentDate, setLatestMarketEnvironmentDate] = useState('');
   const [error, setError] = useState('');
   const selectedRef = useRef<SelectionCandidateItem | null>(null);
   const lastLoadedKeyRef = useRef('');
@@ -736,7 +741,12 @@ const SelectionResearchPage: React.FC = () => {
   const prewarmNextLoadRef = useRef(false);
   const researchMenuRef = useRef<HTMLDivElement | null>(null);
   const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
-  const datePickerMax = String(health?.source_snapshot?.history_bounds?.max_date || health?.source_snapshot?.atomic_bounds?.max_date || health?.latest_signal_date || '');
+  const datePickerMax = maxDateText(
+    health?.source_snapshot?.history_bounds?.max_date,
+    health?.source_snapshot?.atomic_bounds?.max_date,
+    health?.latest_signal_date,
+    latestMarketEnvironmentDate,
+  );
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -935,6 +945,12 @@ const SelectionResearchPage: React.FC = () => {
   useEffect(() => {
     void loadHealth();
     loadBacktests();
+    fetchSelectionMarketEnvironment()
+      .then((environment) => {
+        const latestDate = compactDateText(environment?.trade_date);
+        if (environment?.available && latestDate !== '--') setLatestMarketEnvironmentDate(latestDate);
+      })
+      .catch(() => {});
     let cancelled = false;
     const check = () => {
       StockService.checkBackendHealth().then((ok) => {
@@ -1289,6 +1305,7 @@ const SelectionResearchPage: React.FC = () => {
     ? candidateEmptyStateByDate[candidateListDate] || candidateEmptyStateForMeta(candidateDateMeta)
     : 'idle';
   const candidateEmptyMessage = (() => {
+    if (candidateEmptyState === 'market_only') return '当日没有候选票，已显示市场水位。';
     if (candidateEmptyState === 'completed_empty') return '已跑完，今天没有可推荐的股票。';
     if (candidateEmptyState === 'failed') return '这天候选生成失败，请检查写权限或后端日志。';
     if (candidateEmptyState === 'not_run') return '这天还没有运行当日候选，点击“查看候选”后会执行模型和策略。';

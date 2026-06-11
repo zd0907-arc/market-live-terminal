@@ -5,6 +5,7 @@ import {
   SelectionBacktestDetail,
   SelectionCandidatesResponse,
   SelectionHealthData,
+  SelectionMarketEnvironment,
   SelectionProfileData,
   SelectionQuickEventJudgeData,
   SelectionResearchContextData,
@@ -83,6 +84,19 @@ export const fetchDailySelectionTradeDates = async (
     return await parseApiData<SelectionTradeDatesData>(res);
   } catch (e) {
     console.error('Fetch daily selection trade dates error:', e);
+    return null;
+  }
+};
+
+export const fetchSelectionMarketEnvironment = async (date?: string): Promise<SelectionMarketEnvironment | null> => {
+  try {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    const query = params.toString();
+    const res = await fetch(`${API_BASE_URL}/selection/market-environment${query ? `?${query}` : ''}`);
+    return await parseApiData<SelectionMarketEnvironment>(res);
+  } catch (e) {
+    console.error('Fetch selection market environment error:', e);
     return null;
   }
 };

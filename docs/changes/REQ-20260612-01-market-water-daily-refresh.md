@@ -35,6 +35,7 @@
 - Then：`get_market_environment("2026-06-11")` 返回 `available=true`、`recent.length=90`。
 - Then：`run_daily_new_framework` 的完整性校验中 `market_environment_gate.available=true` 才视为完整。
 - Then：生产 NAS 后端读取运行态数据卷后，不需要重建镜像即可消费每日新水位文件。
+- Then：即使当日候选池为空，只要市场水位已生成，选股工作台日期也能切到当天并展示“近期市场趋势”。
 
 ## 5. 本次补算结果
 - 2026-06-11 已补算到本地运行态目录。
@@ -48,10 +49,13 @@
 - `/usr/bin/python3 -m pytest backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_selection_market_environment_gate.py -q` 通过：7 passed。
 - 本地服务读取验证：`2026-06-11 available=True, water_score=17.1262, recent=90`。
 - 本地日报完整性验证：`core_complete=True, complete=True`。
+- 页面入口补充验证：`daily-trade-dates` 会把 `has_market_environment=true` 的日期标为可选；`2026-06-11` 本地真实数据返回 `selectable=True`、`market_environment.available=True`、`water_score=17.1262`。
+- 定向回归：`/usr/bin/python3 -m pytest backend/tests/test_selection_daily_workbench.py backend/tests/test_selection_market_environment_gate.py -q` 通过：13 passed。
+- 前端构建：`npm run build` 通过。
 
 ## 7. 风险与后续
 - 当前水位刷新仍是全量重算，耗时约十几秒；短期可接受，后续若数据量继续扩大再做增量化。
-- 生产需要部署服务读取路径改造，并同步运行态水位目录到 NAS 数据卷。
+- 生产需要部署服务读取路径改造、日期入口补丁，并同步运行态水位目录到 NAS 数据卷。
 - 仓库 docs 下的研究目录保留为历史兜底，不再作为每日运行态真相源。
 
 ## 8. 归档信息
