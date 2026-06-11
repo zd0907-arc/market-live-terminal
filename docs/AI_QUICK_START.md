@@ -160,7 +160,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `ops/legacy/sync_windows_research_snapshot.sh`、`backend/scripts/legacy/compat/build_local_research_snapshot.py`、`ops/legacy/start_local_backend_with_atomic.sh` 只按兼容/验证工具理解；
 - 当前正式方案是：
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
-  - 后续每天执行 `./ops/run_daily_new_framework.sh --json` 做正式主链增量日跑，日期由脚本自动检测；
+  - 后续每天执行 `./ops/run_daily_new_framework.sh --json` 做正式主链增量日跑，日期由脚本自动检测，并在候选生成后刷新选股页近期市场水位；
   - 查询新框架月批或阶段状态时用 `./ops/check_windows_new_framework_months_status.sh`；
   - `./ops/legacy/run_postclose_l2.sh` 只保留为旧盘后 L2 / cloud 同步兼容链路；
   - Windows -> Mac 数据同步只允许两条路径：

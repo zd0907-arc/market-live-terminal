@@ -1,5 +1,13 @@
 # AI_HANDOFF_LOG（短日志）
 
+## 2026-06-12 每日主链补齐市场水位刷新 | Codex
+- Task ID: `REQ-20260612-01-market-water-daily-refresh`
+- CAP: `CAP-SELECTION-RESEARCH`, `CAP-NAS-OPS`
+- 结论: 已确认 2026-06-11 选股页看不到“近期市场趋势”的根因不是前端丢失，而是每日主链没有刷新市场水位研究产物；当日数据已经进入 atomic、selection、model feature 和候选库，但市场水位目录只到 2026-06-10。已把 `run_daily_new_framework.py` 补成在本地核心数据完整后自动刷新运行态市场水位目录，并把水位可用性纳入完整性校验；`--sync-nas` 会同步该小目录到 NAS 数据卷。后端读取逻辑改为优先读运行态目录，docs 仅兜底，且文件更新后无需重启进程即可读取新 CSV。
+- 风险: `research_market_environment_gate.py` 当前仍是全量重算，不是日增算法；本轮先保证每日可用，后续再评估是否需要增量化。生产仍需部署服务读取路径改造并同步运行态水位目录。
+- 验证: 已补算本地 2026-06-11 水位，结果为 `防守-弱势承压`、水位 `17.1262`、默认 `暂停新开仓`、`recent.length=90`；`python3 -m py_compile backend/scripts/run_daily_new_framework.py backend/app/services/selection_market_environment_gate.py` 通过；`pytest backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_selection_market_environment_gate.py -q` 通过。
+- 链接: `docs/changes/REQ-20260612-01-market-water-daily-refresh.md`, `backend/scripts/run_daily_new_framework.py`, `backend/app/services/selection_market_environment_gate.py`, `backend/tests/test_selection_market_environment_gate.py`, `docs/04_OPS_AND_DEV.md`
+
 ## 2026-06-11 选股页近期市场趋势 UI 发布准备 | Codex
 - Task ID: `REQ-20260611-01-selection-market-trend-ui`
 - CAP: `CAP-SELECTION-RESEARCH`

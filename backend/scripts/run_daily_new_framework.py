@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import json
 import os
 import re
@@ -177,10 +178,27 @@ DEFAULT_AUTO_DETECT_LIMIT = int(os.getenv("DAILY_AUTO_DETECT_LIMIT", "20"))
 DEFAULT_SYNC_NAS = os.getenv("DAILY_SYNC_NAS", "").strip().lower() in {"1", "true", "yes"}
 DEFAULT_NAS_RELEASE_PREFIX = os.getenv("DAILY_NAS_RELEASE_PREFIX", "nas_daily_new")
 DEFAULT_INCLUDE_LIVE_SYNC = os.getenv("DAILY_INCLUDE_LIVE_SYNC", "1").strip().lower() not in {"0", "false", "no"}
+MARKET_ENVIRONMENT_GATE_DIR_NAME = "market_environment_gate_2026-06-10"
+LOCAL_MARKET_ENVIRONMENT_GATE_DIR = Path(
+    os.getenv(
+        "DAILY_LOCAL_MARKET_ENVIRONMENT_GATE_DIR",
+        str(LOCAL_DATA_ROOT / "selection" / MARKET_ENVIRONMENT_GATE_DIR_NAME),
+    )
+)
+REPO_MARKET_ENVIRONMENT_GATE_DIR = Path(
+    os.getenv(
+        "DAILY_REPO_MARKET_ENVIRONMENT_GATE_DIR",
+        str(ROOT_DIR / "docs" / "selection" / MARKET_ENVIRONMENT_GATE_DIR_NAME),
+    )
+)
 NAS_HOST = os.getenv("NAS_HOST", "zhangdong@192.168.3.43").strip()
 NAS_DATA_ROOT = os.getenv("NAS_DATA_ROOT", "/volume1/docker/market-live-terminal/data").strip()
 NAS_PROJECT_ROOT = os.getenv("NAS_PROJECT_ROOT", "/volume1/docker/market-live-terminal/app").strip()
 NAS_LIVE_MARKET_DB = os.getenv("NAS_LIVE_MARKET_DB", f"{NAS_DATA_ROOT}/live/market_data.db").strip()
+NAS_MARKET_ENVIRONMENT_GATE_DIR = os.getenv(
+    "NAS_MARKET_ENVIRONMENT_GATE_DIR",
+    f"{NAS_DATA_ROOT.rstrip('/')}/research/current/selection/{MARKET_ENVIRONMENT_GATE_DIR_NAME}",
+).strip()
 NAS_INCOMING_ROOT = os.getenv("NAS_INCOMING_ROOT", f"{NAS_DATA_ROOT}/incoming").strip()
 NAS_BACKUP_ROOT = os.getenv("NAS_BACKUP_ROOT", "/volume1/docker/market-live-terminal/backups/db_snapshots").strip()
 NAS_SCP_PROTOCOL_OPT = os.getenv("SCP_PROTOCOL_OPT", "-O").strip() or "-O"
@@ -616,12 +634,73 @@ def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
     }
 
 
-def _run_nas_postprocess(trade_date: str, local_live_sync_report: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+def _sync_nas_market_environment_gate(local_market_environment_report: Optional[Dict[str, object]]) -> Dict[str, object]:
+    if not local_market_environment_report or local_market_environment_report.get("status") != "generated":
+        return {"status": "skipped", "reason": "missing_local_market_environment_gate"}
+    local_dir = Path(str(local_market_environment_report.get("out_dir") or LOCAL_MARKET_ENVIRONMENT_GATE_DIR))
+    if not local_dir.exists():
+        raise FileNotFoundError(f"本地市场环境水位目录不存在: {local_dir}")
+    remote_dir = NAS_MARKET_ENVIRONMENT_GATE_DIR.rstrip("/")
+    remote_parent = str(Path(remote_dir).parent).replace("\\", "/")
+    remote_name = Path(remote_dir).name
+    tar_proc = subprocess.Popen(
+        ["tar", "-C", str(local_dir.parent), "-cf", "-", local_dir.name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        ssh_proc = subprocess.run(
+            [
+                "ssh",
+                "-o",
+                f"ConnectTimeout={NAS_SSH_CONNECT_TIMEOUT}",
+                NAS_HOST,
+                f"mkdir -p {shlex.quote(remote_parent)} && tar -C {shlex.quote(remote_parent)} -xf -",
+            ],
+            stdin=tar_proc.stdout,
+            capture_output=True,
+            text=False,
+            check=False,
+        )
+    finally:
+        if tar_proc.stdout:
+            tar_proc.stdout.close()
+    _stdout, tar_stderr = tar_proc.communicate()
+    if tar_proc.returncode != 0:
+        raise RuntimeError(f"市场环境水位打包失败: {tar_stderr.decode('utf-8', errors='ignore')[-1000:]}")
+    if ssh_proc.returncode != 0:
+        detail = (ssh_proc.stderr or ssh_proc.stdout or b"").decode("utf-8", errors="ignore")
+        raise RuntimeError(f"NAS 市场环境水位同步失败: {detail[-1000:]}")
+    verify = _nas_ssh(
+        "python3 - <<'PY'\n"
+        "import csv, json\n"
+        "from pathlib import Path\n"
+        f"p = Path({remote_dir!r}) / 'market_state_daily.csv'\n"
+        "rows = list(csv.DictReader(p.open(encoding='utf-8'))) if p.exists() else []\n"
+        "print(json.dumps({'row_count': len(rows), 'latest_trade_date': rows[-1]['trade_date'] if rows else None}, ensure_ascii=False))\n"
+        "PY"
+    )
+    verify_payload = _parse_json_output(verify.stdout)
+    return {
+        "status": "synced",
+        "local_dir": str(local_dir),
+        "remote_dir": f"{remote_parent}/{remote_name}",
+        "verify": verify_payload,
+    }
+
+
+def _run_nas_postprocess(
+    trade_date: str,
+    local_live_sync_report: Optional[Dict[str, object]] = None,
+    local_market_environment_report: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     live_sync = _sync_nas_live_market_db(trade_date, local_live_sync_report)
+    market_environment_gate = _sync_nas_market_environment_gate(local_market_environment_report)
     snapshot = _snapshot_nas_runtime_dbs()
     return {
         "status": "done",
         "live_sync": live_sync,
+        "market_environment_gate": market_environment_gate,
         "research_release": {
             "status": "skipped",
             "reason": "daily_sync_focuses_on_live_and_backup",
@@ -679,6 +758,51 @@ def _run_local_live_postprocess(trade_date: str) -> Dict[str, object]:
     return {
         "postclose_l2": _run_local_postclose_l2_sync(trade_date),
         "stock_universe_meta": _refresh_local_stock_universe_meta(),
+    }
+
+
+def _run_local_market_environment_gate(trade_date: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    env = os.environ.copy()
+    env["RESEARCH_CURRENT_ROOT"] = str(LOCAL_DATA_ROOT)
+    env["DATA_DIR"] = str(LOCAL_DATA_ROOT)
+    env["LIVE_DATA_ROOT"] = str(LOCAL_LIVE_DATA_ROOT)
+    result = subprocess.run(
+        [
+            LOCAL_PYTHON,
+            str(ROOT_DIR / "backend" / "scripts" / "research_market_environment_gate.py"),
+            "--atomic-db",
+            str(LOCAL_ATOMIC_DB),
+            "--selection-db",
+            str(LOCAL_SELECTION_DB),
+            "--feature-db",
+            str(LOCAL_MODEL_FEATURE_DB),
+            "--meta-db",
+            str(LOCAL_MARKET_DB),
+            "--out-dir",
+            str(LOCAL_MARKET_ENVIRONMENT_GATE_DIR),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(f"市场环境水位刷新失败: {detail[-2000:]}")
+    report = _parse_json_output(result.stdout)
+    latest = str(report.get("trade_date_max") or "")
+    if latest < iso_date:
+        raise RuntimeError(f"市场环境水位未覆盖目标日期: target={iso_date} latest={latest or 'none'}")
+    return {
+        "status": "generated",
+        "target_date": iso_date,
+        "out_dir": str(LOCAL_MARKET_ENVIRONMENT_GATE_DIR),
+        "trade_date_min": report.get("trade_date_min"),
+        "trade_date_max": latest,
+        "market_state_rows": report.get("market_state_rows"),
+        "candidate_rows": report.get("candidate_rows"),
+        "latest_market": report.get("latest_market"),
     }
 
 
@@ -1244,6 +1368,37 @@ def _query_heat_verify(trade_date: str) -> Dict[str, object]:
     }
 
 
+def _query_market_environment_gate_verify(trade_date: str) -> Dict[str, object]:
+    iso_date = _compact_to_iso(trade_date)
+    checked_dirs = [LOCAL_MARKET_ENVIRONMENT_GATE_DIR, REPO_MARKET_ENVIRONMENT_GATE_DIR]
+    for directory in checked_dirs:
+        path = directory / "market_state_daily.csv"
+        if not path.exists() or path.stat().st_size <= 0:
+            continue
+        try:
+            with path.open("r", encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            continue
+        dates = [str(row.get("trade_date") or "") for row in rows if row.get("trade_date")]
+        if not dates:
+            continue
+        return {
+            "trade_date": iso_date,
+            "available": iso_date in set(dates),
+            "row_count": len(rows),
+            "latest_trade_date": max(dates),
+            "source_dir": str(directory),
+        }
+    return {
+        "trade_date": iso_date,
+        "available": False,
+        "row_count": 0,
+        "latest_trade_date": None,
+        "source_dir": None,
+    }
+
+
 def _verify_local(trade_date: str) -> Dict[str, object]:
     return {
         "atomic_trade_daily": _query_count(LOCAL_ATOMIC_DB, "atomic_trade_daily", "trade_date", trade_date),
@@ -1304,10 +1459,11 @@ def _verify_full_local(trade_date: str) -> Dict[str, object]:
     verify["selection_strategy_runs"] = _verify_selection_strategy_runs(trade_date)
     verify["market_index_daily"] = _query_index_verify(trade_date)
     verify["market_heat"] = _query_heat_verify(trade_date)
+    verify["market_environment_gate"] = _query_market_environment_gate_verify(trade_date)
     return verify
 
 
-def _is_local_complete(verify: Dict[str, object]) -> bool:
+def _is_local_core_complete(verify: Dict[str, object]) -> bool:
     strategy_runs = verify.get("selection_strategy_runs") if isinstance(verify, dict) else None
     index_verify = verify.get("market_index_daily") if isinstance(verify, dict) else None
     heat_verify = verify.get("market_heat") if isinstance(verify, dict) else None
@@ -1322,6 +1478,15 @@ def _is_local_complete(verify: Dict[str, object]) -> bool:
         and int(heat_verify.get("cache_covering_count") or 0) > 0
         and int((verify or {}).get("model_market_state_has_index_data") or 0) > 0
         and int((verify or {}).get("model_feature_has_heat") or 0) > 0
+    )
+
+
+def _is_local_complete(verify: Dict[str, object]) -> bool:
+    market_environment_verify = verify.get("market_environment_gate") if isinstance(verify, dict) else None
+    return (
+        _is_local_core_complete(verify)
+        and isinstance(market_environment_verify, dict)
+        and bool(market_environment_verify.get("available"))
     )
 
 
@@ -1489,18 +1654,24 @@ def run_daily(
         if not skip_candidates:
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
         report["local_verify"] = _verify_full_local(trade_date)
-        ok = _is_local_complete(report["local_verify"] or {})
-        if ok and include_live_sync:
+        core_ok = _is_local_core_complete(report["local_verify"] or {})
+        if core_ok and include_live_sync:
             report["local_live_sync"] = _run_local_live_postprocess(trade_date)
         elif not include_live_sync:
             report["local_live_sync"] = {"status": "skipped", "reason": "skip_live_sync"}
+        if core_ok:
+            report["local_market_environment_gate"] = _run_local_market_environment_gate(trade_date)
+            report["local_verify"] = _verify_full_local(trade_date)
+        ok = _is_local_complete(report["local_verify"] or {})
         if ok and sync_nas:
             nas_sync = _run_nas_postprocess(
                 trade_date,
                 report["local_live_sync"] if isinstance(report.get("local_live_sync"), dict) else None,
+                report["local_market_environment_gate"] if isinstance(report.get("local_market_environment_gate"), dict) else None,
             )
             report["nas_sync"] = nas_sync
             report["nas_live_sync"] = nas_sync.get("live_sync")
+            report["nas_market_environment_gate"] = nas_sync.get("market_environment_gate")
             report["nas_release"] = nas_sync.get("research_release")
             report["nas_snapshot"] = nas_sync.get("snapshot")
         report["status"] = "pass" if ok else "fail"

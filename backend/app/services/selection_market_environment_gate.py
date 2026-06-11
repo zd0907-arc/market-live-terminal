@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import csv
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
-RESEARCH_DIR = ROOT / "docs" / "selection" / "market_environment_gate_2026-06-10"
+RESEARCH_DIR_NAME = "market_environment_gate_2026-06-10"
+REPO_RESEARCH_DIR = ROOT / "docs" / "selection" / RESEARCH_DIR_NAME
 POLICY_ID = "market_gate_v0_20260610"
 POLICY_VERSION = "research_v0"
 
@@ -30,12 +32,57 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _read_csv(name: str) -> List[Dict[str, Any]]:
-    path = RESEARCH_DIR / name
+def _candidate_research_dirs() -> List[Path]:
+    candidates: List[Path] = []
+    explicit = os.getenv("MARKET_ENVIRONMENT_GATE_DIR", "").strip()
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    selection_dir = os.getenv("SELECTION_DATA_DIR", "").strip()
+    if selection_dir:
+        candidates.append(Path(selection_dir).expanduser() / RESEARCH_DIR_NAME)
+    research_root = os.getenv("RESEARCH_CURRENT_ROOT", "").strip()
+    if research_root:
+        candidates.append(Path(research_root).expanduser() / "selection" / RESEARCH_DIR_NAME)
+    candidates.append(REPO_RESEARCH_DIR)
+
+    out: List[Path] = []
+    seen = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return out
+
+
+def _research_dir() -> Path:
+    for path in _candidate_research_dirs():
+        if (path / "market_state_daily.csv").exists():
+            return path
+    return _candidate_research_dirs()[0]
+
+
+def _csv_signature(name: str) -> tuple[str, int, int]:
+    path = _research_dir() / name
     if not path.exists():
+        return str(path), -1, -1
+    stat = path.stat()
+    return str(path), stat.st_mtime_ns, stat.st_size
+
+
+@lru_cache(maxsize=128)
+def _read_csv_cached(path_text: str, mtime_ns: int, size: int) -> List[Dict[str, Any]]:
+    if mtime_ns < 0 or size < 0:
         return []
+    path = Path(path_text)
     with path.open("r", encoding="utf-8") as f:
         return [dict(row) for row in csv.DictReader(f)]
+
+
+def _read_csv(name: str) -> List[Dict[str, Any]]:
+    path_text, mtime_ns, size = _csv_signature(name)
+    return _read_csv_cached(path_text, mtime_ns, size)
 
 
 def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -53,13 +100,11 @@ def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-@lru_cache(maxsize=1)
 def market_state_by_date() -> Dict[str, Dict[str, Any]]:
     rows = [_clean_row(row) for row in _read_csv("market_state_daily.csv")]
     return {str(row.get("trade_date")): row for row in rows if row.get("trade_date")}
 
 
-@lru_cache(maxsize=1)
 def gate_policy_summary() -> Dict[str, List[Dict[str, Any]]]:
     return {
         "5d": [_clean_row(row) for row in _read_csv("gate_policy_comparison_5d.csv")],
@@ -68,17 +113,14 @@ def gate_policy_summary() -> Dict[str, List[Dict[str, Any]]]:
     }
 
 
-@lru_cache(maxsize=1)
 def source_regime_summary() -> List[Dict[str, Any]]:
     return [_clean_row(row) for row in _read_csv("gate_summary_by_source_regime.csv")]
 
 
-@lru_cache(maxsize=1)
 def source_metric_scorecard() -> List[Dict[str, Any]]:
     return [_clean_row(row) for row in _read_csv("market_metric_source_day_scorecard.csv")]
 
 
-@lru_cache(maxsize=1)
 def metric_leaderboard() -> List[Dict[str, Any]]:
     return [_clean_row(row) for row in _read_csv("market_metric_source_day_leaderboard.csv")]
 
