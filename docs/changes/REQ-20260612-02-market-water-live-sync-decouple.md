@@ -2,7 +2,7 @@
 
 ## 1. 基本信息
 - 标题：每日市场水位与 live/L2 后处理解耦
-- 状态：VERIFY
+- 状态：RELEASED
 - 负责人：Codex
 - 关联 Task ID：`REQ-20260612-02-market-water-live-sync-decouple`
 - 关联 CAP：`CAP-SELECTION-RESEARCH`, `CAP-NAS-OPS`, `CAP-L2-HISTORY-FOUNDATION`
@@ -49,11 +49,14 @@
 - `python3 -m py_compile backend/scripts/run_daily_new_framework.py backend/app/services/selection_market_environment_gate.py` 通过。
 - `/usr/bin/python3 -m pytest backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_selection_market_environment_gate.py -q` 通过：8 passed。
 - `git diff --check` 通过。
+- 生产数据验证：NAS 数据卷 `market_state_daily.csv` 最新行为 `2026-06-12, water_score=24.7265, 防守-修复观察`。
+- 生产代码验证：NAS app 目录的 `run_daily_new_framework.py` 已包含 `local_market_environment_gate` 先执行、`local_live_sync failed` 记告警的逻辑。
+- 生产公开接口验证：`http://dxp4800pro:8080/api/selection/market-environment?date=2026-06-12` 返回 `available=True, water_score=24.7265, recent=90`；`daily-trade-dates` 中 `2026-06-12` 已可选，原因是 `仅市场水位`。
 
 ## 7. 风险与后续
 - `run_postclose_l2_daily.py` 在 2026-06-12 的失败仍需单独排查；本卡只保证它不再拖垮市场水位。
 - 市场水位刷新仍是全量重算，短期可接受，后续再评估增量化。
 
 ## 8. 归档信息
-- 当前状态：验证中，待生产发布和公开入口冒烟后更新为 `RELEASED`。
+- 当前状态：已发布，未归档。
 - 归档条件：下一交易日单日报数自动生成并同步水位后，可归档。
