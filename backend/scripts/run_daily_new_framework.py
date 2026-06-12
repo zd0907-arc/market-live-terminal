@@ -1655,13 +1655,17 @@ def run_daily(
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
         report["local_verify"] = _verify_full_local(trade_date)
         core_ok = _is_local_core_complete(report["local_verify"] or {})
-        if core_ok and include_live_sync:
-            report["local_live_sync"] = _run_local_live_postprocess(trade_date)
-        elif not include_live_sync:
-            report["local_live_sync"] = {"status": "skipped", "reason": "skip_live_sync"}
         if core_ok:
             report["local_market_environment_gate"] = _run_local_market_environment_gate(trade_date)
             report["local_verify"] = _verify_full_local(trade_date)
+        if core_ok and include_live_sync:
+            try:
+                report["local_live_sync"] = _run_local_live_postprocess(trade_date)
+            except Exception as exc:
+                report["local_live_sync"] = {"status": "failed", "error": str(exc)}
+                report.setdefault("warnings", []).append(f"local_live_sync failed: {exc}")
+        elif not include_live_sync:
+            report["local_live_sync"] = {"status": "skipped", "reason": "skip_live_sync"}
         ok = _is_local_complete(report["local_verify"] or {})
         if ok and sync_nas:
             nas_sync = _run_nas_postprocess(

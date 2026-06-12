@@ -243,12 +243,16 @@ def test_auto_detect_marks_date_missing_when_heat_or_index_artifacts_absent(monk
     assert verify["market_heat"]["heat_row_count"] == 0
 
 
-def test_run_daily_runs_local_live_sync_before_nas_release(monkeypatch, tmp_path):
+def test_run_daily_runs_market_environment_before_local_live_sync_and_nas_release(monkeypatch, tmp_path):
     _wire_local_dbs(monkeypatch, tmp_path)
     monkeypatch.setattr(daily, "LOCAL_MARKET_DB", tmp_path / "live" / "market_data.db")
     _stub_run_daily_dependencies(monkeypatch)
 
     calls = []
+
+    def _fake_market_environment(trade_date):
+        calls.append(("market_environment", trade_date))
+        return {"status": "generated", "target_date": trade_date, "out_dir": str(daily.LOCAL_MARKET_ENVIRONMENT_GATE_DIR)}
 
     def _fake_live_sync(trade_date):
         calls.append(("live_sync", trade_date))
@@ -267,6 +271,7 @@ def test_run_daily_runs_local_live_sync_before_nas_release(monkeypatch, tmp_path
             "snapshot": {"status": "snapshotted"},
         }
 
+    monkeypatch.setattr(daily, "_run_local_market_environment_gate", _fake_market_environment)
     monkeypatch.setattr(daily, "_run_local_live_postprocess", _fake_live_sync)
     monkeypatch.setattr(daily, "_run_nas_postprocess", _fake_nas_postprocess)
 
@@ -283,6 +288,50 @@ def test_run_daily_runs_local_live_sync_before_nas_release(monkeypatch, tmp_path
     }
     assert report["nas_snapshot"] == {"status": "snapshotted"}
     assert calls == [
+        ("market_environment", "20260525"),
+        ("live_sync", "20260525"),
+        ("nas_sync", "20260525", report["local_live_sync"], report["local_market_environment_gate"]),
+    ]
+
+
+def test_run_daily_live_sync_failure_does_not_block_market_environment_sync(monkeypatch, tmp_path):
+    _wire_local_dbs(monkeypatch, tmp_path)
+    monkeypatch.setattr(daily, "LOCAL_MARKET_DB", tmp_path / "live" / "market_data.db")
+    _stub_run_daily_dependencies(monkeypatch)
+
+    calls = []
+
+    def _fake_market_environment(trade_date):
+        calls.append(("market_environment", trade_date))
+        return {"status": "generated", "target_date": trade_date, "out_dir": str(daily.LOCAL_MARKET_ENVIRONMENT_GATE_DIR)}
+
+    def _fake_live_sync(_trade_date):
+        calls.append(("live_sync", _trade_date))
+        raise RuntimeError("postclose failed")
+
+    def _fake_nas_postprocess(trade_date, local_live_sync_report, local_market_environment_report):
+        calls.append(("nas_sync", trade_date, local_live_sync_report, local_market_environment_report))
+        return {
+            "status": "done",
+            "live_sync": {"status": "skipped", "reason": "missing_local_live_sync"},
+            "market_environment_gate": {"status": "synced"},
+            "research_release": {"status": "skipped"},
+            "snapshot": {"status": "snapshotted"},
+        }
+
+    monkeypatch.setattr(daily, "_run_local_market_environment_gate", _fake_market_environment)
+    monkeypatch.setattr(daily, "_run_local_live_postprocess", _fake_live_sync)
+    monkeypatch.setattr(daily, "_run_nas_postprocess", _fake_nas_postprocess)
+
+    report = daily.run_daily("20260525", sync_nas=True)
+
+    assert report["status"] == "pass"
+    assert report["local_market_environment_gate"]["status"] == "generated"
+    assert report["local_live_sync"]["status"] == "failed"
+    assert "postclose failed" in report["local_live_sync"]["error"]
+    assert report["nas_market_environment_gate"] == {"status": "synced"}
+    assert calls == [
+        ("market_environment", "20260525"),
         ("live_sync", "20260525"),
         ("nas_sync", "20260525", report["local_live_sync"], report["local_market_environment_gate"]),
     ]
