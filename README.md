@@ -1,10 +1,10 @@
-# ZhangData 金融实时终端（v5.2.17）
+# ZhangData 金融实时终端（v5.2.20）
 
 ## 项目定位
-- 当前工作版本：`v5.2.17`
+- 当前工作版本：`v5.2.20`
 - 当前运行模式：**Mac 主开发控制台 + Windows 数据主站 + NAS 在线运行节点**
-- 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
-- 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
+- 当前唯一主工作目录：`/Users/dong/ZhangData/market-live-terminal`
+- 当前 Mac 正式主读数据根目录：`/Users/dong/ZhangData/market-data`
 - 当前已验证 NAS 直连入口：`dxp4800pro`（Tailscale MagicDNS） / `100.119.0.126`
 - 当前 NAS 局域网备用入口：`192.168.3.43`
 - 当前 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
@@ -91,6 +91,7 @@ bash ops/run_daily_new_framework.sh --json
 - 最新交接日志：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/AI_HANDOFF_LOG.md`
 - 人工待办（含 Windows 离线阻塞）：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/07_PENDING_TODO.md`
 - 文档治理与索引：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
+- 金融研究 Agent 领域：`/Users/dong/Desktop/AIGC/market-live-terminal/agentic_finance_agents/HANDOFF.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/agentic_finance_agents/DOCS_INDEX.md`
 - 归档命名规范与映射：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_NAMING_STANDARD.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_CATALOG.md`
 
 ## 文档阅读顺序（推荐）

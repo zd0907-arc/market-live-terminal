@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
-import { Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, ComposedChart } from 'recharts';
+import { Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, ReferenceLine } from 'recharts';
 
 import { TickData, SearchResult, CapitalRatioData, CumulativeCapitalData, DashboardSourceMeta, IntradayFusionData } from '../../types';
 import * as StockService from '../../services/stockService';
+import { buildIntradaySlots, DEFAULT_INTRADAY_AXIS_TICKS, inferIntradayStepFromTimes } from '../../utils/intradayTimeAxis';
 import FundsBattleSection from './FundsBattleSection';
 
 interface IntradaySingleDayPanelProps {
@@ -19,6 +20,8 @@ interface IntradaySingleDayPanelProps {
   chartHeightClassName?: string;
   syncId?: string;
   dateControlSlot?: React.ReactNode;
+  previousClose?: number | null;
+  quoteDate?: string | null;
 }
 
 class PanelErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -86,9 +89,137 @@ const shouldPollRealtime = (selectedDate: string) => {
   return now.timeNum >= 915 && now.timeNum <= 1500 && !(now.timeNum >= 1130 && now.timeNum < 1300);
 };
 
-const getWeekDay = (dateStr: string) => {
-  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  return days[new Date(dateStr).getDay()];
+type ChartRenderPoint = {
+  time: string;
+  mainBuyRatio?: number | null;
+  mainSellRatio?: number | null;
+  mainParticipationRatio?: number | null;
+  mainBuyAmount?: number | null;
+  mainSellAmount?: number | null;
+  mainSellAmountPlot?: number | null;
+  superBuyAmount?: number | null;
+  superSellAmount?: number | null;
+  superSellAmountPlot?: number | null;
+  superParticipationRatio?: number | null;
+  closePrice?: number | null;
+  priceChangePct?: number | null;
+};
+
+type CumulativeRenderPoint = {
+  time: string;
+  cumMainBuy: number | null;
+  cumMainSell: number | null;
+  cumNetInflow: number | null;
+  cumSuperNetInflow: number | null;
+  cumSuperBuy: number | null;
+  cumSuperSell: number | null;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const calcPriceChangePct = (price: unknown, previousClose: number | null | undefined) => {
+  const close = toFiniteNumber(price);
+  const base = toFiniteNumber(previousClose);
+  if (close === null || base === null || base <= 0) return null;
+  return ((close - base) / base) * 100;
+};
+
+const buildPctDomain = (values: Array<number | null | undefined>) => {
+  const finiteValues = values
+    .filter((value): value is number => value !== null && value !== undefined && Number.isFinite(Number(value)))
+    .map(Number);
+  if (!finiteValues.length) return [-1, 1];
+  const min = Math.min(0, ...finiteValues);
+  const max = Math.max(0, ...finiteValues);
+  const span = Math.max(Math.abs(min), Math.abs(max), 1);
+  if (max <= 0) return [-span * 1.08, 0];
+  if (min >= 0) return [0, span * 1.08];
+  return [-span * 1.08, span * 1.08];
+};
+
+const fillContinuousFieldsBetweenKnown = <T extends Record<string, unknown>>(rows: T[], fields: string[]): T[] => {
+  const next = rows.map((row) => ({ ...row }));
+  fields.forEach((field) => {
+    const validIndexes = next
+      .map((row, index) => (toFiniteNumber(row[field]) !== null ? index : -1))
+      .filter((index) => index >= 0);
+    const firstValidIndex = validIndexes[0] ?? -1;
+    const lastValidIndex = validIndexes[validIndexes.length - 1] ?? -1;
+    if (firstValidIndex < 0 || lastValidIndex <= firstValidIndex) return;
+
+    let lastValue = next[firstValidIndex][field];
+    for (let index = firstValidIndex + 1; index < lastValidIndex; index += 1) {
+      if (toFiniteNumber(next[index][field]) !== null) {
+        lastValue = next[index][field];
+      } else {
+        next[index][field] = lastValue;
+      }
+    }
+  });
+  return next as T[];
+};
+
+const alignChartDataToTradingDay = (
+  rows: CapitalRatioData[],
+  granularity?: string | null,
+  previousClose?: number | null,
+): ChartRenderPoint[] => {
+  if (!rows.length) return [];
+  const slots = buildIntradaySlots(inferIntradayStepFromTimes(rows.map((row) => row.time), granularity));
+  const byTime = new Map(rows.map((row) => [row.time, row]));
+  const aligned = slots.map((time) => {
+    const row = byTime.get(time);
+    if (row) {
+      return {
+        ...row,
+        closePrice: toFiniteNumber(row.closePrice),
+        priceChangePct: calcPriceChangePct(row.closePrice, previousClose),
+      };
+    }
+    return {
+      time,
+      mainBuyRatio: null,
+      mainSellRatio: null,
+      mainParticipationRatio: null,
+      mainBuyAmount: null,
+      mainSellAmount: null,
+      mainSellAmountPlot: null,
+      superBuyAmount: null,
+      superSellAmount: null,
+      superSellAmountPlot: null,
+      superParticipationRatio: null,
+      closePrice: null,
+      priceChangePct: null,
+    };
+  });
+  return fillContinuousFieldsBetweenKnown(aligned, ['closePrice', 'priceChangePct']);
+};
+
+const alignCumulativeDataToTradingDay = (rows: CumulativeCapitalData[], granularity?: string | null): CumulativeRenderPoint[] => {
+  if (!rows.length) return [];
+  const slots = buildIntradaySlots(inferIntradayStepFromTimes(rows.map((row) => row.time), granularity));
+  const byTime = new Map(rows.map((row) => [row.time, row]));
+  const aligned = slots.map((time) => byTime.get(time) || {
+    time,
+    cumMainBuy: null,
+    cumMainSell: null,
+    cumNetInflow: null,
+    cumSuperNetInflow: null,
+    cumSuperBuy: null,
+    cumSuperSell: null,
+  });
+  return fillContinuousFieldsBetweenKnown(aligned, [
+    'cumMainBuy',
+    'cumMainSell',
+    'cumNetInflow',
+    'cumSuperNetInflow',
+    'cumSuperBuy',
+    'cumSuperSell',
+  ]);
 };
 
 const getProvisionalMeta = (selectedDate: string): DashboardSourceMeta => {
@@ -207,6 +338,8 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
   chartHeightClassName = 'h-[800px] md:h-[500px]',
   syncId = 'capitalFlow',
   dateControlSlot,
+  previousClose,
+  quoteDate,
 }) => {
   const controlledDate = selectedDate !== undefined;
   const [internalSelectedDate, setInternalSelectedDate] = useState('');
@@ -224,7 +357,6 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
   const [cumulativeData, setCumulativeData] = useState<CumulativeCapitalData[]>([]);
   const isFetchingRef = useRef(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState('');
   const [displayDate, setDisplayDate] = useState('');
   const [sourceMeta, setSourceMeta] = useState<DashboardSourceMeta>({});
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
@@ -241,7 +373,6 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
     setDisplayTicks([]);
     setChartData([]);
     setCumulativeData([]);
-    setLastUpdated('');
     setSourceMeta({});
     setFusionData(null);
   }, [activeStock, selectedDateValue]);
@@ -281,7 +412,7 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
             mainBuyAmount: d.mainBuyAmount || 0,
             superSellAmountPlot: d.superSellAmount ? -d.superSellAmount : 0,
             superBuyAmount: d.superBuyAmount || 0,
-            closePrice: d.closePrice || 0,
+            closePrice: toFiniteNumber(d.closePrice),
           }));
           setChartData(processedChart);
           setCumulativeData(data.cumulative_data || []);
@@ -309,8 +440,6 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
             setDisplayTicks(ticks);
           }
 
-          const now = new Date();
-          setLastUpdated(now.toTimeString().split(' ')[0]);
           if (data.display_date) setDisplayDate(data.display_date);
           if (
             !controlledDate
@@ -423,81 +552,79 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
 
     if (!effectiveDisplayDate) {
       return {
-        className: 'text-[11px] font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded border border-slate-700',
-        text: '⚪ 状态检测中...',
+        className: 'text-[10px] font-medium text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700/60',
+        text: '检测中',
       };
     }
 
     if (effectiveMeta.view_mode === 'manual_date') {
       return {
-        className: 'text-[11px] font-bold text-yellow-500 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20',
-        text: `🟡 手动回溯: ${effectiveDisplayDate} (${getWeekDay(effectiveDisplayDate)})`,
+        className: 'text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20',
+        text: '回溯',
       };
     }
 
     const marketStatus = effectiveMeta.market_status;
     const marketLabel = effectiveMeta.market_status_label || '状态未知';
-    const scopeLabel = effectiveMeta.default_display_scope_label || effectiveMeta.view_mode_label || '';
 
     if (marketStatus === 'trading') {
       return {
-        className: 'text-[11px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20',
-        text: `🟢 ${marketLabel} · ${scopeLabel}`,
+        className: 'text-[10px] font-medium text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20',
+        text: marketLabel,
       };
     }
 
     if (marketStatus === 'lunch_break') {
       return {
-        className: 'text-[11px] font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20',
-        text: `🟠 ${marketLabel} · ${scopeLabel}`,
+        className: 'text-[10px] font-medium text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20',
+        text: marketLabel,
       };
     }
 
     if (marketStatus === 'post_close') {
       return {
-        className: 'text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20',
-        text: `🔵 ${marketLabel} · ${scopeLabel}`,
+        className: 'text-[10px] font-medium text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20',
+        text: marketLabel,
       };
     }
 
     return {
-      className: 'text-[11px] font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700',
-      text: `⚪ ${marketLabel} · ${scopeLabel}`,
+      className: 'text-[10px] font-medium text-slate-300 bg-slate-800/70 px-1.5 py-0.5 rounded border border-slate-700/60',
+      text: marketLabel,
     };
   };
 
-  const getSourceLabel = () => {
-    if (sourceMeta.source === 'l2_history') {
-      const bucket = sourceMeta.bucket_granularity || '5m';
-      return `Source: 正式L2历史 (${bucket})`;
-    }
-    if (sourceMeta.source === 'history_1m') return 'Source: 历史1m回放';
-    if (sourceMeta.source === 'sentiment_snapshots_fallback') return 'Source: 当日快照兜底';
-    if (sourceMeta.source === 'realtime_ticks') return sourceMeta.is_finalized ? 'Source: 实时 ticks（已结算）' : 'Source: 实时 ticks';
-    return 'Source: 数据源识别中...';
+  const getUpdateText = () => {
+    const hasLoadedData = chartData.length > 0 || cumulativeData.length > 0 || displayTicks.length > 0;
+    if (isLoadingDashboard) return hasLoadedData ? '刷新中' : '加载中';
+    return '';
   };
 
-  const getUpdateText = () => {
-    const effectiveMeta = sourceMeta.market_status ? sourceMeta : getProvisionalMeta(selectedDateValue);
-    const hasLoadedData = chartData.length > 0 || cumulativeData.length > 0 || displayTicks.length > 0;
-    const updatedSuffix = lastUpdated ? ` · ${lastUpdated}` : '';
-    if (isLoadingDashboard) return hasLoadedData ? `静默刷新中...${updatedSuffix}` : '数据加载中...';
-    if (hasLoadedData) {
-      if (effectiveMeta.view_mode === 'manual_date') return `指定日期数据已加载${updatedSuffix}`;
-      if (effectiveMeta.default_display_scope === 'previous_trade_day') return `上一交易日数据已加载${updatedSuffix}`;
-      if (effectiveMeta.market_status === 'post_close') return `盘后数据已加载${updatedSuffix}`;
-      if (effectiveMeta.market_status === 'closed_day') return `休盘日历史数据已加载${updatedSuffix}`;
-      if (effectiveMeta.market_status === 'trading') return lastUpdated ? `Updated: ${lastUpdated}` : '盘中数据已加载';
-      return `数据已加载${updatedSuffix}`;
-    }
-    return lastUpdated ? `Updated: ${lastUpdated}` : '暂无可展示数据';
-  };
+  const priceReference = useMemo(() => {
+    const base = toFiniteNumber(previousClose);
+    if (base === null || base <= 0) return null;
+    if (displayDate && quoteDate && displayDate !== quoteDate) return null;
+    return base;
+  }, [displayDate, previousClose, quoteDate]);
+  const chartTimelineData = useMemo(
+    () => alignChartDataToTradingDay(chartData, sourceMeta.bucket_granularity, priceReference),
+    [chartData, priceReference, sourceMeta.bucket_granularity],
+  );
+  const pricePctDomain = useMemo(
+    () => buildPctDomain(chartTimelineData.map((row) => row.priceChangePct)),
+    [chartTimelineData],
+  );
+  const cumulativeTimelineData = useMemo(
+    () => alignCumulativeDataToTradingDay(cumulativeData, sourceMeta.bucket_granularity),
+    [cumulativeData, sourceMeta.bucket_granularity],
+  );
 
   if (!activeStock) {
     return <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-6 text-center text-sm text-slate-500">请选择股票查看单日走势。</div>;
   }
 
   const statusBadge = getStatusBadge();
+  const updateText = getUpdateText();
   const off = gradientOffset();
   const defaultDateControls = showDateControls ? (
     <div className="flex items-center gap-2">
@@ -521,73 +648,83 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
 
   return (
     <div className="space-y-2">
-      <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-3 shadow-lg">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-white">
-              <TrendingUp className="h-4 w-4 shrink-0 text-blue-400" />
+      <div className="relative rounded-lg bg-slate-900/80 p-2 shadow-lg">
+        <div className="mb-1.5 flex flex-nowrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-nowrap items-center gap-1.5">
+            <h3 className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-white">
+              <TrendingUp className="h-3.5 w-3.5 shrink-0 text-blue-400" />
               <span className="truncate">{title || (enableRealtime ? '主力动态 (实时)' : '主力动态（单日）')}</span>
               {isRefreshing ? (
-                <span className={`text-[10px] font-normal ${focusMode === 'focus' ? 'text-red-300' : 'text-sky-300'} animate-pulse`}>
-                  静默刷新中...
+                <span className={`text-[9px] font-normal ${focusMode === 'focus' ? 'text-red-300' : 'text-sky-300'} animate-pulse`}>
+                  刷新
                 </span>
               ) : null}
             </h3>
-            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-normal text-slate-500">
-              {getSourceLabel()}
-            </span>
             {dateControlSlot !== undefined ? dateControlSlot : defaultDateControls}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex shrink-0 items-center gap-1">
             <span className={statusBadge.className}>{statusBadge.text}</span>
-            <span className="font-mono text-[10px] text-slate-500">{getUpdateText()}</span>
+            {updateText ? <span className="text-[10px] text-slate-500">{updateText}</span> : null}
           </div>
         </div>
 
         <div className="w-full">
-          <div className={`flex flex-col gap-4 md:grid md:grid-rows-2 md:gap-2 ${chartHeightClassName}`}>
+          <div className={`flex flex-col gap-2 md:grid md:grid-rows-2 md:gap-1.5 ${chartHeightClassName}`}>
             <div className="relative h-full w-full">
-              <div className="absolute left-2 top-2 z-10 rounded bg-slate-900/80 px-2 text-[10px] font-bold text-slate-400 md:left-10 md:text-xs">
+              <div className="absolute left-10 top-1 z-10 bg-slate-900/70 px-1 text-[9px] font-semibold text-slate-500">
                 分时博弈强度
               </div>
               {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} syncId={syncId}>
+                  <ComposedChart data={chartTimelineData} syncId={syncId} margin={{ top: 8, right: 2, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                     <XAxis
                       dataKey="time"
                       xAxisId="0"
                       stroke="#64748b"
-                      tick={{ fontSize: 12 }}
-                      ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                      tick={{ fontSize: 9 }}
+                      ticks={DEFAULT_INTRADAY_AXIS_TICKS}
                       interval="preserveStartEnd"
                       hide
                     />
                     <XAxis dataKey="time" xAxisId="1" hide />
-                    <YAxis yAxisId="amount" stroke="#94a3b8" tick={{ fontSize: 10 }} tickFormatter={(val) => (Math.abs(val) / 10000).toFixed(0)} />
+                    <YAxis yAxisId="amount" width={34} stroke="#94a3b8" tick={{ fontSize: 9 }} tickFormatter={(val) => (Math.abs(val) / 10000).toFixed(0)} />
                     <YAxis yAxisId="ratio" orientation="right" stroke="#cbd5e1" tick={{ fontSize: 10 }} unit="%" domain={[0, 100]} hide />
-                    <YAxis yAxisId="price" orientation="right" domain={['auto', 'auto']} hide />
+                    <YAxis
+                      yAxisId="price"
+                      orientation="right"
+                      width={34}
+                      domain={pricePctDomain}
+                      stroke="#facc15"
+                      tick={{ fontSize: 9 }}
+                      tickFormatter={(val) => `${Number(val).toFixed(1)}%`}
+                    />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                      itemStyle={{ fontSize: 12 }}
-                      formatter={(val: number, name: string) => {
+                      itemStyle={{ fontSize: 10 }}
+                      formatter={(val: number | null | undefined, name: string, item: any) => {
+                        if (val === null || val === undefined || Number.isNaN(Number(val))) return ['--', name];
+                        const num = Number(val);
                         if (name.includes('主力') || name.includes('超大单')) {
-                          if (name.includes('占比') || name.includes('参与度')) return [val + '%', name];
-                          return [(Math.abs(val) / 10000).toFixed(1) + '万', name];
+                          if (name.includes('占比') || name.includes('参与度')) return [num + '%', name];
+                          return [(Math.abs(num) / 10000).toFixed(1) + '万', name];
                         }
-                        if (name === '股价') return [val.toFixed(2), name];
-                        return [val, name];
+                        if (name === '股价') {
+                          const price = toFiniteNumber(item?.payload?.closePrice);
+                          return [`${num.toFixed(2)}%${price !== null ? ` / ${price.toFixed(2)}` : ''}`, name];
+                        }
+                        return [num, name];
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
                     <Bar xAxisId="0" yAxisId="amount" dataKey="mainBuyAmount" name="主力买入" fill="#f87171" barSize={4} fillOpacity={1} />
                     <Bar xAxisId="0" yAxisId="amount" dataKey="mainSellAmountPlot" name="主力卖出" fill="#4ade80" barSize={4} fillOpacity={1} />
                     <Bar xAxisId="1" yAxisId="amount" dataKey="superBuyAmount" name="超大单买入" fill="#9333ea" barSize={4} />
                     <Bar xAxisId="1" yAxisId="amount" dataKey="superSellAmountPlot" name="超大单卖出" fill="#14532d" barSize={4} />
-                    <Line yAxisId="ratio" type="monotone" dataKey="mainParticipationRatio" name="主力参与度" stroke="#f8fafc" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
-                    <Line yAxisId="ratio" type="monotone" dataKey="superParticipationRatio" name="超大单参与度" stroke="#9333ea" strokeWidth={1} dot={false} strokeOpacity={0.25} animationDuration={500} />
-                    <Line yAxisId="price" type="monotone" dataKey="closePrice" name="股价" stroke="#facc15" strokeWidth={1} dot={false} animationDuration={500} />
+                    <Line yAxisId="ratio" type="monotone" dataKey="mainParticipationRatio" name="主力参与度" stroke="#f8fafc" strokeWidth={1} dot={false} connectNulls strokeOpacity={0.25} animationDuration={500} />
+                    <Line yAxisId="ratio" type="monotone" dataKey="superParticipationRatio" name="超大单参与度" stroke="#9333ea" strokeWidth={1} dot={false} connectNulls strokeOpacity={0.25} animationDuration={500} />
+                    <ReferenceLine yAxisId="price" y={0} stroke="#facc15" strokeOpacity={0.35} strokeDasharray="3 3" />
+                    <Line yAxisId="price" type="monotone" dataKey="priceChangePct" name="股价" stroke="#facc15" strokeWidth={1.4} dot={false} connectNulls animationDuration={500} />
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : isLoadingDashboard ? (
@@ -606,12 +743,12 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
             </div>
 
             <div className="relative h-full w-full">
-              <div className="absolute left-2 top-2 z-10 rounded bg-slate-900/80 px-2 text-[10px] font-bold text-slate-400 md:left-10 md:text-xs">
+              <div className="absolute left-10 top-1 z-10 bg-slate-900/70 px-1 text-[9px] font-semibold text-slate-500">
                 主力累计资金 (万元)
               </div>
               {cumulativeData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={cumulativeData} syncId={syncId}>
+                  <ComposedChart data={cumulativeTimelineData} syncId={syncId} margin={{ top: 8, right: 2, left: -10, bottom: 0 }}>
                     <defs>
                       <linearGradient id={`${syncId}-splitColor`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset={off} stopColor="#ef4444" stopOpacity={0.3} />
@@ -622,27 +759,27 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
                     <XAxis
                       dataKey="time"
                       stroke="#64748b"
-                      tick={{ fontSize: 12 }}
-                      ticks={['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']}
+                      tick={{ fontSize: 9 }}
+                      ticks={DEFAULT_INTRADAY_AXIS_TICKS}
                       interval="preserveStartEnd"
                     />
-                    <YAxis yAxisId="net" stroke="#a78bfa" tick={{ fontSize: 12 }} tickFormatter={(val) => (val / 10000).toFixed(0)} domain={['auto', 'auto']} />
+                    <YAxis yAxisId="net" width={34} stroke="#a78bfa" tick={{ fontSize: 9 }} tickFormatter={(val) => (val / 10000).toFixed(0)} domain={['auto', 'auto']} />
                     <YAxis yAxisId="total" orientation="right" stroke="#64748b" tick={{ fontSize: 12 }} tickFormatter={(val) => (val / 10000).toFixed(0)} domain={['auto', 'auto']} hide />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }}
-                      itemStyle={{ fontSize: 12 }}
-                      formatter={(val: number, name: string) => {
-                        const v = (val / 10000).toFixed(1) + '万';
+                      itemStyle={{ fontSize: 10 }}
+                      formatter={(val: number | null | undefined, name: string) => {
+                        if (val === null || val === undefined || Number.isNaN(Number(val))) return ['--', name];
+                        const v = (Number(val) / 10000).toFixed(1) + '万';
                         return [v, name];
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={36} />
-                    <Area yAxisId="net" type="monotone" dataKey="cumNetInflow" name="主力净流入" stroke="none" fill={`url(#${syncId}-splitColor)`} animationDuration={500} />
-                    <Line yAxisId="net" type="monotone" dataKey="cumSuperNetInflow" name="超大单净流入" stroke="#d946ef" strokeWidth={2} dot={false} strokeDasharray="5 5" animationDuration={500} />
-                    <Line yAxisId="total" type="monotone" dataKey="cumMainBuy" name="主力买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
-                    <Line yAxisId="total" type="monotone" dataKey="cumMainSell" name="主力卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeOpacity={0.8} animationDuration={500} />
-                    <Line yAxisId="total" type="monotone" dataKey="cumSuperBuy" name="超大单买入" stroke="#ef4444" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
-                    <Line yAxisId="total" type="monotone" dataKey="cumSuperSell" name="超大单卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
+                    <Area yAxisId="net" type="monotone" dataKey="cumNetInflow" name="主力净流入" stroke="none" fill={`url(#${syncId}-splitColor)`} connectNulls animationDuration={500} />
+                    <Line yAxisId="net" type="monotone" dataKey="cumSuperNetInflow" name="超大单净流入" stroke="#d946ef" strokeWidth={2} dot={false} connectNulls strokeDasharray="5 5" animationDuration={500} />
+                    <Line yAxisId="total" type="monotone" dataKey="cumMainBuy" name="主力买入" stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls strokeOpacity={0.8} animationDuration={500} />
+                    <Line yAxisId="total" type="monotone" dataKey="cumMainSell" name="主力卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} connectNulls strokeOpacity={0.8} animationDuration={500} />
+                    <Line yAxisId="total" type="monotone" dataKey="cumSuperBuy" name="超大单买入" stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
+                    <Line yAxisId="total" type="monotone" dataKey="cumSuperSell" name="超大单卖出" stroke="#22c55e" strokeWidth={1.5} dot={false} connectNulls strokeDasharray="3 3" strokeOpacity={0.8} animationDuration={500} />
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
@@ -653,13 +790,9 @@ const IntradaySingleDayPanel: React.FC<IntradaySingleDayPanelProps> = ({
         </div>
       </div>
 
-      <div>
-        <div className="relative min-w-0 rounded-xl border border-slate-800 bg-slate-900 p-3 shadow-lg">
-          <PanelErrorBoundary>
-            <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
-          </PanelErrorBoundary>
-        </div>
-      </div>
+      <PanelErrorBoundary>
+        <FundsBattleSection data={fusionData} isLoading={isLoadingFusion} />
+      </PanelErrorBoundary>
     </div>
   );
 };

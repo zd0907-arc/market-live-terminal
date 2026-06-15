@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from typing import List
-from backend.app.models.schemas import WatchlistItem, APIResponse
-from backend.app.db.crud import get_watchlist_items, add_watchlist_item, remove_watchlist_item
+from backend.app.models.schemas import WatchlistItem, WatchlistReorderRequest, APIResponse
+from backend.app.db.crud import get_watchlist_items, add_watchlist_item, remove_watchlist_item, reorder_watchlist_items
 from backend.app.core.security import require_write_access
 from backend.app.core.task_runner import submit_background
 import logging
@@ -57,4 +57,14 @@ def delete_watchlist(symbol: str):
         return APIResponse(code=200, message=f"Removed {symbol} from watchlist")
     except Exception as e:
         logger.error(f"Failed to remove {symbol} from watchlist: {e}")
+        return APIResponse(code=500, message=str(e))
+
+@router.put("/watchlist/reorder", response_model=APIResponse, dependencies=[Depends(require_write_access)])
+def reorder_watchlist(payload: WatchlistReorderRequest):
+    """持久化星标盯盘顺序。"""
+    try:
+        reorder_watchlist_items(payload.symbols)
+        return APIResponse(code=200, message="Watchlist order updated")
+    except Exception as e:
+        logger.error(f"Failed to reorder watchlist: {e}")
         return APIResponse(code=500, message=str(e))

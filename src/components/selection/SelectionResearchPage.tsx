@@ -2,14 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowLeft, BarChart3, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, ShieldCheck } from 'lucide-react';
 
 import {
-  SelectionBacktestDetail,
-  SelectionBacktestRunItem,
   SelectionCandidateItem,
   SelectionHealthData,
   HistoryMultiframeItem,
   SelectionMarketEnvironment,
   SelectionProfileData,
-  SelectionStrategy,
   SelectionTradeDateItem,
   SelectionTradeDatesData,
 } from '../../types';
@@ -17,40 +14,22 @@ import {
   fetchDailySelectionCandidates,
   fetchDailySelectionProfile,
   fetchDailySelectionTradeDates,
-  fetchSelectionBacktestDetail,
-  fetchSelectionBacktests,
   fetchSelectionHealth,
   fetchSelectionHistoryMultiframeBatch,
   fetchSelectionMarketEnvironment,
-  fetchSelectionV2Evaluation,
-  fetchStableCallbackEvaluation,
-  fetchTrendContinuationEvaluation,
-  prewarmSelectionResearchContexts,
   refreshDailySelectionCandidates,
   refreshSelectionResearch,
-  runSelectionBacktest,
 } from '../../services/selectionService';
 import * as StockService from '../../services/stockService';
 import QuoteMetaRow from '../common/QuoteMetaRow';
 import StockQuoteHeroCard from '../common/StockQuoteHeroCard';
-import { Metric, SectionCard } from '../common/ResearchCard';
 import MiniKlineChart, { type MiniKlineMarker } from '../common/MiniKlineChart';
 import SelectionDecisionPanel from './SelectionDecisionPanel';
 import { APP_VERSION } from '../../version';
 import { SPARK_PATTERN_RESEARCH_PAGES } from './sparkPatternResearchRegistry';
 import { MARKET_ENVIRONMENT_GATE_RESEARCH_PAGE } from './marketEnvironmentGateResearchRegistry';
 
-const STABLE_CALLBACK_STRATEGY: SelectionStrategy = 'stable_capital_callback';
-const TREND_CONTINUATION_STRATEGY: SelectionStrategy = 'trend_continuation_callback';
-const PRODUCT_STRATEGIES: SelectionStrategy[] = [STABLE_CALLBACK_STRATEGY, TREND_CONTINUATION_STRATEGY];
 const HOLDING_HISTORY_TIMEOUT_MS = 22000;
-type ActiveStrategy = Extract<SelectionStrategy, 'stable_capital_callback' | 'trend_continuation_callback' | 'v2'>;
-
-const STRATEGY_OPTIONS: Array<{ value: ActiveStrategy; label: string }> = [
-  { value: 'stable_capital_callback', label: '资金流回调稳健' },
-  { value: 'trend_continuation_callback', label: '趋势中继高质量回踩' },
-  { value: 'v2', label: '旧策略对照' },
-];
 
 const STRATEGY_LABELS: Record<string, string> = {
   daily_candidate_pool: '每日综合候选池',
@@ -693,7 +672,6 @@ const SelectionTrendNavCard: React.FC<{
 
 const SelectionResearchPage: React.FC = () => {
   const [health, setHealth] = useState<SelectionHealthData | null>(null);
-  const [activeStrategy, setActiveStrategy] = useState<ActiveStrategy>(STABLE_CALLBACK_STRATEGY);
   const [tradeDate, setTradeDate] = useState('');
   const [pendingTradeDate, setPendingTradeDate] = useState('');
   const [candidates, setCandidates] = useState<SelectionCandidateItem[]>([]);
@@ -715,20 +693,14 @@ const SelectionResearchPage: React.FC = () => {
   const [trendHistoryBySymbol, setTrendHistoryBySymbol] = useState<Record<string, HistoryMultiframeItem[]>>({});
   const [backendStatus, setBackendStatus] = useState(true);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
-  const [backtestRuns, setBacktestRuns] = useState<SelectionBacktestRunItem[]>([]);
-  const [backtestDetail, setBacktestDetail] = useState<SelectionBacktestDetail | null>(null);
-  const [v2Evaluation, setV2Evaluation] = useState<any | null>(null);
   const [nameOverrides, setNameOverrides] = useState<Record<string, string>>({});
   const [tradeDateMetaByDate, setTradeDateMetaByDate] = useState<Record<string, SelectionTradeDateItem>>({});
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidateEmptyStateByDate, setCandidateEmptyStateByDate] = useState<Record<string, CandidateEmptyState>>({});
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingTrendHistory, setLoadingTrendHistory] = useState(false);
-  const [runningBacktest, setRunningBacktest] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [researchMenuOpen, setResearchMenuOpen] = useState(false);
-  const [backtestStartDate, setBacktestStartDate] = useState('2026-03-02');
-  const [backtestEndDate, setBacktestEndDate] = useState('2026-04-24');
   const [latestMarketEnvironmentDate, setLatestMarketEnvironmentDate] = useState('');
   const [error, setError] = useState('');
   const selectedRef = useRef<SelectionCandidateItem | null>(null);
@@ -738,7 +710,6 @@ const SelectionResearchPage: React.FC = () => {
   const candidateLoadDateRef = useRef('');
   const backendHealthFailureCountRef = useRef(0);
   const dateInitializedRef = useRef(false);
-  const prewarmNextLoadRef = useRef(false);
   const researchMenuRef = useRef<HTMLDivElement | null>(null);
   const datePickerMin = String(health?.source_snapshot?.history_bounds?.min_date || health?.source_snapshot?.atomic_bounds?.min_date || '2025-01-01');
   const datePickerMax = maxDateText(
@@ -772,27 +743,6 @@ const SelectionResearchPage: React.FC = () => {
     if (Object.keys(next).length > 0) {
       setNameOverrides((prev) => ({ ...prev, ...next }));
     }
-  };
-
-  const triggerResearchPrewarm = (items: SelectionCandidateItem[], dateText?: string) => {
-    if (!items.length) return;
-    const actionable = items.filter((item) => item.entry_allowed !== false);
-    const watch = items.filter((item) => item.entry_allowed === false).slice(0, 5);
-    const picked = [...actionable, ...watch].slice(0, 12);
-    if (!picked.length) return;
-    void prewarmSelectionResearchContexts({
-      date: dateText || tradeDate,
-      strategy: 'daily_candidate_pool',
-      limit: 12,
-      items: picked.map((item) => ({
-        symbol: item.symbol.toLowerCase(),
-        trade_date: item.trade_date || dateText || tradeDate,
-        strategy: item.strategy_internal_id || 'daily_candidate_pool',
-        rank: item.rank,
-        entry_allowed: item.entry_allowed,
-        action_label: item.action_label,
-      })),
-    });
   };
 
   const loadHealth = async () => {
@@ -872,14 +822,12 @@ const SelectionResearchPage: React.FC = () => {
     setTradeDate(next);
   };
 
-  const loadCandidates = async (dateArg = tradeDate, force = false, prewarm = false) => {
+  const loadCandidates = async (dateArg = tradeDate, force = false) => {
     const targetDate = dateArg || tradeDate;
     if (!targetDate) return;
     const loadKey = `daily_candidate_pool:${targetDate}`;
     if (!force && lastLoadedKeyRef.current === loadKey) return;
     lastLoadedKeyRef.current = loadKey;
-    const shouldPrewarm = prewarm || prewarmNextLoadRef.current;
-    prewarmNextLoadRef.current = false;
     const requestSeq = candidatesRequestSeqRef.current + 1;
     candidatesRequestSeqRef.current = requestSeq;
     candidateLoadDateRef.current = targetDate;
@@ -909,9 +857,6 @@ const SelectionResearchPage: React.FC = () => {
         const nextState = prev[targetDate] || candidateEmptyStateForMeta(tradeDateMetaByDate[targetDate]);
         return { ...prev, [targetDate]: nextState };
       });
-      if (shouldPrewarm) {
-        triggerResearchPrewarm(items, nextDate || targetDate);
-      }
       const prevSelected = selectedRef.current;
       const keepSelected = (
         prevSelected?.trade_date === targetDate
@@ -932,19 +877,8 @@ const SelectionResearchPage: React.FC = () => {
     }
   };
 
-  const loadBacktests = async () => {
-    const items = await fetchSelectionBacktests();
-    const runs = items as SelectionBacktestRunItem[];
-    setBacktestRuns(runs);
-    if (runs.length > 0 && !backtestDetail) {
-      const detail = await fetchSelectionBacktestDetail(runs[0].id);
-      setBacktestDetail(detail);
-    }
-  };
-
   useEffect(() => {
     void loadHealth();
-    loadBacktests();
     fetchSelectionMarketEnvironment()
       .then((environment) => {
         const latestDate = compactDateText(environment?.trade_date);
@@ -993,10 +927,9 @@ const SelectionResearchPage: React.FC = () => {
       return;
     }
     if (pendingTradeDate === tradeDate) {
-      await loadCandidates(pendingTradeDate, true, true);
+      await loadCandidates(pendingTradeDate, true);
       return;
     }
-    prewarmNextLoadRef.current = true;
     setTradeDate(pendingTradeDate);
   };
 
@@ -1061,13 +994,19 @@ const SelectionResearchPage: React.FC = () => {
     if (!selected) return;
     const symbol = selected.symbol.toLowerCase();
     const resolvedName = (selectedDisplayName || selected.name || symbol).trim();
-    if (isWatchlisted) {
-      await StockService.removeFromWatchlist(symbol);
-      setIsWatchlisted(false);
-      return;
+    try {
+      if (isWatchlisted) {
+        await StockService.removeFromWatchlist(symbol);
+        setIsWatchlisted(false);
+        setError('');
+        return;
+      }
+      await StockService.addToWatchlist(symbol, resolvedName);
+      setIsWatchlisted(true);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '星标更新失败');
     }
-    await StockService.addToWatchlist(symbol, resolvedName);
-    setIsWatchlisted(true);
   };
 
   const handleRefresh = async () => {
@@ -1097,54 +1036,14 @@ const SelectionResearchPage: React.FC = () => {
       if (nextDate) {
         setTradeDate(nextDate);
         setPendingTradeDate(nextDate);
-        await loadCandidates(nextDate, true, true);
+        await loadCandidates(nextDate, true);
       } else {
-        await loadCandidates(tradeDate, true, true);
+        await loadCandidates(tradeDate, true);
       }
-      await loadBacktests();
     } catch (e) {
       setError('刷新失败，请检查写权限或后端日志');
     } finally {
       setRefreshing(false);
-    }
-  };
-
-  const handleRunBacktest = async () => {
-    setRunningBacktest(true);
-    setError('');
-    try {
-      if (PRODUCT_STRATEGIES.includes(activeStrategy) || activeStrategy === 'v2') {
-        const payload = activeStrategy === STABLE_CALLBACK_STRATEGY ? await fetchStableCallbackEvaluation({
-          start_date: backtestStartDate,
-          end_date: backtestEndDate,
-          top_n: 10,
-        }) : activeStrategy === TREND_CONTINUATION_STRATEGY ? await fetchTrendContinuationEvaluation({
-          start_date: backtestStartDate,
-          end_date: backtestEndDate,
-          top_n: 20,
-        }) : await fetchSelectionV2Evaluation({
-          start_date: backtestStartDate,
-          end_date: backtestEndDate,
-          top_n: 10,
-        });
-        setV2Evaluation(payload);
-        setBacktestDetail(null);
-        return;
-      }
-      setV2Evaluation(null);
-      const detail = await runSelectionBacktest({
-        strategy_name: activeStrategy,
-        start_date: backtestStartDate,
-        end_date: backtestEndDate,
-        holding_days_set: [5, 10, 20, 40],
-        max_positions_per_day: 10,
-      });
-      setBacktestDetail(detail);
-      await loadBacktests();
-    } catch (e) {
-      setError('回测执行失败，请检查写权限或后端日志');
-    } finally {
-      setRunningBacktest(false);
     }
   };
 
@@ -1675,6 +1574,7 @@ const SelectionResearchPage: React.FC = () => {
             {selected ? (
               <div className="mb-2">
                 <StockQuoteHeroCard
+                  compact
                   name={heroName}
                   symbol={selected.symbol.toUpperCase()}
                   price={heroPrice}
@@ -1689,6 +1589,7 @@ const SelectionResearchPage: React.FC = () => {
                   marketCapLabel={fmtMarketCap(profile?.market_cap ?? selected.market_cap)}
                   metaRow={
                     <QuoteMetaRow
+                      compact
                       isWatchlisted={isWatchlisted}
                       onToggleWatchlist={handleToggleWatchlist}
                       backendStatus={backendStatus}
@@ -1706,183 +1607,6 @@ const SelectionResearchPage: React.FC = () => {
             />
           </div>
         </div>
-
-        <details className="rounded-2xl border border-slate-800 bg-slate-900/70">
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-white">
-            <span className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-emerald-400" />
-              策略验证 / 回测
-            </span>
-            <span className="text-xs font-normal text-slate-500">默认收起，不影响日常选股</span>
-          </summary>
-          <div className="space-y-4 border-t border-slate-800 px-4 py-4">
-            <div className="grid gap-3 md:grid-cols-[220px_180px_180px_auto_auto] md:items-end">
-              <label className="text-xs text-slate-400">
-                验证策略
-                <select
-                  value={activeStrategy}
-                  onChange={(e) => setActiveStrategy(e.target.value as ActiveStrategy)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none hover:border-slate-500"
-                  aria-label="选择验证策略"
-                >
-                  {STRATEGY_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs text-slate-400">
-                开始日期
-                <input type="date" value={backtestStartDate} onChange={(e) => setBacktestStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-              </label>
-              <label className="text-xs text-slate-400">
-                结束日期
-                <input type="date" value={backtestEndDate} onChange={(e) => setBacktestEndDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-              </label>
-              <button
-                type="button"
-                onClick={handleRunBacktest}
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500"
-              >
-                <RefreshCw className={`h-4 w-4 ${runningBacktest ? 'animate-spin' : ''}`} />
-                运行回测
-              </button>
-              <div className="text-xs text-slate-500">看固定持有收益，也看窗口内最高机会。</div>
-            </div>
-
-	            {PRODUCT_STRATEGIES.includes(activeStrategy) || activeStrategy === 'v2' ? (
-	              <div>
-	                {v2Evaluation ? (
-	                  <div className="space-y-3">
-	                    <div className="grid gap-2 md:grid-cols-5">
-	                      <Metric label="交易数" value={String(v2Evaluation.summary?.trade_count ?? 0)} />
-	                      <Metric label="胜率" value={fmtPct(v2Evaluation.summary?.win_rate)} />
-	                      <Metric label="平均净收益" value={fmtPct(v2Evaluation.summary?.avg_return_pct)} />
-	                      <Metric label="中位净收益" value={fmtPct(v2Evaluation.summary?.median_return_pct)} />
-	                      <Metric label="最大亏损" value={fmtPct(v2Evaluation.summary?.max_loss_pct ?? v2Evaluation.summary?.min_return_pct)} tone="text-red-200" />
-	                    </div>
-                    <div className="max-h-80 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
-                      <table className="min-w-full text-xs">
-                        <thead className="text-left text-slate-500">
-                          <tr>
-                            <th className="pb-2 pr-3">股票</th>
-                            <th className="pb-2 pr-3">排名</th>
-                            <th className="pb-2 pr-3">信号</th>
-                            <th className="pb-2 pr-3">入场</th>
-                            <th className="pb-2 pr-3">出场</th>
-	                            <th className="pb-2 pr-3">阶段</th>
-	                            <th className="pb-2 pr-3">风险</th>
-	                            <th className="pb-2 pr-3">收益</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(v2Evaluation.trades || []).slice(0, 80).map((trade: any, index: number) => (
-                            <tr key={`${trade.symbol}-${trade.signal_date}-${index}`} className="border-t border-slate-800/70">
-                              <td className="py-1.5 pr-3">{trade.symbol}</td>
-                              <td className="py-1.5 pr-3">#{trade.rank ?? '--'}</td>
-                              <td className="py-1.5 pr-3">{trade.signal_date}</td>
-                              <td className="py-1.5 pr-3">{trade.entry_date}</td>
-	                              <td className="py-1.5 pr-3">{trade.exit_signal_date || trade.exit_date}</td>
-	                              <td className="py-1.5 pr-3">{trade.lifecycle_phase_label || '--'}</td>
-	                              <td className="py-1.5 pr-3">{trade.risk_count ?? '--'}</td>
-	                              <td className="py-1.5 pr-3">{fmtPct(trade.net_return_pct ?? trade.return_pct)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-	                  <div className="py-10 text-center text-sm text-slate-500">运行策略评估后展示每日 Top10 候选的入场、出场和收益。</div>
-                )}
-              </div>
-            ) : (
-            <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="space-y-2">
-                {backtestRuns.map((run) => (
-                  <button
-                    key={run.id}
-                    type="button"
-                    onClick={async () => setBacktestDetail(await fetchSelectionBacktestDetail(run.id))}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-3 text-left hover:border-slate-600"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold text-white">#{run.id} · {run.strategy_name}</div>
-                      <span className="text-[11px] text-slate-500">{run.status}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400">{run.start_date} ~ {run.end_date}</div>
-                    <div className="mt-1 text-[11px] text-slate-500">{run.holding_days_set}</div>
-                  </button>
-                ))}
-              </div>
-              <div>
-                {backtestDetail ? (
-                  <div className="space-y-3">
-                    <div>
-                      <div className="text-sm font-semibold text-white">Run #{backtestDetail.run.id}</div>
-                      <div className="text-xs text-slate-500">{backtestDetail.run.strategy_name} · {backtestDetail.run.start_date} ~ {backtestDetail.run.end_date}</div>
-                    </div>
-                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
-                      <table className="min-w-full text-xs">
-                        <thead className="text-left text-slate-500">
-                          <tr>
-                            <th className="pb-2 pr-3">持有</th>
-                            <th className="pb-2 pr-3">交易数</th>
-                            <th className="pb-2 pr-3">固定胜率</th>
-                            <th className="pb-2 pr-3">固定均值</th>
-                            <th className="pb-2 pr-3">窗口正收益率</th>
-                            <th className="pb-2 pr-3">平均最高涨幅</th>
-                            <th className="pb-2 pr-3">最大回撤</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {backtestDetail.summaries.map((item) => (
-                            <tr key={item.id} className="border-t border-slate-800/70">
-                              <td className="py-1.5 pr-3">{item.holding_days}D</td>
-                              <td className="py-1.5 pr-3">{item.trade_count}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(item.win_rate)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(item.avg_return_pct)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(item.opportunity_win_rate)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(item.avg_max_runup_pct)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(item.max_drawdown_pct)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="max-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 px-3 py-2">
-                      <div className="mb-2 text-xs font-semibold text-slate-400">样本交易（前 40 条）</div>
-                      <table className="min-w-full text-xs">
-                        <thead className="text-left text-slate-500">
-                          <tr>
-                            <th className="pb-2 pr-3">股票</th>
-                            <th className="pb-2 pr-3">信号</th>
-                            <th className="pb-2 pr-3">固定收益</th>
-                            <th className="pb-2 pr-3">窗口最高涨幅</th>
-                            <th className="pb-2 pr-3">最大回撤</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {backtestDetail.trades.slice(0, 40).map((trade) => (
-                            <tr key={trade.id} className="border-t border-slate-800/70">
-                              <td className="py-1.5 pr-3">{trade.symbol}</td>
-                              <td className="py-1.5 pr-3">{trade.signal_date}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(trade.fixed_exit_return_pct ?? trade.return_pct)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(trade.max_runup_within_holding_pct)}</td>
-                              <td className="py-1.5 pr-3">{fmtPct(trade.max_drawdown_within_holding_pct ?? trade.max_drawdown_pct)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="py-10 text-center text-sm text-slate-500">选择一条回测记录查看结果，或先运行新回测。</div>
-                )}
-              </div>
-            </div>
-            )}
-          </div>
-        </details>
       </div>
     </div>
   );

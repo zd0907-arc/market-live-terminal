@@ -4,6 +4,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RESTART_IF_RUNNING="${RESTART_IF_RUNNING:-true}"
 
+load_env_value() {
+  local key="$1"
+  local env_file="$ROOT/.env.local"
+  local line value
+  [ -f "$env_file" ] || return 0
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$env_file" | tail -n 1 || true)"
+  [ -n "$line" ] || return 0
+  value="${line#*=}"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  export "$key=$value"
+}
+
+for key in FORMAL_MARKET_DATA_ROOT LOCAL_DATA_ROOT MARKET_DATA_ROOT LIVE_DATA_ROOT LOCAL_LIVE_DATA_ROOT DB_PATH USER_DB_PATH SELECTION_DB_PATH ATOMIC_COMPACT_DB_PATH ATOMIC_MAINBOARD_DB_PATH ATOMIC_DB_PATH ENABLE_ATOMIC_COMPACT_READ ENABLE_CLOUD_COLLECTOR ENABLE_BACKGROUND_RUNTIME SELECTION_AUTO_REFRESH_ON_READ PORT; do
+  if [ -z "${!key+x}" ]; then
+    load_env_value "$key"
+  fi
+done
+
 is_truthy() {
   local value
   value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
@@ -142,9 +163,11 @@ if [ "$COMPACT_READ_ENABLED" = "true" ]; then
   export ATOMIC_MAINBOARD_DB_PATH="$ATOMIC_COMPACT_DB_PATH"
   export ATOMIC_DB_PATH="$ATOMIC_COMPACT_DB_PATH"
 elif [ ! -f "$ATOMIC_MAINBOARD_DB_PATH" ]; then
-  echo "[local-research] 未找到 atomic DB: $ATOMIC_MAINBOARD_DB_PATH" >&2
-  echo "[local-research] 请先执行: bash ops/bootstrap_mac_full_processed_sync.sh" >&2
-  exit 1
+  echo "[local-research] 未找到本地 atomic DB: $ATOMIC_MAINBOARD_DB_PATH" >&2
+  echo "[local-research] 将以 live/selection/market_heat 轻量模式启动；需要 atomic/5m 大库的接口需走 NAS 派生库或后续查询接口。" >&2
+  export ATOMIC_COMPACT_DB_PATH=""
+  export ATOMIC_MAINBOARD_DB_PATH=""
+  export ATOMIC_DB_PATH=""
 fi
 
 mkdir -p "$DATA_ROOT" "$RESOLVED_LIVE_DATA_ROOT" "$(dirname "$SELECTION_DB_PATH")" "$(dirname "$ATOMIC_MAINBOARD_DB_PATH")" "$(dirname "$DB_PATH")" "$(dirname "$USER_DB_PATH")"

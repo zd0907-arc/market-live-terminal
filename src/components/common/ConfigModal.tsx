@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield, Save } from 'lucide-react';
+import { Settings, MessageSquare, Cpu, CheckCircle, XCircle, Shield, Save, Star, Trash2, RefreshCw } from 'lucide-react';
 import * as StockService from '../../services/stockService';
+import { WatchlistItem } from '../../types';
 
 interface ConfigModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: () => void;
+    onWatchlistChanged?: () => void;
 }
 
-const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [activeTab, setActiveTab] = useState<'sentiment' | 'ai'>('sentiment');
+const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave, onWatchlistChanged }) => {
+    const [activeTab, setActiveTab] = useState<'sentiment' | 'ai' | 'watchlist'>('sentiment');
 
     // Sentiment Config
     const [bullWords, setBullWords] = useState('');
@@ -23,6 +25,24 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
     const [isTesting, setIsTesting] = useState(false);
     const [isSavingAi, setIsSavingAi] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean, message: string } | null>(null);
+
+    // Watchlist
+    const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+    const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(false);
+    const [watchlistError, setWatchlistError] = useState('');
+
+    const loadWatchlist = async () => {
+        setIsLoadingWatchlist(true);
+        setWatchlistError('');
+        try {
+            const rows = await StockService.getWatchlist();
+            setWatchlist(rows);
+        } catch (e) {
+            setWatchlistError('星标加载失败');
+        } finally {
+            setIsLoadingWatchlist(false);
+        }
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -39,6 +59,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                 setLlmKeyConfigured(info.key_configured || false);
                 setLlmModelSource(info.model_source || 'env');
             });
+
+            void loadWatchlist();
         }
     }, [isOpen]);
 
@@ -81,6 +103,17 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
         }
     };
 
+    const handleRemoveWatchlist = async (item: WatchlistItem) => {
+        setWatchlistError('');
+        try {
+            await StockService.removeFromWatchlist(item.symbol);
+            setWatchlist(prev => prev.filter(row => row.symbol !== item.symbol));
+            onWatchlistChanged?.();
+        } catch (e) {
+            setWatchlistError('取消星标失败');
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -108,6 +141,14 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                     >
                         <div className="flex items-center justify-center gap-2">
                             <Cpu className="w-4 h-4" /> AI 设置
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('watchlist')}
+                        className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'watchlist' ? 'border-amber-500 text-amber-300 bg-slate-800/50' : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'}`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            <Star className="w-4 h-4" /> 星标
                         </div>
                     </button>
                 </div>
@@ -219,14 +260,58 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, onClose, onSave }) =>
                             </div>
                         </div>
                     )}
+
+                    {activeTab === 'watchlist' && (
+                        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm font-semibold text-white">星标票</div>
+                                <button
+                                    type="button"
+                                    onClick={() => void loadWatchlist()}
+                                    disabled={isLoadingWatchlist}
+                                    className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWatchlist ? 'animate-spin' : ''}`} />
+                                    刷新
+                                </button>
+                            </div>
+                            {watchlistError ? <div className="rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{watchlistError}</div> : null}
+                            <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950/40">
+                                {isLoadingWatchlist && watchlist.length === 0 ? (
+                                    <div className="px-3 py-8 text-center text-xs text-slate-500">加载中</div>
+                                ) : watchlist.length === 0 ? (
+                                    <div className="px-3 py-8 text-center text-xs text-slate-500">暂无星标票</div>
+                                ) : (
+                                    watchlist.map((item) => (
+                                        <div key={item.symbol} className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2.5 last:border-0">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-medium text-slate-100">{item.name || item.symbol}</div>
+                                                <div className="font-mono text-[11px] uppercase text-slate-500">{item.symbol}</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleRemoveWatchlist(item)}
+                                                className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-200"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                                取消星标
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-700 flex justify-end gap-3 bg-slate-900/50">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm">取消</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm font-medium">
-                        保存配置
-                    </button>
+                    <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm">{activeTab === 'watchlist' ? '关闭' : '取消'}</button>
+                    {activeTab !== 'watchlist' ? (
+                        <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm font-medium">
+                            保存配置
+                        </button>
+                    ) : null}
                 </div>
             </div>
         </div>

@@ -14,7 +14,6 @@ export interface BattlePoint {
   oibReal: number;
   price: number;
   signal?: SignalMark;
-  isClipped?: boolean;
 }
 
 export const DEFAULT_FUNDS_BATTLE_TUNING: FundsBattleSignalTuning = {
@@ -196,23 +195,8 @@ export function buildBattleSeries(
     });
   }
 
-  if (rawPoints.length === 0) {
-    return { points: [], lacksOrderEventFactors };
-  }
-
-  const absValues = rawPoints.map((point) => Math.abs(point.oibReal));
-  const mean = absValues.reduce((sum, value) => sum + value, 0) / absValues.length;
-  const limit = mean > 0 ? mean * 3 : 0;
-
   return {
-    points: rawPoints.map((point) => {
-      const isClipped = limit > 0 && Math.abs(point.oibReal) > limit;
-      return {
-        ...point,
-        oib: isClipped ? (point.oibReal > 0 ? limit : -limit) : point.oibReal,
-        isClipped,
-      };
-    }),
+    points: rawPoints,
     lacksOrderEventFactors,
   };
 }

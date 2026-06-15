@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from typing import Sequence
 from backend.app.core.config import DB_FILE, USER_DB_FILE
 from backend.app.core.time_buckets import is_canonical_30m_start
 
@@ -19,9 +20,19 @@ def _ensure_user_schema(conn: sqlite3.Connection):
         '''CREATE TABLE IF NOT EXISTS watchlist (
              symbol TEXT PRIMARY KEY,
              name TEXT,
-             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             sort_order INTEGER
         )'''
     )
+    watchlist_columns = {row[1] for row in c.execute("PRAGMA table_info(watchlist)").fetchall()}
+    if "sort_order" not in watchlist_columns:
+        c.execute("ALTER TABLE watchlist ADD COLUMN sort_order INTEGER")
+    null_sort_rows = c.execute(
+        "SELECT symbol FROM watchlist WHERE sort_order IS NULL ORDER BY added_at DESC"
+    ).fetchall()
+    for index, row in enumerate(null_sort_rows):
+        c.execute("UPDATE watchlist SET sort_order=? WHERE symbol=?", (index, row[0]))
+    c.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_sort_order ON watchlist(sort_order, added_at)")
     c.execute(
         '''CREATE TABLE IF NOT EXISTS app_config (
              key TEXT PRIMARY KEY,
@@ -37,17 +48,44 @@ def _ensure_user_schema(conn: sqlite3.Connection):
 def get_watchlist_items():
     conn = get_user_db_connection()
     c = conn.cursor()
-    c.execute("SELECT * FROM watchlist ORDER BY added_at DESC")
+    c.execute(
+        """
+        SELECT symbol, name, added_at, sort_order
+        FROM watchlist
+        ORDER BY COALESCE(sort_order, 999999), added_at DESC
+        """
+    )
     rows = c.fetchall()
     conn.close()
-    return [{"symbol": r[0], "name": r[1], "added_at": r[2]} for r in rows]
+    return [{"symbol": r[0], "name": r[1], "added_at": r[2], "sort_order": r[3]} for r in rows]
 
 def add_watchlist_item(symbol: str, name: str):
     conn = get_user_db_connection()
     c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO watchlist (symbol, name) VALUES (?, ?)", (symbol, name))
+    row = c.execute("SELECT sort_order FROM watchlist WHERE symbol = ?", (symbol,)).fetchone()
+    if row is None:
+        max_row = c.execute("SELECT MAX(sort_order) FROM watchlist").fetchone()
+        next_sort = int(max_row[0] or 0)
+        if max_row[0] is not None:
+            next_sort += 1
+        c.execute(
+            "INSERT INTO watchlist (symbol, name, sort_order) VALUES (?, ?, ?)",
+            (symbol, name, next_sort),
+        )
+    else:
+        c.execute("UPDATE watchlist SET name = ? WHERE symbol = ?", (name, symbol))
     conn.commit()
     conn.close()
+
+def reorder_watchlist_items(symbols: Sequence[str]):
+    conn = get_user_db_connection()
+    c = conn.cursor()
+    try:
+        for index, symbol in enumerate(symbols):
+            c.execute("UPDATE watchlist SET sort_order = ? WHERE symbol = ?", (index, symbol))
+        conn.commit()
+    finally:
+        conn.close()
 
 def remove_watchlist_item(symbol: str):
     """从星标列表中删除指定股票"""

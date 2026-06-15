@@ -3,6 +3,28 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RESTART_IF_RUNNING="${RESTART_IF_RUNNING:-true}"
+
+load_env_value() {
+  local key="$1"
+  local env_file="$ROOT/.env.local"
+  local line value
+  [ -f "$env_file" ] || return 0
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${key}=" "$env_file" | tail -n 1 || true)"
+  [ -n "$line" ] || return 0
+  value="${line#*=}"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  export "$key=$value"
+}
+
+for key in FRONTEND_PORT BACKEND_PORT VITE_API_PROXY_TARGET; do
+  if [ -z "${!key+x}" ]; then
+    load_env_value "$key"
+  fi
+done
+
 FRONTEND_PORT="${FRONTEND_PORT:-3001}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://127.0.0.1:${BACKEND_PORT}}"

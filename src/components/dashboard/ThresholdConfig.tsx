@@ -4,9 +4,10 @@ import ConfigModal from '../common/ConfigModal';
 
 interface ThresholdConfigProps {
     onConfigUpdate: () => void;
+    onWatchlistChanged?: () => void;
 }
 
-const ThresholdConfig: React.FC<ThresholdConfigProps> = ({ onConfigUpdate }) => {
+const ThresholdConfig: React.FC<ThresholdConfigProps> = ({ onConfigUpdate, onWatchlistChanged }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     const handleSave = () => {
@@ -29,6 +30,7 @@ const ThresholdConfig: React.FC<ThresholdConfigProps> = ({ onConfigUpdate }) => 
                 isOpen={isOpen} 
                 onClose={() => setIsOpen(false)} 
                 onSave={handleSave} 
+                onWatchlistChanged={onWatchlistChanged}
             />
         </div>
     );

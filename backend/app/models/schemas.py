@@ -12,6 +12,10 @@ class WatchlistItem(BaseModel):
     symbol: str
     name: str
     added_at: str
+    sort_order: Optional[int] = None
+
+class WatchlistReorderRequest(BaseModel):
+    symbols: List[str]
 
 # --- Market Data ---
 class TickData(BaseModel):

@@ -24,6 +24,7 @@ const MarketEnvironmentGateResearchPage = lazy(() => import('./components/select
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
+const WatchlistBoardPage = lazy(() => import('./components/watchlist/WatchlistBoardPage'));
 
 const VALID_SYMBOL_RE = /^(sh|sz|bj)\d{6}$/i;
 
@@ -94,6 +95,15 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">复盘页面加载中...</div>}>
         <ReviewPage />
+      </Suspense>
+    );
+  }
+
+  const isWatchlistRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/watchlist');
+  if (isWatchlistRoute) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">盯盘页加载中...</div>}>
+        <WatchlistBoardPage />
       </Suspense>
     );
   }
@@ -256,6 +266,16 @@ const App: React.FC = () => {
     setConfigVersion(prev => prev + 1);
   };
 
+  const refreshActiveWatchlistState = React.useCallback(() => {
+    if (!activeStock) {
+      setIsWatchlisted(false);
+      return;
+    }
+    StockService.getWatchlist()
+      .then(list => setIsWatchlisted(list.some(item => item.symbol === activeStock.symbol)))
+      .catch(() => {});
+  }, [activeStock]);
+
   const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
   };
@@ -395,12 +415,18 @@ const App: React.FC = () => {
 
   const toggleWatchlist = async () => {
     if (!activeStock) return;
-    if (isWatchlisted) {
-      await StockService.removeFromWatchlist(activeStock.symbol);
-      setIsWatchlisted(false);
-    } else {
-      await StockService.addToWatchlist(activeStock.symbol, activeStock.name);
-      setIsWatchlisted(true);
+    try {
+      if (isWatchlisted) {
+        await StockService.removeFromWatchlist(activeStock.symbol);
+        setIsWatchlisted(false);
+      } else {
+        await StockService.addToWatchlist(activeStock.symbol, activeStock.name);
+        setIsWatchlisted(true);
+      }
+      setError('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '星标更新失败';
+      setError(message);
     }
   };
 
@@ -573,6 +599,13 @@ const App: React.FC = () => {
         onSelectHistory={(res) => handleSelectStock(res)}
         rightSlot={
           <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+            <a
+              href="/watchlist"
+              className="h-9 items-center rounded-lg border border-rose-700/50 bg-rose-900/30 px-3 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-800/40 md:inline-flex"
+              title="打开盯盘页"
+            >
+              盯盘页
+            </a>
             {!CLOUD_LITE_MODE && (
               <>
                 <a
@@ -598,7 +631,7 @@ const App: React.FC = () => {
                 </a>
               </>
             )}
-            <ThresholdConfig onConfigUpdate={handleConfigUpdate} />
+            <ThresholdConfig onConfigUpdate={handleConfigUpdate} onWatchlistChanged={refreshActiveWatchlistState} />
           </div>
         }
       />
@@ -756,6 +789,8 @@ const App: React.FC = () => {
                 isTradingHours={isTradingHours}
                 configVersion={configVersion}
                 focusMode={focusMode}
+                previousClose={quote?.lastClose}
+                quoteDate={quote?.date}
               />
             </Suspense>
           </ViewErrorBoundary>

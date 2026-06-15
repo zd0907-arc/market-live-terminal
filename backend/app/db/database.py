@@ -42,8 +42,18 @@ def init_db():
     c_user.execute('''CREATE TABLE IF NOT EXISTS watchlist (
                  symbol TEXT PRIMARY KEY,
                  name TEXT,
-                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                 sort_order INTEGER
                  )''')
+    watchlist_columns = {row[1] for row in c_user.execute("PRAGMA table_info(watchlist)").fetchall()}
+    if "sort_order" not in watchlist_columns:
+        c_user.execute("ALTER TABLE watchlist ADD COLUMN sort_order INTEGER")
+    null_sort_rows = c_user.execute(
+        "SELECT symbol FROM watchlist WHERE sort_order IS NULL ORDER BY added_at DESC"
+    ).fetchall()
+    for index, row in enumerate(null_sort_rows):
+        c_user.execute("UPDATE watchlist SET sort_order=? WHERE symbol=?", (index, row[0]))
+    c_user.execute("CREATE INDEX IF NOT EXISTS idx_watchlist_sort_order ON watchlist(sort_order, added_at)")
 
     conn = get_db_connection()
     c = conn.cursor()

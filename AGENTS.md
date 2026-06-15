@@ -37,5 +37,6 @@
 - 数据契约与存储口径：`docs/03_DATA_CONTRACTS.md`、`docs/contracts/storage.md`
 - 运维、发布、脚本入口：`docs/04_OPS_AND_DEV.md`
 - AI / skill 路由：`docs/ops/ai-skill-routing.md`
+- 金融研究 Agent 领域：`agentic_finance_agents/HANDOFF.md`、`agentic_finance_agents/DOCS_INDEX.md`
 - 三端同步与 Mac/NAS 协作：`docs/ops/three-end-sync.md`、`docs/ops/mac-nas-collaboration.md`
 - AI 协作、过程卡、交接：`docs/00_AI_HANDOFF_PROTOCOL.md`、`docs/06_CHANGE_MANAGEMENT.md`

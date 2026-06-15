@@ -5,7 +5,7 @@
 - CAP: `CAP-SELECTION-RESEARCH`, `CAP-NAS-OPS`, `CAP-L2-HISTORY-FOUNDATION`
 - 结论: 已确认 2026-06-12 选股页缺水位的根因不是核心行情或选股数据缺失，而是每日主链在刷新市场水位前先执行 live/L2 后处理；`run_postclose_l2_daily.py` 失败后流程提前退出，导致当天水位没有生成。已把主链改成核心数据完整后先生成市场水位，再执行 live/L2 后处理；live/L2 失败只记录告警，不再阻断水位生成和 NAS 水位同步。
 - 风险: `run_postclose_l2_daily.py` 在 2026-06-12 的失败仍是独立问题，后续需要单独排查；本轮只保证选股页市场水位不再被它拖空。
-- 验证: 已补算本地 2026-06-12 水位，结果为 `防守-修复观察`、水位 `24.7265`、默认 `暂停新开仓`、`recent.length=90`；本地 8001 与 3001 接口均返回 `available=True`。生产 NAS 数据卷已同步到 `2026-06-12`，公开接口返回 `available=True, water=24.7265, recent=90`，日期列表中 `2026-06-12` 已可选。`python3 -m py_compile backend/scripts/run_daily_new_framework.py backend/app/services/selection_market_environment_gate.py` 通过；`pytest backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_selection_market_environment_gate.py -q` 通过：8 passed；`git diff --check` 通过。
+- 验证: 已补算本地 2026-06-12 水位，结果为 `防守-修复观察`、水位 `24.7265`、默认 `暂停新开仓`、`recent.length=90`；本地 8001 与 3001 接口均返回 `available=True`。`python3 -m py_compile backend/scripts/run_daily_new_framework.py backend/app/services/selection_market_environment_gate.py` 通过；`pytest backend/tests/test_run_daily_new_framework_auto.py backend/tests/test_selection_market_environment_gate.py -q` 通过：8 passed；`git diff --check` 通过。
 - 链接: `docs/changes/REQ-20260612-02-market-water-live-sync-decouple.md`, `backend/scripts/run_daily_new_framework.py`, `backend/tests/test_run_daily_new_framework_auto.py`
 
 ## 2026-06-12 每日主链补齐市场水位刷新 | Codex

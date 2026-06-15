@@ -35,6 +35,13 @@ export interface SearchResult {
   market: string; // sh or sz
 }
 
+export interface WatchlistItem {
+  symbol: string;
+  name: string;
+  added_at?: string;
+  sort_order?: number | null;
+}
+
 export interface CapitalFlowTrend {
   time: string;           // HH:mm
   mainNetInflow: number;  // 主力净流入 (大单+超大单)

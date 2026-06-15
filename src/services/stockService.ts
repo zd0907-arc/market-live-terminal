@@ -13,6 +13,7 @@ import {
   SandboxReviewBar,
   ReviewPoolItem,
   ReviewBar,
+  WatchlistItem,
 } from '../types';
 import { API_BASE_URL, DEV_BACKEND_DIRECT_URL, getWriteHeaders } from '../config';
 
@@ -307,22 +308,51 @@ export const fetchIntradayFusion = async (symbol: string, date?: string): Promis
 // ==========================================
 // Watchlist API
 // ==========================================
-export const addToWatchlist = async (symbol: string, name: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}&name=${encodeURIComponent(name)}`, {
+const assertWatchlistWrite = async (response: Response, actionLabel: string) => {
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new Error(payload?.detail || payload?.message || `${actionLabel}失败`);
+  }
+  if (payload?.code != null && Number(payload.code) !== 200) {
+    throw new Error(payload?.message || `${actionLabel}失败`);
+  }
+};
+
+export const addToWatchlist = async (symbol: string, name: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/watchlist?symbol=${encodeURIComponent(symbol)}&name=${encodeURIComponent(name)}`, {
     method: 'POST',
     headers: getWriteHeaders()
   });
+  await assertWatchlistWrite(response, '加入盯盘');
 };
 
-export const removeFromWatchlist = async (symbol: string) => {
-  await fetch(`${API_BASE_URL}/watchlist?symbol=${symbol}`, {
+export const removeFromWatchlist = async (symbol: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/watchlist?symbol=${encodeURIComponent(symbol)}`, {
     method: 'DELETE',
     headers: getWriteHeaders()
   });
+  await assertWatchlistWrite(response, '移出盯盘');
 };
 
-export const getWatchlist = async (): Promise<any[]> => {
+export const reorderWatchlist = async (symbols: string[]): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/watchlist/reorder`, {
+    method: 'PUT',
+    headers: getWriteHeaders(true),
+    body: JSON.stringify({ symbols })
+  });
+  await assertWatchlistWrite(response, '调整盯盘顺序');
+};
+
+export const getWatchlist = async (): Promise<WatchlistItem[]> => {
   const res = await fetch(`${API_BASE_URL}/watchlist`);
+  if (!res.ok) {
+    throw new Error('盯盘池加载失败');
+  }
   return await res.json();
 };
 
