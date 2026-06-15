@@ -1,9 +1,9 @@
 # MOD-20260616-01 Mac 代码与数据仓库恢复规划
 
 - 日期：2026-06-16
-- 状态：PLAN
+- 状态：DONE（2026-06-16 恢复完成，20260615 跑数验收通过）
 - 范围：Mac 本地开发仓库、Mac 本地研究站数据仓库、NAS 恢复源、Windows 只读/跑数节点
-- 不在本轮执行：不覆盖当前目录、不拉取大库、不发布、不改 NAS/Windows 生产流程
+- 已执行边界：不覆盖旧 iCloud 目录、不拉回 67G atomic 全量大库、不把 Windows 当 Git 跳板、不推送 NAS Git remote
 - 最新路径决策：统一恢复到 `/Users/dong/ZhangData`，代码仓库和数据库都放在这个根目录下。
 
 ## 1. 目标和成功标准
@@ -19,11 +19,94 @@
 5. `ops/start_local_research_station.sh`、`ops/start_local_research_frontend.sh`、`ops/run_daily_new_framework.sh` 这些正式入口可执行，且不再读错路径。
 6. 恢复完成后，以 `2026-06-15` 单日跑数作为最终验收：Windows 负责跑数，Mac 完成增量合并，NAS 同步通过，本地页面/API 能读到 6 月 15 日结果。
 
-## 1.1 最新执行假设
+## 1.0 恢复完成结果
 
-下一轮 Goal Mode 直接按“完全恢复”推进，不把任务拆成只盘点或只生成 manifest。
+本轮已按统一根目录完成恢复：
 
-默认假设：
+```text
+/Users/dong/ZhangData/market-live-terminal
+/Users/dong/ZhangData/market-data
+/Users/dong/ZhangData/recovery
+```
+
+代码恢复结果：
+
+1. 从 NAS Git `a89c7c4` 克隆，创建本地分支 `codex/mac-recovery-20260616`。
+2. 已提交 3 个本地 checkpoint：
+   - `29b1325 Recover Mac research station code and data paths`
+   - `2289019 Restore agentic finance research playbook`
+   - `bd54f94 Load recovery env for daily runner`
+3. `nas` remote 已配置为 `nas-git:zhangdong/market-live-terminal.git`。
+4. 版本已统一到 `5.2.20`。
+5. 恢复了 `agentic_finance_agents/`、星标盯盘页、Agentic 公司研究嵌入、watchlist 服务端排序与重排接口、6 月 13-15 期间缺失的 `backend/scripts` 和运维脚本。
+6. `ops/start_local_research_station.sh`、`ops/start_local_research_frontend.sh`、`ops/run_daily_new_framework.sh` 已能读取新路径 `.env.local`。
+
+验证结果：
+
+1. `bash scripts/check_baseline.sh` 通过：后端 `215 passed, 8 warnings`，前端 `vite build` 通过，治理检查仅历史 warning。
+2. 新路径服务已启动：
+   - Backend: `http://127.0.0.1:8001`
+   - Frontend: `http://127.0.0.1:3001`
+3. `/api/selection/health` 最新信号日为 `2026-06-15`。
+4. `/api/selection/daily-candidates?trade_date=2026-06-15&include_exit_watchlist=true` 返回 11 个候选，市场水位可用。
+5. Playwright 页面验证通过：
+   - `/selection-research` 显示 `2026-06-15`、全部 11、买点 3、观察 8、水位 25.0。
+   - `/watchlist` 显示 4/4 星标卡片和 live 行情/资金字段。
+
+数据恢复结果：
+
+1. 已从 NAS 恢复到 Mac：
+   - `live/market_data.db`
+   - `live/user_data.db`
+   - `research/current/selection/selection_research.db`
+   - `research/current/selection/model_feature_store.db`
+   - `research/current/selection/model_market_index_daily.db`
+   - `research/current/market_heat/`
+   - `research/current/selection/market_environment_gate_2026-06-10/`
+2. 67G `atomic_facts/market_atomic_mainboard_compact_current.db` 未拉回 Mac。
+3. 20260615 跑数后，Mac 仅保留当天 atomic day delta 小库用于本地校验：
+   - `atomic_trade_daily`: 3187
+   - `atomic_trade_5m`: 155022
+4. 为恢复每日候选链路，从旧本地恢复了 55MB 被 `.gitignore` 忽略的运行时模型产物：
+   - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/`
+   - `data/selection/opportunity_discovery/postclose_exit_v0_2/`
+
+20260615 最终验收结果：
+
+| 项 | 结果 |
+|---|---:|
+| Mac `live.history_daily_l2` | 7926 |
+| Mac `live.history_5m_l2` | 349821 |
+| Mac `selection_feature_daily` | 3187 |
+| Mac `selection_signal_daily` | 3187 |
+| Mac `selection_candidate_daily` | 11 |
+| Mac `model_feature_daily_v1` | 3187 |
+| Mac `model_market_index_daily` | 5 |
+| Mac `fine_theme_heat_daily_v2` | 633 |
+| Mac 水位目录 | 430 行，最新 `2026-06-15` |
+| NAS `live.history_daily_l2` | 7926 |
+| NAS `live.history_5m_l2` | 349821 |
+| NAS `stock_universe_meta` | 5533 |
+| NAS 水位目录 | 430 行，最新 `2026-06-15` |
+
+最终证据文件：
+
+```text
+/Users/dong/ZhangData/recovery/final_validation_20260615.json
+```
+
+注意事项：
+
+1. 第一次 `bash ops/run_daily_new_framework.sh --date 20260615 --json --sync-nas` 的主报告为 `fail`，原因是 repo 内运行时模型产物缺失，导致 `spark_opportunity_selector` 失败。
+2. 恢复模型产物后，已补跑本地候选，五个必需策略源全部 `success`。
+3. `postclose_l2` 有一次 prepare SSH 子进程卡住；已复用已完成的 Windows worker artifacts，通过正式合并/导出函数补齐 Mac live 和 NAS live。
+4. 没有触发 NAS 快照任务；本轮仅做 NAS live 与市场水位同步验收。
+
+## 1.1 本轮执行时采用的假设
+
+本节保留为恢复过程审计记录。恢复已完成，后续目标模式不应再按本节重新执行恢复。
+
+本轮执行时采用的默认假设：
 
 1. 新统一根目录使用：
 
@@ -390,25 +473,35 @@ SELECTION_DB_PATH=/Users/dong/ZhangData/market-data/research/current/selection/s
 
 1. 当前残缺目录没有 `.git`，不能把它当作可信主线。
 2. NAS `main` 稳定但偏旧，不能直接覆盖掉当前树中的 Agentic 和 watchlist 后续工作。
-3. `v5.2.20` 当前是残缺状态：前端版本号到了，但后端版本和 watchlist 后端能力没跟上。
+3. `v5.2.20` 残缺风险已处理：后端版本、watchlist 服务端排序与重排接口已补齐并通过基线测试。
 4. 67G atomic DB 已超过当前 Mac 安全恢复阈值，应明确留在 NAS。
 5. 旧文档里仍有 `/Users/dong/Desktop/AIGC/market-data` 和 `v5.2.2` 等旧口径，恢复后要统一修订。
 6. iCloud 问题不是“路径名字难看”，而是真实文件仍受 Desktop/文稿同步管理。必须把真实目录迁出 iCloud。
 7. Windows 只用于项目数据和跑数，不能把“可 SSH”扩大理解成可以浏览或移动其它资料。
 
-## 9. 下一轮 Goal Mode 建议入口
+## 9. 后续 Goal Mode 建议入口
 
-下一轮目标建议写成：
+本恢复目标已完成。后续目标模式不要再从旧 iCloud 路径恢复一遍，默认从新根目录继续开发、研究或跑数。
+
+后续目标建议写成：
 
 ```text
-按 docs/changes/MOD-20260616-01-mac-code-and-data-recovery-plan.md 执行 Mac 本地代码仓库与数据仓库一步到位恢复。统一根目录使用 /Users/dong/ZhangData：代码恢复到 /Users/dong/ZhangData/market-live-terminal，数据库恢复到 /Users/dong/ZhangData/market-data。直接完成 Git 仓库恢复、backend/scripts 恢复、6 月 13-15 后续功能补齐、NAS 轻量数据库传输、本地 .env.local 配置、测试、启动和页面/API 验收。67G atomic 大库留 NAS，不直接拉回 Mac。恢复完成后，把 Windows 电脑只作为只读数据来源和跑数节点，执行 20260615 单日正式主链作为最终验证；13、14 日按周末不补。优先从 Mac 新仓库执行 bash ops/run_daily_new_framework.sh --date 20260615 --json --sync-nas；如果参数名不同，先查 --help 再运行。最终必须确认 Mac 本地库、NAS live/水位同步和本地 /selection-research、/watchlist 页面都能读到 2026-06-15。
+继续在已恢复的新根目录推进 Market Live Terminal。主工作区是 /Users/dong/ZhangData/market-live-terminal，正式本地数据根是 /Users/dong/ZhangData/market-data，旧 iCloud Desktop 目录只作为只读历史输入，不再作为开发主线。开始前先读 AGENTS.md、docs/changes/MOD-20260616-01-mac-code-and-data-recovery-plan.md、/Users/dong/ZhangData/recovery/final_validation_20260615.json。默认按 Mac 本地研究站验证；Windows 只作为只读数据来源和跑数节点，NAS 只按明确目标做 live/水位/发布同步。67G atomic 全量大库继续留 NAS，Mac 只保留必要日增量或轻量派生库。涉及 NAS/Gitea/Tailscale/SSH 时优先使用 nas skill。若要跑后续交易日，先确认交易日和 Windows 日包，再从新仓库执行 bash ops/run_daily_new_framework.sh --date YYYYMMDD --json --sync-nas，并最终验证 Mac 本地库、NAS live/水位、/selection-research、/watchlist。
 ```
 
-第一步执行时应先产出两个文件，但产出后继续自动执行，不作为人工暂停点：
+已完成恢复留下的关键证据：
 
 ```text
 /Users/dong/ZhangData/recovery/recovery_code_manifest_20260616.json
 /Users/dong/ZhangData/recovery/recovery_data_manifest_20260616.json
+/Users/dong/ZhangData/recovery/final_validation_20260615.json
 ```
 
-没有 manifest 前，不执行覆盖、移动或大文件拉取；manifest 显示空间安全、源文件可读后，直接继续恢复。
+当前服务入口：
+
+```text
+Backend:  http://127.0.0.1:8001
+Frontend: http://127.0.0.1:3001
+```
+
+如果后续需要推送代码到 NAS Gitea，先明确目标 remote/branch，再按 NAS skill 校验 remote 和 push；不要默认自动推送。
