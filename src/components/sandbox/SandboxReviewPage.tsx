@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts';
-import { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { DataZoomComponent, GraphicComponent, GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { Calendar, RefreshCw, Target } from 'lucide-react';
 
@@ -23,6 +23,8 @@ echarts.use([
   TooltipComponent,
   LegendComponent,
   DataZoomComponent,
+  TitleComponent,
+  GraphicComponent,
   CanvasRenderer,
 ]);
 

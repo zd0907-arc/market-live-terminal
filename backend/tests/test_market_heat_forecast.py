@@ -159,3 +159,57 @@ def test_market_heat_treats_deleted_legacy_alias_and_canonical_atomic_db_as_same
     }
 
     assert market_heat._snapshot_matches_current_sources(snapshot, "2026-06-05")
+
+
+def test_market_heat_treats_windows_atomic_path_as_same_logical_source(monkeypatch, tmp_path):
+    formal_root = tmp_path / "market-data"
+    research_root = formal_root / "research" / "current"
+    atomic_dir = research_root / "atomic_facts"
+    atomic_dir.mkdir(parents=True, exist_ok=True)
+    real_db = atomic_dir / "market_atomic_mainboard_compact_current.db"
+    real_db.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("FORMAL_MARKET_DATA_ROOT", str(formal_root))
+    monkeypatch.setenv("RESEARCH_CURRENT_ROOT", str(research_root))
+    monkeypatch.setenv("MARKET_HEAT_ATOMIC_DB", str(real_db))
+    import backend.app.core.config as config
+    import backend.app.services.market_heat as market_heat
+
+    importlib.reload(config)
+    importlib.reload(market_heat)
+
+    snapshot = {
+        "meta": {
+            "trade_date": "2026-06-05",
+            "atomic_db": r"D:\market-live-terminal\data\atomic_facts\market_atomic_mainboard_compact_current.db",
+        }
+    }
+
+    assert market_heat._snapshot_matches_current_sources(snapshot, "2026-06-05")
+
+
+def test_market_heat_treats_nas_runtime_atomic_path_as_same_logical_source(monkeypatch, tmp_path):
+    formal_root = tmp_path / "market-data"
+    research_root = formal_root / "research" / "current"
+    atomic_dir = research_root / "atomic_facts"
+    atomic_dir.mkdir(parents=True, exist_ok=True)
+    real_db = atomic_dir / "market_atomic_mainboard_compact_current.db"
+    real_db.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("FORMAL_MARKET_DATA_ROOT", str(formal_root))
+    monkeypatch.setenv("RESEARCH_CURRENT_ROOT", str(research_root))
+    monkeypatch.setenv("MARKET_HEAT_ATOMIC_DB", str(real_db))
+    import backend.app.core.config as config
+    import backend.app.services.market_heat as market_heat
+
+    importlib.reload(config)
+    importlib.reload(market_heat)
+
+    snapshot = {
+        "meta": {
+            "trade_date": "2026-06-05",
+            "atomic_db": "/runtime-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db",
+        }
+    }
+
+    assert market_heat._snapshot_matches_current_sources(snapshot, "2026-06-05")

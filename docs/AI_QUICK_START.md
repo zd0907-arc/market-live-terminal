@@ -1,11 +1,11 @@
 # AI_QUICK_START
 
 ## 当前真相
-- 当前稳定基线目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前稳定基线目录：`/Users/dong/ZhangData/market-live-terminal`
 - 当前主线分支：`main`
-- 当前工作版本：`v5.2.2`
+- 当前工作版本：`v5.2.20`
 - 当前真实运行模式：**Mac 主开发控制台 + Windows 数据主站 + NAS 在线运行节点**
-- 当前 Mac 正式主读数据根目录：`/Users/dong/Desktop/AIGC/market-data`
+- 当前 Mac 正式主读数据根目录：`/Users/dong/ZhangData/market-data`
 - 当前已验证 NAS 直连入口：`dxp4800pro` / `100.119.0.126`
 - 当前已验证 NAS 公网入口：`https://dxp4800pro.tailfff556.ts.net/`
 - 当前已验证 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
@@ -21,17 +21,17 @@
   - 选股进行中阶段：`stage-selection-in-progress-v4.3.2`
 
 ## 只允许修改的主区域
-- 前端源码：`/Users/dong/Desktop/AIGC/market-live-terminal/src`
-- 后端源码：`/Users/dong/Desktop/AIGC/market-live-terminal/backend`
-- 发布与部署：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy`
-- 项目文档：`/Users/dong/Desktop/AIGC/market-live-terminal/docs`
+- 前端源码：`/Users/dong/ZhangData/market-live-terminal/src`
+- 后端源码：`/Users/dong/ZhangData/market-live-terminal/backend`
+- 发布与部署：`/Users/dong/ZhangData/market-live-terminal/deploy`
+- 项目文档：`/Users/dong/ZhangData/market-live-terminal/docs`
 
 ## 禁止当作当前主线开发目录
-- 本地虚拟环境：`/Users/dong/Desktop/AIGC/market-live-terminal/.venv`
-- 本地运行产物：`/Users/dong/Desktop/AIGC/market-live-terminal/.run`
+- 本地虚拟环境：`/Users/dong/ZhangData/market-live-terminal/.venv`
+- 本地运行产物：`/Users/dong/ZhangData/market-live-terminal/.run`
 
 ## 当前 worktree / 分支纪律
-- 当前唯一主工作目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 当前唯一主工作目录：`/Users/dong/ZhangData/market-live-terminal`
 - 当前唯一主线分支：`main`
 - `codex/*` 分支只承接当前需求；历史 worktree / 临时分支只作为备份，不再作为默认开发入口
 - 若存在多个 worktree，默认只在上述主工作目录整理文档和做主线收口。
@@ -45,7 +45,7 @@
 
 ## 最小自检
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash scripts/check_baseline.sh
 ```
 
@@ -94,16 +94,16 @@ bash scripts/check_baseline.sh
 `review -> health -> mother card -> archive`
 
 ## 当前关键脚本
-- Windows -> Mac 首次全量同步：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
-- NAS 轻量部署：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/nas/deploy_nas_lite.sh`
-- 本地研究站启动：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_station.sh`
-- 本地研究站前端：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/start_local_research_frontend.sh`
-- 每日盘后正式主链：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/run_daily_new_framework.sh`
-- 新框架月批/阶段状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/check_windows_new_framework_months_status.sh`
-- 兼容旧盘后链路：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/legacy/run_postclose_l2.sh`
-- 旧盘后状态查询：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/legacy/check_postclose_l2_status.sh`
-- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/legacy/sync_windows_research_snapshot.sh`
-- atomic 兼容直启（仅兼容排查）：`/Users/dong/Desktop/AIGC/market-live-terminal/ops/legacy/start_local_backend_with_atomic.sh`
+- Windows -> Mac 首次全量同步：`/Users/dong/ZhangData/market-live-terminal/ops/bootstrap_mac_full_processed_sync.sh`
+- NAS 轻量部署：`/Users/dong/ZhangData/market-live-terminal/ops/nas/deploy_nas_lite.sh`
+- 本地研究站启动：`/Users/dong/ZhangData/market-live-terminal/ops/start_local_research_station.sh`
+- 本地研究站前端：`/Users/dong/ZhangData/market-live-terminal/ops/start_local_research_frontend.sh`
+- 每日盘后正式主链：`/Users/dong/ZhangData/market-live-terminal/ops/run_daily_new_framework.sh`
+- 新框架月批/阶段状态查询：`/Users/dong/ZhangData/market-live-terminal/ops/check_windows_new_framework_months_status.sh`
+- 兼容旧盘后链路：`/Users/dong/ZhangData/market-live-terminal/ops/legacy/run_postclose_l2.sh`
+- 旧盘后状态查询：`/Users/dong/ZhangData/market-live-terminal/ops/legacy/check_postclose_l2_status.sh`
+- Windows -> Mac 旧快照同步（仅过渡验证）：`/Users/dong/ZhangData/market-live-terminal/ops/legacy/sync_windows_research_snapshot.sh`
+- atomic 兼容直启（仅兼容排查）：`/Users/dong/ZhangData/market-live-terminal/ops/legacy/start_local_backend_with_atomic.sh`
 
 除白名单脚本外，其他 `ops` 脚本默认先按历史工具处理；具体边界见 `docs/ops/atomic-script-families-boundary.md`。
 
@@ -129,7 +129,7 @@ ssh zhangdong@dxp4800pro
 
 ## 每天盘后要跑的指令
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/run_daily_new_framework.sh --json
 ```
 
@@ -142,7 +142,7 @@ bash ops/run_daily_new_framework.sh --json
 
 ## 本地研究站最小启动顺序
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 # 首次：先把 Windows 处理后全量库同步到 Mac
 bash ops/bootstrap_mac_full_processed_sync.sh
 
@@ -175,5 +175,5 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ## 当前回退入口
 - 老阶段回退：`stage-pre-selection-v4.2.32`
 - 选股进行中阶段回退：`stage-selection-in-progress-v4.3.2`
-- 当前工作版本：`v5.2.2`
+- 当前工作版本：`v5.2.20`
 - 运行架构当前入口：`docs/01_SYSTEM_ARCHITECTURE.md`

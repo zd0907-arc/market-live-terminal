@@ -52,7 +52,7 @@ Mac、Windows、NAS 三端的正式目录、正式文件名、生产职责和备
 正式根目录：
 
 ```text
-/Users/dong/Desktop/AIGC/market-data
+/Users/dong/ZhangData/market-data
 ```
 
 当前正式入口：

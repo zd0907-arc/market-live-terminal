@@ -105,7 +105,7 @@ ssh laqiyuan@192.168.3.108 'cmd /c schtasks /Query /TN ZhangDataLiveCrawler /V /
 
 > 当前盘后正式日常指令：
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/run_daily_new_framework.sh --json --sync-nas
 ```
 
@@ -117,7 +117,7 @@ bash ops/run_daily_new_framework.sh --json --sync-nas
 
 > 兼容旧盘后链路指令（仅历史 L2 / cloud 同步参考）：
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/legacy/run_postclose_l2.sh
 ```
 
@@ -135,9 +135,9 @@ bash ops/legacy/run_postclose_l2.sh
 5. **需求收尾**：同步更新 `AI_HANDOFF_LOG` 与 `07_PENDING_TODO`。
 
 ## 6. 当前工作目录与主线
-- 主目录：`/Users/dong/Desktop/AIGC/market-live-terminal`
+- 主目录：`/Users/dong/ZhangData/market-live-terminal`
 - 主线分支：`main`
-- 当前工作版本：`v5.2.2`
+- 当前工作版本：`v5.2.20`
 - 当前项目真相入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 临时需求分支可使用 `codex/*`，但默认不把额外 worktree 作为主开发入口。
 

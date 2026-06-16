@@ -11,7 +11,7 @@
 - 当前临时公网入口：`https://dxp4800pro.tailfff556.ts.net/`
 - repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
 - 正式数据根按 `live / research/current / cache / artifacts / incoming` 收口；repo 内 `data/` 仅兼容/fallback
-- 当前项目真相总入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
+- 当前项目真相总入口：`/Users/dong/ZhangData/market-live-terminal/docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前已落地核心模块：盯盘、正式复盘、选股研究工作台；当前线上运行节点是 NAS，研究页默认也按 NAS `research/current` 口径提供在线查询。
 - 当前探索中能力：热点板块 / 市场热度研究；本地研究站仍是主研究工作台，NAS 线上查询能力已经打通，但盘中 crawler 切换仍处观察期。
 
@@ -30,13 +30,13 @@
 - 私网运维默认走 `dxp4800pro`
 - 外部访客当前走 `https://dxp4800pro.tailfff556.ts.net/`
 - 当前这条 `tailfff556.ts.net` 已可继续作为正式公网入口；只有在需要长期固定品牌域名时，才再单独切 `Cloudflare Tunnel + 自定义域名`
-- 所有 `Mac <-> NAS` 协作细节统一看：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/mac-nas-collaboration.md`
+- 所有 `Mac <-> NAS` 协作细节统一看：`/Users/dong/ZhangData/market-live-terminal/docs/ops/mac-nas-collaboration.md`
 
 ## 快速启动（本地）
 
 ### 1) 准备 Python / Node 依赖
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
@@ -45,13 +45,13 @@ npm install
 
 ### 2) 首次把 Windows 处理后全量库同步到 Mac
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/bootstrap_mac_full_processed_sync.sh
 ```
 
 ### 3) 启动本地研究站后端
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 PORT=8001 bash ops/start_local_research_station.sh
 ```
 
@@ -62,37 +62,37 @@ PORT=8001 bash ops/start_local_research_station.sh
 
 ### 4) 启动本地研究站前端
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ```
 
 默认访问：`http://localhost:3001`  
 默认本地后端：`http://127.0.0.1:8001`
-端口规范：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/port-management.md`
+端口规范：`/Users/dong/ZhangData/market-live-terminal/docs/ops/port-management.md`
 
 ### 5) 每日盘后正式跑数
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/run_daily_new_framework.sh --json
 ```
 
 不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；完整性包含市场环境指数、热点结果、热点页面缓存和选股工作台模型/策略输出。已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
 
 ## 关键文档
-- 架构：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
-- 业务能力地图：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`
-- 数据/接口契约入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/03_DATA_CONTRACTS.md`
-- 运维与发版入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/04_OPS_AND_DEV.md`
-- Mac <-> NAS 协作入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/mac-nas-collaboration.md`
-- LLM 与密钥安全：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/05_LLM_KEY_SECURITY.md`
-- 变更与阶段目标流程：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/06_CHANGE_MANAGEMENT.md`
-- AI 协作交接：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/00_AI_HANDOFF_PROTOCOL.md`
-- AI 快速入口：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/AI_QUICK_START.md`
-- 最新交接日志：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/AI_HANDOFF_LOG.md`
-- 人工待办（含 Windows 离线阻塞）：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/07_PENDING_TODO.md`
-- 文档治理与索引：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
-- 金融研究 Agent 领域：`/Users/dong/Desktop/AIGC/market-live-terminal/agentic_finance_agents/HANDOFF.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/agentic_finance_agents/DOCS_INDEX.md`
-- 归档命名规范与映射：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_NAMING_STANDARD.md`、`/Users/dong/Desktop/AIGC/market-live-terminal/docs/archive/ARCHIVE_CATALOG.md`
+- 架构：`/Users/dong/ZhangData/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
+- 业务能力地图：`/Users/dong/ZhangData/market-live-terminal/docs/02_BUSINESS_DOMAIN.md`
+- 数据/接口契约入口：`/Users/dong/ZhangData/market-live-terminal/docs/03_DATA_CONTRACTS.md`
+- 运维与发版入口：`/Users/dong/ZhangData/market-live-terminal/docs/04_OPS_AND_DEV.md`
+- Mac <-> NAS 协作入口：`/Users/dong/ZhangData/market-live-terminal/docs/ops/mac-nas-collaboration.md`
+- LLM 与密钥安全：`/Users/dong/ZhangData/market-live-terminal/docs/05_LLM_KEY_SECURITY.md`
+- 变更与阶段目标流程：`/Users/dong/ZhangData/market-live-terminal/docs/06_CHANGE_MANAGEMENT.md`
+- AI 协作交接：`/Users/dong/ZhangData/market-live-terminal/docs/00_AI_HANDOFF_PROTOCOL.md`
+- AI 快速入口：`/Users/dong/ZhangData/market-live-terminal/docs/AI_QUICK_START.md`
+- 最新交接日志：`/Users/dong/ZhangData/market-live-terminal/docs/AI_HANDOFF_LOG.md`
+- 人工待办（含 Windows 离线阻塞）：`/Users/dong/ZhangData/market-live-terminal/docs/07_PENDING_TODO.md`
+- 文档治理与索引：`/Users/dong/ZhangData/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
+- 金融研究 Agent 领域：`/Users/dong/ZhangData/market-live-terminal/agentic_finance_agents/HANDOFF.md`、`/Users/dong/ZhangData/market-live-terminal/agentic_finance_agents/DOCS_INDEX.md`
+- 归档命名规范与映射：`/Users/dong/ZhangData/market-live-terminal/docs/archive/ARCHIVE_NAMING_STANDARD.md`、`/Users/dong/ZhangData/market-live-terminal/docs/archive/ARCHIVE_CATALOG.md`
 
 ## 文档阅读顺序（推荐）
 1. 先看 `docs/AI_QUICK_START.md`（当前主线、目录、阅读顺序）。
@@ -111,15 +111,15 @@ bash ops/run_daily_new_framework.sh --json
 ## 核心文档编号（固定）
 - `00` 协作协议，`01` 架构，`02` 需求总册，`03` 契约，`04` 运维发布，`05` 安全，`06` 变更流程，`07` 待办阻塞，`08` 文档治理。
 - `09+` 不再用于核心文档编号；动态文档使用 `docs/changes/` 的类型编号体系。
-- 编号冻结规则见：`/Users/dong/Desktop/AIGC/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
+- 编号冻结规则见：`/Users/dong/ZhangData/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
 
 ## 发布与同步
 - 正式代码发布：`git push nas main`（如需外部备份，再补 `git push origin main`）
 - 正式研究数据发布：`bash ops/run_daily_new_framework.sh --json --sync-nas`
 - 注意：`--sync-nas` 当前只发布 `research/current`，不等于同步 `market-data/live/market_data.db` 的全市场历史底座
-- 旧云端发布（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/Desktop/AIGC/market-live-terminal/deploy_to_cloud.sh`
-- Windows 脚本同步：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_to_windows.sh`
-- 本地离线补数上云（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/Desktop/AIGC/market-live-terminal/sync_local_to_cloud.sh`
+- 旧云端发布（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/ZhangData/market-live-terminal/deploy_to_cloud.sh`
+- Windows 脚本同步：`/Users/dong/ZhangData/market-live-terminal/sync_to_windows.sh`
+- 本地离线补数上云（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/ZhangData/market-live-terminal/sync_local_to_cloud.sh`
 
 ## Git 仓库
 
@@ -136,7 +136,7 @@ bash ops/run_daily_new_framework.sh --json
 
 ## 最小自检
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash scripts/check_baseline.sh
 ```
 

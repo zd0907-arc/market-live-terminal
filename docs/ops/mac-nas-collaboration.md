@@ -376,7 +376,7 @@ sqlite3 /volume1/docker/market-live-terminal/data/live/market_data.db '.tables'
 
 正式切换细节统一看：
 
-- `/Users/dong/Desktop/AIGC/market-live-terminal/docs/ops/nas-public-domain-cloudflare.md`
+- `/Users/dong/ZhangData/market-live-terminal/docs/ops/nas-public-domain-cloudflare.md`
 
 ### 8.3 数据目录治理
 

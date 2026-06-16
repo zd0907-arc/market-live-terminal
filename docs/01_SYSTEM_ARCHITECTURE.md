@@ -91,7 +91,7 @@
    - 研究正式库同步到 Mac。
 
 ### 流水线 C：Mac 本地研究站消费
-1. **首次全量同步**：Mac 从 Windows 同步处理后正式库，当前外置数据根目录优先使用 `/Users/dong/Desktop/AIGC/market-data`。
+1. **首次全量同步**：Mac 从 Windows 同步处理后正式库，当前外置数据根目录优先使用 `/Users/dong/ZhangData/market-data`。
 2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。当前正式入口是 `ops/run_daily_new_framework.sh --json`；如需同时发布到线上运行节点，则使用 `--sync-nas` 进入 NAS `staging -> current -> archive` 链路。
 3. **本地服务消费**：Mac 本地后端通过 `ops/start_local_research_station.sh` 读取本机正式库，为复盘 / 选股 / 研究页面供数。
 4. **本地实时语义**：Mac 本地默认不长期跑后台 crawler（`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`）；打开单票盯盘时，接口可触发按需补拉当日 ticks 并写入本地库。若要获得与线上完全一致的连续盘中体验，应以 Windows/NAS 线上 realtime 链路为准。
@@ -119,7 +119,7 @@
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：
 
 ### 基础配置
-*   `FORMAL_MARKET_DATA_ROOT`: 当前正式数据根；默认 `/Users/dong/Desktop/AIGC/market-data`（Mac）或 `/runtime-data`（NAS）。
+*   `FORMAL_MARKET_DATA_ROOT`: 当前正式数据根；默认 `/Users/dong/ZhangData/market-data`（Mac）或 `/runtime-data`（NAS）。
 *   `LIVE_DATA_ROOT`: 在线轻量库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/live` 推导。
 *   `RESEARCH_CURRENT_ROOT`: 正式研究库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/research/current` 推导。
 *   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认按 `LIVE_DATA_ROOT/market_data.db` 解释；repo `data/market_data.db` 只按兼容副本理解。

@@ -58,6 +58,9 @@ def _formal_market_data_root() -> Path:
 
 def _canonicalize_market_data_alias(path: Path) -> Path:
     expanded = path.expanduser()
+    cross_endpoint = _canonicalize_cross_endpoint_market_data_path(expanded)
+    if cross_endpoint is not None:
+        return cross_endpoint
     formal_root = _formal_market_data_root()
     aliases = {
         formal_root / "market_data.db": formal_root / "live" / "market_data.db",
@@ -75,6 +78,59 @@ def _canonicalize_market_data_alias(path: Path) -> Path:
             continue
         return canonical_path / relative
     return expanded
+
+
+def _canonicalize_cross_endpoint_market_data_path(path: Path) -> Optional[Path]:
+    text = str(path).replace("\\", "/").strip()
+    if not text:
+        return None
+    raw_parts = [part for part in text.split("/") if part and not part.endswith(":")]
+    parts = [part.lower() for part in raw_parts]
+    research_root = Path(RESEARCH_CURRENT_ROOT)
+    formal_root = _formal_market_data_root()
+
+    def tail_after(sequence: Sequence[str]) -> Optional[List[str]]:
+        lowered = [item.lower() for item in sequence]
+        size = len(lowered)
+        for idx in range(0, len(parts) - size + 1):
+            if parts[idx : idx + size] == lowered:
+                return raw_parts[idx + size :]
+        return None
+
+    def map_research_tail(tail: Optional[List[str]]) -> Optional[Path]:
+        if not tail or tail[0] not in {"atomic_facts", "selection", "market_heat"}:
+            return None
+        return research_root.joinpath(*tail)
+
+    def map_data_tail(tail: Optional[List[str]]) -> Optional[Path]:
+        if not tail:
+            return None
+        head = tail[0].lower()
+        if head == "research" and len(tail) >= 3 and tail[1].lower() == "current":
+            return map_research_tail(tail[2:])
+        if head in {"atomic_facts", "selection", "market_heat"}:
+            return research_root.joinpath(*tail)
+        if head == "live" and len(tail) >= 2:
+            return formal_root.joinpath(*tail)
+        return None
+
+    for sequence in (
+        ("runtime-data", "research", "current"),
+    ):
+        mapped = map_research_tail(tail_after(sequence))
+        if mapped is not None:
+            return mapped
+
+    for sequence in (
+        ("market-live-terminal", "data"),
+        ("market-data",),
+        ("runtime-data",),
+    ):
+        mapped = map_data_tail(tail_after(sequence))
+        if mapped is not None:
+            return mapped
+
+    return None
 
 
 def _normalize_path_identity(value: Any) -> str:

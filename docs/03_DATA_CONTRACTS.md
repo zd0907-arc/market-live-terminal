@@ -38,7 +38,7 @@
 | `data/sandbox/review_v2/*` | 沙盒复盘隔离数据域 |
 
 补充：
-- 当前 Mac 正式研究根目录是一份外置同步库：`/Users/dong/Desktop/AIGC/market-data`
+- 当前 Mac 正式研究根目录是一份外置同步库：`/Users/dong/ZhangData/market-data`
 - `market-data/live/market_data.db` 同时承接全市场历史/回退消费；`research/current` 发布成功不代表这份 `live` 历史底座已经同步到 NAS
 - repo 内 `data/selection/selection_research.db`、`data/market_data.db`、`data/user_data.db` 不应再被理解成默认正式主库
 - `selection_research_windows.db`、`compact_smoke_*`、`model_feature_store_smoke_*` 这些 Windows 旧物理名已退休到冷备区；默认口径统一按 `selection_research_main`、`atomic_compact_main`、`model_feature_store_main` 的 canonical 名解释
