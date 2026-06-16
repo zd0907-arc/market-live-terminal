@@ -18,8 +18,8 @@
 
 1. Mac 本地开发仓是主工作副本。
 2. 每次关键变更至少执行：
-   - `git push origin main`
    - `git push nas main`
+   - `git push origin main`
 
 解释：
 
@@ -70,7 +70,7 @@
 
 已补脚本：
 
-- [nas_backup_runtime_db_snapshot.sh](/Users/dong/Desktop/AIGC/market-live-terminal/ops/nas/nas_backup_runtime_db_snapshot.sh:1)
+- [nas_backup_runtime_db_snapshot.sh](/Users/dong/ZhangData/market-live-terminal/ops/nas/nas_backup_runtime_db_snapshot.sh:1)
 
 作用：
 

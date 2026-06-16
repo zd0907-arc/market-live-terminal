@@ -19,6 +19,7 @@
 6. Windows -> Mac 正式同步只允许“局域网 HTTP relay / Cloud relay”，禁止再走 SSH/scp 直拉。
 7. 实时盯盘 crawler 与每日盘后跑数是两条不同链路：前者当前仍以 Windows `ZhangDataLiveCrawler` 为正式基线，NAS crawler 已跑通但仍在观察期；后者当前正式主链是 `ops/run_daily_new_framework.sh`；`ops/legacy/run_postclose_l2.sh` 仅保留为旧盘后 L2 / cloud 同步兼容链路。
 8. Mac -> NAS 默认直连 Tailscale，不再把 Windows 当跳板机。
+9. 用户说“代码提交云端 / 远程代码备份 / 双备份”时，默认指 `GitHub origin` + `NAS Gitea nas` 双推；除非用户明确限定，不只推其中一个，推后必须分别验真远端 commit。
 
 ## 3. 先看哪个操作文档
 | 场景 | 文档 |
@@ -125,6 +126,15 @@ bash ops/legacy/run_postclose_l2.sh
 > 同时不要并行拉起多个本地后端；当前正式脚本已内置“同仓库重复实例保护”，重复执行会先停止旧实例再启动新实例。
 > 页面侧也不要把远端抓数挂到初始化或轮询上。尤其 `散户一致性观察` 这类链路，页面默认只能读本地库；补抓必须是显式手动动作或盘后任务，否则很容易把本地单实例后端拖到业务接口超时。
 > 选股/研究页同样遵守这个原则：读接口只负责展示当前本地已有结果；不能在初始化时默默重跑，也不要默认走云端兜底。未跑、无结果、失败必须直接给出明确空态，重跑只允许通过显式按钮或每日任务。
+
+> 当前代码双备份指令：
+```bash
+git push nas main
+git push origin main
+git ls-remote nas refs/heads/main
+git ls-remote origin refs/heads/main
+```
+> 验真标准：两个远端 `main` 的 commit 都必须等于本地 `git rev-parse HEAD`。
 
 
 ## 5. 强制 gate

@@ -230,13 +230,10 @@ scp -O local-file zhangdong@dxp4800pro:/volume1/docker/market-live-terminal/data
 
 ```bash
 git push nas main
-```
-
-需要外部备份时再补：
-
-```bash
 git push origin main
 ```
+
+这里的“代码提交云端 / 远程代码备份 / 双备份”固定指 `NAS Gitea` 与 `GitHub` 双推；除非明确说明只推私有仓，不再把 GitHub 作为可选补充项。
 
 ### 5.5 能重启和验服务
 

@@ -114,7 +114,7 @@ bash ops/run_daily_new_framework.sh --json
 - 编号冻结规则见：`/Users/dong/ZhangData/market-live-terminal/docs/08_DOCS_GOVERNANCE.md`
 
 ## 发布与同步
-- 正式代码发布：`git push nas main`（如需外部备份，再补 `git push origin main`）
+- 正式代码云端提交：默认双推 `git push nas main` + `git push origin main`；这里的“云端”固定指 NAS Gitea 与 GitHub 两端。
 - 正式研究数据发布：`bash ops/run_daily_new_framework.sh --json --sync-nas`
 - 注意：`--sync-nas` 当前只发布 `research/current`，不等于同步 `market-data/live/market_data.db` 的全市场历史底座
 - 旧云端发布（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/ZhangData/market-live-terminal/deploy_to_cloud.sh`
@@ -131,8 +131,8 @@ bash ops/run_daily_new_framework.sh --json
 
 推送方式：
 
-- 推送到 GitHub：`git push origin main`
-- 推送到 NAS：`git push nas main`
+- 代码云端双推：`git push nas main` + `git push origin main`
+- NAS 单推只用于明确要求只更新私有仓的场景。
 
 ## 最小自检
 ```bash
