@@ -11,8 +11,11 @@ import {
   WatchlistItem,
 } from '../../types';
 import * as StockService from '../../services/stockService';
+import { lockBodyScroll } from '../../utils/bodyScrollLock';
 import { APP_VERSION } from '../../version';
+import AgenticCompanyResearchEmbed from '../common/AgenticCompanyResearchEmbed';
 import IntradayMonitorChart from '../dashboard/IntradayMonitorChart';
+import IntradaySingleDayPanel from '../dashboard/IntradaySingleDayPanel';
 
 const PRIMARY_CARD_COUNT = 6;
 
@@ -117,8 +120,17 @@ const WatchlistCard: React.FC<{
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
+  const [detailMode, setDetailMode] = useState<BoardMode>(boardMode);
+  const [detailHistoryDays, setDetailHistoryDays] = useState<HistoryDays>(historyDays);
+  const [detailHistoryGranularity, setDetailHistoryGranularity] = useState<HistoryMultiframeGranularity>(historyGranularity);
+  const [detailDashboard, setDetailDashboard] = useState<RealtimeDashboardData | null>(null);
+  const [detailFusion, setDetailFusion] = useState<IntradayFusionData | null>(null);
+  const [detailHistoryRows, setDetailHistoryRows] = useState<HistoryMultiframeItem[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const isMountedRef = useRef(true);
+  const detailRequestSeqRef = useRef(0);
 
   const loadQuote = async () => {
     try {
@@ -197,6 +209,11 @@ const WatchlistCard: React.FC<{
     return () => window.removeEventListener('click', closeMenu);
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!detailOpen) return;
+    return lockBodyScroll();
+  }, [detailOpen]);
+
   const pct = quote && quote.lastClose > 0 ? ((quote.price - quote.lastClose) / quote.lastClose) * 100 : null;
   const intradayNetValue = useMemo(() => {
     const rows = dashboard?.cumulative_data || [];
@@ -220,12 +237,84 @@ const WatchlistCard: React.FC<{
     setMenuOpen(false);
     onMove(item.symbol, action);
   };
+  const openDetail = () => {
+    setDetailMode(boardMode);
+    setDetailHistoryDays(historyDays);
+    setDetailHistoryGranularity(historyGranularity);
+    setDetailDashboard(dashboard);
+    setDetailFusion(fusion);
+    setDetailHistoryRows(historyRows);
+    setDetailError('');
+    setDetailOpen(true);
+  };
+
+  useEffect(() => {
+    if (!detailOpen) return;
+    const requestSeq = detailRequestSeqRef.current + 1;
+    detailRequestSeqRef.current = requestSeq;
+    let cancelled = false;
+    setDetailLoading(true);
+    setDetailError('');
+
+    if (detailMode === 'history') {
+      StockService.fetchHistoryMultiframe(stock.symbol, {
+        days: detailHistoryDays,
+        granularity: detailHistoryGranularity,
+        includeTodayPreview: true,
+      })
+        .then((nextRows) => {
+          if (cancelled || requestSeq !== detailRequestSeqRef.current) return;
+          setDetailHistoryRows(nextRows);
+          setDetailDashboard(null);
+          setDetailFusion(null);
+        })
+        .catch(() => {
+          if (!cancelled && requestSeq === detailRequestSeqRef.current) setDetailError('历史数据加载失败');
+        })
+        .finally(() => {
+          if (!cancelled && requestSeq === detailRequestSeqRef.current) setDetailLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    Promise.all([
+      StockService.fetchRealtimeDashboard(stock.symbol),
+      StockService.fetchIntradayFusion(stock.symbol),
+    ])
+      .then(([nextDashboard, nextFusion]) => {
+        if (cancelled || requestSeq !== detailRequestSeqRef.current) return;
+        setDetailDashboard(nextDashboard);
+        setDetailFusion(nextFusion);
+        setDetailHistoryRows([]);
+      })
+      .catch(() => {
+        if (!cancelled && requestSeq === detailRequestSeqRef.current) setDetailError('当日数据加载失败');
+      })
+      .finally(() => {
+        if (!cancelled && requestSeq === detailRequestSeqRef.current) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailOpen, detailHistoryDays, detailHistoryGranularity, detailMode, stock.symbol]);
+
+  const detailLatestHistoryRow = detailHistoryRows[detailHistoryRows.length - 1];
+  const detailIntradayNetValue = useMemo(() => {
+    const rows = detailDashboard?.cumulative_data || [];
+    return rows.length ? Number(rows[rows.length - 1]?.cumNetInflow) : null;
+  }, [detailDashboard]);
+  const detailNetValue = detailMode === 'history' ? historyNetValue(detailLatestHistoryRow) : detailIntradayNetValue;
+  const detailDisplayDate = detailMode === 'history'
+    ? detailLatestHistoryRow?.trade_date
+    : (quote?.date || detailDashboard?.display_date || detailFusion?.trade_date || item.added_at?.slice(0, 10));
 
   return (
     <>
       <article
         className="relative min-h-[360px] cursor-pointer rounded-lg border border-slate-800 bg-slate-900/80 p-2.5 shadow-lg transition hover:border-slate-700"
-        onClick={() => setDetailOpen(true)}
+        onClick={openDetail}
       >
         <button
           type="button"
@@ -331,11 +420,11 @@ const WatchlistCard: React.FC<{
 
       {detailOpen ? (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/78 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden overscroll-none bg-slate-950/78 p-4 backdrop-blur-sm"
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-2xl"
+            className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
@@ -346,8 +435,8 @@ const WatchlistCard: React.FC<{
                   <InlineStat label="高" value={Number.isFinite(Number(quote?.high)) ? Number(quote?.high).toFixed(2) : '--'} tone="text-red-200" />
                   <InlineStat label="低" value={Number.isFinite(Number(quote?.low)) ? Number(quote?.low).toFixed(2) : '--'} tone="text-emerald-200" />
                   <InlineStat label="额" value={formatMoney(quote?.amount)} />
-                  <InlineStat label="资金净" value={formatMoney(netValue)} tone={toneClass(netValue)} />
-                  <span className="whitespace-nowrap font-mono text-slate-500">{displayDate || '--'}</span>
+                  <InlineStat label="资金净" value={formatMoney(detailNetValue)} tone={toneClass(detailNetValue)} />
+                  <span className="whitespace-nowrap font-mono text-slate-500">{detailDisplayDate || '--'}</span>
                 </div>
               </div>
               <div className="flex shrink-0 items-start gap-3">
@@ -367,17 +456,88 @@ const WatchlistCard: React.FC<{
                 </button>
               </div>
             </div>
-            <div className="p-3">
-              <IntradayMonitorChart
-                data={fusion}
-                historyRows={historyRows}
-                mode={boardMode}
-                granularity={historyGranularity}
-                isLoading={loading}
-                height={560}
-                previousClose={quote?.lastClose}
-                quoteDate={quote?.date}
-              />
+            <div
+              className="min-h-0 overflow-auto overscroll-contain p-3"
+              onWheel={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex h-8 items-center gap-px rounded-lg border border-slate-800 bg-slate-950/60 p-0.5">
+                    <SegmentButton active={detailMode === 'intraday'} onClick={() => setDetailMode('intraday')}>当日</SegmentButton>
+                    <SegmentButton active={detailMode === 'history'} onClick={() => setDetailMode('history')}>历史</SegmentButton>
+                  </div>
+                  <div className="flex h-8 items-center gap-px rounded-lg border border-slate-800 bg-slate-950/60 p-0.5">
+                    {[30, 90, 180].map((days) => (
+                      <SegmentButton
+                        key={days}
+                        active={detailMode === 'history' && detailHistoryDays === days}
+                        onClick={() => {
+                          setDetailMode('history');
+                          setDetailHistoryDays(days as HistoryDays);
+                        }}
+                      >
+                        {days}天
+                      </SegmentButton>
+                    ))}
+                  </div>
+                  <div className="flex h-8 items-center gap-px rounded-lg border border-slate-800 bg-slate-950/60 p-0.5">
+                    {(['1h', '1d'] as HistoryMultiframeGranularity[]).map((granularity) => (
+                      <SegmentButton
+                        key={granularity}
+                        active={detailMode === 'history' && detailHistoryGranularity === granularity}
+                        onClick={() => {
+                          setDetailMode('history');
+                          setDetailHistoryGranularity(granularity);
+                        }}
+                      >
+                        {GRANULARITY_LABELS[granularity]}
+                      </SegmentButton>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {detailError || (detailLoading ? '详情数据加载中' : detailMode === 'intraday' ? '当日动态' : `${detailHistoryDays}天${GRANULARITY_LABELS[detailHistoryGranularity]}历史资金图`)}
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+                <div className="min-w-0">
+                  {detailMode === 'intraday' ? (
+                    <IntradaySingleDayPanel
+                      activeStock={stock}
+                      focusMode="focus"
+                      enableRealtime
+                      showDateControls={false}
+                      showReturnToday={false}
+                      title="当日动态"
+                      chartHeightClassName="h-[760px] md:h-[560px]"
+                      syncId={`watchlistDetail-${stock.symbol}`}
+                      previousClose={quote?.lastClose}
+                      quoteDate={quote?.date}
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+                      <IntradayMonitorChart
+                        data={detailFusion}
+                        historyRows={detailHistoryRows}
+                        mode={detailMode}
+                        granularity={detailHistoryGranularity}
+                        isLoading={detailLoading}
+                        height={560}
+                        previousClose={quote?.lastClose}
+                        quoteDate={quote?.date}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <AgenticCompanyResearchEmbed
+                    symbol={stock.symbol}
+                    companyName={displayName}
+                    showUnavailableState
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

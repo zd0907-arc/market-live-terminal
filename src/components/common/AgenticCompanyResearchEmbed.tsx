@@ -3,10 +3,13 @@ import { ExternalLink, RefreshCw, X } from 'lucide-react';
 
 import { fetchAgenticCompanyResearch } from '../../services/selectionService';
 import { AgenticCompanyResearchArtifact } from '../../types';
+import { lockBodyScroll } from '../../utils/bodyScrollLock';
 
 type AgenticCompanyResearchEmbedProps = {
   symbol?: string | null;
   companyName?: string | null;
+  onAvailabilityChange?: (available: boolean) => void;
+  showUnavailableState?: boolean;
 };
 
 const readinessLabel = (artifact: AgenticCompanyResearchArtifact) => {
@@ -23,7 +26,12 @@ const readinessClass = (artifact: AgenticCompanyResearchArtifact) => {
   return 'border-amber-500/40 bg-amber-500/10 text-amber-100';
 };
 
-const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = ({ symbol, companyName }) => {
+const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = ({
+  symbol,
+  companyName,
+  onAvailabilityChange,
+  showUnavailableState = false,
+}) => {
   const [artifact, setArtifact] = useState<AgenticCompanyResearchArtifact | null>(null);
   const [loading, setLoading] = useState(false);
   const [fullOpen, setFullOpen] = useState(false);
@@ -62,6 +70,7 @@ const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = 
   useEffect(() => {
     if (!normalizedSymbol) {
       setArtifact(null);
+      onAvailabilityChange?.(false);
       return;
     }
     let cancelled = false;
@@ -72,8 +81,10 @@ const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = 
     fetchAgenticCompanyResearch(normalizedSymbol)
       .then((payload) => {
         if (cancelled) return;
+        const available = Boolean(payload?.available && payload.compact_html && payload.full_html);
         setCompactHeight(payload?.manifest?.compact?.height?.preferred_px || 520);
-        setArtifact(payload?.available && payload.compact_html && payload.full_html ? payload : null);
+        setArtifact(available ? payload : null);
+        onAvailabilityChange?.(available);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -81,7 +92,12 @@ const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = 
     return () => {
       cancelled = true;
     };
-  }, [normalizedSymbol]);
+  }, [normalizedSymbol, onAvailabilityChange]);
+
+  useEffect(() => {
+    if (!fullOpen) return;
+    return lockBodyScroll();
+  }, [fullOpen]);
 
   useEffect(() => {
     resizeCompactFrame();
@@ -99,11 +115,25 @@ const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = 
   }, [artifact?.run_id, asOfDate, generatedAt]);
 
   if (!artifact || !compactDoc || !fullDoc) {
-    return loading ? (
+    if (loading) return (
       <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-500">
         Agentic 公司研究读取中...
       </section>
-    ) : null;
+    );
+    if (showUnavailableState) {
+      return (
+        <section className="rounded-xl border border-dashed border-slate-700 bg-slate-900/55 p-4">
+          <div className="text-sm font-semibold text-slate-100">暂无 Agentic 公司研究</div>
+          <div className="mt-2 text-xs leading-5 text-slate-400">
+            当前股票还没有 `research_ui_manifest.json` 对应的 compact/full 页面产物。左侧仍可查看盯盘行情和历史资金图；等 10+1 Agent 研究完成后，这里会自动变成公司研究入口。
+          </div>
+          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/45 px-3 py-2 text-[11px] text-slate-500">
+            需要的产物：`final_report.md`、`close_pack.md`、`ui/compact.html`、`ui/full.html`、`ui/research_ui_manifest.json`、`ui/data.json`
+          </div>
+        </section>
+      );
+    }
+    return null;
   }
 
   return (
@@ -122,7 +152,9 @@ const AgenticCompanyResearchEmbed: React.FC<AgenticCompanyResearchEmbedProps> = 
           <button
             type="button"
             onClick={() => normalizedSymbol && fetchAgenticCompanyResearch(normalizedSymbol).then((payload) => {
-              setArtifact(payload?.available && payload.compact_html && payload.full_html ? payload : artifact);
+              const available = Boolean(payload?.available && payload.compact_html && payload.full_html);
+              setArtifact(available ? payload : artifact);
+              onAvailabilityChange?.(available);
             })}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
             aria-label="重新读取公司研究"

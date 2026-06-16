@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, FileText, Newspaper, ShieldAle
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
 import IntradaySingleDayPanel from '../dashboard/IntradaySingleDayPanel';
 import { Metric } from '../common/ResearchCard';
-import AgenticCompanyResearchEmbed from './AgenticCompanyResearchEmbed';
+import AgenticCompanyResearchEmbed from '../common/AgenticCompanyResearchEmbed';
 import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
 import {
   HistoryMultiframeGranularity,
