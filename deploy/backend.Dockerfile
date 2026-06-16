@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt -i https://pypi.tuna.tsi
 
 # 3. 复制后端代码和运行时研究产物
 COPY backend /app/backend
+COPY agentic_finance_agents /app/agentic_finance_agents
 COPY docs/selection/market_environment_gate_2026-06-10 /app/docs/selection/market_environment_gate_2026-06-10
 COPY docs/strategy-rework /app/docs/strategy-rework
 
