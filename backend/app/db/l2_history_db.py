@@ -1212,7 +1212,9 @@ def query_review_pool(
             if row[0]
         }
         old_bounds = _fetch_old_review_bounds(conn)
-        atomic_bounds = _fetch_atomic_review_bounds()
+        # The NAS atomic DB can be tens of GB. Use it only as a disaster fallback;
+        # the formal review pool should come from the lightweight live history DB.
+        atomic_bounds = {} if old_bounds else _fetch_atomic_review_bounds()
         merged_bounds: Dict[str, Dict[str, str]] = {}
         for source_bounds in (atomic_bounds, old_bounds):
             for symbol, payload in source_bounds.items():
