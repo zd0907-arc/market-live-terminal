@@ -1,0 +1,45 @@
+{
+  "run_id": "20260616-2130-sz002137-company",
+  "subject": "sz002137",
+  "company_name": "实益达",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-16T21:30:00+08:00",
+  "status": "candidate_only",
+  "compact": {
+    "path": "ui/compact.html",
+    "title": "实益达研究摘要",
+    "height": {
+      "min_px": 420,
+      "preferred_px": 560,
+      "max_px": 760
+    },
+    "scroll_mode": "page",
+    "summary_focus": [
+      "business_change",
+      "valuation_bridge",
+      "price_driver"
+    ]
+  },
+  "full": {
+    "path": "ui/full.html",
+    "title": "实益达完整研究",
+    "display_mode": "overlay",
+    "preferred_width": "90vw",
+    "preferred_height": "90vh"
+  },
+  "data_path": "ui/data.json",
+  "source_refs": [
+    "final_report.md",
+    "close_pack.md"
+  ],
+  "blocked_claims": [
+    "不标记为正式 10+1 Agent 研究结论",
+    "不输出目标价或买卖指令"
+  ],
+  "data_gaps": [
+    "未完成 10 个金融 Agent 独立证据链",
+    "未完成 07 事实一致性对账",
+    "未完成 08 晋级收口"
+  ],
+  "promotion_readiness": "candidate_only"
+}

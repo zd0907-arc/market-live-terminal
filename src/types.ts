@@ -672,6 +672,55 @@ export interface SelectionResearchEvidenceData {
   items?: SelectionResearchEvidenceItem[];
 }
 
+export interface AgenticCompanyResearchManifest {
+  run_id?: string;
+  subject?: string;
+  company_name?: string;
+  as_of_date?: string;
+  generated_at?: string;
+  status?: string;
+  compact?: {
+    path?: string;
+    title?: string;
+    height?: {
+      min_px?: number;
+      preferred_px?: number;
+      max_px?: number;
+    };
+    scroll_mode?: string;
+    summary_focus?: string[];
+  };
+  full?: {
+    path?: string;
+    title?: string;
+    display_mode?: string;
+    preferred_width?: string;
+    preferred_height?: string;
+  };
+  data_path?: string;
+  source_refs?: string[];
+  blocked_claims?: string[];
+  data_gaps?: string[];
+  promotion_readiness?: string;
+}
+
+export interface AgenticCompanyResearchArtifact {
+  available: boolean;
+  symbol: string;
+  run_id?: string;
+  reason?: string;
+  manifest?: AgenticCompanyResearchManifest;
+  artifact_paths?: {
+    compact?: string | null;
+    full?: string | null;
+    data?: string | null;
+    manifest?: string | null;
+  };
+  compact_html?: string | null;
+  full_html?: string | null;
+  data?: Record<string, any> | null;
+}
+
 export interface SelectionResearchContextData {
   symbol: string;
   name?: string | null;

@@ -7,13 +7,13 @@
 当前工作区：
 
 ```text
-/Users/dong/Desktop/AIGC/market-live-terminal-agentic-research
+/Users/dong/ZhangData/market-live-terminal
 ```
 
 当前分支：
 
 ```text
-codex/agentic-company-research-plan
+main
 ```
 
 ## 先读顺序
@@ -82,13 +82,16 @@ codex/agentic-company-research-plan
 
 ## 当前已知不足
 
-振德医疗和粤桂股份两次示范 run 仍不算生产级：
+2026-06-16 恢复后核查：当前仓库恢复了 Agent 定义、流程、schema 和页面产物规范；本轮新增了 1 个 `sz002137 / 实益达` 候选级 UI run，用于验证 `research_ui_manifest.json`、`compact.html` 和 `full.html` 的读取链路。
+
+历史文档里提到的振德医疗和粤桂股份两次示范 run，即便后续找回，也仍不算生产级：
 
 - Agent JSON 不完整。
 - `evidence_cache.jsonl` 和 `retrieval_log.jsonl` 基本为空。
 - 估值桥、同业位置、历史对比还不够深。
 - 页面产物尚未对历史 run 生成。
 - 研究结果尚未进入独立 `company_research.db`。
+- 主应用已具备候选级只读接入链路，但只有 1 个样例 run；尚未形成批量正式研究库。
 
 后续新研究应按新版要求重跑，不要复用旧示范 run 的质量标准。
 

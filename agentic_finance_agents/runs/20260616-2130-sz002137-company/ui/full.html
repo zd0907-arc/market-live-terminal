@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>实益达完整研究</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #020617;
+      --panel: #0f172a;
+      --border: #243244;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --sky: #38bdf8;
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    main { padding: 20px; }
+    h1, h2, h3, p { margin: 0; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    .eyebrow { color: var(--cyan); font-size: 12px; font-weight: 800; }
+    h1 { margin-top: 5px; font-size: 28px; line-height: 1.15; }
+    .sub { margin-top: 8px; color: var(--muted); max-width: 980px; font-size: 14px; }
+    .status {
+      min-width: 132px;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      background: #0b1120;
+      padding: 10px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status strong { display: block; color: var(--amber); font-size: 17px; margin-top: 3px; }
+    .grid { display: grid; gap: 14px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .section { margin-top: 16px; }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(15,23,42,.78);
+      padding: 14px;
+    }
+    h2 { margin-bottom: 10px; font-size: 15px; color: #f8fafc; }
+    .metric { font-size: 22px; font-weight: 850; line-height: 1.1; }
+    .label { margin-top: 6px; color: var(--muted); font-size: 12px; }
+    .bars { display: grid; gap: 9px; }
+    .bar { display: grid; grid-template-columns: 96px minmax(0, 1fr) 48px; gap: 10px; align-items: center; font-size: 13px; }
+    .track { height: 9px; overflow: hidden; border-radius: 999px; background: #1e293b; }
+    .fill { height: 100%; border-radius: inherit; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 7px; border-bottom: 1px solid #1e293b; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    .callout {
+      border-left: 3px solid var(--cyan);
+      border-radius: 7px;
+      background: rgba(8,47,73,.26);
+      padding: 10px 12px;
+      color: #dbeafe;
+      font-size: 13px;
+    }
+    .warn { color: var(--amber); }
+    .cool { color: var(--sky); }
+    .good { color: var(--emerald); }
+    .hot { color: var(--rose); }
+    @media (max-width: 860px) {
+      main { padding: 14px; }
+      .top { display: block; }
+      .status { margin-top: 12px; text-align: left; }
+      .grid-2, .grid-4 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top">
+      <div>
+        <div class="eyebrow">Agentic Research Full · 本地 HTML 产物</div>
+        <h1>实益达 <span class="cool">sz002137</span> 公司研究页</h1>
+        <p class="sub">本页用于验证选股页可以从 run manifest 打开完整公司研究。当前内容是候选级接入种子，不代表已经完成 10+1 Agent 研究。</p>
+      </div>
+      <div class="status">晋级状态<strong>candidate_only</strong></div>
+    </header>
+
+    <section class="section grid grid-4">
+      <div class="panel"><div class="metric">2025A</div><div class="label">收入/利润基线待核验</div></div>
+      <div class="panel"><div class="metric good">2026Q1</div><div class="label">变化率待正式研究</div></div>
+      <div class="panel"><div class="metric warn">PE 桥</div><div class="label">静态、TTM、季度年化</div></div>
+      <div class="panel"><div class="metric hot">驱动</div><div class="label">题材、业绩、资金拆分</div></div>
+    </section>
+
+    <section class="section grid grid-2">
+      <div class="panel">
+        <h2>1. 公司本质和业务地图</h2>
+        <svg viewBox="0 0 680 230" width="100%" height="230" role="img" aria-label="业务地图示意">
+          <rect x="20" y="32" width="150" height="50" rx="8" fill="#082f49" stroke="#0ea5e9"/>
+          <text x="95" y="62" text-anchor="middle" fill="#e0f2fe" font-size="14" font-weight="700">实益达</text>
+          <path d="M170 57 L248 57" stroke="#475569" stroke-width="2"/>
+          <rect x="248" y="18" width="150" height="38" rx="8" fill="#111827" stroke="#334155"/>
+          <text x="323" y="42" text-anchor="middle" fill="#cbd5e1" font-size="12">电子制造服务</text>
+          <rect x="248" y="76" width="150" height="38" rx="8" fill="#111827" stroke="#334155"/>
+          <text x="323" y="100" text-anchor="middle" fill="#cbd5e1" font-size="12">LED/照明应用</text>
+          <rect x="248" y="134" width="150" height="38" rx="8" fill="#111827" stroke="#334155"/>
+          <text x="323" y="158" text-anchor="middle" fill="#cbd5e1" font-size="12">品牌/其他</text>
+          <path d="M398 37 L468 37" stroke="#475569" stroke-width="2"/>
+          <path d="M398 95 L468 95" stroke="#475569" stroke-width="2"/>
+          <path d="M398 153 L468 153" stroke="#475569" stroke-width="2"/>
+          <rect x="468" y="18" width="180" height="38" rx="8" fill="#0f172a" stroke="#334155"/>
+          <text x="558" y="42" text-anchor="middle" fill="#94a3b8" font-size="12">收入/毛利拆分</text>
+          <rect x="468" y="76" width="180" height="38" rx="8" fill="#0f172a" stroke="#334155"/>
+          <text x="558" y="100" text-anchor="middle" fill="#94a3b8" font-size="12">订单/客户验证</text>
+          <rect x="468" y="134" width="180" height="38" rx="8" fill="#0f172a" stroke="#334155"/>
+          <text x="558" y="158" text-anchor="middle" fill="#94a3b8" font-size="12">费用/现金流验证</text>
+          <text x="20" y="210" fill="#94a3b8" font-size="12">正式版应由财报、公告和行业 Agent 自动核验，而不是手填示意。</text>
+        </svg>
+      </div>
+
+      <div class="panel">
+        <h2>2. 年度到季度变化</h2>
+        <table>
+          <thead><tr><th>指标</th><th>当前口径</th><th>页面动作</th></tr></thead>
+          <tbody>
+            <tr><td>收入</td><td>待正式研究</td><td>展示 2025A / 2026Q1 变化和来源</td></tr>
+            <tr><td>扣非利润</td><td>待正式研究</td><td>拆毛利、费用、非经常损益</td></tr>
+            <tr><td>CFO</td><td>待正式研究</td><td>判断利润是否转成现金</td></tr>
+            <tr><td>存货</td><td>待正式研究</td><td>识别制造链库存压力</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section grid grid-2">
+      <div class="panel">
+        <h2>3. 收入 / 利润结构示意</h2>
+        <div class="bars">
+          <div class="bar"><span>制造服务</span><div class="track"><div class="fill" style="width:58%;background:var(--sky)"></div></div><b>58</b></div>
+          <div class="bar"><span>LED应用</span><div class="track"><div class="fill" style="width:24%;background:var(--emerald)"></div></div><b>24</b></div>
+          <div class="bar"><span>其他</span><div class="track"><div class="fill" style="width:18%;background:var(--amber)"></div></div><b>18</b></div>
+        </div>
+        <p class="label">本模块验证图文 HTML 容器；正式版必须替换为可溯源数据。</p>
+      </div>
+
+      <div class="panel">
+        <h2>4. 估值分母桥</h2>
+        <table>
+          <thead><tr><th>口径</th><th>状态</th><th>需要回答</th></tr></thead>
+          <tbody>
+            <tr><td>静态 PE</td><td>待核验</td><td>上一完整年度利润是否代表常态</td></tr>
+            <tr><td>TTM PE</td><td>待核验</td><td>滚动利润是否改善</td></tr>
+            <tr><td>单季年化 PE</td><td>待核验</td><td>最新季度能不能外推</td></tr>
+            <tr><td>同业位置</td><td>待核验</td><td>贵、便宜还是不可比</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section grid grid-2">
+      <div class="panel">
+        <h2>5. 股价驱动归因</h2>
+        <div class="bars">
+          <div class="bar"><span>题材资金</span><div class="track"><div class="fill" style="width:72%;background:var(--rose)"></div></div><b>高</b></div>
+          <div class="bar"><span>业绩变化</span><div class="track"><div class="fill" style="width:52%;background:var(--amber)"></div></div><b>中</b></div>
+          <div class="bar"><span>估值重算</span><div class="track"><div class="fill" style="width:40%;background:var(--cyan)"></div></div><b>中</b></div>
+          <div class="bar"><span>行业景气</span><div class="track"><div class="fill" style="width:32%;background:var(--emerald)"></div></div><b>弱</b></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>6. 风险和反证</h2>
+        <div class="callout">本 run 没有完整 evidence ledger。页面必须显示候选状态，不能把示意卡包装成正式结论。</div>
+        <table style="margin-top:12px;">
+          <tbody>
+            <tr><td>反证 1</td><td>Q2 扣非和现金流无法验证改善。</td></tr>
+            <tr><td>反证 2</td><td>题材热度退潮且成交无法延续。</td></tr>
+            <tr><td>反证 3</td><td>同业估值位置核验后不支持重估。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section panel">
+      <h2>7. Agent 来源和证据状态</h2>
+      <p class="sub">当前只有 11 页面生成层的接入种子。正式进入页面前，应补齐 01-10 Agent 独立输出、07 对账、08 收口和 source registry。</p>
+    </section>
+  </main>
+</body>
+</html>

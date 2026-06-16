@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>实益达研究摘要</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #020617;
+      --panel: #0f172a;
+      --border: #243244;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --sky: #38bdf8;
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: transparent;
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    main { padding: 4px 0 0; }
+    h1, h2, p { margin: 0; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .eyebrow { color: var(--cyan); font-size: 11px; font-weight: 700; }
+    h1 { margin-top: 5px; font-size: 22px; line-height: 1.18; }
+    .sub { margin-top: 7px; color: var(--muted); font-size: 13px; }
+    .status {
+      min-width: 94px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .status strong { display: block; color: var(--amber); font-size: 15px; margin-top: 4px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-bottom: 1px solid var(--border);
+    }
+    .stat { padding: 12px 12px 12px 0; border-right: 1px solid rgba(148,163,184,.2); }
+    .stat:last-child { border-right: 0; }
+    .value { font-size: 19px; font-weight: 800; line-height: 1.1; }
+    .label { margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    h2 { margin-bottom: 10px; color: #f8fafc; font-size: 13px; }
+    .bars { display: grid; gap: 8px; }
+    .bar { display: grid; grid-template-columns: 88px minmax(0, 1fr) 40px; gap: 8px; align-items: center; font-size: 12px; }
+    .track { height: 8px; overflow: hidden; border-radius: 999px; background: #1e293b; }
+    .fill { height: 100%; border-radius: inherit; }
+    .note {
+      margin-top: 12px;
+      border-left: 3px solid var(--cyan);
+      border-radius: 7px;
+      background: rgba(8,47,73,.22);
+      padding: 9px 11px;
+      color: #dbeafe;
+      font-size: 12px;
+    }
+    .warn { color: var(--amber); }
+    .cool { color: var(--sky); }
+    .hot { color: var(--rose); }
+    @media (max-width: 760px) {
+      .top { display: block; }
+      .status { margin-top: 10px; text-align: left; }
+      .stats, .split { grid-template-columns: 1fr; }
+      .stat { border-right: 0; border-bottom: 1px solid rgba(148,163,184,.2); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="top">
+      <div>
+        <div class="eyebrow">Agentic Research · 磁盘产物</div>
+        <h1>实益达 <span class="cool">sz002137</span></h1>
+        <p class="sub">本卡来自 `agentic_finance_agents/runs/.../ui/compact.html`，用于验证选股页正式读取 manifest 和 HTML 的链路。</p>
+      </div>
+      <div class="status">研究状态<strong>候选</strong></div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><div class="value">2025A</div><div class="label">基线年度待正式核验</div></div>
+      <div class="stat"><div class="value warn">2026Q1</div><div class="label">变化观察点待补证据</div></div>
+      <div class="stat"><div class="value cool">PE 桥</div><div class="label">静态 / TTM / 季度年化</div></div>
+      <div class="stat"><div class="value hot">驱动</div><div class="label">题材、业绩、资金拆开看</div></div>
+    </section>
+
+    <section class="split">
+      <div>
+        <h2>业务结构示意</h2>
+        <div class="bars">
+          <div class="bar"><span>制造服务</span><div class="track"><div class="fill" style="width:58%;background:var(--sky)"></div></div><b>58</b></div>
+          <div class="bar"><span>LED应用</span><div class="track"><div class="fill" style="width:24%;background:var(--emerald)"></div></div><b>24</b></div>
+          <div class="bar"><span>其他</span><div class="track"><div class="fill" style="width:18%;background:var(--amber)"></div></div><b>18</b></div>
+        </div>
+        <p class="label">数字为接入示意，不作为正式研究结论。</p>
+      </div>
+      <div>
+        <h2>股价驱动示意</h2>
+        <div class="bars">
+          <div class="bar"><span>题材资金</span><div class="track"><div class="fill" style="width:72%;background:var(--rose)"></div></div><b>高</b></div>
+          <div class="bar"><span>业绩变化</span><div class="track"><div class="fill" style="width:48%;background:var(--amber)"></div></div><b>中</b></div>
+          <div class="bar"><span>估值重算</span><div class="track"><div class="fill" style="width:38%;background:var(--cyan)"></div></div><b>中</b></div>
+        </div>
+        <p class="label">正式版需要接 20/60/120 日走势、公告和资金事件。</p>
+      </div>
+    </section>
+
+    <section class="note">当前只验证“manifest → compact/full HTML → 选股页 iframe/完整页”的链路；正式研究需重跑 10+1 Agent。</section>
+  </main>
+</body>
+</html>

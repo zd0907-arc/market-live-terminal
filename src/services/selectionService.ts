@@ -1,5 +1,6 @@
 import { API_BASE_URL, getWriteHeaders } from '../config';
 import {
+  AgenticCompanyResearchArtifact,
   HistoryMultiframeGranularity,
   HistoryMultiframeItem,
   SelectionBacktestDetail,
@@ -154,6 +155,20 @@ export const fetchSelectionProfile = async (symbol: string, date?: string, strat
     return await parseApiData<SelectionProfileData>(res);
   } catch (e) {
     console.error('Fetch selection profile error:', e);
+    return null;
+  }
+};
+
+export const fetchAgenticCompanyResearch = async (
+  symbol: string,
+  includeHtml = true,
+): Promise<AgenticCompanyResearchArtifact | null> => {
+  try {
+    const params = new URLSearchParams({ include_html: includeHtml ? 'true' : 'false' });
+    const res = await fetch(`${API_BASE_URL}/selection/agentic-company-research/${symbol}?${params.toString()}`);
+    return await parseApiData<AgenticCompanyResearchArtifact>(res);
+  } catch (e) {
+    console.error('Fetch agentic company research error:', e);
     return null;
   }
 };

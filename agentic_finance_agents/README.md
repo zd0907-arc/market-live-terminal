@@ -97,13 +97,15 @@ Agent 编号、中文名、状态和默认模型以 `registry/README.md` 为准�
 - 第 11 个页面生成 Agent。
 - 单公司、行业、Codex 调度流程。
 - Agent 输出、run 目录、页面产物和研究历史存储草案。
-- 振德医疗、粤桂股份的示范 run。
 - 研究产出升级方案，包括估值分母桥、TTM、单季年化 PE、同业位置和历史对比。
+- 1 个 `sz002137 / 实益达` 候选级 UI run，用于验证选股页读取 `compact/full` 产物。
+- 选股页候选级只读接入 `research_ui_manifest.json`、`compact.html`、`full.html` 和 `data.json`。
 
 尚未完成：
 
+- 历史文档提到的振德医疗、粤桂股份示范 run 需要后续从备份或历史会话另行找回。
 - 正式 `company_research.db`。
-- 页面侧正式接入 `compact/full` 产物。
+- 批量标的的正式 `compact/full` 产物生产和索引。
 - 生产级 evidence/retrieval ledger。
 - 对振德医疗和粤桂股份按新版标准重跑。
 

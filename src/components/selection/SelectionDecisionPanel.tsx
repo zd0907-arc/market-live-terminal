@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, FileText, Newspaper, ShieldAle
 import HistoryMultiframeFusionView from '../dashboard/HistoryMultiframeFusionView';
 import IntradaySingleDayPanel from '../dashboard/IntradaySingleDayPanel';
 import { Metric } from '../common/ResearchCard';
+import AgenticCompanyResearchEmbed from './AgenticCompanyResearchEmbed';
 import { fetchSelectionHistoryMultiframe, fetchSelectionResearchContext, prepareSelectionResearchContext } from '../../services/selectionService';
 import {
   HistoryMultiframeGranularity,
@@ -876,6 +877,11 @@ const SelectionDecisionPanel: React.FC<Props> = ({ candidate, profile, displayNa
           </div>
         </div>
       </section>
+
+      <AgenticCompanyResearchEmbed
+        symbol={candidate.symbol}
+        companyName={displayName || researchContext?.name || candidate.name}
+      />
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
         <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr]">

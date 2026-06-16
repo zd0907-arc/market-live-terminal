@@ -16,6 +16,7 @@ from backend.app.services.selection_research import (
     refresh_selection_research,
     run_selection_backtest,
 )
+from backend.app.services.agentic_company_research import get_agentic_company_research_artifact
 from backend.app.services.selection_daily_workbench import (
     get_daily_selection_candidates,
     get_daily_selection_profile,
@@ -227,6 +228,20 @@ def selection_profile(
         return APIResponse(code=200, data=get_profile(symbol, date))
     except Exception as exc:
         return APIResponse(code=500, message=f"选股画像查询失败: {exc}", data=None)
+
+
+@router.get("/selection/agentic-company-research/{symbol}", response_model=APIResponse)
+def selection_agentic_company_research(
+    symbol: str,
+    include_html: bool = Query(True, description="是否返回 compact/full HTML 文本"),
+):
+    try:
+        return APIResponse(
+            code=200,
+            data=get_agentic_company_research_artifact(symbol, include_html=include_html),
+        )
+    except Exception as exc:
+        return APIResponse(code=500, message=f"Agentic 公司研究产物读取失败: {exc}", data=None)
 
 
 @router.get("/selection/research-context/{symbol}", response_model=APIResponse)

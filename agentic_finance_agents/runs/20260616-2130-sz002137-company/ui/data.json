@@ -1,0 +1,89 @@
+{
+  "identity": {
+    "symbol": "sz002137",
+    "company_name": "实益达",
+    "status": "candidate_only",
+    "purpose": "selection_page_agentic_ui_integration"
+  },
+  "business_modules": [
+    {
+      "name": "电子制造服务",
+      "weight": 58,
+      "note": "示意项：正式研究需由财报和公告证据核验。"
+    },
+    {
+      "name": "LED/照明应用",
+      "weight": 24,
+      "note": "示意项：正式研究需拆收入、毛利和客户。"
+    },
+    {
+      "name": "品牌/其他",
+      "weight": 18,
+      "note": "示意项：正式研究需确认持续性。"
+    }
+  ],
+  "period_compare": [
+    {
+      "metric": "收入变化",
+      "baseline": "2025A",
+      "latest": "2026Q1",
+      "status": "待正式研究"
+    },
+    {
+      "metric": "扣非利润",
+      "baseline": "2025A",
+      "latest": "2026Q1",
+      "status": "待正式研究"
+    },
+    {
+      "metric": "经营现金流",
+      "baseline": "2025A",
+      "latest": "2026Q1",
+      "status": "待正式研究"
+    }
+  ],
+  "valuation_bridge": {
+    "static_pe": "待核验",
+    "ttm_pe": "待核验",
+    "quarter_annualized_pe": "待核验",
+    "peer_position": "待核验"
+  },
+  "price_driver_modules": [
+    {
+      "name": "题材资金",
+      "level": "高",
+      "note": "示意：正式版需对齐 20/60/120 日走势和事件。"
+    },
+    {
+      "name": "业绩变化",
+      "level": "中",
+      "note": "示意：正式版需核验利润和现金流。"
+    },
+    {
+      "name": "估值重算",
+      "level": "中",
+      "note": "示意：正式版需给出估值分母桥。"
+    }
+  ],
+  "watch_variables": [
+    "最新财报扣非利润",
+    "经营现金流",
+    "存货周转",
+    "题材热度和成交持续性"
+  ],
+  "risk_flags": [
+    "当前产物仅用于接入验证",
+    "缺少 evidence/retrieval ledger",
+    "未完成 Agent 07/08 收口"
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "11-research-page-composer",
+      "status": "integration_seed"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "ledger_ready": false
+  }
+}
