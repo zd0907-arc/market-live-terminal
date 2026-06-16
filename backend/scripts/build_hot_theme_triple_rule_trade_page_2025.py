@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
+ROOT = Path("/Users/dong/ZhangData/market-live-terminal")
 BASE_SCRIPT = ROOT / "backend/scripts/backtest_hot_theme_rule_pack_portfolio_2025.py"
 OUT_MD = ROOT / "docs/selection/market_heat/backtests/hot_theme_triple_rule_operations_2025.md"
 OUT_HTML = ROOT / "docs/selection/market_heat/backtests/hot_theme_triple_rule_trades_2025.html"

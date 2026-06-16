@@ -8,7 +8,7 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 RELEASE_NAME="$1"
-FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
 RESEARCH_CURRENT_ROOT_DEFAULT="$FORMAL_MARKET_DATA_ROOT/research/current"
 NAS_HOST="${NAS_HOST:-zhangdong@dxp4800pro}"
 NAS_DATA_ROOT="${NAS_DATA_ROOT:-/volume1/docker/market-live-terminal/data}"

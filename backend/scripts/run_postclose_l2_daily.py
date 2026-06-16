@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
 DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
 DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT

@@ -8,7 +8,7 @@ Mac 是当前正式的本地研究与开发环境，负责：
 
 ## 2. 日常启动顺序
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/bootstrap_mac_full_processed_sync.sh   # 首次或需要全量同步时
 PORT=8001 bash ops/start_local_research_station.sh
 BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
@@ -22,7 +22,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ## 2.1 启动红线
 - 本地后端必须通过 `ops/start_local_research_station.sh` 启动。
 - 不要直接手工执行 `python -m backend.app.main`。
-- 原因：正式脚本会注入外置数据根目录 `/Users/dong/Desktop/AIGC/market-data` 的 `DB_PATH / USER_DB_PATH / SELECTION_DB_PATH / ATOMIC_MAINBOARD_DB_PATH`；手工直跑容易退回项目内 `data/`，导致页面读到旧库，出现“历史多维停在旧日期”“盯盘页分时异常”等假故障。
+- 原因：正式脚本会注入外置数据根目录 `/Users/dong/ZhangData/market-data` 的 `DB_PATH / USER_DB_PATH / SELECTION_DB_PATH / ATOMIC_MAINBOARD_DB_PATH`；手工直跑容易退回项目内 `data/`，导致页面读到旧库，出现“历史多维停在旧日期”“盯盘页分时异常”等假故障。
 
 ## 2.2 重复实例防线
 - `ops/start_local_research_station.sh` 已内置同仓库重复实例保护；再次执行时会先停掉旧实例，再启动新实例。
@@ -55,13 +55,13 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 你现在如果只是想正常打开本地研究站、验证页面、继续开发，默认不要走这条链。
 
 ## 3. 当前正式消费对象
-优先使用外置数据根目录：`/Users/dong/Desktop/AIGC/market-data`。启动脚本会自动把它映射成：
-- `DB_PATH=/Users/dong/Desktop/AIGC/market-data/live/market_data.db`
-- `USER_DB_PATH=/Users/dong/Desktop/AIGC/market-data/live/user_data.db`
-- `ATOMIC_COMPACT_DB_PATH=/Users/dong/Desktop/AIGC/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
+优先使用外置数据根目录：`/Users/dong/ZhangData/market-data`。启动脚本会自动把它映射成：
+- `DB_PATH=/Users/dong/ZhangData/market-data/live/market_data.db`
+- `USER_DB_PATH=/Users/dong/ZhangData/market-data/live/user_data.db`
+- `ATOMIC_COMPACT_DB_PATH=/Users/dong/ZhangData/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
 - `ATOMIC_MAINBOARD_DB_PATH` 在默认开启 compact 读取时会落到上述 compact 主路径
-- `SELECTION_DB_PATH=/Users/dong/Desktop/AIGC/market-data/research/current/selection/selection_research.db`
-- `model_feature_store` 正式主读路径：`/Users/dong/Desktop/AIGC/market-data/research/current/selection/model_feature_store.db`
+- `SELECTION_DB_PATH=/Users/dong/ZhangData/market-data/research/current/selection/selection_research.db`
+- `model_feature_store` 正式主读路径：`/Users/dong/ZhangData/market-data/research/current/selection/model_feature_store.db`
 
 若外置目录不存在，才回退到项目内 `data/`。
 

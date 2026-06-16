@@ -138,7 +138,7 @@ def test_daily_candidate_pool_sanitizes_artifact_path(monkeypatch, tmp_path):
             "entry_block_reasons": [],
             "explain_factors": {"model_score": 39.0, "breakout_score": 80.0},
             "raw_payload": {},
-            "artifact_path": "/Users/dong/Desktop/AIGC/market-live-terminal/data/selection/opportunity_discovery_trade_l2_v0_1/model.joblib",
+            "artifact_path": "/Users/dong/ZhangData/market-live-terminal/data/selection/opportunity_discovery_trade_l2_v0_1/model.joblib",
         }
     ]
 

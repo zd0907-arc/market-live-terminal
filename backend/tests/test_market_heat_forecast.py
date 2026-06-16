@@ -213,3 +213,67 @@ def test_market_heat_treats_nas_runtime_atomic_path_as_same_logical_source(monke
     }
 
     assert market_heat._snapshot_matches_current_sources(snapshot, "2026-06-05")
+
+
+def test_fine_heat_dates_include_cache_and_v2_history_when_atomic_is_latest_only(monkeypatch, tmp_path):
+    formal_root = tmp_path / "market-data"
+    research_root = formal_root / "research" / "current"
+    atomic_dir = research_root / "atomic_facts"
+    heat_dir = research_root / "market_heat"
+    cache_dir = heat_dir / "cache"
+    atomic_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    atomic_db = atomic_dir / "market_atomic_mainboard_compact_current.db"
+    with sqlite3.connect(str(atomic_db)) as conn:
+        conn.execute("CREATE TABLE atomic_trade_daily (trade_date TEXT)")
+        conn.execute("INSERT INTO atomic_trade_daily VALUES ('2026-06-15')")
+        conn.commit()
+
+    heat_v2_db = heat_dir / "fine_theme_heat_daily_v2.db"
+    with sqlite3.connect(str(heat_v2_db)) as conn:
+        conn.execute("CREATE TABLE fine_theme_heat_daily_v2 (trade_date TEXT, theme_id TEXT)")
+        conn.executemany(
+            "INSERT INTO fine_theme_heat_daily_v2 VALUES (?, ?)",
+            [
+                ("2026-06-11", "theme_a"),
+                ("2026-06-12", "theme_a"),
+                ("2026-06-15", "theme_a"),
+            ],
+        )
+        conn.commit()
+
+    cache_payload = {
+        "meta": {
+            "source": "local atomic_trade_daily + canonical fine themes",
+            "atomic_db": str(atomic_db),
+        },
+        "snapshots": {
+            "2026-06-11": {"sectors": []},
+            "2026-06-12": {"sectors": []},
+            "2026-06-15": {"sectors": []},
+        },
+    }
+    (cache_dir / "fine_heat_snapshots_2026-06-11_2026-06-15_m5_80.json").write_text(
+        json.dumps(cache_payload),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("FORMAL_MARKET_DATA_ROOT", str(formal_root))
+    monkeypatch.setenv("RESEARCH_CURRENT_ROOT", str(research_root))
+    monkeypatch.setenv("MARKET_HEAT_ATOMIC_DB", str(atomic_db))
+    monkeypatch.setenv("FINE_THEME_HEAT_V2_DB", str(heat_v2_db))
+    import backend.app.core.config as config
+    import backend.app.services.market_heat as market_heat
+
+    importlib.reload(config)
+    importlib.reload(market_heat)
+
+    result = market_heat.list_fine_heat_trade_dates(days=20)
+    dates = {item["date"]: item for item in result["dates"]}
+
+    assert result["latest_trade_date"] == "2026-06-15"
+    assert result["latest_cached_date"] == "2026-06-15"
+    assert set(dates) == {"2026-06-11", "2026-06-12", "2026-06-15"}
+    assert dates["2026-06-11"]["has_cache"] is True
+    assert dates["2026-06-11"]["selectable"] is True

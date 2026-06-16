@@ -15,7 +15,7 @@
 | `backend/sample_data/shadow/market.db` / `backend/sample_data/shadow/market_data.db` / `backend/sample_data/examples/market_data_sample.db` | shadow / sample / 排障对象；不进入正式主链 |
 
 补充：
-- 当前 Mac 正式研究根目录是 `/Users/dong/Desktop/AIGC/market-data`
+- 当前 Mac 正式研究根目录是 `/Users/dong/ZhangData/market-data`
 - 正式数据根统一按 `live / research/current / cache / artifacts / incoming` 收口
 - `market-data` 根目录旧正式路径兼容入口已删除；真实物理位置固定在 `live/` 与 `research/current/`
 - repo 内 `data/selection/selection_research.db` 只按回退 / 兼容副本理解，不再当跨端唯一正式名

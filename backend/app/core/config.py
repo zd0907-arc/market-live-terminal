@@ -6,7 +6,7 @@ from typing import List
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 DEFAULT_FORMAL_MARKET_DATA_ROOT = os.getenv(
     "FORMAL_MARKET_DATA_ROOT",
-    "/Users/dong/Desktop/AIGC/market-data",
+    "/Users/dong/ZhangData/market-data",
 )
 
 

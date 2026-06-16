@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_RESEARCH_ROOT = FORMAL_MARKET_DATA_ROOT / "research" / "current"
 DEFAULT_DATA_DIR = Path(os.getenv("DATA_DIR", str(DEFAULT_RESEARCH_ROOT if DEFAULT_RESEARCH_ROOT.is_dir() else FORMAL_MARKET_DATA_ROOT)))
 DEFAULT_OUT_DB = Path(os.getenv("MODEL_INDEX_DB", str(DEFAULT_DATA_DIR / "selection" / "model_market_index_daily.db")))

@@ -15,8 +15,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", "/Users/dong/Desktop/AIGC/market-data/research/current"))
-DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/Desktop/AIGC/market-data"))
+RESEARCH_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", "/Users/dong/ZhangData/market-data/research/current"))
+DATA_ROOT = Path(os.getenv("DATA_DIR", "/Users/dong/ZhangData/market-data"))
 
 DEFAULT_ATOMIC_DB = RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = RESEARCH_ROOT / "selection" / "selection_research.db"

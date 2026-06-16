@@ -665,6 +665,33 @@ const MarketHeatPage: React.FC = () => {
     }
   };
 
+  const selectableFineDates = useMemo(
+    () => (fineDates?.dates || [])
+      .filter((item) => item.selectable && item.has_cache)
+      .map((item) => item.date)
+      .sort(),
+    [fineDates],
+  );
+  const prevFineDate = useMemo(() => {
+    if (!heatDate) return '';
+    return [...selectableFineDates].reverse().find((date) => date < heatDate) || '';
+  }, [heatDate, selectableFineDates]);
+  const nextFineDate = useMemo(() => {
+    if (!heatDate) return '';
+    return selectableFineDates.find((date) => date > heatDate) || '';
+  }, [heatDate, selectableFineDates]);
+
+  const switchFineDate = (target: string) => {
+    if (!target || loading) return;
+    setHeatDate(target);
+    void load(target);
+  };
+
+  const handleFineDateChange = (target: string) => {
+    setHeatDate(target);
+    void load(target);
+  };
+
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -833,14 +860,34 @@ const MarketHeatPage: React.FC = () => {
           <div className="mr-2 flex items-center gap-2 text-base font-bold text-white"><Flame className="h-5 w-5 text-amber-400" />市场热点温度计</div>
           <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">v{APP_VERSION}</span>
           <span className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-400">当前 {fineDashboard?.meta?.trade_date || heatDate || '--'}</span>
+          <button
+            type="button"
+            onClick={() => switchFineDate(prevFineDate)}
+            disabled={loading || !prevFineDate}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-45"
+            aria-label="上一热点交易日"
+            title={prevFineDate ? `上一热点交易日 ${prevFineDate}` : '没有更早的热点缓存日期'}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
           <HeatTradeDatePicker
             value={heatDate}
             minDate={fineDates?.min_date}
             maxDate={fineDates?.max_date}
             latestDate={fineDates?.latest_trade_date}
             dateMetaByDate={fineDateMetaByDate}
-            onChange={setHeatDate}
+            onChange={handleFineDateChange}
           />
+          <button
+            type="button"
+            onClick={() => switchFineDate(nextFineDate)}
+            disabled={loading || !nextFineDate}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-45"
+            aria-label="下一热点交易日"
+            title={nextFineDate ? `下一热点交易日 ${nextFineDate}` : '没有更新的热点缓存日期'}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
           <button type="button" onClick={() => load(heatDate)} disabled={loading || !heatDate} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm font-medium text-slate-100 hover:border-slate-500 disabled:opacity-60">
             查询
           </button>

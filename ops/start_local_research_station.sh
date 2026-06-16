@@ -72,7 +72,7 @@ stop_repo_backends() {
   done
 }
 
-DEFAULT_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+DEFAULT_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
 DEFAULT_RESEARCH_ROOT="$DEFAULT_MARKET_DATA_ROOT/research/current"
 DEFAULT_LIVE_ROOT="$DEFAULT_MARKET_DATA_ROOT/live"
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-FORMAL_DATA_ROOT_DEFAULT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+FORMAL_DATA_ROOT_DEFAULT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
 FORMAL_LIVE_ROOT_DEFAULT="$FORMAL_DATA_ROOT_DEFAULT/live"
 RESEARCH_ROOT_DEFAULT="$FORMAL_DATA_ROOT_DEFAULT/research/current"
 

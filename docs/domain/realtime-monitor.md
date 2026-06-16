@@ -32,7 +32,7 @@
 ## Mac 本地实时现状
 - 本地启动脚本：`ops/start_local_research_station.sh`。
 - 默认后台：`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`。
-- 本地历史 / 复盘 / 选股读取 `/Users/dong/Desktop/AIGC/market-data` 下同步后的正式库。
+- 本地历史 / 复盘 / 选股读取 `/Users/dong/ZhangData/market-data` 下同步后的正式库。
 - 当日单票盯盘如发现本地 ticks 陈旧，可由 `backend/app/routers/market.py` 的按需 hydrate 逻辑调用 `fetch_live_ticks` 补齐该股票当天数据。
 
 ## 当前仍需继续做的

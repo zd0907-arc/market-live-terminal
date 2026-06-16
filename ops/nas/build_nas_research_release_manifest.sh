@@ -8,7 +8,7 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 RELEASE_NAME="$1"
-FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
 RESEARCH_CURRENT_ROOT_DEFAULT="$FORMAL_MARKET_DATA_ROOT/research/current"
 
 if [ -d "$RESEARCH_CURRENT_ROOT_DEFAULT" ]; then

@@ -319,9 +319,9 @@ def write_markdown(model_df: pd.DataFrame, overlay_df: pd.DataFrame) -> None:
             "",
             "## 对应产物",
             "",
-            "- [probe_signal_q1_2026_model_compare.csv](/Users/dong/Desktop/AIGC/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_model_compare.csv)",
-            "- [probe_signal_q1_2026_bucket_compare.csv](/Users/dong/Desktop/AIGC/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_bucket_compare.csv)",
-            "- [probe_signal_q1_2026_overlay_compare.csv](/Users/dong/Desktop/AIGC/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_overlay_compare.csv)",
+            "- [probe_signal_q1_2026_model_compare.csv](/Users/dong/ZhangData/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_model_compare.csv)",
+            "- [probe_signal_q1_2026_bucket_compare.csv](/Users/dong/ZhangData/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_bucket_compare.csv)",
+            "- [probe_signal_q1_2026_overlay_compare.csv](/Users/dong/ZhangData/market-live-terminal/docs/strategy-rework/experiments/20260603-probe-lift-research/probe_signal_q1_2026_overlay_compare.csv)",
         ]
     )
     (OUT_DIR / "probe_signal_q1_2026_out_of_sample.md").write_text("\n".join(lines), encoding="utf-8")

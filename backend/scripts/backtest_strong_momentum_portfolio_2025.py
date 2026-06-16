@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from statistics import mean
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
+ROOT = Path("/Users/dong/ZhangData/market-live-terminal")
 IN_HTML = ROOT / "docs/selection/market_heat/backtests/hot_theme_strong_momentum_l2_cases.html"
 OUT_CSV = ROOT / "data/selection/market_heat/backtests/strong_momentum_portfolio_2025_trades.csv"
 OUT_SKIPPED = ROOT / "data/selection/market_heat/backtests/strong_momentum_portfolio_2025_skipped.csv"

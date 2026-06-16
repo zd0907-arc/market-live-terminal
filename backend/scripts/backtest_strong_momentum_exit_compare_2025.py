@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from statistics import mean, median
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
+ROOT = Path("/Users/dong/ZhangData/market-live-terminal")
 IN_HTML = ROOT / "docs/selection/market_heat/backtests/hot_theme_strong_momentum_l2_cases.html"
 OUT_DIR = ROOT / "data/selection/market_heat/backtests"
 DOC_DIR = ROOT / "docs/selection/market_heat/backtests"

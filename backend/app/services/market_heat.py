@@ -46,6 +46,7 @@ LOW_POSITION_L2_SAMPLES_DB = Path(os.getenv("HOT_THEME_LOW_POSITION_L2_SAMPLES_D
 FINE_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "fine_hotspot_rules.json"
 THEME_CANONICAL_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "theme_canonical_rules.json"
 TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "tradable_theme_map.db")))
+FINE_THEME_HEAT_V2_DB = Path(os.getenv("FINE_THEME_HEAT_V2_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_daily_v2.db")))
 FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_forecast.db")))
 
 
@@ -821,21 +822,54 @@ def refresh_fine_heat_snapshot_cache(end_date: Optional[str] = None, days: int =
 
 
 def list_fine_heat_trade_dates(end_date: Optional[str] = None, days: int = 260) -> Dict[str, Any]:
-    latest = latest_trade_date()
-    target = end_date or latest
-    dates = _trade_dates(target, max(20, int(days))) if target else []
+    atomic_latest = latest_trade_date()
     cache_dir = MARKET_HEAT_DIR / "cache"
     ranges: List[Tuple[str, str, Path]] = []
+    cached_dates = set()
     for path in cache_dir.glob("fine_heat_snapshots_*_m*_*.json"):
         parsed = _parse_fine_cache_name(path)
         if not parsed:
             continue
         start_date, cache_end_date, _min_count, _max_count = parsed
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        meta = payload.get("meta") or {}
+        if str(meta.get("source") or "") != FINE_HEAT_CACHE_SOURCE:
+            continue
+        if not _same_path_identity(meta.get("atomic_db"), ATOMIC_DB):
+            continue
+        snapshots = payload.get("snapshots") or {}
+        if not isinstance(snapshots, dict) or not snapshots:
+            continue
         ranges.append((start_date, cache_end_date, path))
+        cached_dates.update(str(date) for date in snapshots.keys())
     latest_cached_date = max((end for _start, end, _path in ranges), default=None)
 
-    def cached(date: str) -> bool:
-        return any(start <= date <= end for start, end, _path in ranges)
+    atomic_dates = set()
+    if atomic_latest:
+        atomic_dates.update(_trade_dates(atomic_latest, max(20, int(days))))
+
+    heat_v2_dates = set()
+    if FINE_THEME_HEAT_V2_DB.exists():
+        try:
+            with sqlite3.connect(str(FINE_THEME_HEAT_V2_DB), timeout=30) as conn:
+                rows = conn.execute(
+                    """
+                    SELECT DISTINCT trade_date
+                    FROM fine_theme_heat_daily_v2
+                    ORDER BY trade_date
+                    """
+                ).fetchall()
+            heat_v2_dates.update(str(row[0]) for row in rows if row and row[0])
+        except sqlite3.Error:
+            heat_v2_dates = set()
+
+    latest = max((date for date in [atomic_latest, latest_cached_date, max(heat_v2_dates, default=None)] if date), default=None)
+    target = end_date or latest
+    all_dates = sorted(date for date in (atomic_dates | heat_v2_dates | cached_dates) if (not target or date <= target))
+    dates = all_dates[-max(20, int(days)):]
 
     return {
         "latest_trade_date": latest,
@@ -846,8 +880,8 @@ def list_fine_heat_trade_dates(end_date: Optional[str] = None, days: int = 260) 
             {
                 "date": date,
                 "is_trade_day": True,
-                "selectable": True,
-                "has_cache": cached(date),
+                "selectable": date in cached_dates or date in atomic_dates,
+                "has_cache": date in cached_dates,
                 "is_latest": date == latest,
             }
             for date in dates

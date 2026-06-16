@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+FORMAL_MARKET_DATA_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_RESEARCH_ROOT = FORMAL_MARKET_DATA_ROOT / "research" / "current"
 DATA_ROOT = Path(os.getenv("DATA_DIR", str(DEFAULT_RESEARCH_ROOT if DEFAULT_RESEARCH_ROOT.is_dir() else FORMAL_MARKET_DATA_ROOT)))
 DEFAULT_TARGET_DB = DATA_ROOT / "selection" / "model_feature_store.db"

@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 from statistics import mean, median
 
-ROOT = Path("/Users/dong/Desktop/AIGC/market-live-terminal")
+ROOT = Path("/Users/dong/ZhangData/market-live-terminal")
 IN_CSV = ROOT / "data/selection/market_heat/backtests/hot_theme_big_mover_l2_precondition_events.csv"
 OUT_MD = ROOT / "docs/selection/market_heat/backtests/hot_theme_fwd20_screen_rules.md"
 OUT_HTML = ROOT / "docs/selection/market_heat/backtests/hot_theme_fwd20_screen_rules_cases.html"

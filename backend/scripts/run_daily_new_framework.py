@@ -21,7 +21,7 @@ from urllib.parse import quote
 import urllib.request
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/Desktop/AIGC/market-data"))
+DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
 DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
 DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
@@ -1258,15 +1258,54 @@ def _run_local_daily_candidates(trade_date: str) -> Dict[str, object]:
         text=True,
         env=env,
     )
-    payload: Dict[str, object] = {"return_code": result.returncode}
-    if result.stdout.strip():
-        try:
-            payload["report"] = _parse_json_output(result.stdout)
-        except Exception:
-            payload["stdout"] = result.stdout[-2000:]
+    if result.returncode != 0:
+        raise RuntimeError(
+            "本地选股候选生成失败: "
+            f"return_code={result.returncode} "
+            f"stderr={result.stderr[-2000:]} "
+            f"stdout={result.stdout[-2000:]}"
+        )
+    try:
+        report = _parse_json_output(result.stdout)
+    except Exception as exc:
+        raise RuntimeError(f"本地选股候选生成输出无法解析: {exc}; stdout={result.stdout[-2000:]}") from exc
+    _validate_local_daily_candidate_report(report, trade_date)
+    payload: Dict[str, object] = {"return_code": result.returncode, "report": report}
     if result.stderr.strip():
         payload["stderr"] = result.stderr[-2000:]
     return payload
+
+
+def _validate_local_daily_candidate_report(report: Dict[str, object], trade_date: str) -> None:
+    target_date = _compact_date(trade_date)
+    if not isinstance(report, dict) or not report:
+        raise RuntimeError("本地选股候选生成没有返回有效报告")
+    report_date = str(report.get("trade_date") or "").strip()
+    if report_date and _compact_date(report_date) != target_date:
+        raise RuntimeError(f"本地选股候选生成日期不一致: expected={target_date} actual={report_date}")
+    errors = report.get("errors")
+    if isinstance(errors, dict) and errors:
+        failed_keys = ", ".join(sorted(str(key) for key in errors.keys()))
+        raise RuntimeError(f"本地选股候选生成存在失败源: {failed_keys}")
+    source_runs = report.get("source_runs")
+    if not isinstance(source_runs, list):
+        raise RuntimeError("本地选股候选生成缺少 source_runs")
+    by_source = {
+        str(item.get("source_id") or ""): item
+        for item in source_runs
+        if isinstance(item, dict) and str(item.get("source_id") or "").strip()
+    }
+    missing = [source_id for source_id in REQUIRED_SELECTION_SOURCE_IDS if source_id not in by_source]
+    failed = [
+        source_id
+        for source_id in REQUIRED_SELECTION_SOURCE_IDS
+        if source_id in by_source and str(by_source[source_id].get("status") or "") != "success"
+    ]
+    if missing or failed:
+        raise RuntimeError(
+            "本地选股候选生成 required sources 未完成: "
+            f"missing={missing} failed={failed}"
+        )
 
 
 def _query_count(db_path: Path, table: str, date_col: str, trade_date: str) -> int:

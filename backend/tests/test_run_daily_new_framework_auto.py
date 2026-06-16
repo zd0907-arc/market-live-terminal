@@ -1,4 +1,8 @@
+import json
 import sqlite3
+import subprocess
+
+import pytest
 
 import backend.scripts.run_daily_new_framework as daily
 
@@ -372,3 +376,69 @@ def test_run_daily_skip_live_sync_keeps_mainline_but_skips_postprocess(monkeypat
     }
     assert report["nas_snapshot"] == {"status": "snapshotted"}
     assert calls == [("nas_sync", "20260525", report["local_live_sync"], report["local_market_environment_gate"])]
+
+
+def _candidate_report(trade_date="2026-05-25", *, source_ids=None, errors=None):
+    ids = list(source_ids or daily.REQUIRED_SELECTION_SOURCE_IDS)
+    return {
+        "trade_date": trade_date,
+        "sources": {source_id: 0 for source_id in ids},
+        "source_runs": [
+            {"source_id": source_id, "status": "success", "candidate_count": 0}
+            for source_id in ids
+        ],
+        "errors": errors or {},
+        "merged_count": 0,
+        "exit_watchlist_count": 0,
+    }
+
+
+def test_run_local_daily_candidates_accepts_complete_source_report(monkeypatch):
+    payload = _candidate_report()
+
+    def _fake_run(*args, **kwargs):
+        env = kwargs["env"]
+        assert env["SPARK_OPPORTUNITY_HEAT_DB"] == str(daily.LOCAL_HEAT_V2_DB)
+        assert "--date" in args[0]
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(daily.subprocess, "run", _fake_run)
+
+    report = daily._run_local_daily_candidates("20260525")
+
+    assert report["return_code"] == 0
+    assert report["report"] == payload
+
+
+def test_run_local_daily_candidates_raises_on_subprocess_failure(monkeypatch):
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 1, "partial stdout", "boom")
+
+    monkeypatch.setattr(daily.subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="本地选股候选生成失败"):
+        daily._run_local_daily_candidates("20260525")
+
+
+def test_run_local_daily_candidates_requires_all_required_sources(monkeypatch):
+    payload = _candidate_report(source_ids=daily.REQUIRED_SELECTION_SOURCE_IDS[:-1])
+
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(daily.subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="required sources"):
+        daily._run_local_daily_candidates("20260525")
+
+
+def test_run_local_daily_candidates_raises_on_source_errors(monkeypatch):
+    payload = _candidate_report(errors={"spark_opportunity_selector": "missing heat"})
+
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(daily.subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="存在失败源"):
+        daily._run_local_daily_candidates("20260525")

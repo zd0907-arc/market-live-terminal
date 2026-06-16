@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/Desktop/AIGC/market-data}"
+FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
 MARKET_DATA_ROOT="${MARKET_DATA_ROOT:-$FORMAL_MARKET_DATA_ROOT}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/.run/market-data-inventory}"
 
