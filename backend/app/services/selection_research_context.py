@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from backend.app.db.database import get_db_connection
+from backend.app.services.selection_candidate_store import query_daily_candidate_profile
 from backend.app.services.selection_research import get_profile as get_legacy_profile
 from backend.app.services.selection_stable_callback import (
     STRATEGY_INTERNAL_ID as STABLE_CALLBACK_STRATEGY_ID,
@@ -309,6 +310,30 @@ def _int(value: Any, default: int = 0) -> int:
 
 def _select_profile(symbol: str, trade_date: Optional[str], strategy: str) -> Tuple[Dict[str, Any], Optional[str]]:
     normalized_strategy = str(strategy or STABLE_CALLBACK_STRATEGY_ID).strip().lower()
+    normalized_symbol = normalize_stock_event_symbol(symbol) or str(symbol or "").strip().lower()
+    if trade_date:
+        daily_profile = query_daily_candidate_profile(normalized_symbol, _date_text(trade_date))
+        if daily_profile:
+            profile = dict(daily_profile)
+            profile.setdefault("requested_trade_date", _date_text(trade_date))
+            profile.setdefault("profile_date_fallback_used", False)
+            profile.setdefault("strategy_display_name", profile.get("primary_source_name") or "每日综合候选池")
+            profile.setdefault("strategy_internal_id", profile.get("primary_source_id") or "daily_candidate_pool")
+            profile.setdefault("strategy_version", profile.get("primary_source_id") or "daily_candidate_pool")
+            profile.setdefault("feature_version", "daily_candidate_pool")
+            profile.setdefault("current_judgement", profile.get("action_label") or profile.get("reason_summary") or "")
+            profile.setdefault("trade_plan", {
+                "signal_date": profile.get("entry_signal_date") or profile.get("trade_date"),
+                "entry_date": profile.get("entry_date"),
+                "exit_signal_date": profile.get("exit_signal_date"),
+                "exit_date": profile.get("exit_date"),
+                "exit_reason": profile.get("replay_exit_reason"),
+                "return_pct": profile.get("replay_return_pct"),
+            })
+            profile.setdefault("series", [])
+            profile.setdefault("event_timeline", [])
+            profile.setdefault("research", {})
+            return profile, None
     try:
         if normalized_strategy == STABLE_CALLBACK_STRATEGY_ID:
             return get_stable_callback_profile(symbol, trade_date), None
