@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0010-sz002137-company",
+  "agent_id": "01-pitch-builder",
+  "status": "complete",
+  "summary": "最终研究结论：主线不是“机器人实质受益”，而是“题材映射需要剥离”。2025扭亏标签需补净利、扣非、现金流和投资收益拆分。\n\n核心主线：实益达近期主要交易宇树科技、机器人、光学光电子和六度人和参股映射，但公司披露仅间接持有宇树科技约0.01%股权。\n\n下一步：补正式财报字段和事件覆盖后再考虑晋级。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0008-sh603629-company",
+  "agent_id": "04-model-builder",
+  "status": "complete",
+  "summary": "模型结论：事件有 PE 超100倍风险提示，但缺可复核利润分母；传统制造和算力转租分母不能混用。\n\nBear/Base/Bull 只能写观察框架，不能输出目标价或精确利润预测。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

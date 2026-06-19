@@ -1,0 +1,2 @@
+{"agent_id": "02-meeting-preparer", "tool": "query_local_db", "target": "watchlist + fact_pack", "query": "batch fact pack", "retrieved_at": "2026-06-17T00:03:00+08:00", "status": "ok"}
+{"agent_id": "03/04/05/06/09/10", "tool": "subagent", "target": "fact_pack.json", "query": "role-scoped research", "retrieved_at": "2026-06-17T00:03:00+08:00", "status": "ok"}

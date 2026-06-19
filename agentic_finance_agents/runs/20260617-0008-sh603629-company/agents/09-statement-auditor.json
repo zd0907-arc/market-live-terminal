@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0008-sh603629-company",
+  "agent_id": "09-statement-auditor",
+  "status": "complete",
+  "summary": "财务质量评级：C。\n\n财务质量判断：传统制造与算力业务必须分开。当前缺算力收入、毛利、订单金额、交付和回款，不能把题材直接当利润。\n\n需要补核：算力合同、GPU交付、海外子公司收入",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

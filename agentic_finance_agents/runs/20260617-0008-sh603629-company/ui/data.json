@@ -1,0 +1,116 @@
+{
+  "symbol": "sh603629",
+  "company_name": "利通电子",
+  "line": "高分歧算力转型",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "promotion_readiness": "candidate_only",
+  "identity": {
+    "symbol": "sh603629",
+    "company_name": "利通电子",
+    "line": "高分歧算力转型",
+    "market_cap_yi": 399.12
+  },
+  "business_modules": [
+    {
+      "name": "液晶显示精密结构件",
+      "type": "business_line"
+    },
+    {
+      "name": "电子元器件",
+      "type": "business_line"
+    },
+    {
+      "name": "算力云转租/租赁",
+      "type": "business_line"
+    }
+  ],
+  "period_compare": [
+    {
+      "label": "5日",
+      "value": 4.14
+    },
+    {
+      "label": "20日",
+      "value": -3.98
+    },
+    {
+      "label": "60日",
+      "value": 170.48
+    }
+  ],
+  "valuation_bridge": {
+    "summary": "事件有 PE 超100倍风险提示，但缺可复核利润分母；传统制造和算力转租分母不能混用。",
+    "available": false,
+    "reason": "precise denominator missing"
+  },
+  "revenue_mix": [],
+  "profit_sources": [
+    {
+      "summary": "传统制造与算力业务必须分开。当前缺算力收入、毛利、订单金额、交付和回款，不能把题材直接当利润。"
+    }
+  ],
+  "price_driver_modules": [
+    {
+      "summary": "股价交易算力订单、GPU供应链、token分成澄清、异常波动和资金分歧。6月16日 L2 约 -7.25 亿，20日约 -53.85 亿。"
+    }
+  ],
+  "watch_variables": [
+    "算力合同",
+    "GPU交付",
+    "海外子公司收入",
+    "融资/质押",
+    "异常波动公告",
+    "20日L2"
+  ],
+  "risk_flags": [
+    {
+      "rating": "red",
+      "summary": "股价/估值异常、题材拥挤、传闻澄清、算力订单兑现和资金反转风险都很高。东阳光合资公司未开展业务，token分成暂无具体实施计划。"
+    }
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "02-meeting-preparer",
+      "summary": "确认 7 只均应拆成 mode=company 单公司 run；边界为 Mac 本地事实包，Windows/NAS 不参与；公开网页只做方向校验，不补写精确 PE 或利润表字段。"
+    },
+    {
+      "agent_id": "03-earnings-reviewer",
+      "summary": "利通电子、中百集团、实益达有较多公告/问答；振德医疗和中百集团有可用业绩数字；领益智造、东百集团、粤桂股份财报细项不足。"
+    },
+    {
+      "agent_id": "04-model-builder",
+      "summary": "只有振德医疗具备最低可用利润桥，中百集团具备亏损压力观察锚；其余只能做经营驱动框架，不能形成精确利润分母或 PE。"
+    },
+    {
+      "agent_id": "05-market-researcher",
+      "summary": "本批分成 AI/消费电子/算力、零售/内贸流通、业绩修复型周期/医疗耗材三条交易线；主题交易和资金验证权重较高。"
+    },
+    {
+      "agent_id": "06-valuation-reviewer",
+      "summary": "统一不给精确 PE、同业分位或合理估值区间；只输出估值分母桥和股价驱动核查。"
+    },
+    {
+      "agent_id": "09-statement-auditor",
+      "summary": "财务质量为初筛：振德 B，利通/实益达 C，中百 D，领益/东百/粤桂 unknown。"
+    },
+    {
+      "agent_id": "10-kyc-screener",
+      "summary": "风险评级：利通电子、中百集团、实益达 red；其余 unknown，未命中不等于低风险。"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "blocked_claims": [
+      "不能写 token 分成已落地",
+      "不能写东阳光合资已贡献业务",
+      "不能写供应链完全无风险",
+      "不能把高管传闻当事实"
+    ],
+    "data_gaps": [
+      "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+      "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+    ]
+  }
+}

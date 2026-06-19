@@ -1,0 +1,119 @@
+{
+  "symbol": "sh603301",
+  "company_name": "振德医疗",
+  "line": "业绩修复型医疗耗材",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "promotion_readiness": "candidate_only",
+  "identity": {
+    "symbol": "sh603301",
+    "company_name": "振德医疗",
+    "line": "业绩修复型医疗耗材",
+    "market_cap_yi": 225.88
+  },
+  "business_modules": [
+    {
+      "name": "医用敷料",
+      "type": "business_line"
+    },
+    {
+      "name": "感染防护",
+      "type": "business_line"
+    },
+    {
+      "name": "手术感控",
+      "type": "business_line"
+    },
+    {
+      "name": "家庭护理",
+      "type": "business_line"
+    }
+  ],
+  "period_compare": [
+    {
+      "label": "5日",
+      "value": 5.13
+    },
+    {
+      "label": "20日",
+      "value": -9.48
+    },
+    {
+      "label": "60日",
+      "value": -8.43
+    }
+  ],
+  "valuation_bridge": {
+    "summary": "有 2025/Q1 归母约数，但缺 TTM、扣非和同日市值，不能给精确 PE；2026Q1*4 机械年化约 4.88 亿元只作压力测试。",
+    "available": false,
+    "reason": "precise denominator missing"
+  },
+  "revenue_mix": [],
+  "profit_sources": [
+    {
+      "summary": "公开摘要可用的利润锚较强，但缺收入、扣非、现金流、毛利率和分产品数据。"
+    }
+  ],
+  "price_driver_modules": [
+    {
+      "summary": "股价主要交易医疗耗材利润修复、海外库存周期和资金潜伏。6月16日 L2 主力净流入约 0.15 亿，5日和20日 L2 均偏流入。"
+    }
+  ],
+  "watch_variables": [
+    "Q2扣非净利",
+    "毛利率",
+    "海外订单/库存",
+    "集采与汇率",
+    "20日L2延续性"
+  ],
+  "risk_flags": [
+    {
+      "rating": "unknown",
+      "summary": "Q1 高增长若只是低基数或库存周期扰动，估值分母会失效；医疗耗材仍受集采、汇率、原料和监管约束。"
+    }
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "02-meeting-preparer",
+      "summary": "确认 7 只均应拆成 mode=company 单公司 run；边界为 Mac 本地事实包，Windows/NAS 不参与；公开网页只做方向校验，不补写精确 PE 或利润表字段。"
+    },
+    {
+      "agent_id": "03-earnings-reviewer",
+      "summary": "利通电子、中百集团、实益达有较多公告/问答；振德医疗和中百集团有可用业绩数字；领益智造、东百集团、粤桂股份财报细项不足。"
+    },
+    {
+      "agent_id": "04-model-builder",
+      "summary": "只有振德医疗具备最低可用利润桥，中百集团具备亏损压力观察锚；其余只能做经营驱动框架，不能形成精确利润分母或 PE。"
+    },
+    {
+      "agent_id": "05-market-researcher",
+      "summary": "本批分成 AI/消费电子/算力、零售/内贸流通、业绩修复型周期/医疗耗材三条交易线；主题交易和资金验证权重较高。"
+    },
+    {
+      "agent_id": "06-valuation-reviewer",
+      "summary": "统一不给精确 PE、同业分位或合理估值区间；只输出估值分母桥和股价驱动核查。"
+    },
+    {
+      "agent_id": "09-statement-auditor",
+      "summary": "财务质量为初筛：振德 B，利通/实益达 C，中百 D，领益/东百/粤桂 unknown。"
+    },
+    {
+      "agent_id": "10-kyc-screener",
+      "summary": "风险评级：利通电子、中百集团、实益达 red；其余 unknown，未命中不等于低风险。"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "blocked_claims": [
+      "不能写成海外去库存已经完全结束",
+      "不能写精确 PE 或同业分位",
+      "不能把未命中风险写成低风险"
+    ],
+    "data_gaps": [
+      "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+      "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。",
+      "本地事件库对该票近期公告/新闻覆盖不足。"
+    ]
+  }
+}

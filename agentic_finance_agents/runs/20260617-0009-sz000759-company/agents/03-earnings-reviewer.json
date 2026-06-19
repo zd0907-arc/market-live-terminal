@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0009-sz000759-company",
+  "agent_id": "03-earnings-reviewer",
+  "status": "complete",
+  "summary": "收入/利润来源：收入继续下滑且仍亏损，Q1经营现金流改善需排除供应商账期、存货压降等营运资本因素。\n\n业务线索：区域商超、仓储、便利店、生鲜零售\n\n给下游：缺失字段不得补写；只保留可核验业绩锚。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

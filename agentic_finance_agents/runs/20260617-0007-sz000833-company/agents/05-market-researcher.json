@@ -1,0 +1,15 @@
+{
+  "run_id": "20260617-0007-sz000833-company",
+  "agent_id": "05-market-researcher",
+  "status": "complete",
+  "summary": "行业/主题：糖价/矿化工周期弹性。\n\n市场交易：股价主要交易糖价、硫酸/硫铁矿价格、业绩预增和国企改革。5日 -4.40%、20日 -13.53%，20日 L2 约 -8.28 亿。\n\n监控变量：糖价、硫酸/硫铁矿价格、Q2利润、扣非占比、20日L2流出收敛",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。",
+    "本地事件库对该票近期公告/新闻覆盖不足。"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "run_id": "20260617-0010-sz002137-company",
+  "subject": "sz002137",
+  "company_name": "实益达",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "compact": {
+    "path": "ui/compact.html",
+    "title": "实益达研究摘要",
+    "height": {
+      "min_px": 420,
+      "preferred_px": 620,
+      "max_px": 860
+    },
+    "scroll_mode": "page",
+    "summary_focus": [
+      "business_change",
+      "valuation_bridge",
+      "price_driver"
+    ]
+  },
+  "full": {
+    "path": "ui/full.html",
+    "title": "实益达完整研究",
+    "display_mode": "overlay",
+    "preferred_width": "90vw",
+    "preferred_height": "90vh"
+  },
+  "data_path": "ui/data.json",
+  "source_refs": [
+    "final_report.md",
+    "promotion_candidates.json",
+    "agents/07-gl-reconciler.md",
+    "fact_pack.json"
+  ],
+  "blocked_claims": [
+    "不能写深度绑定宇树",
+    "不能写机器人业务直接受益",
+    "不能写参股带来重大利润贡献",
+    "不能写微信生态必然兑现"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ],
+  "promotion_readiness": "candidate_only"
+}

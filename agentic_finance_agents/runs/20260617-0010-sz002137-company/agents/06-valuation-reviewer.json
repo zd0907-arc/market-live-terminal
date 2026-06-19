@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0010-sz002137-company",
+  "agent_id": "06-valuation-reviewer",
+  "status": "complete",
+  "summary": "估值分母：缺归母/扣非/TTM，参股概念不能替代利润分母。宇树0.01%间接权益不足以支撑重大利润贡献。\n\n股价驱动：股价交易宇树/机器人、光学光电子和六度人和。6月16日 L2 回吐，5日仍小幅流入。\n\n最大反证：参股比例极低、异常波动、人事换届和题材无法变现是核心风险；不能把六度人和或宇树映射写成确定利润。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "symbol": "sz002600",
+  "company_name": "领益智造",
+  "line": "AI终端/消费电子平台",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "promotion_readiness": "candidate_only",
+  "identity": {
+    "symbol": "sz002600",
+    "company_name": "领益智造",
+    "line": "AI终端/消费电子平台",
+    "market_cap_yi": 1023.88
+  },
+  "business_modules": [
+    {
+      "name": "精密功能及结构件",
+      "type": "business_line"
+    },
+    {
+      "name": "显示及触控模组",
+      "type": "business_line"
+    },
+    {
+      "name": "材料",
+      "type": "business_line"
+    },
+    {
+      "name": "贸易及物流",
+      "type": "business_line"
+    }
+  ],
+  "period_compare": [
+    {
+      "label": "5日",
+      "value": 1.21
+    },
+    {
+      "label": "20日",
+      "value": -11.06
+    },
+    {
+      "label": "60日",
+      "value": 5.54
+    }
+  ],
+  "valuation_bridge": {
+    "summary": "缺 2025/Q1 净利、扣非、TTM 和利润率桥，不能给 PE。1023.88 亿市值需要利润分母和毛利率验证。",
+    "available": false,
+    "reason": "precise denominator missing"
+  },
+  "revenue_mix": [],
+  "profit_sources": [
+    {
+      "summary": "利润关键在客户订单、产品结构、毛利率和消费电子库存周期；本批缺精确收入、净利、扣非和客户集中度。"
+    }
+  ],
+  "price_driver_modules": [
+    {
+      "summary": "股价主要交易 AI 终端和消费电子复苏预期。6月16日 L2 主力净流入约 3.26 亿，但20日 L2 约 -25.21 亿。"
+    }
+  ],
+  "watch_variables": [
+    "AI终端订单",
+    "苹果链景气",
+    "毛利率",
+    "机器人/AI眼镜收入占比",
+    "20日L2是否转正"
+  ],
+  "risk_flags": [
+    {
+      "rating": "unknown",
+      "summary": "AI终端、机器人等概念不能等同于新增订单或利润兑现；大市值票一旦利润率不改善，弹性会被压制。"
+    }
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "02-meeting-preparer",
+      "summary": "确认 7 只均应拆成 mode=company 单公司 run；边界为 Mac 本地事实包，Windows/NAS 不参与；公开网页只做方向校验，不补写精确 PE 或利润表字段。"
+    },
+    {
+      "agent_id": "03-earnings-reviewer",
+      "summary": "利通电子、中百集团、实益达有较多公告/问答；振德医疗和中百集团有可用业绩数字；领益智造、东百集团、粤桂股份财报细项不足。"
+    },
+    {
+      "agent_id": "04-model-builder",
+      "summary": "只有振德医疗具备最低可用利润桥，中百集团具备亏损压力观察锚；其余只能做经营驱动框架，不能形成精确利润分母或 PE。"
+    },
+    {
+      "agent_id": "05-market-researcher",
+      "summary": "本批分成 AI/消费电子/算力、零售/内贸流通、业绩修复型周期/医疗耗材三条交易线；主题交易和资金验证权重较高。"
+    },
+    {
+      "agent_id": "06-valuation-reviewer",
+      "summary": "统一不给精确 PE、同业分位或合理估值区间；只输出估值分母桥和股价驱动核查。"
+    },
+    {
+      "agent_id": "09-statement-auditor",
+      "summary": "财务质量为初筛：振德 B，利通/实益达 C，中百 D，领益/东百/粤桂 unknown。"
+    },
+    {
+      "agent_id": "10-kyc-screener",
+      "summary": "风险评级：利通电子、中百集团、实益达 red；其余 unknown，未命中不等于低风险。"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "blocked_claims": [
+      "不能把 AI 手机/机器人概念写成确定新增订单",
+      "不能写精确 PE",
+      "不能写低风险"
+    ],
+    "data_gaps": [
+      "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+      "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。",
+      "本地事件库对该票近期公告/新闻覆盖不足。"
+    ]
+  }
+}

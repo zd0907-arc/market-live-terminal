@@ -1,0 +1,20 @@
+{
+  "subject": "sz002600",
+  "company_name": "领益智造",
+  "mode": "company",
+  "as_of_date": "2026-06-16",
+  "depth": "standard_batch_candidate",
+  "success_criteria": [
+    "领益智造是千亿市值的消费电子零部件平台，市场交易 AI 手机、AI 眼镜、机器人、苹果/华为/小米链和消费电子复苏。"
+  ],
+  "assumptions": [
+    "Mac 本地研究站事实包为主",
+    "公开资料只做方向校验",
+    "缺失财务数字不补写"
+  ],
+  "blocking_questions": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。",
+    "本地事件库对该票近期公告/新闻覆盖不足。"
+  ]
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#020617; color:#e5e7eb; }
+* { box-sizing:border-box; } body { margin:0; background:linear-gradient(180deg,#061522 0%,#020617 100%); }
+.card { border:1px solid rgba(34,211,238,.22); background:rgba(15,23,42,.86); padding:16px; border-radius:8px; }
+.top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+h1 { margin:0; font-size:19px; line-height:1.2; letter-spacing:0; } .sym { color:#94a3b8; font-size:12px; margin-top:3px; font-family:ui-monospace,Menlo,monospace; }
+.badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; } .badge { border:1px solid rgba(148,163,184,.35); padding:4px 7px; border-radius:999px; font-size:11px; color:#cbd5e1; white-space:nowrap; }
+.risk-red { border-color:rgba(248,113,113,.5); color:#fecaca; background:rgba(127,29,29,.28); } .risk-unknown { border-color:rgba(251,191,36,.45); color:#fde68a; background:rgba(113,63,18,.22); }
+.thesis { margin:14px 0 0; color:#f8fafc; font-size:14px; line-height:1.7; }
+.grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+.metric { border:1px solid rgba(51,65,85,.9); background:rgba(2,6,23,.45); border-radius:7px; padding:9px; min-height:58px; } .label { color:#94a3b8; font-size:11px; } .value { margin-top:4px; font-size:14px; font-weight:700; color:#e2e8f0; }
+.section { margin-top:14px; border-top:1px solid rgba(51,65,85,.85); padding-top:12px; } .section h2 { margin:0 0 8px; font-size:13px; color:#bfdbfe; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; } p,li { font-size:13px; line-height:1.65; color:#cbd5e1; } ul { margin:0; padding-left:18px; }
+.gap { color:#fbbf24; } .foot { margin-top:12px; font-size:11px; color:#64748b; }
+@media(max-width:720px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .cols { grid-template-columns:1fr; } }
+</style></head><body><div class="card">
+<div class="top"><div><h1>实益达</h1><div class="sym">sz002137 · 参股题材剥离/小盘电子</div></div><div class="badges"><span class="badge">财务 C</span><span class="badge risk-red">风险 red</span><span class="badge">候选研究</span></div></div>
+<p class="thesis">主线不是“机器人实质受益”，而是“题材映射需要剥离”。2025扭亏标签需补净利、扣非、现金流和投资收益拆分。</p>
+<div class="grid">
+  <div class="metric"><div class="label">最新价</div><div class="value">9.84</div></div>
+  <div class="metric"><div class="label">市值</div><div class="value">53.13亿</div></div>
+  <div class="metric"><div class="label">20日涨跌</div><div class="value">+15.26%</div></div>
+  <div class="metric"><div class="label">20日L2</div><div class="value">0.23亿</div></div>
+</div>
+<div class="section cols"><div><h2>核心主线</h2><p>实益达近期主要交易宇树科技、机器人、光学光电子和六度人和参股映射，但公司披露仅间接持有宇树科技约0.01%股权。</p></div><div><h2>估值/分母</h2><p>缺归母/扣非/TTM，参股概念不能替代利润分母。宇树0.01%间接权益不足以支撑重大利润贡献。</p></div></div>
+<div class="section cols"><div><h2>股价驱动</h2><p>股价交易宇树/机器人、光学光电子和六度人和。6月16日 L2 回吐，5日仍小幅流入。</p></div><div><h2>最大反证</h2><p>参股比例极低、异常波动、人事换届和题材无法变现是核心风险；不能把六度人和或宇树映射写成确定利润。</p></div></div>
+<div class="section"><h2>继续盯</h2><ul><li>宇树权益变化</li><li>六度人和13.045%股权变现</li><li>主业利润</li><li>异常波动公告</li><li>5日L2确认</li></ul></div>
+<div class="section gap"><h2>数据缺口</h2><ul><li>Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。</li><li>company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。</li></ul></div>
+<div class="foot">Agentic Finance Agents · 10+1 协作候选产物 · 截至 2026-06-16</div>
+</div></body></html>

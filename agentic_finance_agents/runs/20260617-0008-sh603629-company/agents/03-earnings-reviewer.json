@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0008-sh603629-company",
+  "agent_id": "03-earnings-reviewer",
+  "status": "complete",
+  "summary": "收入/利润来源：传统制造与算力业务必须分开。当前缺算力收入、毛利、订单金额、交付和回款，不能把题材直接当利润。\n\n业务线索：液晶显示精密结构件、电子元器件、算力云转租/租赁\n\n给下游：缺失字段不得补写；只保留可核验业绩锚。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

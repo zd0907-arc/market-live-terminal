@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0010-sz002137-company",
+  "agent_id": "09-statement-auditor",
+  "status": "complete",
+  "summary": "财务质量评级：C。\n\n财务质量判断：2025年报扭亏标签存在，但缺净利、扣非、现金流和主营/投资收益拆分，不能确认扭亏质量。\n\n需要补核：宇树权益变化、六度人和13.045%股权变现、主业利润",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

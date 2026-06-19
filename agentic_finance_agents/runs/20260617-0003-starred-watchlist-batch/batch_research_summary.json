@@ -1,0 +1,71 @@
+{
+  "batch_id": "20260617-0003-starred-watchlist-batch",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "as_of_date": "2026-06-16",
+  "runs": [
+    {
+      "symbol": "sh603301",
+      "name": "振德医疗",
+      "run_id": "20260617-0004-sh603301-company",
+      "line": "业绩修复型医疗耗材",
+      "financial_rating": "B",
+      "risk_rating": "unknown",
+      "summary": "当前更适合作为“业绩修复 + 资金潜伏”的观察对象，而不是纯题材票。需要继续验证 Q1 高增能否延续到 Q2/Q3。"
+    },
+    {
+      "symbol": "sz002600",
+      "name": "领益智造",
+      "run_id": "20260617-0005-sz002600-company",
+      "line": "AI终端/消费电子平台",
+      "financial_rating": "unknown",
+      "risk_rating": "unknown",
+      "summary": "题材覆盖很宽，但本地财报和事件证据不足。6月16日单日资金流入强，20日资金仍显著流出，说明短反弹尚未扭转中期分歧。"
+    },
+    {
+      "symbol": "sh600693",
+      "name": "东百集团",
+      "run_id": "20260617-0006-sh600693-company",
+      "line": "零售/物流主题观察",
+      "financial_rating": "unknown",
+      "risk_rating": "unknown",
+      "summary": "5/20/60日表现均弱，近期 L2 走弱。需要补零售、物流、物业各自收入和利润，才能判断是不是资产修复而非题材交易。"
+    },
+    {
+      "symbol": "sz000833",
+      "name": "粤桂股份",
+      "run_id": "20260617-0007-sz000833-company",
+      "line": "糖价/矿化工周期弹性",
+      "financial_rating": "unknown",
+      "risk_rating": "unknown",
+      "summary": "业务逻辑清楚，但利润数字不足；近期价格和资金都偏弱，必须等预增转化为可核验利润和现金流。"
+    },
+    {
+      "symbol": "sh603629",
+      "name": "利通电子",
+      "run_id": "20260617-0008-sh603629-company",
+      "line": "高分歧算力转型",
+      "financial_rating": "C",
+      "risk_rating": "red",
+      "summary": "它是本批最需要风险红标的票之一：60日涨幅约170%，事件中有 PE 超100倍和异常波动提示，6月16日及20日 L2 流出明显。"
+    },
+    {
+      "symbol": "sz000759",
+      "name": "中百集团",
+      "run_id": "20260617-0009-sz000759-company",
+      "line": "亏损零售修复/题材澄清",
+      "financial_rating": "D",
+      "risk_rating": "red",
+      "summary": "短线交易大消费、零售和免税传闻，但公司已澄清免税牌照暂无进展、暂无布局免税店计划。应重点看亏损修复和现金流质量。"
+    },
+    {
+      "symbol": "sz002137",
+      "name": "实益达",
+      "run_id": "20260617-0010-sz002137-company",
+      "line": "参股题材剥离/小盘电子",
+      "financial_rating": "C",
+      "risk_rating": "red",
+      "summary": "主线不是“机器人实质受益”，而是“题材映射需要剥离”。2025扭亏标签需补净利、扣非、现金流和投资收益拆分。"
+    }
+  ],
+  "global_conclusion": "7只星标已按 10+1 Agent 协作流程产出候选研究；均未进入正式 company_research.db。"
+}

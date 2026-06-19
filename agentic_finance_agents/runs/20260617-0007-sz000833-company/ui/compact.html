@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#020617; color:#e5e7eb; }
+* { box-sizing:border-box; } body { margin:0; background:linear-gradient(180deg,#061522 0%,#020617 100%); }
+.card { border:1px solid rgba(34,211,238,.22); background:rgba(15,23,42,.86); padding:16px; border-radius:8px; }
+.top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+h1 { margin:0; font-size:19px; line-height:1.2; letter-spacing:0; } .sym { color:#94a3b8; font-size:12px; margin-top:3px; font-family:ui-monospace,Menlo,monospace; }
+.badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; } .badge { border:1px solid rgba(148,163,184,.35); padding:4px 7px; border-radius:999px; font-size:11px; color:#cbd5e1; white-space:nowrap; }
+.risk-red { border-color:rgba(248,113,113,.5); color:#fecaca; background:rgba(127,29,29,.28); } .risk-unknown { border-color:rgba(251,191,36,.45); color:#fde68a; background:rgba(113,63,18,.22); }
+.thesis { margin:14px 0 0; color:#f8fafc; font-size:14px; line-height:1.7; }
+.grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+.metric { border:1px solid rgba(51,65,85,.9); background:rgba(2,6,23,.45); border-radius:7px; padding:9px; min-height:58px; } .label { color:#94a3b8; font-size:11px; } .value { margin-top:4px; font-size:14px; font-weight:700; color:#e2e8f0; }
+.section { margin-top:14px; border-top:1px solid rgba(51,65,85,.85); padding-top:12px; } .section h2 { margin:0 0 8px; font-size:13px; color:#bfdbfe; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; } p,li { font-size:13px; line-height:1.65; color:#cbd5e1; } ul { margin:0; padding-left:18px; }
+.gap { color:#fbbf24; } .foot { margin-top:12px; font-size:11px; color:#64748b; }
+@media(max-width:720px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .cols { grid-template-columns:1fr; } }
+</style></head><body><div class="card">
+<div class="top"><div><h1>粤桂股份</h1><div class="sym">sz000833 · 糖价/矿化工周期弹性</div></div><div class="badges"><span class="badge">财务 unknown</span><span class="badge risk-unknown">风险 unknown</span><span class="badge">候选研究</span></div></div>
+<p class="thesis">业务逻辑清楚，但利润数字不足；近期价格和资金都偏弱，必须等预增转化为可核验利润和现金流。</p>
+<div class="grid">
+  <div class="metric"><div class="label">最新价</div><div class="value">23.19</div></div>
+  <div class="metric"><div class="label">市值</div><div class="value">192.58亿</div></div>
+  <div class="metric"><div class="label">20日涨跌</div><div class="value">-13.53%</div></div>
+  <div class="metric"><div class="label">20日L2</div><div class="value">-8.28亿</div></div>
+</div>
+<div class="section cols"><div><h2>核心主线</h2><p>粤桂股份是糖、纸、酒精、轻钙、硫铁矿和硫酸组合，市场交易糖价、硫化工/磷化工、业绩弹性和国企改革。</p></div><div><h2>估值/分母</h2><p>缺本地核验后的精确利润分母、扣非和 TTM；无法给 PE 或同业分位。</p></div></div>
+<div class="section cols"><div><h2>股价驱动</h2><p>股价主要交易糖价、硫酸/硫铁矿价格、业绩预增和国企改革。5日 -4.40%、20日 -13.53%，20日 L2 约 -8.28 亿。</p></div><div><h2>最大反证</h2><p>商品价格回落、农业天气、环保/安全生产和预增兑现不足都会削弱周期弹性。</p></div></div>
+<div class="section"><h2>继续盯</h2><ul><li>糖价</li><li>硫酸/硫铁矿价格</li><li>Q2利润</li><li>扣非占比</li><li>20日L2流出收敛</li></ul></div>
+<div class="section gap"><h2>数据缺口</h2><ul><li>Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。</li><li>company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。</li><li>本地事件库对该票近期公告/新闻覆盖不足。</li></ul></div>
+<div class="foot">Agentic Finance Agents · 10+1 协作候选产物 · 截至 2026-06-16</div>
+</div></body></html>

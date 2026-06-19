@@ -1,0 +1,25 @@
+{
+  "run_id": "20260617-0004-sh603301-company",
+  "subject": "sh603301",
+  "company_name": "振德医疗",
+  "promotion_readiness": "candidate_only",
+  "ready_fields": [
+    "company identity",
+    "business line",
+    "market driver",
+    "watch variables",
+    "risk flags"
+  ],
+  "blocked_fields": [
+    "precise PE",
+    "peer percentile",
+    "TTM bridge",
+    "full financial quality",
+    "formal company_research.db promotion"
+  ],
+  "blocked_claims": [
+    "不能写成海外去库存已经完全结束",
+    "不能写精确 PE 或同业分位",
+    "不能把未命中风险写成低风险"
+  ]
+}

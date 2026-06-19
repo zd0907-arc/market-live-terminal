@@ -1,0 +1,19 @@
+{
+  "subject": "sh603629",
+  "company_name": "利通电子",
+  "mode": "company",
+  "as_of_date": "2026-06-16",
+  "depth": "standard_batch_candidate",
+  "success_criteria": [
+    "利通电子的交易核心已从传统显示结构件切到算力租赁/云转租。公司事件库很丰富，但估值和题材风险也最突出。"
+  ],
+  "assumptions": [
+    "Mac 本地研究站事实包为主",
+    "公开资料只做方向校验",
+    "缺失财务数字不补写"
+  ],
+  "blocking_questions": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

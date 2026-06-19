@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0010-sz002137-company",
+  "agent_id": "03-earnings-reviewer",
+  "status": "complete",
+  "summary": "收入/利润来源：2025年报扭亏标签存在，但缺净利、扣非、现金流和主营/投资收益拆分，不能确认扭亏质量。\n\n业务线索：LED照明、消费电子、电子制造、数字营销/投资\n\n给下游：缺失字段不得补写；只保留可核验业绩锚。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0008-sh603629-company",
+  "agent_id": "06-valuation-reviewer",
+  "status": "complete",
+  "summary": "估值分母：事件有 PE 超100倍风险提示，但缺可复核利润分母；传统制造和算力转租分母不能混用。\n\n股价驱动：股价交易算力订单、GPU供应链、token分成澄清、异常波动和资金分歧。6月16日 L2 约 -7.25 亿，20日约 -53.85 亿。\n\n最大反证：股价/估值异常、题材拥挤、传闻澄清、算力订单兑现和资金反转风险都很高。东阳光合资公司未开展业务，token分成暂无具体实施计划。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

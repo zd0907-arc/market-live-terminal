@@ -1,0 +1,120 @@
+{
+  "symbol": "sz000759",
+  "company_name": "中百集团",
+  "line": "亏损零售修复/题材澄清",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "promotion_readiness": "candidate_only",
+  "identity": {
+    "symbol": "sz000759",
+    "company_name": "中百集团",
+    "line": "亏损零售修复/题材澄清",
+    "market_cap_yi": 38.62
+  },
+  "business_modules": [
+    {
+      "name": "区域商超",
+      "type": "business_line"
+    },
+    {
+      "name": "仓储",
+      "type": "business_line"
+    },
+    {
+      "name": "便利店",
+      "type": "business_line"
+    },
+    {
+      "name": "生鲜零售",
+      "type": "business_line"
+    }
+  ],
+  "period_compare": [
+    {
+      "label": "5日",
+      "value": -1.16
+    },
+    {
+      "label": "20日",
+      "value": 13.12
+    },
+    {
+      "label": "60日",
+      "value": 0.68
+    }
+  ],
+  "valuation_bridge": {
+    "summary": "亏损状态下 PE 不适用；需先验证转正路径，不能用题材替代利润分母。",
+    "available": false,
+    "reason": "precise denominator missing"
+  },
+  "revenue_mix": [],
+  "profit_sources": [
+    {
+      "summary": "收入继续下滑且仍亏损，Q1经营现金流改善需排除供应商账期、存货压降等营运资本因素。"
+    }
+  ],
+  "price_driver_modules": [
+    {
+      "summary": "股价交易零售/大消费、免税传闻和异常波动。20日收益约 +13.12%，20日 L2 约 +2.82 亿。"
+    }
+  ],
+  "watch_variables": [
+    "同店销售",
+    "关店提效",
+    "毛利率",
+    "经营现金流",
+    "免税进展澄清",
+    "监管整改"
+  ],
+  "risk_flags": [
+    {
+      "rating": "red",
+      "summary": "监管警示函整改不能写成风险解除；异常波动和免税澄清必须展示；若亏损持续，题材估值缺支撑。"
+    }
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "02-meeting-preparer",
+      "summary": "确认 7 只均应拆成 mode=company 单公司 run；边界为 Mac 本地事实包，Windows/NAS 不参与；公开网页只做方向校验，不补写精确 PE 或利润表字段。"
+    },
+    {
+      "agent_id": "03-earnings-reviewer",
+      "summary": "利通电子、中百集团、实益达有较多公告/问答；振德医疗和中百集团有可用业绩数字；领益智造、东百集团、粤桂股份财报细项不足。"
+    },
+    {
+      "agent_id": "04-model-builder",
+      "summary": "只有振德医疗具备最低可用利润桥，中百集团具备亏损压力观察锚；其余只能做经营驱动框架，不能形成精确利润分母或 PE。"
+    },
+    {
+      "agent_id": "05-market-researcher",
+      "summary": "本批分成 AI/消费电子/算力、零售/内贸流通、业绩修复型周期/医疗耗材三条交易线；主题交易和资金验证权重较高。"
+    },
+    {
+      "agent_id": "06-valuation-reviewer",
+      "summary": "统一不给精确 PE、同业分位或合理估值区间；只输出估值分母桥和股价驱动核查。"
+    },
+    {
+      "agent_id": "09-statement-auditor",
+      "summary": "财务质量为初筛：振德 B，利通/实益达 C，中百 D，领益/东百/粤桂 unknown。"
+    },
+    {
+      "agent_id": "10-kyc-screener",
+      "summary": "风险评级：利通电子、中百集团、实益达 red；其余 unknown，未命中不等于低风险。"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "blocked_claims": [
+      "不能写已获免税牌照",
+      "不能写免税店布局",
+      "不能写警示函风险解除",
+      "不能把零售涨停写成业绩兑现"
+    ],
+    "data_gaps": [
+      "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+      "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+    ]
+  }
+}

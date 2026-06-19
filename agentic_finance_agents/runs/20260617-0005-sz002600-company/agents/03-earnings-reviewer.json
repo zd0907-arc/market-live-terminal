@@ -1,0 +1,15 @@
+{
+  "run_id": "20260617-0005-sz002600-company",
+  "agent_id": "03-earnings-reviewer",
+  "status": "complete",
+  "summary": "收入/利润来源：利润关键在客户订单、产品结构、毛利率和消费电子库存周期；本批缺精确收入、净利、扣非和客户集中度。\n\n业务线索：精密功能及结构件、显示及触控模组、材料、贸易及物流\n\n给下游：缺失字段不得补写；只保留可核验业绩锚。",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。",
+    "本地事件库对该票近期公告/新闻覆盖不足。"
+  ]
+}

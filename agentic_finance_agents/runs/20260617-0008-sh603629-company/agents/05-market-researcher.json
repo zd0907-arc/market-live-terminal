@@ -1,0 +1,14 @@
+{
+  "run_id": "20260617-0008-sh603629-company",
+  "agent_id": "05-market-researcher",
+  "status": "complete",
+  "summary": "行业/主题：高分歧算力转型。\n\n市场交易：股价交易算力订单、GPU供应链、token分成澄清、异常波动和资金分歧。6月16日 L2 约 -7.25 亿，20日约 -53.85 亿。\n\n监控变量：算力合同、GPU交付、海外子公司收入、融资/质押、异常波动公告、20日L2",
+  "source_refs": [
+    "fact_pack.json",
+    "subagent_result"
+  ],
+  "data_gaps": [
+    "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+    "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+  ]
+}

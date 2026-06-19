@@ -1,0 +1,23 @@
+{
+  "allowed_local_sources": [
+    "/Users/dong/ZhangData/market-live-terminal",
+    "/Users/dong/ZhangData/market-data",
+    "/Users/dong/ZhangData/market-data/live/market_data.db",
+    "/Users/dong/ZhangData/market-data/research/current/selection/selection_research.db",
+    "/Users/dong/ZhangData/market-data/research/current/atomic_facts/market_atomic_mainboard_compact_current.db",
+    "/Users/dong/ZhangData/market-data/research/current/market_heat/stock_sector_map.db"
+  ],
+  "allowed_public_sources": [
+    "https://www.google.com/search?q=%E5%AE%9E%E7%9B%8A%E8%BE%BE+%E5%AE%87%E6%A0%91%E7%A7%91%E6%8A%80+0.01%25+%E8%82%A1%E6%9D%83",
+    "https://www.google.com/search?q=%E5%AE%9E%E7%9B%8A%E8%BE%BE+2025+%E5%B9%B4%E6%8A%A5+%E6%89%AD%E4%BA%8F+2026+%E4%B8%80%E5%AD%A3%E6%8A%A5"
+  ],
+  "forbidden_sources": [
+    "FactSet",
+    "CapIQ",
+    "Daloopa",
+    "IBISWorld",
+    "PitchBook",
+    "Dun & Bradstreet"
+  ],
+  "source_ref_policy": "required_for_all_facts"
+}

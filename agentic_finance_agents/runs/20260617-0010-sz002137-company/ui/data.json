@@ -1,0 +1,119 @@
+{
+  "symbol": "sz002137",
+  "company_name": "实益达",
+  "line": "参股题材剥离/小盘电子",
+  "as_of_date": "2026-06-16",
+  "generated_at": "2026-06-17T00:03:00+08:00",
+  "status": "candidate_only",
+  "promotion_readiness": "candidate_only",
+  "identity": {
+    "symbol": "sz002137",
+    "company_name": "实益达",
+    "line": "参股题材剥离/小盘电子",
+    "market_cap_yi": 53.13
+  },
+  "business_modules": [
+    {
+      "name": "LED照明",
+      "type": "business_line"
+    },
+    {
+      "name": "消费电子",
+      "type": "business_line"
+    },
+    {
+      "name": "电子制造",
+      "type": "business_line"
+    },
+    {
+      "name": "数字营销/投资",
+      "type": "business_line"
+    }
+  ],
+  "period_compare": [
+    {
+      "label": "5日",
+      "value": -6.21
+    },
+    {
+      "label": "20日",
+      "value": 15.26
+    },
+    {
+      "label": "60日",
+      "value": 13.2
+    }
+  ],
+  "valuation_bridge": {
+    "summary": "缺归母/扣非/TTM，参股概念不能替代利润分母。宇树0.01%间接权益不足以支撑重大利润贡献。",
+    "available": false,
+    "reason": "precise denominator missing"
+  },
+  "revenue_mix": [],
+  "profit_sources": [
+    {
+      "summary": "2025年报扭亏标签存在，但缺净利、扣非、现金流和主营/投资收益拆分，不能确认扭亏质量。"
+    }
+  ],
+  "price_driver_modules": [
+    {
+      "summary": "股价交易宇树/机器人、光学光电子和六度人和。6月16日 L2 回吐，5日仍小幅流入。"
+    }
+  ],
+  "watch_variables": [
+    "宇树权益变化",
+    "六度人和13.045%股权变现",
+    "主业利润",
+    "异常波动公告",
+    "5日L2确认"
+  ],
+  "risk_flags": [
+    {
+      "rating": "red",
+      "summary": "参股比例极低、异常波动、人事换届和题材无法变现是核心风险；不能把六度人和或宇树映射写成确定利润。"
+    }
+  ],
+  "agent_sources": [
+    {
+      "agent_id": "02-meeting-preparer",
+      "summary": "确认 7 只均应拆成 mode=company 单公司 run；边界为 Mac 本地事实包，Windows/NAS 不参与；公开网页只做方向校验，不补写精确 PE 或利润表字段。"
+    },
+    {
+      "agent_id": "03-earnings-reviewer",
+      "summary": "利通电子、中百集团、实益达有较多公告/问答；振德医疗和中百集团有可用业绩数字；领益智造、东百集团、粤桂股份财报细项不足。"
+    },
+    {
+      "agent_id": "04-model-builder",
+      "summary": "只有振德医疗具备最低可用利润桥，中百集团具备亏损压力观察锚；其余只能做经营驱动框架，不能形成精确利润分母或 PE。"
+    },
+    {
+      "agent_id": "05-market-researcher",
+      "summary": "本批分成 AI/消费电子/算力、零售/内贸流通、业绩修复型周期/医疗耗材三条交易线；主题交易和资金验证权重较高。"
+    },
+    {
+      "agent_id": "06-valuation-reviewer",
+      "summary": "统一不给精确 PE、同业分位或合理估值区间；只输出估值分母桥和股价驱动核查。"
+    },
+    {
+      "agent_id": "09-statement-auditor",
+      "summary": "财务质量为初筛：振德 B，利通/实益达 C，中百 D，领益/东百/粤桂 unknown。"
+    },
+    {
+      "agent_id": "10-kyc-screener",
+      "summary": "风险评级：利通电子、中百集团、实益达 red；其余 unknown，未命中不等于低风险。"
+    }
+  ],
+  "evidence_status": {
+    "promotion_readiness": "candidate_only",
+    "blocked_claims": [
+      "不能写深度绑定宇树",
+      "不能写机器人业务直接受益",
+      "不能写参股带来重大利润贡献",
+      "不能写微信生态必然兑现"
+    ],
+    "data_gaps": [
+      "Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。",
+      "company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。"
+    ]
+  }
+}

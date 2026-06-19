@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#020617; color:#e5e7eb; }
+* { box-sizing:border-box; } body { margin:0; background:linear-gradient(180deg,#061522 0%,#020617 100%); }
+.card { border:1px solid rgba(34,211,238,.22); background:rgba(15,23,42,.86); padding:16px; border-radius:8px; }
+.top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+h1 { margin:0; font-size:19px; line-height:1.2; letter-spacing:0; } .sym { color:#94a3b8; font-size:12px; margin-top:3px; font-family:ui-monospace,Menlo,monospace; }
+.badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; } .badge { border:1px solid rgba(148,163,184,.35); padding:4px 7px; border-radius:999px; font-size:11px; color:#cbd5e1; white-space:nowrap; }
+.risk-red { border-color:rgba(248,113,113,.5); color:#fecaca; background:rgba(127,29,29,.28); } .risk-unknown { border-color:rgba(251,191,36,.45); color:#fde68a; background:rgba(113,63,18,.22); }
+.thesis { margin:14px 0 0; color:#f8fafc; font-size:14px; line-height:1.7; }
+.grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+.metric { border:1px solid rgba(51,65,85,.9); background:rgba(2,6,23,.45); border-radius:7px; padding:9px; min-height:58px; } .label { color:#94a3b8; font-size:11px; } .value { margin-top:4px; font-size:14px; font-weight:700; color:#e2e8f0; }
+.section { margin-top:14px; border-top:1px solid rgba(51,65,85,.85); padding-top:12px; } .section h2 { margin:0 0 8px; font-size:13px; color:#bfdbfe; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; } p,li { font-size:13px; line-height:1.65; color:#cbd5e1; } ul { margin:0; padding-left:18px; }
+.gap { color:#fbbf24; } .foot { margin-top:12px; font-size:11px; color:#64748b; }
+@media(max-width:720px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .cols { grid-template-columns:1fr; } }
+</style></head><body><div class="card">
+<div class="top"><div><h1>中百集团</h1><div class="sym">sz000759 · 亏损零售修复/题材澄清</div></div><div class="badges"><span class="badge">财务 D</span><span class="badge risk-red">风险 red</span><span class="badge">候选研究</span></div></div>
+<p class="thesis">短线交易大消费、零售和免税传闻，但公司已澄清免税牌照暂无进展、暂无布局免税店计划。应重点看亏损修复和现金流质量。</p>
+<div class="grid">
+  <div class="metric"><div class="label">最新价</div><div class="value">6.21</div></div>
+  <div class="metric"><div class="label">市值</div><div class="value">38.62亿</div></div>
+  <div class="metric"><div class="label">20日涨跌</div><div class="value">+13.12%</div></div>
+  <div class="metric"><div class="label">20日L2</div><div class="value">2.82亿</div></div>
+</div>
+<div class="section cols"><div><h2>核心主线</h2><p>中百集团是传统商超和新零售修复线，但基本面仍弱：2025营收82.83亿同比下降20.21%，2026Q1营收20.32亿同比下降20.83%，归母净亏损9740.40万元。</p></div><div><h2>估值/分母</h2><p>亏损状态下 PE 不适用；需先验证转正路径，不能用题材替代利润分母。</p></div></div>
+<div class="section cols"><div><h2>股价驱动</h2><p>股价交易零售/大消费、免税传闻和异常波动。20日收益约 +13.12%，20日 L2 约 +2.82 亿。</p></div><div><h2>最大反证</h2><p>监管警示函整改不能写成风险解除；异常波动和免税澄清必须展示；若亏损持续，题材估值缺支撑。</p></div></div>
+<div class="section"><h2>继续盯</h2><ul><li>同店销售</li><li>关店提效</li><li>毛利率</li><li>经营现金流</li><li>免税进展澄清</li><li>监管整改</li></ul></div>
+<div class="section gap"><h2>数据缺口</h2><ul><li>Mac 本地 stock_financial_snapshots 对该批星标覆盖不完整；未直接写精确 PE 分母。</li><li>company_research.db 尚未实现，本批产物以 runs 文件为候选研究产物。</li></ul></div>
+<div class="foot">Agentic Finance Agents · 10+1 协作候选产物 · 截至 2026-06-16</div>
+</div></body></html>
