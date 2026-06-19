@@ -1,19 +1,22 @@
 # MOD-20260619-03 NAS 存储清理与备份策略收口
 
 日期：2026-06-19
-状态：`IN_PROGRESS`
+状态：`PENDING_USER_DELETE`
 主机：`NAS 192.168.3.43`
 
 ## 结论
 
-本轮先完成“止血”：每日盘后 `--sync-nas` 不再默认触发 NAS 数据库快照，避免继续每天复制 `68G+` atomic 大库。
+本轮完成两件事：
+
+1. 机制止血：每日盘后 `--sync-nas` 不再默认触发 NAS 数据库快照，避免继续每天复制 `68G+` atomic 大库。
+2. 现场收口：历史备份、旧发布归档和传输残留已集中移动到一个待删除目录，由用户自行最终删除。
 
 当前 NAS 大空间问题不是线上服务本身变成了 `1T`，而是历史备份和历史发布归档堆积：
 
 ```text
 /volume1/docker/market-live-terminal/app       79M
 /volume1/docker/market-live-terminal/data      226G
-/volume1/docker/market-live-terminal/backups   820G
+/volume1/docker/market-live-terminal/backups   820G  清理前
 ```
 
 其中真正当前线上查询主数据主要在：
@@ -23,6 +26,20 @@ data/research/current                          76G
 data/live                                     1.2G
 data/selection                                 99M
 ```
+
+当前整理后：
+
+```text
+/volume1/docker/market-live-terminal/data                    77G
+/volume1/docker/market-live-terminal/backups                  0
+/volume1/docker/market-live-terminal/_pending_delete_20260619 314G
+```
+
+说明：
+
+1. `_pending_delete_20260619` 只是集中待删桶，不是运行路径。
+2. 同卷移动不会释放空间；用户删除该目录后才会真正释放空间。
+3. 当前线上服务继续读取 `data/live`、`data/research/current`、`data/selection`。
 
 ## 业务来源解释
 
@@ -118,9 +135,15 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
    - runtime：默认保留 `4` 份
    - full：默认保留 `1` 份
 
-## 当前可删候选
+## 已集中移动的可删对象
 
-下面是“按业务判断可以清理”的候选。清理前仍建议先确认当天没有正在跑日跑或发布。
+下面对象已移动到：
+
+```text
+/volume1/docker/market-live-terminal/_pending_delete_20260619
+```
+
+用户可在 NAS 文件管理器中删除这个目录来释放空间。
 
 ### A. 旧全量日快照
 
@@ -148,14 +171,12 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 
 建议：
 
-1. 保守：只保留最新一份 `20260618_031041`，删除其余。
-2. 激进：整个 `db_snapshots` 删除。
+已由用户先行删除主要内容；剩余旧快照不再保留。
 
 预计释放：
 
 ```text
-保守约 580G
-激进约 656G
+约 656G
 ```
 
 ### B. 旧导入包
@@ -163,7 +184,7 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 路径：
 
 ```text
-/volume1/docker/market-live-terminal/backups/imports/full-import_20260608
+/volume1/docker/market-live-terminal/_pending_delete_20260619/backups/imports
 ```
 
 大小：
@@ -182,16 +203,16 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 2. 这份不是服务读取路径。
 3. 它与当前线上数据有大量重复。
 
-建议：
+处理结果：
 
-公司 Mac 迁移完成并验证后删除；如果急需释放空间，也可以现在删除。
+已移动到待删除桶，可直接删除。
 
 ### C. 旧扁平结构备份
 
 路径：
 
 ```text
-/volume1/docker/market-live-terminal/backups/legacy_flat_root_20260608
+/volume1/docker/market-live-terminal/_pending_delete_20260619/backups/legacy_flat_root_20260608
 ```
 
 大小：
@@ -210,17 +231,16 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 2. 这份不是服务读取路径。
 3. 它主要用于“旧结构误迁移时回滚”。
 
-建议：
+处理结果：
 
-公司 Mac 迁移完成并验证后删除；如果急需释放空间，也可以现在删除。
+已移动到待删除桶，可直接删除。
 
 ### D. 旧 research 发布归档
 
 路径：
 
 ```text
-/volume1/docker/market-live-terminal/data/research/archive/20260605_220145_nas_daily_new_20260605
-/volume1/docker/market-live-terminal/data/research/archive/20260608_235037_nas_daily_new_20260608
+/volume1/docker/market-live-terminal/_pending_delete_20260619/data/research/archive
 ```
 
 大小：
@@ -239,16 +259,16 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 2. 这两份只用于旧发布回滚。
 3. 当前已完成三端同步后，它们的回滚价值下降。
 
-建议：
+处理结果：
 
-公司 Mac 迁移完成并验证后删除；若要立刻清空间，至少保留最近一份。
+已移动到待删除桶，可直接删除。
 
 ### E. 本轮三端同步前备份
 
 路径：
 
 ```text
-/volume1/docker/market-live-terminal/backups/pre_three_end_sync_20260619_183932
+/volume1/docker/market-live-terminal/_pending_delete_20260619/backups/pre_three_end_sync_20260619_183932
 ```
 
 大小：
@@ -261,16 +281,16 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 
 2026-06-19 三端同步前，为 selection、market_heat、模型小目录做的局部回滚备份。
 
-建议：
+处理结果：
 
-先保留到公司 Mac 迁移完成；之后可以删除。
+已移动到待删除桶，可直接删除。
 
 ### F. incoming 历史传输残留
 
 路径：
 
 ```text
-/volume1/docker/market-live-terminal/data/incoming
+/volume1/docker/market-live-terminal/_pending_delete_20260619/data/incoming
 ```
 
 大小：
@@ -283,9 +303,31 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 
 历史日跑、验证、传输测试和日志。
 
-建议：
+处理结果：
 
-可后续清理，但不是当前空间主因。
+已移动到待删除桶，可直接删除。正式 `data/incoming` 已重建为空目录。
+
+### G. 旧手工备份
+
+路径：
+
+```text
+/volume1/docker/market-live-terminal/_pending_delete_20260619/backups/manual
+```
+
+大小：
+
+```text
+1.9G
+```
+
+来源：
+
+早期人工保存的旧 `market_data.db` / 小型 selection 备份。
+
+处理结果：
+
+已移动到待删除桶。正式 `backups/manual` 已重建为空目录。
 
 ## 推荐清理顺序
 
@@ -297,31 +339,35 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 /volume1/docker/market-live-terminal/data/selection
 ```
 
-优先释放空间：
-
-1. 清理 `backups/db_snapshots`：释放 `580G-656G`
-2. 清理 `backups/imports/full-import_20260608`：释放 `78G`
-3. 清理 `backups/legacy_flat_root_20260608`：释放 `78G`
-4. 清理 `data/research/archive` 旧发布归档：释放最多 `149G`
-
-## 给用户的删除方式
-
-如果用户自己在 NAS 文件管理器删除，优先删这些整目录：
+用户现在只需要删除一个目录：
 
 ```text
-/volume1/docker/market-live-terminal/backups/db_snapshots
-/volume1/docker/market-live-terminal/backups/imports/full-import_20260608
-/volume1/docker/market-live-terminal/backups/legacy_flat_root_20260608
+/volume1/docker/market-live-terminal/_pending_delete_20260619
 ```
 
-如果需要由 Codex 代删，建议先执行“隔离移动”，把候选目录移动到同一目录：
+预计释放：
 
 ```text
-/volume1/docker/market-live-terminal/backups/_pending_delete_20260619/
+约 314G
 ```
 
-确认线上服务和公司 Mac 迁移都正常后，再删除该目录。
+加上用户已经删除的 `db_snapshots`，本轮合计移出/可释放空间约 `900G+`。
 
-## 未执行删除
+## 验证结果
 
-本轮到当前为止没有删除 NAS 上任何历史备份或当前运行数据。
+移动后已验证：
+
+1. `/api/health` 返回 `ok`。
+2. `/api/selection/daily-candidates?date=2026-06-17&limit=1` 返回 200。
+3. `/api/market_heat/fine_dates?days=20` 返回 200，最新日期 `2026-06-17`。
+4. `/api/market_temperature/snapshot?days=5` 返回 200，最新日期 `2026-06-17`。
+
+## Docker 数据边界
+
+NAS Docker 项目目录只保留三类东西：
+
+1. 正在运行的 app。
+2. 正在被线上服务读取的 data。
+3. 新机制下的短期运行态快照。
+
+长期“文件保险柜”不放在 Docker 目录里。若用户需要整份文件级备份，应放到 NAS 个人数据盘或独立共享目录，由用户手动或 DSM 任务管理。

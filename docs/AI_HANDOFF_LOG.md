@@ -4,8 +4,8 @@
 - Task ID: `MOD-20260619-03-nas-storage-cleanup-and-backup-policy`
 - CAP: `CAP-NAS-OPS`, `CAP-WIN-PIPELINE`
 - 结论: 已确认 NAS 空间异常的主因不是线上 `data/research/current`，而是旧策略把每日主链后的运行库快照做成全量备份，反复复制 `68G+` atomic 大库，导致 `backups/db_snapshots` 堆到约 `656G`。已把每日 `--sync-nas` 改成默认只同步 NAS 生产增量和市场水位目录，不再触发数据库快照；`nas_backup_runtime_db_snapshot.sh` 默认改为运行态轻量快照，只有显式 `SNAPSHOT_PROFILE=full` 才复制 atomic 大库。
-- 风险: 本轮没有删除 NAS 历史备份；`backups/db_snapshots`、`backups/imports/full-import_20260608`、`backups/legacy_flat_root_20260608`、`data/research/archive` 仍占用大量空间，需用户确认后删除或先移动到 `_pending_delete_20260619`。
-- 验证: 已完成 NAS 只读盘点，确认 `data/research/current` 约 `76G`、`data` 总计约 `226G`、`backups` 约 `820G`；已补单元测试覆盖 `DAILY_NAS_SNAPSHOT_POLICY=off` 默认不触达 NAS。
+- 风险: 本轮没有替用户最终删除文件；历史备份、旧发布归档和传输残留已集中移动到 `/volume1/docker/market-live-terminal/_pending_delete_20260619`，用户删除这个目录后才会真正释放空间。
+- 验证: 已完成 NAS 只读盘点和集中移动，当前运行目录为 `data=77G`、`backups=0`、`_pending_delete_20260619=314G`；已补单元测试覆盖 `DAILY_NAS_SNAPSHOT_POLICY=off` 默认不触达 NAS，NAS 线上健康、选股、市场热度和市场温度接口均通过。
 - 链接: `docs/changes/MOD-20260619-03-nas-storage-cleanup-and-backup-policy.md`, `backend/scripts/run_daily_new_framework.py`, `ops/nas/nas_backup_runtime_db_snapshot.sh`, `docs/ops/storage-backup-policy.md`
 
 ## 2026-06-12 市场水位与 live/L2 后处理解耦 | Codex

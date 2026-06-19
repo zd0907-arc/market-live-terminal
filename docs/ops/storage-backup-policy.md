@@ -6,10 +6,12 @@
 
 1. `Mac` 负责开发真相和 Git 提交。
 2. `Windows` 负责原始包与正式跑数，不负责长期主备份。
-3. `NAS` 负责在线服务、正式数据库快照和结构化备份。
+3. `NAS` 负责在线服务、短期运行态快照和结构化备份入口。
 4. 每日盘后 `--sync-nas` 只做生产增量同步，不默认做数据库快照。
 
 不要再把 Windows 当主备份机。
+
+也不要把 NAS Docker 项目目录当长期文件保险柜。Docker 目录只保留运行服务需要的内容和少量短期回滚点；长期文件级备份应放到 NAS 个人数据盘或独立共享目录，由用户手动或 DSM 任务管理。
 
 ## 2. 代码怎么备份
 
@@ -45,31 +47,43 @@
 
 ### 3.2 正式数据库
 
-正式数据库备份以 NAS 为中心。
+正式数据库备份以 NAS 为中心，但分为“运行目录”和“保险柜目录”两类。
 
 正式口径：
 
 1. Mac 是研究消费与开发现场。
-2. NAS 是正式 snapshot / archive / 公网服务节点。
+2. NAS Docker 目录是在线服务节点和短期运行态快照节点。
 3. Windows 不再承担“最终备份仓”角色。
+4. NAS 个人数据盘或独立共享目录才是长期文件级备份位置。
 
-当前建议路径：
+当前 Docker 内建议路径：
 
 - 正式运行/研究库：
   - `/volume1/docker/market-live-terminal/data/live`
   - `/volume1/docker/market-live-terminal/data/research/current`
+  - `/volume1/docker/market-live-terminal/data/selection`
 - 运行态轻量备份快照：
   - `/volume1/docker/market-live-terminal/backups/runtime_snapshots`
 - 手工全量备份快照：
   - `/volume1/docker/market-live-terminal/backups/full_snapshots`
-- 旧的全量日快照历史包：
-  - `/volume1/docker/market-live-terminal/backups/db_snapshots`
 - 人工冷备：
   - `/volume1/docker/market-live-terminal/backups/manual`
-- 退休旧结构：
-  - `/volume1/docker/market-live-terminal/backups/legacy_flat_root_20260608`
-- 导入/迁移历史包：
-  - `/volume1/docker/market-live-terminal/backups/imports`
+
+当前不再保留在 Docker 运行路径里的对象：
+
+- 旧的全量日快照历史包
+- 旧导入包
+- 旧扁平结构备份
+- 旧 `research/current` 发布归档
+- 历史 `incoming` 传输残留
+
+这些对象已集中到：
+
+```text
+/volume1/docker/market-live-terminal/_pending_delete_20260619
+```
+
+由用户在 NAS 文件管理器中手动删除。
 
 ## 4. 当前可执行的备份机制
 
@@ -124,14 +138,15 @@ SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
 2. **每日数据同步**：每日盘后只同步增量到 NAS 生产库，不默认做快照
 3. **数据库轻量快照**：最多每周固定跑一次 `nas_backup_runtime_db_snapshot.sh`，保留最近 `4` 份
 4. **全量 atomic 快照**：只在重大改造前人工执行 `SNAPSHOT_PROFILE=full`，保留最近 `1` 份
-5. **人工冷备**：真正要离线长期保存时，放到 `backups/manual/`
+5. **人工冷备**：真正要长期保存时，放到 NAS 个人数据盘或独立共享目录，不放在 Docker 项目运行目录里
 
 ## 6. 现在不建议做的事
 
 1. 不建议让 Windows 承担唯一长期备份角色。
-2. 不建议继续把大备份直接堆在项目根目录。
-3. 不建议现在做“云上唯一单盘备份”并把它当灾备完成态。
-4. 不建议把 `backups/db_snapshots` 继续作为新快照落点；这里已经降级为历史待清理目录。
+2. 不建议继续把大备份直接堆在 Docker 项目根目录。
+3. 不建议把 Docker `data/` 或 `backups/` 当长期文件保险柜。
+4. 不建议现在做“云上唯一单盘备份”并把它当灾备完成态。
+5. 不建议把 `backups/db_snapshots` 继续作为新快照落点；这里已经降级为历史待清理目录。
 
 ## 7. 后续增强
 
