@@ -314,16 +314,16 @@ def _build_rubber_dashboard(data_dir: Path) -> Dict[str, Any]:
             "price_confirm_max": (summary_rows[0] if summary_rows else {}).get("price_confirm_max") or (summary_rows[0] if summary_rows else {}).get("price_gate_max", ""),
             "price_confirm_state": (summary_rows[0] if summary_rows else {}).get("price_confirm_state") or (summary_rows[0] if summary_rows else {}).get("price_gate_status", ""),
         },
-        "report_path": str(report_file.relative_to(ROOT)) if report_file else "",
+        "report_path": _source_path(report_file),
         "sources": {
-            "summary": str(summary_file.relative_to(ROOT)) if summary_file else "",
-            "factor_scorecard": str(factor_file.relative_to(ROOT)) if factor_file else "",
-            "monitor": str(monitor_file.relative_to(ROOT)) if monitor_file else "",
-            "weather": str(weather_file.relative_to(ROOT)) if weather_file else "",
-            "trigger_rules": str(trigger_file.relative_to(ROOT)) if trigger_file else "",
-            "company_transmission": str(company_file.relative_to(ROOT)) if company_file else "",
-            "score_history": str(score_history_file.relative_to(ROOT)) if score_history_file.exists() else "",
-            "long_cycle_price_history": str(long_cycle_file.relative_to(ROOT)) if long_cycle_file.exists() else "",
+            "summary": _source_path(summary_file),
+            "factor_scorecard": _source_path(factor_file),
+            "monitor": _source_path(monitor_file),
+            "weather": _source_path(weather_file),
+            "trigger_rules": _source_path(trigger_file),
+            "company_transmission": _source_path(company_file),
+            "score_history": _source_path(score_history_file),
+            "long_cycle_price_history": _source_path(long_cycle_file),
         },
     }
 
@@ -340,10 +340,10 @@ def _build_storage_dashboard(data_dir: Path) -> Dict[str, Any]:
         "operability_summary": _read_csv(operability_file) if operability_file else [],
         "score_history": _read_csv(score_history_file),
         "sources": {
-            "summary": str(summary_file.relative_to(ROOT)) if summary_file else "",
-            "factor_scorecard": str(factor_file.relative_to(ROOT)) if factor_file else "",
-            "operability_summary": str(operability_file.relative_to(ROOT)) if operability_file else "",
-            "score_history": str(score_history_file.relative_to(ROOT)) if score_history_file.exists() else "",
+            "summary": _source_path(summary_file),
+            "factor_scorecard": _source_path(factor_file),
+            "operability_summary": _source_path(operability_file),
+            "score_history": _source_path(score_history_file),
         },
     }
 
@@ -362,11 +362,11 @@ def _build_agri_basket_dashboard(data_dir: Path) -> Dict[str, Any]:
         "watchlist": _read_csv(watchlist_file),
         "score_history": _read_csv(score_history_file),
         "sources": {
-            "summary": str(summary_file.relative_to(ROOT)) if summary_file else "",
-            "factor_scorecard": str(factor_file.relative_to(ROOT)) if factor_file else "",
-            "price_basket": str(price_file.relative_to(ROOT)) if price_file else "",
-            "watchlist": str(watchlist_file.relative_to(ROOT)) if watchlist_file.exists() else "",
-            "score_history": str(score_history_file.relative_to(ROOT)) if score_history_file.exists() else "",
+            "summary": _source_path(summary_file),
+            "factor_scorecard": _source_path(factor_file),
+            "price_basket": _source_path(price_file),
+            "watchlist": _source_path(watchlist_file),
+            "score_history": _source_path(score_history_file),
         },
     }
 
@@ -387,12 +387,12 @@ def _build_generic_dashboard(data_dir: Path, idea_id: str) -> Dict[str, Any]:
         "watchlist": _read_csv(watchlist_file),
         "score_history": _read_csv(score_history_file),
         "sources": {
-            "summary": str(summary_file.relative_to(ROOT)) if summary_file else "",
-            "factor_scorecard": str(factor_file.relative_to(ROOT)) if factor_file else "",
-            "market_heat": str(heat_file.relative_to(ROOT)) if heat_file else "",
-            "company_research": str(company_file.relative_to(ROOT)) if company_file else "",
-            "watchlist": str(watchlist_file.relative_to(ROOT)) if watchlist_file.exists() else "",
-            "score_history": str(score_history_file.relative_to(ROOT)) if score_history_file.exists() else "",
+            "summary": _source_path(summary_file),
+            "factor_scorecard": _source_path(factor_file),
+            "market_heat": _source_path(heat_file),
+            "company_research": _source_path(company_file),
+            "watchlist": _source_path(watchlist_file),
+            "score_history": _source_path(score_history_file),
         },
     }
 
@@ -407,6 +407,17 @@ def _read_csv(path: Path) -> List[Dict[str, Any]]:
 def _latest_file(folder: Path, pattern: str) -> Optional[Path]:
     files = sorted(folder.glob(pattern))
     return files[-1] if files else None
+
+
+def _source_path(path: Optional[Path]) -> str:
+    if not path or not path.exists():
+        return ""
+    for base in (ROOT, Path(FORMAL_MARKET_DATA_ROOT)):
+        try:
+            return str(path.relative_to(base))
+        except ValueError:
+            continue
+    return str(path)
 
 
 def _read_text(path: Optional[Path], max_chars: int = 40000) -> str:
@@ -450,7 +461,7 @@ def list_trend_ideas() -> Dict[str, Any]:
             "rating": cfg["rating"],
             "stage": cfg["stage"],
             "action": cfg["list_action"],
-            "latest_report": str(latest_report.relative_to(ROOT)) if latest_report else "",
+            "latest_report": _source_path(latest_report),
             "summary": summary,
         })
     return {"items": ideas}
@@ -516,18 +527,18 @@ def get_trend_dashboard(idea_id: str) -> Dict[str, Any]:
         "generic_dashboard": _build_generic_dashboard(data_dir, idea_id) if cfg.get("generic_only") else None,
         "tracking_tasks": _read_csv(data_dir / "tracking_tasks.csv"),
         "report": {
-            "path": str(latest_report.relative_to(ROOT)) if latest_report else "",
+            "path": _source_path(latest_report),
             "summary": summary,
             "markdown": report_text,
         },
         "sources": {
-            "latest_price": str(latest_price.relative_to(ROOT)) if latest_price else "",
-            "latest_price_history": str(latest_price_history.relative_to(ROOT)) if latest_price_history else "",
-            "latest_company": str(latest_company.relative_to(ROOT)) if latest_company else "",
-            "latest_validation": str(latest_validation.relative_to(ROOT)) if latest_validation else "",
-            "latest_global": str(latest_global.relative_to(ROOT)) if latest_global else "",
-            "latest_global_history": str(latest_global_history.relative_to(ROOT)) if latest_global_history else "",
-            "latest_valuation": str(latest_valuation.relative_to(ROOT)) if latest_valuation else "",
-            "latest_decision": str(latest_decision.relative_to(ROOT)) if latest_decision else "",
+            "latest_price": _source_path(latest_price),
+            "latest_price_history": _source_path(latest_price_history),
+            "latest_company": _source_path(latest_company),
+            "latest_validation": _source_path(latest_validation),
+            "latest_global": _source_path(latest_global),
+            "latest_global_history": _source_path(latest_global_history),
+            "latest_valuation": _source_path(latest_valuation),
+            "latest_decision": _source_path(latest_decision),
         },
     }
