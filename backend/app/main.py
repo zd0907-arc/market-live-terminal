@@ -80,10 +80,11 @@ app.include_router(stock_events.router, prefix="/api", tags=["Stock Events"])
 app.include_router(ingest.router, prefix="/api/internal/ingest", tags=["Ingest"])
 app.include_router(review.router, prefix="/api/review", tags=["Review"])
 if is_research_api_routes_enabled():
-    from backend.app.routers import selection, market_heat, trend_research
+    from backend.app.routers import selection, market_heat, market_temperature, trend_research
 
     app.include_router(selection.router, prefix="/api", tags=["Selection Research"])
     app.include_router(market_heat.router, prefix="/api", tags=["Market Heat"])
+    app.include_router(market_temperature.router, prefix="/api", tags=["Market Temperature"])
     app.include_router(trend_research.router, prefix="/api", tags=["Trend Research"])
 else:
     logger.info("Research API routes are disabled by ENABLE_RESEARCH_API_ROUTES=false")

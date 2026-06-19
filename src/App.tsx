@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Activity, ArrowUp, ArrowDown, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Target, BrainCircuit } from 'lucide-react';
+import { Activity, ArrowUp, ArrowDown, Wifi, AlertCircle, RefreshCw, BarChart3, TrendingUp, Target, BrainCircuit, Thermometer } from 'lucide-react';
 import { HistoryMultiframeGranularity, RealTimeQuote, ReviewPoolItem, SearchResult } from './types';
 import * as StockService from './services/stockService';
 import ThresholdConfig from './components/dashboard/ThresholdConfig';
@@ -22,6 +22,7 @@ const SparkPatternResearchPage = lazy(() => import('./components/selection/Spark
 const ProbeSignalResearchPage = lazy(() => import('./components/selection/ProbeSignalResearchPage'));
 const MarketEnvironmentGateResearchPage = lazy(() => import('./components/selection/MarketEnvironmentGateResearchPage'));
 const MarketHeatPage = lazy(() => import('./components/market/MarketHeatPage'));
+const MarketTemperaturePage = lazy(() => import('./components/market/MarketTemperaturePage'));
 const HotThemeLowPositionSamplesPage = lazy(() => import('./components/market/HotThemeLowPositionSamplesPage'));
 const TrendResearchPage = lazy(() => import('./components/trend/TrendResearchPage'));
 const WatchlistBoardPage = lazy(() => import('./components/watchlist/WatchlistBoardPage'));
@@ -215,6 +216,16 @@ const App: React.FC = () => {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">热点低位样本加载中...</div>}>
         <HotThemeLowPositionSamplesPage />
+      </Suspense>
+    );
+  }
+
+  const isMarketTemperatureRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/market-temperature');
+  if (isMarketTemperatureRoute) {
+    if (CLOUD_LITE_MODE) return <CloudLiteBlockedPage title="市场温度雷达" />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0a0f1c] text-slate-300 p-6">市场温度雷达加载中...</div>}>
+        <MarketTemperaturePage />
       </Suspense>
     );
   }
@@ -568,6 +579,7 @@ const App: React.FC = () => {
   const selectionHref = '/selection-research';
   const modelTrainingHref = '/model-training';
   const marketHeatHref = '/market-heat';
+  const marketTemperatureHref = '/market-temperature';
   const trendResearchHref = '/trend-research';
 
   return (
@@ -629,6 +641,13 @@ const App: React.FC = () => {
                 >
                   市场热点
                 </a>
+                <a
+                  href={marketTemperatureHref}
+                  className="hidden h-9 items-center rounded-lg border border-orange-700/50 bg-orange-900/30 px-3 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-800/40 lg:inline-flex"
+                  title="打开市场温度雷达"
+                >
+                  市场温度
+                </a>
               </>
             )}
             <ThresholdConfig onConfigUpdate={handleConfigUpdate} onWatchlistChanged={refreshActiveWatchlistState} />
@@ -687,6 +706,13 @@ const App: React.FC = () => {
                 >
                   <BarChart3 className="h-4 w-4" />
                   看市场热点
+                </a>
+                <a
+                  href={marketTemperatureHref}
+                  className="ml-2 mt-2 inline-flex items-center gap-2 rounded-lg border border-orange-600/40 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-200 hover:bg-orange-500/20 md:mt-0"
+                >
+                  <Thermometer className="h-4 w-4" />
+                  看市场温度
                 </a>
                 <a
                   href={modelTrainingHref}
