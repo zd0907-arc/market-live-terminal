@@ -92,7 +92,7 @@
 
 ### 流水线 C：Mac 本地研究站消费
 1. **首次全量同步**：Mac 从 Windows 同步处理后正式库，当前外置数据根目录优先使用 `/Users/dong/ZhangData/market-data`。
-2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。当前正式入口是 `ops/run_daily_new_framework.sh --json --sync-nas`；该口径会在 Mac 校验通过后同步 NAS 生产 `live` 增量、市场水位目录并启动运行库快照。整套 `research/current` 大体量发布保留为单独动作。
+2. **日常增量同步**：每日盘后总控在 Windows 产生日增量后，同步到 Mac 本地正式库。当前正式入口是 `ops/run_daily_new_framework.sh --json --sync-nas`；该口径会在 Mac 校验通过后同步 NAS 生产 `live` 增量和市场水位目录。整套 `research/current` 大体量发布和 NAS 数据库快照都保留为单独动作。
 3. **本地服务消费**：Mac 本地后端通过 `ops/start_local_research_station.sh` 读取本机正式库，为复盘 / 选股 / 研究页面供数。
 4. **本地实时语义**：Mac 本地默认不长期跑后台 crawler（`ENABLE_BACKGROUND_RUNTIME=false`、`ENABLE_CLOUD_COLLECTOR=false`）；打开单票盯盘时，接口可触发按需补拉当日 ticks 并写入本地库。若要获得与线上完全一致的连续盘中体验，应以 Windows/NAS 线上 realtime 链路为准。
 

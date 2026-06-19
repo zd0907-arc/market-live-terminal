@@ -8,7 +8,7 @@
 1. Windows 产出原始包与正式跑数结果
 2. 通过新框架主链刷新 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main`
 3. 必要结果同步到 Mac；自 `2026-06-09` 起，主链本地校验通过后还会继续补一次本地 `postclose_l2` L2 历史并刷新 `stock_universe_meta`
-4. 如需同步线上运行节点，则用正式日跑的 `--sync-nas` 口径同步 NAS 生产 `live` 增量、市场水位目录并启动运行库快照
+4. 如需同步线上运行节点，则用正式日跑的 `--sync-nas` 口径同步 NAS 生产 `live` 增量和市场水位目录；数据库快照是单独备份动作
 5. `ops/legacy/run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
 6. 整套 `research/current` 大体量发布不包含在每日默认 `--sync-nas` 收口；需要时单独走 NAS release 链
 
@@ -43,7 +43,7 @@ bash ops/run_daily_new_framework.sh --json --sync-nas
 只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
 
 补充边界：
-- `--sync-nas` 当前同步 NAS 生产 `live` 增量、市场水位目录，并后台启动运行库快照
+- `--sync-nas` 当前同步 NAS 生产 `live` 增量和市场水位目录；默认不再后台启动运行库快照
 - 这条主链现在会自动补齐 Mac 本地 `live/market_data.db` 的 `history_daily_l2 / history_5m_l2` 与 `stock_universe_meta`
 - 整套 `research/current` 大体量发布仍是单独动作，不绑在每日默认收口里
 

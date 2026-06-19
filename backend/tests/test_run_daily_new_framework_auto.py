@@ -339,7 +339,7 @@ def test_run_daily_runs_market_environment_before_local_live_sync_and_nas_releas
                 "status": "skipped",
                 "reason": "daily_sync_focuses_on_live_and_backup",
             },
-            "snapshot": {"status": "snapshotted"},
+            "snapshot": {"status": "skipped", "reason": "daily_nas_snapshot_policy_off"},
         }
 
     monkeypatch.setattr(daily, "_run_local_market_environment_gate", _fake_market_environment)
@@ -357,7 +357,7 @@ def test_run_daily_runs_market_environment_before_local_live_sync_and_nas_releas
         "status": "skipped",
         "reason": "daily_sync_focuses_on_live_and_backup",
     }
-    assert report["nas_snapshot"] == {"status": "snapshotted"}
+    assert report["nas_snapshot"] == {"status": "skipped", "reason": "daily_nas_snapshot_policy_off"}
     assert ("market_environment", "20260525") in calls
     assert any(item[:2] == ("live_sync", "20260525") for item in calls)
     assert calls[-1] == ("nas_sync", "20260525", report["local_live_sync"], report["local_market_environment_gate"])
@@ -410,7 +410,7 @@ def test_run_daily_skip_live_sync_keeps_mainline_but_skips_postprocess(monkeypat
                 "status": "skipped",
                 "reason": "daily_sync_focuses_on_live_and_backup",
             },
-            "snapshot": {"status": "snapshotted"},
+            "snapshot": {"status": "skipped", "reason": "daily_nas_snapshot_policy_off"},
         }
 
     monkeypatch.setattr(daily, "_run_nas_postprocess", _fake_nas_postprocess)
@@ -426,8 +426,24 @@ def test_run_daily_skip_live_sync_keeps_mainline_but_skips_postprocess(monkeypat
         "status": "skipped",
         "reason": "daily_sync_focuses_on_live_and_backup",
     }
-    assert report["nas_snapshot"] == {"status": "snapshotted"}
+    assert report["nas_snapshot"] == {"status": "skipped", "reason": "daily_nas_snapshot_policy_off"}
     assert calls == [("nas_sync", "20260525", report["local_live_sync"], report["local_market_environment_gate"])]
+
+
+def test_nas_snapshot_policy_defaults_to_off(monkeypatch):
+    called = {"ssh": False}
+
+    def _fail_if_called(_cmd):
+        called["ssh"] = True
+        raise AssertionError("snapshot policy off must not touch NAS")
+
+    monkeypatch.setattr(daily, "_nas_ssh", _fail_if_called)
+
+    assert daily._snapshot_nas_runtime_dbs() == {
+        "status": "skipped",
+        "reason": "daily_nas_snapshot_policy_off",
+    }
+    assert called["ssh"] is False
 
 
 def _candidate_report(trade_date="2026-05-25", *, source_ids=None, errors=None):

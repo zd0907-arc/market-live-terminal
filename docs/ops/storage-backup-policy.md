@@ -7,6 +7,7 @@
 1. `Mac` 负责开发真相和 Git 提交。
 2. `Windows` 负责原始包与正式跑数，不负责长期主备份。
 3. `NAS` 负责在线服务、正式数据库快照和结构化备份。
+4. 每日盘后 `--sync-nas` 只做生产增量同步，不默认做数据库快照。
 
 不要再把 Windows 当主备份机。
 
@@ -57,7 +58,11 @@
 - 正式运行/研究库：
   - `/volume1/docker/market-live-terminal/data/live`
   - `/volume1/docker/market-live-terminal/data/research/current`
-- 正式备份快照：
+- 运行态轻量备份快照：
+  - `/volume1/docker/market-live-terminal/backups/runtime_snapshots`
+- 手工全量备份快照：
+  - `/volume1/docker/market-live-terminal/backups/full_snapshots`
+- 旧的全量日快照历史包：
   - `/volume1/docker/market-live-terminal/backups/db_snapshots`
 - 人工冷备：
   - `/volume1/docker/market-live-terminal/backups/manual`
@@ -76,19 +81,38 @@
 
 1. 从 NAS 当前正式 runtime 根读取 sqlite 主库。
 2. 用 sqlite `.backup` 生成一致性快照。
-3. 输出到：
-   - `/volume1/docker/market-live-terminal/backups/db_snapshots/<timestamp>/`
+3. 默认输出到：
+   - `/volume1/docker/market-live-terminal/backups/runtime_snapshots/<timestamp>/`
 
-覆盖对象：
+默认覆盖对象：
 
 1. `live/market_data.db`
 2. `live/user_data.db`
-3. `research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
-4. `research/current/selection/selection_research.db`
-5. `research/current/selection/model_feature_store.db`
-6. `research/current/selection/model_market_index_daily.db`
-7. `research/current/market_heat/*.db`
-8. `research/current/market_heat/*_latest.json`
+3. `research/current/selection/selection_research.db`
+4. `research/current/selection/model_feature_store.db`
+5. `research/current/selection/model_market_index_daily.db`
+6. `research/current/market_heat/*.db`
+7. `research/current/market_heat/*_latest.json`
+
+默认不覆盖：
+
+1. `research/current/atomic_facts/market_atomic_mainboard_compact_current.db`
+
+原因：
+
+1. 这张 atomic 大库当前约 `68G+`，是训练 / 全量研究底座，不是每天线上查询都要新复制的对象。
+2. 每天复制它会把 NAS `backups` 快速堆到数百 GB，已经实测发生过。
+3. 需要全量保险时，必须人工显式执行：
+
+```bash
+SNAPSHOT_PROFILE=full bash ops/nas/nas_backup_runtime_db_snapshot.sh
+```
+
+这个命令会输出到：
+
+```text
+/volume1/docker/market-live-terminal/backups/full_snapshots/<timestamp>/
+```
 
 ## 5. 频率建议
 
@@ -97,19 +121,22 @@
 最小可用机制：
 
 1. **代码**：每次关键改动都 `push origin` + `push nas`
-2. **数据库**：每日盘后或每周固定跑一次 `nas_backup_runtime_db_snapshot.sh`
-3. **重大改造前**：额外做一次人工冷备，放到 `backups/manual/`
+2. **每日数据同步**：每日盘后只同步增量到 NAS 生产库，不默认做快照
+3. **数据库轻量快照**：最多每周固定跑一次 `nas_backup_runtime_db_snapshot.sh`，保留最近 `4` 份
+4. **全量 atomic 快照**：只在重大改造前人工执行 `SNAPSHOT_PROFILE=full`，保留最近 `1` 份
+5. **人工冷备**：真正要离线长期保存时，放到 `backups/manual/`
 
 ## 6. 现在不建议做的事
 
 1. 不建议让 Windows 承担唯一长期备份角色。
 2. 不建议继续把大备份直接堆在项目根目录。
 3. 不建议现在做“云上唯一单盘备份”并把它当灾备完成态。
+4. 不建议把 `backups/db_snapshots` 继续作为新快照落点；这里已经降级为历史待清理目录。
 
 ## 7. 后续增强
 
 如果后面你补齐第二块云盘或对象存储，再做下一层：
 
-1. NAS `db_snapshots` 定期同步到云端
+1. NAS `runtime_snapshots` 定期同步到云端
 2. 关键 raw 包按月份增量同步到云端
 3. 形成 `本机 + NAS + 云端` 三份数据链

@@ -204,7 +204,15 @@ NAS_MARKET_ENVIRONMENT_GATE_DIR = os.getenv(
     f"{NAS_DATA_ROOT.rstrip('/')}/research/current/selection/{MARKET_ENVIRONMENT_GATE_DIR_NAME}",
 ).strip()
 NAS_INCOMING_ROOT = os.getenv("NAS_INCOMING_ROOT", f"{NAS_DATA_ROOT}/incoming").strip()
-NAS_BACKUP_ROOT = os.getenv("NAS_BACKUP_ROOT", "/volume1/docker/market-live-terminal/backups/db_snapshots").strip()
+NAS_RUNTIME_BACKUP_ROOT = os.getenv(
+    "NAS_RUNTIME_BACKUP_ROOT",
+    "/volume1/docker/market-live-terminal/backups/runtime_snapshots",
+).strip()
+NAS_FULL_BACKUP_ROOT = os.getenv(
+    "NAS_FULL_BACKUP_ROOT",
+    "/volume1/docker/market-live-terminal/backups/full_snapshots",
+).strip()
+DEFAULT_NAS_SNAPSHOT_POLICY = os.getenv("DAILY_NAS_SNAPSHOT_POLICY", "off").strip().lower()
 NAS_SCP_PROTOCOL_OPT = os.getenv("SCP_PROTOCOL_OPT", "-O").strip() or "-O"
 NAS_SSH_CONNECT_TIMEOUT = int(os.getenv("SSH_CONNECT_TIMEOUT", "8"))
 
@@ -682,7 +690,24 @@ DETACH DATABASE meta;
     }
 
 
-def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
+def _normalize_nas_snapshot_policy(policy: Optional[str] = None) -> str:
+    value = (policy if policy is not None else DEFAULT_NAS_SNAPSHOT_POLICY).strip().lower()
+    if value in {"", "0", "false", "no", "none", "off", "skip", "disabled"}:
+        return "off"
+    if value in {"runtime", "light"}:
+        return "runtime"
+    if value in {"full", "atomic"}:
+        return "full"
+    raise ValueError(f"不支持的 DAILY_NAS_SNAPSHOT_POLICY: {value}")
+
+
+def _snapshot_nas_runtime_dbs(policy: Optional[str] = None) -> Dict[str, object]:
+    snapshot_policy = _normalize_nas_snapshot_policy(policy)
+    if snapshot_policy == "off":
+        return {
+            "status": "skipped",
+            "reason": "daily_nas_snapshot_policy_off",
+        }
     running = _nas_ssh("ps -ef | grep '[n]as_backup_runtime_db_snapshot.sh' || true")
     running_lines = [line.strip() for line in str(running.stdout or "").splitlines() if line.strip()]
     if running_lines:
@@ -691,13 +716,15 @@ def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
             "processes": running_lines,
         }
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    target_root = f"{NAS_BACKUP_ROOT.rstrip('/')}/{stamp}"
+    backup_root = NAS_FULL_BACKUP_ROOT if snapshot_policy == "full" else NAS_RUNTIME_BACKUP_ROOT
+    target_root = f"{backup_root.rstrip('/')}/{stamp}"
     log_dir = f"{NAS_INCOMING_ROOT.rstrip('/')}/daily_new_framework/backup_logs"
     log_path = f"{log_dir}/nas_backup_runtime_db_snapshot_{stamp}.log"
     command = (
         f"mkdir -p {shlex.quote(log_dir)} && "
         f"cd {shlex.quote(NAS_PROJECT_ROOT)} && "
-        f"(STAMP={shlex.quote(stamp)} nohup bash ops/nas/nas_backup_runtime_db_snapshot.sh "
+        f"(STAMP={shlex.quote(stamp)} SNAPSHOT_PROFILE={shlex.quote(snapshot_policy)} "
+        f"nohup bash ops/nas/nas_backup_runtime_db_snapshot.sh "
         f"> {shlex.quote(log_path)} 2>&1 < /dev/null & echo $!)"
     )
     result = _nas_ssh(command)
@@ -707,6 +734,7 @@ def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
     return {
         "status": "started",
         "pid": int(pid),
+        "policy": snapshot_policy,
         "target_root": target_root,
         "log_path": log_path,
     }
@@ -1994,7 +2022,7 @@ def main() -> None:
     parser.add_argument("--auto-detect-limit", type=int, default=DEFAULT_AUTO_DETECT_LIMIT, help="自动检测时最多检查最近多少个 Windows 日包")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-candidates", action="store_true")
-    parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后同步 NAS 生产 live 增量、市场水位目录并启动运行库快照")
+    parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后同步 NAS 生产 live 增量和市场水位目录；默认不启动数据库快照")
     parser.add_argument("--skip-nas", action="store_true", help="本次跳过 NAS 同步；正式 wrapper 默认拒绝，需 DAILY_ALLOW_SKIP_NAS=1 才能排障使用")
     parser.add_argument("--skip-live-sync", action="store_true", help="本次跳过 Mac 本地 live/market_data.db 的 L2 历史补齐与 stock_universe_meta 刷新")
     parser.add_argument("--json", action="store_true")

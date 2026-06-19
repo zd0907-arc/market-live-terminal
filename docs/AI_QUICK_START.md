@@ -136,10 +136,11 @@ bash ops/run_daily_new_framework.sh --json --sync-nas
 默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、市场环境指数、热点长表、热点页面缓存、model feature store、选股工作台活跃模型/策略产出，以及 Mac 本地必需模型产物检查。
 
 补充：
-- `--sync-nas` 当前负责把 Mac 已确认正确的正式 `live` 结果和市场水位目录同步到 NAS 生产库，并后台启动一轮 NAS 数据库快照
+- `--sync-nas` 当前负责把 Mac 已确认正确的正式 `live` 结果和市场水位目录同步到 NAS 生产库；默认不再启动 NAS 数据库快照
 - 正式入口会自动补 `--sync-nas`；`--skip-nas` 只允许设置 `DAILY_ALLOW_SKIP_NAS=1` 后用于本地排障
 - 这条主链现在会在本地校验通过后，顺手补一次 Mac 本地 `live/market_data.db` 的 `postclose_l2` 历史并刷新 `stock_universe_meta`
 - 整套 `research/current` 的大体量发布仍保留为单独动作，不再绑进每天跑数后的默认收口
+- NAS 备份改为人工或 NAS 计划任务触发：默认运行态轻量快照落到 `/volume1/docker/market-live-terminal/backups/runtime_snapshots`，只有显式 `SNAPSHOT_PROFILE=full` 才会备份 68G+ atomic 大库
 
 ## 本地研究站最小启动顺序
 ```bash

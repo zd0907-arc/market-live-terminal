@@ -12,7 +12,7 @@
 5. 新框架日跑默认自动检测日期：扫描 Windows 日包，对比 Mac 本地完整性，只补最新完整日之后的缺失日期。
 6. 新框架日跑在 Windows 侧会把市场环境指数和当天热点结果纳入主链：指数刷新与 atomic 并行，热点计算在 atomic 完成后执行，二者都必须在模型特征构建前到位。
 7. Mac 侧完成标准包含 atomic、selection、model_feature_store 落表，以及选股工作台活跃模型/策略的 success 运行记录；当前活跃来源为 `spark_opportunity_selector`、`stable_capital_callback`、`trend_continuation_callback`、`probe_day0_watch`、`probe_d3_confirmed`。
-8. 当启用 `--sync-nas` 时，Mac 本地校验通过后，会同步 NAS 生产 `live` 增量、市场水位目录，并后台启动运行库快照；整套 `research/current` 大体量发布不再绑在每日默认收口里。
+8. 当启用 `--sync-nas` 时，Mac 本地校验通过后，会同步 NAS 生产 `live` 增量和市场水位目录；运行库快照不再绑在每日默认收口里，整套 `research/current` 大体量发布也保留为单独动作。
 
 ## 当前仍需继续做的
 - 全链路 `30m` 目标验证
