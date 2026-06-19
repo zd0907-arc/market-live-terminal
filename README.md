@@ -73,10 +73,10 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 ### 5) 每日盘后正式跑数
 ```bash
 cd /Users/dong/ZhangData/market-live-terminal
-bash ops/run_daily_new_framework.sh --json
+bash ops/run_daily_new_framework.sh --json --sync-nas
 ```
 
-不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；完整性包含市场环境指数、热点结果、热点页面缓存和选股工作台模型/策略输出。已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
+不传 `--date` 时会自动检测 Windows 已有日包中 Mac 尚未完整完成的最新日期；完整性包含市场环境指数、热点结果、热点页面缓存、选股工作台模型/策略输出和本地必需模型产物。已完整的历史日期不会重复跑，早于最新完整日的历史缺口只记录在报告里。
 
 ## 关键文档
 - 架构：`/Users/dong/ZhangData/market-live-terminal/docs/01_SYSTEM_ARCHITECTURE.md`
@@ -115,8 +115,8 @@ bash ops/run_daily_new_framework.sh --json
 
 ## 发布与同步
 - 正式代码云端提交：默认双推 `git push nas main` + `git push origin main`；这里的“云端”固定指 NAS Gitea 与 GitHub 两端。
-- 正式研究数据发布：`bash ops/run_daily_new_framework.sh --json --sync-nas`
-- 注意：`--sync-nas` 当前只发布 `research/current`，不等于同步 `market-data/live/market_data.db` 的全市场历史底座
+- 正式每日跑数与 NAS 同步：`bash ops/run_daily_new_framework.sh --json --sync-nas`
+- 注意：`--sync-nas` 当前聚焦 NAS 生产 `live` 增量、市场水位目录和运行库快照，不默认做整套 `research/current` 大体量发布
 - 旧云端发布（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/ZhangData/market-live-terminal/deploy_to_cloud.sh`
 - Windows 脚本同步：`/Users/dong/ZhangData/market-live-terminal/sync_to_windows.sh`
 - 本地离线补数上云（历史 flat-data 兼容链，不是当前正式默认入口）：`/Users/dong/ZhangData/market-live-terminal/sync_local_to_cloud.sh`

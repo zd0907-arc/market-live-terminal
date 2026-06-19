@@ -121,6 +121,10 @@ LOCAL_PYTHON = _resolve_local_python()
 LAN_WINDOWS_HOST = os.getenv("DAILY_WIN_LAN_HOST", "192.168.3.108")
 LAN_SYNC_PORT = int(os.getenv("DAILY_LAN_SYNC_PORT", "18767"))
 HTTP_SYNC_TIMEOUT = int(os.getenv("DAILY_HTTP_SYNC_TIMEOUT", "1800"))
+LAN_HTTP_START_ATTEMPTS = int(os.getenv("DAILY_LAN_HTTP_START_ATTEMPTS", "1"))
+HTTP_HEALTHCHECK_ATTEMPTS = int(os.getenv("DAILY_HTTP_HEALTHCHECK_ATTEMPTS", "3"))
+HTTP_HEALTHCHECK_TIMEOUT = float(os.getenv("DAILY_HTTP_HEALTHCHECK_TIMEOUT", "2"))
+HTTP_HEALTHCHECK_SLEEP_SECONDS = float(os.getenv("DAILY_HTTP_HEALTHCHECK_SLEEP_SECONDS", "0.5"))
 
 WINDOWS_REQUIRED_SCRIPTS = [
     "backend/scripts/run_daily_new_framework.py",
@@ -490,6 +494,76 @@ def _extract_postclose_local_delta(postclose_report: Dict[str, object], trade_da
     raise FileNotFoundError(f"未找到本地 postclose L2 日增量: trade_date={trade_date}")
 
 
+def _local_live_l2_counts(trade_date: str) -> Dict[str, int]:
+    target_date = _compact_to_iso(trade_date)
+    if not LOCAL_MARKET_DB.exists():
+        return {"rows_daily": 0, "rows_5m": 0}
+    with sqlite3.connect(str(LOCAL_MARKET_DB)) as conn:
+        rows_daily = int(
+            conn.execute("SELECT COUNT(*) FROM history_daily_l2 WHERE date=?", (target_date,)).fetchone()[0]
+            or 0
+        )
+        rows_5m = int(
+            conn.execute("SELECT COUNT(*) FROM history_5m_l2 WHERE source_date=?", (target_date,)).fetchone()[0]
+            or 0
+        )
+    return {"rows_daily": rows_daily, "rows_5m": rows_5m}
+
+
+def _local_live_sync_complete(report: Optional[Dict[str, object]]) -> bool:
+    if not isinstance(report, dict):
+        return False
+    status = str(report.get("status") or "").strip().lower()
+    if status not in {"ok", "recovered"}:
+        return False
+    postclose = report.get("postclose_l2")
+    if not isinstance(postclose, dict) or postclose.get("status") != "done":
+        return False
+    final_status = str(postclose.get("final_status") or "").strip().upper()
+    return final_status in {"PASS", "PASS_WITH_WARNINGS"}
+
+
+def _recover_local_live_postprocess(trade_date: str, error: str) -> Dict[str, object]:
+    target_date = _compact_date(trade_date)
+    local_delta = ROOT_DIR / ".run" / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
+    if not local_delta.exists():
+        raise FileNotFoundError(f"无法恢复 live 同步：本地 L2 delta 不存在: {local_delta}")
+    counts = _local_live_l2_counts(target_date)
+    if int(counts.get("rows_daily") or 0) <= 0 or int(counts.get("rows_5m") or 0) <= 0:
+        raise RuntimeError(f"无法恢复 live 同步：本地 live L2 行数为空: {counts}")
+    postclose_report = {
+        "status": "done",
+        "final_status": "PASS_WITH_WARNINGS",
+        "target_days": [target_date],
+        "recovered_from_error": str(error)[-2000:],
+        "day_reports": [
+            {
+                "trade_date": target_date,
+                "local_artifacts": [str(local_delta)],
+                "local_market_merge_report": {
+                    "trade_date": _compact_to_iso(target_date),
+                    **counts,
+                    "db_path": str(LOCAL_MARKET_DB),
+                },
+                "execution_summary": {
+                    "final_status": "PASS_WITH_WARNINGS",
+                    "reason": "local_live_rows_recovered_after_report_failure",
+                    "warning_count": 1,
+                    "failure_summary": {"report_failure": str(error)[-500:]},
+                    "is_production_ready": False,
+                },
+            }
+        ],
+    }
+    return {
+        "status": "recovered",
+        "recovery_reason": "local_live_rows_and_delta_exist",
+        "postclose_l2": postclose_report,
+        "stock_universe_meta": _refresh_local_stock_universe_meta(),
+        "original_error": str(error)[-2000:],
+    }
+
+
 def _build_stock_universe_meta_sync_db(trade_date: str) -> Dict[str, object]:
     target_date = _compact_date(trade_date)
     sync_db = ROOT_DIR / ".run" / "daily_new_framework" / target_date / "processed" / f"stock_universe_meta_sync_{target_date}.db"
@@ -557,6 +631,10 @@ def _sync_nas_live_market_db(trade_date: str, local_live_sync_report: Optional[D
 
     remote_sql = f"""
 PRAGMA busy_timeout=5000;
+CREATE INDEX IF NOT EXISTS idx_history_5m_l2_source_date
+ON history_5m_l2(source_date);
+CREATE INDEX IF NOT EXISTS idx_history_daily_l2_date
+ON history_daily_l2(date);
 ATTACH DATABASE '{remote_l2_delta.replace("'", "''")}' AS delta;
 ATTACH DATABASE '{remote_meta_delta.replace("'", "''")}' AS meta;
 BEGIN IMMEDIATE;
@@ -619,8 +697,8 @@ def _snapshot_nas_runtime_dbs() -> Dict[str, object]:
     command = (
         f"mkdir -p {shlex.quote(log_dir)} && "
         f"cd {shlex.quote(NAS_PROJECT_ROOT)} && "
-        f"STAMP={shlex.quote(stamp)} nohup bash ops/nas/nas_backup_runtime_db_snapshot.sh "
-        f"> {shlex.quote(log_path)} 2>&1 < /dev/null & echo $!"
+        f"(STAMP={shlex.quote(stamp)} nohup bash ops/nas/nas_backup_runtime_db_snapshot.sh "
+        f"> {shlex.quote(log_path)} 2>&1 < /dev/null & echo $!)"
     )
     result = _nas_ssh(command)
     pid = str(result.stdout or "").strip().splitlines()[-1].strip()
@@ -713,23 +791,57 @@ def _run_json_command(cmd: Sequence[str]) -> Dict[str, object]:
     result = _run(cmd, check=False)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
-        raise RuntimeError(f"命令失败: {shlex.join(list(cmd))} ; {detail[:500]}")
+        raise RuntimeError(f"命令失败: {shlex.join(list(cmd))} ; {detail[:4000]}")
     return _parse_json_output(result.stdout)
 
 
-def _run_local_postclose_l2_sync(trade_date: str) -> Dict[str, object]:
+def _shared_windows_atomic_day_root(trade_date: str) -> str:
+    trade_date = _compact_date(trade_date)
+    return str(PureWindowsPath(rf"Z:\atomic_stage\daily_new_{trade_date}\{trade_date}\{trade_date}"))
+
+
+def _cleanup_shared_windows_atomic_extract(trade_date: str) -> Dict[str, object]:
+    trade_date = _compact_date(trade_date)
+    root = str(PureWindowsPath(rf"Z:\atomic_stage\daily_new_{trade_date}"))
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$root = {_powershell_single_quoted(root)}
+if (Test-Path -LiteralPath $root) {{
+  Remove-Item -LiteralPath $root -Recurse -Force
+  Write-Output "deleted"
+}} else {{
+  Write-Output "missing"
+}}
+"""
+    result = _run_windows_powershell(script, check=False)
+    status = (result.stdout or "").strip().splitlines()
+    return {
+        "status": status[-1].strip() if status else ("failed" if result.returncode != 0 else "unknown"),
+        "root": root,
+        "return_code": int(result.returncode),
+    }
+
+
+def _run_local_postclose_l2_sync(
+    trade_date: str,
+    reuse_day_root: str = "",
+    seed_artifact_db: str = "",
+) -> Dict[str, object]:
     script_path = ROOT_DIR / "backend" / "scripts" / "run_postclose_l2_daily.py"
-    report = _run_json_command(
-        [
-            LOCAL_PYTHON,
-            str(script_path),
-            "--date",
-            _compact_date(trade_date),
-            "--skip-cloud-merge",
-            "--skip-mac-sync",
-            "--json",
-        ]
-    )
+    cmd = [
+        LOCAL_PYTHON,
+        str(script_path),
+        "--date",
+        _compact_date(trade_date),
+        "--skip-cloud-merge",
+        "--skip-mac-sync",
+    ]
+    if reuse_day_root:
+        cmd.extend(["--reuse-day-root", reuse_day_root])
+    if seed_artifact_db:
+        cmd.extend(["--seed-artifact-db", seed_artifact_db])
+    cmd.append("--json")
+    report = _run_json_command(cmd)
     final_status = str(report.get("final_status") or "")
     if report.get("status") != "done" or final_status == "FAIL":
         raise RuntimeError(
@@ -754,9 +866,17 @@ def _refresh_local_stock_universe_meta() -> Dict[str, object]:
     return report
 
 
-def _run_local_live_postprocess(trade_date: str) -> Dict[str, object]:
+def _run_local_live_postprocess(trade_date: str, seed_artifact_db: str = "") -> Dict[str, object]:
+    shared_day_root = _shared_windows_atomic_day_root(trade_date)
+    postclose_report = _run_local_postclose_l2_sync(
+        trade_date,
+        reuse_day_root=shared_day_root,
+        seed_artifact_db=seed_artifact_db,
+    )
+    cleanup_report = _cleanup_shared_windows_atomic_extract(trade_date)
     return {
-        "postclose_l2": _run_local_postclose_l2_sync(trade_date),
+        "postclose_l2": postclose_report,
+        "shared_atomic_extract_cleanup": cleanup_report,
         "stock_universe_meta": _refresh_local_stock_universe_meta(),
     }
 
@@ -841,15 +961,15 @@ def _windows_relative_under_project(remote_path: str) -> str:
 
 def _http_healthcheck(base_url: str, token: str) -> None:
     last_error: Optional[Exception] = None
-    for _ in range(10):
+    for _ in range(max(1, HTTP_HEALTHCHECK_ATTEMPTS)):
         req = urllib.request.Request(f"{base_url.rstrip('/')}/__health__", headers={"X-Relay-Token": token})
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=HTTP_HEALTHCHECK_TIMEOUT) as resp:
                 if int(getattr(resp, "status", 200)) == 200:
                     return
         except Exception as exc:
             last_error = exc
-            time.sleep(1)
+            time.sleep(max(0.0, HTTP_HEALTHCHECK_SLEEP_SECONDS))
     raise RuntimeError(f"HTTP relay 未就绪: {base_url}") from last_error
 
 
@@ -888,6 +1008,20 @@ def _start_windows_http_relay(token: str) -> Dict[str, object]:
         proc.terminate()
         raise
     return {"mode": "LAN_HTTP", "token": token, "base_url": base_url, "process": proc}
+
+
+def _start_windows_http_relay_with_retries(token: str) -> Dict[str, object]:
+    last_error: Optional[Exception] = None
+    attempts = max(1, int(LAN_HTTP_START_ATTEMPTS))
+    for attempt in range(1, attempts + 1):
+        try:
+            return _start_windows_http_relay(token)
+        except Exception as exc:
+            last_error = exc
+            _stop_windows_http_relay()
+            if attempt < attempts:
+                time.sleep(3)
+    raise RuntimeError(f"LAN HTTP relay 启动失败，已重试 {attempts} 次") from last_error
 
 
 def _cleanup_sync_context(sync_context: Optional[Dict[str, object]]) -> None:
@@ -995,9 +1129,15 @@ def _write_atomic_config(trade_date: str, local_run_root: Path, *, win_atomic_db
         "include_gem": False,
         "main_board_only": True,
         "stop_on_failure": True,
-        "cleanup_extracted": True,
+        "cleanup_extracted": False,
         "prefetch_next_day_extract": False,
         "reuse_extracted_day_if_exists": False,
+        "force_rerun_completed_days": True,
+        "stream_extract_process": True,
+        "stream_process_batch_size": 64,
+        "stream_poll_seconds": 0.5,
+        "stream_ready_stable_seconds": 0.75,
+        "postclose_seed_artifact_db": f"{win_run_py}/{trade_date}/postclose_seed_l2_{trade_date}.db",
         "state_file": f"{win_run_py}/{trade_date}/atomic_state.json",
         "report_file": f"{win_run_py}/{trade_date}/atomic_report.json",
         "batches": [{"name": run_name, "kind": "l2", "date_from": iso_date, "date_to": iso_date}],
@@ -1165,6 +1305,11 @@ def _run_windows_pipeline(
         f'"{WIN_PYTHON_EXE}" backend\\scripts\\export_model_feature_store_day_delta.py {trade_date} '
         f'--source-db "{win_model_feature_db}" --output-db "{feature_delta}"'
     )
+    postclose_seed_artifact = (
+        atomic_report.get("postclose_seed_artifact", {}).get("db_path")
+        if isinstance(atomic_report.get("postclose_seed_artifact"), dict)
+        else None
+    )
 
     return {
         "atomic_report": atomic_report,
@@ -1186,6 +1331,7 @@ def _run_windows_pipeline(
             "model_market_index": win_model_index_db,
             "fine_theme_heat_v2": WIN_HEAT_V2_DB,
             "fine_heat_cache": ((heat_report.get("fine_heat_cache") or {}).get("cache_path") if isinstance(heat_report.get("fine_heat_cache"), dict) else None),
+            "postclose_seed_artifact": postclose_seed_artifact,
         },
     }
 
@@ -1274,6 +1420,19 @@ def _run_local_daily_candidates(trade_date: str) -> Dict[str, object]:
     if result.stderr.strip():
         payload["stderr"] = result.stderr[-2000:]
     return payload
+
+
+def _validate_local_selection_model_artifacts(trade_date: str) -> Dict[str, object]:
+    if str(ROOT_DIR) not in sys.path:
+        sys.path.insert(0, str(ROOT_DIR))
+    from backend.app.services.spark_opportunity_exit import validate_exit_model_artifacts
+    from backend.app.services.spark_opportunity_selector import validate_model_artifacts
+
+    return {
+        "status": "ok",
+        "spark_opportunity_selector": validate_model_artifacts(),
+        "spark_exit_dual_track": validate_exit_model_artifacts(_compact_to_iso(trade_date)),
+    }
 
 
 def _validate_local_daily_candidate_report(report: Dict[str, object], trade_date: str) -> None:
@@ -1646,7 +1805,11 @@ def run_daily(
     _sync_required_windows_scripts()
     report["windows_reference_inputs"] = _ensure_windows_heat_reference_inputs()
     sync_context: Optional[Dict[str, object]] = None
+    local_live_executor: Optional[ThreadPoolExecutor] = None
+    local_live_future = None
     try:
+        if not skip_candidates:
+            report["local_model_artifacts"] = _validate_local_selection_model_artifacts(trade_date)
         windows_report = _run_windows_pipeline(
             trade_date,
             local_run_root,
@@ -1659,7 +1822,7 @@ def run_daily(
         token = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii").rstrip("=")
         if _tcp_reachable(LAN_WINDOWS_HOST, 22, 1.0):
             try:
-                sync_context = _start_windows_http_relay(token)
+                sync_context = _start_windows_http_relay_with_retries(token)
             except Exception as exc:
                 _progress(f"[{trade_date}] LAN HTTP 不可用，回退 LAN SCP: {exc}")
                 sync_context = {"mode": "LAN_SCP"}
@@ -1690,6 +1853,18 @@ def run_daily(
             artifact_sync_results[key] = _download_windows_file(str(remote_path), Path(local_path), sync_context)
         report["artifact_sync_results"] = artifact_sync_results
         report["local_merges"] = _merge_local_deltas(trade_date, local_deltas)
+        postclose_seed_artifact = str(
+            ((windows_report.get("remote_artifacts") or {}).get("postclose_seed_artifact"))
+            if isinstance(windows_report.get("remote_artifacts"), dict)
+            else ""
+        ).strip()
+        if include_live_sync:
+            local_live_executor = ThreadPoolExecutor(max_workers=1)
+            local_live_future = local_live_executor.submit(
+                _run_local_live_postprocess,
+                trade_date,
+                postclose_seed_artifact,
+            )
         if not skip_candidates:
             report["local_daily_candidates"] = _run_local_daily_candidates(trade_date)
         report["local_verify"] = _verify_full_local(trade_date)
@@ -1697,15 +1872,26 @@ def run_daily(
         if core_ok:
             report["local_market_environment_gate"] = _run_local_market_environment_gate(trade_date)
             report["local_verify"] = _verify_full_local(trade_date)
-        if core_ok and include_live_sync:
+        if include_live_sync and local_live_future is not None:
             try:
-                report["local_live_sync"] = _run_local_live_postprocess(trade_date)
+                report["local_live_sync"] = local_live_future.result()
             except Exception as exc:
-                report["local_live_sync"] = {"status": "failed", "error": str(exc)}
                 report.setdefault("warnings", []).append(f"local_live_sync failed: {exc}")
+                try:
+                    report["local_live_sync"] = _recover_local_live_postprocess(trade_date, str(exc))
+                    report.setdefault("warnings", []).append("local_live_sync recovered from existing local live rows and delta")
+                except Exception as recover_exc:
+                    report["local_live_sync"] = {
+                        "status": "failed",
+                        "error": str(exc),
+                        "recovery_error": str(recover_exc),
+                    }
         elif not include_live_sync:
             report["local_live_sync"] = {"status": "skipped", "reason": "skip_live_sync"}
-        ok = _is_local_complete(report["local_verify"] or {})
+        live_ok = (not include_live_sync) or _local_live_sync_complete(
+            report["local_live_sync"] if isinstance(report.get("local_live_sync"), dict) else None
+        )
+        ok = _is_local_complete(report["local_verify"] or {}) and live_ok
         if ok and sync_nas:
             nas_sync = _run_nas_postprocess(
                 trade_date,
@@ -1717,12 +1903,26 @@ def run_daily(
             report["nas_market_environment_gate"] = nas_sync.get("market_environment_gate")
             report["nas_release"] = nas_sync.get("research_release")
             report["nas_snapshot"] = nas_sync.get("snapshot")
+            nas_live_ok = (
+                not include_live_sync
+                or (
+                    isinstance(report.get("nas_live_sync"), dict)
+                    and report["nas_live_sync"].get("status") == "synced"
+                )
+            )
+            nas_gate_ok = (
+                isinstance(report.get("nas_market_environment_gate"), dict)
+                and report["nas_market_environment_gate"].get("status") == "synced"
+            )
+            ok = ok and nas_live_ok and nas_gate_ok
         report["status"] = "pass" if ok else "fail"
     except Exception as exc:
         report["status"] = "fail"
         report["error"] = str(exc)
         raise
     finally:
+        if local_live_executor is not None:
+            local_live_executor.shutdown(wait=True)
         _cleanup_sync_context(sync_context)
         _write_report(trade_date, report)
     return report
@@ -1794,8 +1994,8 @@ def main() -> None:
     parser.add_argument("--auto-detect-limit", type=int, default=DEFAULT_AUTO_DETECT_LIMIT, help="自动检测时最多检查最近多少个 Windows 日包")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-candidates", action="store_true")
-    parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后把本地正式研究库发布到 NAS research/current")
-    parser.add_argument("--skip-nas", action="store_true", help="本次跳过 NAS 发布")
+    parser.add_argument("--sync-nas", action="store_true", default=DEFAULT_SYNC_NAS, help="成功后同步 NAS 生产 live 增量、市场水位目录并启动运行库快照")
+    parser.add_argument("--skip-nas", action="store_true", help="本次跳过 NAS 同步；正式 wrapper 默认拒绝，需 DAILY_ALLOW_SKIP_NAS=1 才能排障使用")
     parser.add_argument("--skip-live-sync", action="store_true", help="本次跳过 Mac 本地 live/market_data.db 的 L2 历史补齐与 stock_universe_meta 刷新")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()

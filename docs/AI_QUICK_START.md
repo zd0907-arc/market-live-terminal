@@ -130,13 +130,14 @@ ssh zhangdong@dxp4800pro
 ## 每天盘后要跑的指令
 ```bash
 cd /Users/dong/ZhangData/market-live-terminal
-bash ops/run_daily_new_framework.sh --json
+bash ops/run_daily_new_framework.sh --json --sync-nas
 ```
 
-默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、市场环境指数、热点长表、热点页面缓存、model feature store，以及选股工作台活跃模型/策略产出。
+默认不传日期。脚本会自动查 Windows 日包，跳过已完整日期，只补最新完整日之后的缺失日期；完成标准包含 Windows 跑数、Mac delta 合并、市场环境指数、热点长表、热点页面缓存、model feature store、选股工作台活跃模型/策略产出，以及 Mac 本地必需模型产物检查。
 
 补充：
-- `--sync-nas` 当前负责把 Mac 已确认正确的正式 `live` 结果同步到 NAS 生产库，并后台启动一轮 NAS 数据库快照
+- `--sync-nas` 当前负责把 Mac 已确认正确的正式 `live` 结果和市场水位目录同步到 NAS 生产库，并后台启动一轮 NAS 数据库快照
+- 正式入口会自动补 `--sync-nas`；`--skip-nas` 只允许设置 `DAILY_ALLOW_SKIP_NAS=1` 后用于本地排障
 - 这条主链现在会在本地校验通过后，顺手补一次 Mac 本地 `live/market_data.db` 的 `postclose_l2` 历史并刷新 `stock_universe_meta`
 - 整套 `research/current` 的大体量发布仍保留为单独动作，不再绑进每天跑数后的默认收口
 
@@ -160,7 +161,7 @@ BACKEND_PORT=8001 FRONTEND_PORT=3001 bash ops/start_local_research_frontend.sh
 - `ops/legacy/sync_windows_research_snapshot.sh`、`backend/scripts/legacy/compat/build_local_research_snapshot.py`、`ops/legacy/start_local_backend_with_atomic.sh` 只按兼容/验证工具理解；
 - 当前正式方案是：
   - 首次把 Windows 的处理后全量库整库同步到 Mac；
-  - 后续每天执行 `./ops/run_daily_new_framework.sh --json` 做正式主链增量日跑，日期由脚本自动检测，并在候选生成后刷新选股页近期市场水位；
+  - 后续每天执行 `./ops/run_daily_new_framework.sh --json --sync-nas` 做正式主链增量日跑，日期由脚本自动检测，并在候选生成后刷新选股页近期市场水位；
   - 查询新框架月批或阶段状态时用 `./ops/check_windows_new_framework_months_status.sh`；
   - `./ops/legacy/run_postclose_l2.sh` 只保留为旧盘后 L2 / cloud 同步兼容链路；
   - Windows -> Mac 数据同步只允许两条路径：

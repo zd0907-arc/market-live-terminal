@@ -45,6 +45,27 @@ def _model_dir(model_dir: Optional[str | Path] = None) -> Path:
     return Path(model_dir or os.getenv("SPARK_OPPORTUNITY_MODEL_DIR") or DEFAULT_MODEL_DIR)
 
 
+def required_model_artifacts(model_dir: Optional[str | Path] = None) -> List[Path]:
+    root = _model_dir(model_dir)
+    return [
+        root / "summary.json",
+        root / "feature_columns.json",
+        root / "model.joblib",
+    ]
+
+
+def validate_model_artifacts(model_dir: Optional[str | Path] = None) -> Dict[str, Any]:
+    artifacts = required_model_artifacts(model_dir)
+    missing = [str(path) for path in artifacts if not path.exists()]
+    if missing:
+        raise RuntimeError("星火机会模型产物缺失: " + ", ".join(missing))
+    return {
+        "status": "ok",
+        "model_dir": str(_model_dir(model_dir)),
+        "artifacts": [str(path) for path in artifacts],
+    }
+
+
 def _artifact_label(path: str | Path) -> str:
     candidate = Path(path)
     if candidate.name:

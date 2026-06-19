@@ -8,9 +8,9 @@
 1. Windows 产出原始包与正式跑数结果
 2. 通过新框架主链刷新 `atomic_compact_main`、`selection_research_main`、`model_feature_store_main`
 3. 必要结果同步到 Mac；自 `2026-06-09` 起，主链本地校验通过后还会继续补一次本地 `postclose_l2` L2 历史并刷新 `stock_universe_meta`
-4. 如需上线，则再通过 NAS release 链把正式研究库发布到 `research/current`
+4. 如需同步线上运行节点，则用正式日跑的 `--sync-nas` 口径同步 NAS 生产 `live` 增量、市场水位目录并启动运行库快照
 5. `ops/legacy/run_postclose_l2.sh` 只按兼容旧链路理解，不再作为当前默认主线阅读入口
-6. `market_data_live_main` 的全市场历史底座同步不包含在 `--sync-nas`；它属于单独的 `live` 库同步/补库动作
+6. 整套 `research/current` 大体量发布不包含在每日默认 `--sync-nas` 收口；需要时单独走 NAS release 链
 
 当前要区分两条链：
 
@@ -19,15 +19,15 @@
 
 ## 2. 当前正式入口
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
-./ops/run_daily_new_framework.sh --json
+cd /Users/dong/ZhangData/market-live-terminal
+./ops/run_daily_new_framework.sh --json --sync-nas
 ./ops/check_windows_new_framework_months_status.sh
 ```
 
 ## 2.1 当前正式日常指令
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_daily_new_framework.sh --json
+cd /Users/dong/ZhangData/market-live-terminal
+bash ops/run_daily_new_framework.sh --json --sync-nas
 ```
 
 默认不传 `--date`。脚本会扫描 Windows `D:\MarketData` 下最近日包，和 Mac 正式库对比：
@@ -37,24 +37,25 @@ bash ops/run_daily_new_framework.sh --json
 - `model_feature_daily_v1`、`model_feature_intraday_shape_v1`
 - 选股模型依赖的当日热点结果已经生成
 - 热点页面依赖的当日热点缓存已经同步回 Mac
+- Mac 本地必需模型产物完整
 - `selection_strategy_runs` 中当天活跃来源的 success 记录：`spark_opportunity_selector`、`stable_capital_callback`、`trend_continuation_callback`、`probe_day0_watch`、`probe_d3_confirmed`
 
 只自动选择“最新完整日之后”的缺失日期补跑；早于最新完整日的历史缺口进入 `historical_missing_dates`，不作为日常自动补跑对象。
 
 补充边界：
-- `--sync-nas` 当前只发布 NAS `research/current`
+- `--sync-nas` 当前同步 NAS 生产 `live` 增量、市场水位目录，并后台启动运行库快照
 - 这条主链现在会自动补齐 Mac 本地 `live/market_data.db` 的 `history_daily_l2 / history_5m_l2` 与 `stock_universe_meta`
-- 若线上问题落在 `live/market_data.db` 的全市场历史底座，需要单独做 `live` 库同步或历史补库
+- 整套 `research/current` 大体量发布仍是单独动作，不绑在每日默认收口里
 
 需要人工指定日期排障时才使用：
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
-bash ops/run_daily_new_framework.sh --date 20260525 --json
+cd /Users/dong/ZhangData/market-live-terminal
+bash ops/run_daily_new_framework.sh --date 20260525 --json --sync-nas
 ```
 
 ## 2.1.0 兼容旧链路
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/legacy/run_postclose_l2.sh
 ```
 
@@ -117,14 +118,14 @@ docs/selection/model_market_index_daily_runbook.md
 
 ## 2.3 状态检查
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/check_windows_new_framework_months_status.sh
 ```
 这个脚本当前更适合看新框架月批 / 阶段状态，不等同于每个交易日的逐日状态面板。
 
 兼容旧链路状态：
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 bash ops/legacy/check_postclose_l2_status.sh
 ```
 新框架与旧链路的状态文件不同，不要混用旧 `postclose_daily_run_*.log` 去判断新框架日跑是否失败。

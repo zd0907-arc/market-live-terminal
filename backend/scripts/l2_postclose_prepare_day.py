@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
+import sqlite3
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
@@ -28,11 +28,49 @@ from backend.scripts.l2_daily_backfill import list_symbol_dirs, normalize_symbol
 
 
 def _chunk_symbols(symbols: Sequence[str], worker_count: int) -> List[List[str]]:
+    if not symbols:
+        return []
     if worker_count <= 1 or len(symbols) <= 1:
         return [list(symbols)]
     worker_count = max(1, min(int(worker_count), len(symbols)))
-    chunk_size = math.ceil(len(symbols) / worker_count)
-    return [list(symbols[i:i + chunk_size]) for i in range(0, len(symbols), chunk_size)]
+    chunks = [[] for _ in range(worker_count)]
+    for idx, symbol in enumerate(symbols):
+        chunks[idx % worker_count].append(symbol)
+    return [chunk for chunk in chunks if chunk]
+
+
+def _symbol_dir_weight(symbol_dir: Path) -> int:
+    total = 0
+    stack = [Path(symbol_dir)]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_file():
+                            total += int(entry.stat().st_size)
+                        elif entry.is_dir():
+                            stack.append(Path(entry.path))
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return max(1, total)
+
+
+def _balanced_symbol_chunks(symbol_weights: Sequence[Tuple[str, int]], worker_count: int) -> List[List[str]]:
+    if not symbol_weights:
+        return []
+    if worker_count <= 1 or len(symbol_weights) <= 1:
+        return [[symbol for symbol, _ in symbol_weights]]
+    worker_count = max(1, min(int(worker_count), len(symbol_weights)))
+    buckets: List[Dict[str, object]] = [{"weight": 0, "symbols": []} for _ in range(worker_count)]
+    for symbol, weight in sorted(symbol_weights, key=lambda item: (-int(item[1]), item[0])):
+        bucket = min(buckets, key=lambda item: (int(item["weight"]), len(item["symbols"])))
+        bucket["symbols"].append(symbol)
+        bucket["weight"] = int(bucket["weight"]) + int(weight)
+    return [sorted(list(bucket["symbols"])) for bucket in buckets if bucket["symbols"]]
 
 
 def _resolve_archive_path(market_root: Path, trade_date: str) -> Path:
@@ -58,6 +96,11 @@ def _wait_archive_stable(archive_path: Path, stable_seconds: int) -> Dict[str, i
     return {"size_before": int(size_before), "size_after": int(size_after)}
 
 
+def _archive_size_snapshot(archive_path: Path) -> Dict[str, int]:
+    size = int(archive_path.stat().st_size)
+    return {"size_before": size, "size_after": size}
+
+
 def _extract_archive(archive_path: Path, extract_root: Path, force_reextract: bool) -> Path:
     if extract_root.exists() and force_reextract:
         shutil.rmtree(extract_root)
@@ -81,6 +124,40 @@ def _extract_archive(archive_path: Path, extract_root: Path, force_reextract: bo
     return day_root
 
 
+def _resolve_reuse_day_root(candidate: Optional[Path]) -> Optional[Path]:
+    if candidate is None:
+        return None
+    path = Path(candidate)
+    if not path.exists():
+        return None
+    try:
+        day_root, _ = normalize_month_day_root(path)
+    except Exception:
+        return None
+    if not day_root.exists():
+        return None
+    if not list_symbol_dirs(day_root):
+        return None
+    return day_root
+
+
+def _load_excluded_symbols_from_artifact(artifact_db: Optional[Path], trade_date: str) -> List[str]:
+    if artifact_db is None:
+        return []
+    path = Path(artifact_db)
+    if not path.exists():
+        return []
+    try:
+        with sqlite3.connect(path) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT symbol FROM history_daily_l2 WHERE date=?",
+                (f"{trade_date[:4]}-{trade_date[4:6]}-{trade_date[6:]}",),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    return sorted({str(row[0]).strip().lower() for row in rows if str(row[0]).strip()})
+
+
 def prepare_day(
     trade_date: str,
     market_root: Path,
@@ -89,22 +166,38 @@ def prepare_day(
     workers: int,
     stable_seconds: int = 30,
     force_reextract: bool = True,
+    reuse_day_root: Optional[Path] = None,
+    exclude_artifact_db: Optional[Path] = None,
 ) -> Dict[str, object]:
     trade_date = str(trade_date).replace("-", "").strip()
     if len(trade_date) != 8 or not trade_date.isdigit():
         raise ValueError(f"非法 trade_date: {trade_date}")
 
+    reused_day_root = _resolve_reuse_day_root(reuse_day_root)
     archive_path = _resolve_archive_path(Path(market_root), trade_date)
-    size_info = _wait_archive_stable(archive_path, stable_seconds=stable_seconds)
+    size_info = (
+        _archive_size_snapshot(archive_path)
+        if reused_day_root is not None
+        else _wait_archive_stable(archive_path, stable_seconds=stable_seconds)
+    )
 
     extract_root = Path(stage_root) / trade_date
-    day_root = _extract_archive(archive_path, extract_root, force_reextract=force_reextract)
+    if reused_day_root is not None:
+        day_root = reused_day_root
+        reused_extract = True
+    else:
+        day_root = _extract_archive(archive_path, extract_root, force_reextract=force_reextract)
+        reused_extract = False
 
     symbol_dirs = list_symbol_dirs(day_root)
-    symbols = [normalize_symbol_dir_name(path.name) for path in symbol_dirs]
-    if not symbols:
-        raise RuntimeError(f"解压后未发现 symbol 目录: {day_root}")
-
+    excluded_symbols = set(_load_excluded_symbols_from_artifact(exclude_artifact_db, trade_date))
+    symbol_weights: List[Tuple[str, int]] = []
+    for symbol_dir in symbol_dirs:
+        symbol = normalize_symbol_dir_name(symbol_dir.name)
+        if symbol in excluded_symbols:
+            continue
+        symbol_weights.append((symbol, _symbol_dir_weight(symbol_dir)))
+    symbols = [symbol for symbol, _ in symbol_weights]
     day_output_root = Path(output_root) / trade_date
     shards_root = day_output_root / "shards"
     artifacts_root = day_output_root / "artifacts"
@@ -112,7 +205,9 @@ def prepare_day(
     artifacts_root.mkdir(parents=True, exist_ok=True)
 
     shard_paths: List[Dict[str, object]] = []
-    for idx, chunk in enumerate(_chunk_symbols(symbols, workers), start=1):
+    chunks = _balanced_symbol_chunks(symbol_weights, workers)
+    weight_by_symbol = {symbol: weight for symbol, weight in symbol_weights}
+    for idx, chunk in enumerate(chunks, start=1):
         shard_file = shards_root / f"worker_{idx}.symbols.txt"
         shard_file.write_text("\n".join(chunk) + "\n", encoding="utf-8")
         artifact_db = artifacts_root / f"worker_{idx}.db"
@@ -122,6 +217,7 @@ def prepare_day(
             {
                 "worker": idx,
                 "symbol_count": len(chunk),
+                "estimated_input_bytes": int(sum(weight_by_symbol.get(symbol, 0) for symbol in chunk)),
                 "symbols_file": str(shard_file),
                 "artifact_db": str(artifact_db),
             }
@@ -133,8 +229,14 @@ def prepare_day(
         "archive_size": int(size_info["size_after"]),
         "extract_root": str(extract_root),
         "day_root": str(day_root),
+        "reused_extract": reused_extract,
+        "reuse_day_root": str(reuse_day_root) if reuse_day_root else "",
+        "exclude_artifact_db": str(exclude_artifact_db) if exclude_artifact_db else "",
+        "excluded_symbol_count": len(excluded_symbols),
         "worker_count": len(shard_paths),
         "symbol_count": len(symbols),
+        "shard_strategy": "input_size_balanced",
+        "estimated_input_bytes": int(sum(weight for _, weight in symbol_weights)),
         "shards": shard_paths,
     }
     manifest_path = day_output_root / "manifest.json"
@@ -152,6 +254,8 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--stable-seconds", type=int, default=30)
     parser.add_argument("--no-force-reextract", action="store_true")
+    parser.add_argument("--reuse-day-root", default="", help=r"可选复用已解压 day_root；命中时跳过再次解压")
+    parser.add_argument("--exclude-artifact-db", default="", help=r"可选种子 artifact db；其中已有 symbol 会从本次 shard 中排除")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -163,6 +267,8 @@ def main() -> None:
         workers=int(args.workers),
         stable_seconds=int(args.stable_seconds),
         force_reextract=not bool(args.no_force_reextract),
+        reuse_day_root=Path(args.reuse_day_root) if args.reuse_day_root else None,
+        exclude_artifact_db=Path(args.exclude_artifact_db) if args.exclude_artifact_db else None,
     )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))

@@ -151,7 +151,7 @@
 
 正式主链仍是：
 
-- `bash ops/run_daily_new_framework.sh --json`
+- `bash ops/run_daily_new_framework.sh --json --sync-nas`
 
 试盘这条线的接法不需要单独起新框架，仍挂在：
 

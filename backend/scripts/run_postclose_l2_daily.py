@@ -95,7 +95,10 @@ LAN_WINDOWS_HOST = os.getenv("L2_WIN_LAN_HOST", "192.168.3.108").strip()
 CLOUD_PUBLIC_HTTP_HOST = os.getenv("L2_CLOUD_PUBLIC_HTTP_HOST", "111.229.144.202").strip()
 LAN_SYNC_PORT = int(os.getenv("L2_LAN_SYNC_PORT", "18765"))
 CLOUD_RELAY_PORT = int(os.getenv("L2_CLOUD_RELAY_PORT", "18766"))
-LAN_HTTP_START_ATTEMPTS = int(os.getenv("L2_LAN_HTTP_START_ATTEMPTS", "2"))
+LAN_HTTP_START_ATTEMPTS = int(os.getenv("L2_LAN_HTTP_START_ATTEMPTS", "1"))
+HTTP_HEALTHCHECK_ATTEMPTS = int(os.getenv("L2_HTTP_HEALTHCHECK_ATTEMPTS", "3"))
+HTTP_HEALTHCHECK_TIMEOUT = float(os.getenv("L2_HTTP_HEALTHCHECK_TIMEOUT", "2"))
+HTTP_HEALTHCHECK_SLEEP_SECONDS = float(os.getenv("L2_HTTP_HEALTHCHECK_SLEEP_SECONDS", "0.5"))
 ALLOW_CLOUD_RELAY_WHEN_LAN_REACHABLE = os.getenv("L2_ALLOW_CLOUD_RELAY_WHEN_LAN_REACHABLE", "").strip().lower() in {"1", "true", "yes"}
 FORCE_LAN_SCP = os.getenv("L2_FORCE_LAN_SCP", "").strip().lower() in {"1", "true", "yes"}
 HTTP_SYNC_TIMEOUT = int(os.getenv("L2_HTTP_SYNC_TIMEOUT", "1800"))
@@ -506,18 +509,24 @@ def _sync_required_cloud_scripts() -> None:
         _run(["scp", str(local_path), f"{CLOUD_HOST}:{remote_path}"], check=True)
 
 
-def _http_healthcheck(base_url: str, token: str, *, retries: int = 10, sleep_seconds: float = 1.0) -> None:
+def _http_healthcheck(
+    base_url: str,
+    token: str,
+    *,
+    retries: int = HTTP_HEALTHCHECK_ATTEMPTS,
+    sleep_seconds: float = HTTP_HEALTHCHECK_SLEEP_SECONDS,
+) -> None:
     url = f"{base_url.rstrip('/')}/__health__"
     last_error: Optional[Exception] = None
-    for _ in range(retries):
+    for _ in range(max(1, int(retries))):
         req = urllib.request.Request(url, headers={"X-Relay-Token": token}, method="GET")
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=HTTP_HEALTHCHECK_TIMEOUT) as resp:
                 if int(getattr(resp, "status", 200)) == 200:
                     return
         except Exception as exc:
             last_error = exc
-            time.sleep(sleep_seconds)
+            time.sleep(max(0.0, float(sleep_seconds)))
     raise RuntimeError(f"HTTP relay 未就绪: {base_url}") from last_error
 
 
@@ -826,21 +835,31 @@ def _sync_required_windows_scripts() -> None:
         _run(["scp", str(local_path), f"{WIN_HOST}:{_win_scp_path(remote_path)}"], check=True)
 
 
-def _prepare_day(trade_date: str, workers: int, stable_seconds: int) -> Dict[str, object]:
+def _prepare_day(
+    trade_date: str,
+    workers: int,
+    stable_seconds: int,
+    reuse_day_root: str = "",
+    exclude_artifact_db: str = "",
+) -> Dict[str, object]:
     _progress(f"[{trade_date}] 开始 prepare：检查归档稳定性、解压、切 {workers} 个 shard")
     prepare_bat = _resolve_windows_prepare_bat()
+    reuse_arg = f'--reuse-day-root "{reuse_day_root}" ' if reuse_day_root else ""
+    exclude_arg = f'--exclude-artifact-db "{exclude_artifact_db}" ' if exclude_artifact_db else ""
     cmd = (
         f'cmd /c ""{prepare_bat}" {trade_date} '
         f'--market-root "{WIN_MARKET_ROOT}" '
         f'--stage-root "{WIN_STAGE_ROOT}" '
         f'--output-root "{WIN_OUTPUT_ROOT}" '
-        f'--workers {workers} --stable-seconds {stable_seconds} --json"'
+        f'--workers {workers} --stable-seconds {stable_seconds} {reuse_arg}{exclude_arg}--json"'
     )
     result = _ssh(WIN_HOST, cmd)
     manifest = json.loads(result.stdout)
     _progress(
         f"[{trade_date}] prepare 完成：archive_size={manifest.get('archive_size')} "
-        f"symbol_count={manifest.get('symbol_count')} worker_count={manifest.get('worker_count')}"
+        f"symbol_count={manifest.get('symbol_count')} worker_count={manifest.get('worker_count')} "
+        f"reused_extract={int(bool(manifest.get('reused_extract')))} "
+        f"excluded_symbol_count={int(manifest.get('excluded_symbol_count') or 0)}"
     )
     return manifest
 
@@ -1614,6 +1633,8 @@ def run_day(
     stable_seconds: int,
     skip_cloud_merge: bool = False,
     skip_mac_sync: bool = False,
+    reuse_day_root: str = "",
+    seed_artifact_db: str = "",
 ) -> Dict[str, object]:
     local_day_root = ROOT_DIR / ".run" / "postclose_l2" / trade_date
     _progress(f"[{trade_date}] ===== 开始处理 =====")
@@ -1636,11 +1657,17 @@ def run_day(
     selection_sync_report: Optional[Dict[str, object]] = None
     index_sync_report: Optional[Dict[str, object]] = None
     try:
-        prepared = _prepare_day(trade_date=trade_date, workers=workers, stable_seconds=stable_seconds)
+        prepared = _prepare_day(
+            trade_date=trade_date,
+            workers=workers,
+            stable_seconds=stable_seconds,
+            reuse_day_root=reuse_day_root,
+            exclude_artifact_db=seed_artifact_db,
+        )
         worker_results = _run_workers(prepared, local_day_root=local_day_root)
         windows_merge_report = _merge_on_windows(
             trade_date=trade_date,
-            remote_artifacts=[str(item["artifact_db"]) for item in worker_results],
+            remote_artifacts=([seed_artifact_db] if seed_artifact_db else []) + [str(item["artifact_db"]) for item in worker_results],
         )
         l2_delta_report = _export_windows_l2_day_delta(
             trade_date=trade_date,
@@ -1724,6 +1751,8 @@ def main() -> None:
     parser.add_argument("--stable-seconds", type=int, default=30)
     parser.add_argument("--skip-cloud-merge", action="store_true")
     parser.add_argument("--skip-mac-sync", action="store_true")
+    parser.add_argument("--reuse-day-root", default="", help=r"可选复用已解压 day_root；命中时跳过再次解压")
+    parser.add_argument("--seed-artifact-db", default="", help=r"可选种子 artifact db；其 symbol 将跳过 worker，并在 merge 时并入结果")
     parser.add_argument("--bootstrap-mac-full-sync", action="store_true")
     parser.add_argument("--bootstrap-only", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -1827,6 +1856,8 @@ def main() -> None:
             stable_seconds=int(args.stable_seconds),
             skip_cloud_merge=bool(args.skip_cloud_merge),
             skip_mac_sync=bool(args.skip_mac_sync),
+            reuse_day_root=str(args.reuse_day_root or "").strip(),
+            seed_artifact_db=str(args.seed_artifact_db or "").strip(),
         )
         for day in target_days
     ]

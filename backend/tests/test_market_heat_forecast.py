@@ -277,3 +277,134 @@ def test_fine_heat_dates_include_cache_and_v2_history_when_atomic_is_latest_only
     assert set(dates) == {"2026-06-11", "2026-06-12", "2026-06-15"}
     assert dates["2026-06-11"]["has_cache"] is True
     assert dates["2026-06-11"]["selectable"] is True
+
+
+def test_fine_theme_stock_detail_falls_back_to_live_history_when_atomic_is_latest_only(monkeypatch, tmp_path):
+    formal_root = tmp_path / "market-data"
+    research_root = formal_root / "research" / "current"
+    heat_dir = research_root / "market_heat"
+    atomic_dir = research_root / "atomic_facts"
+    live_dir = formal_root / "live"
+    heat_dir.mkdir(parents=True, exist_ok=True)
+    atomic_dir.mkdir(parents=True, exist_ok=True)
+    live_dir.mkdir(parents=True, exist_ok=True)
+
+    atomic_db = atomic_dir / "market_atomic_mainboard_compact_current.db"
+    with sqlite3.connect(str(atomic_db)) as conn:
+        conn.execute("CREATE TABLE atomic_trade_daily (trade_date TEXT)")
+        conn.execute("INSERT INTO atomic_trade_daily VALUES ('2026-06-15')")
+        conn.commit()
+
+    theme_db = heat_dir / "tradable_theme_map.db"
+    symbols = [f"sz00000{idx}" for idx in range(1, 6)]
+    with sqlite3.connect(str(theme_db)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE clean_sector_boards (
+                sector_code TEXT NOT NULL,
+                sector_name TEXT NOT NULL,
+                sector_type TEXT NOT NULL,
+                clean_status TEXT NOT NULL,
+                clean_reason TEXT,
+                weight REAL NOT NULL DEFAULT 1.0,
+                source TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (sector_code, sector_type)
+            );
+            CREATE TABLE clean_stock_sector_memberships (
+                symbol TEXT NOT NULL,
+                name TEXT,
+                sector_code TEXT NOT NULL,
+                sector_name TEXT NOT NULL,
+                sector_type TEXT NOT NULL,
+                weight REAL NOT NULL DEFAULT 1.0,
+                source TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                PRIMARY KEY (symbol, sector_code, sector_type)
+            );
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO clean_sector_boards (
+                sector_code, sector_name, sector_type, clean_status, source, generated_at
+            ) VALUES ('BK0001', '测试主题', 'concept', 'active', 'test', '2026-06-12')
+            """
+        )
+        for idx, symbol in enumerate(symbols, start=1):
+            conn.execute(
+                """
+                INSERT INTO clean_stock_sector_memberships (
+                    symbol, name, sector_code, sector_name, sector_type, source, generated_at
+                ) VALUES (?, ?, 'BK0001', '测试主题', 'concept', 'test', '2026-06-12')
+                """,
+                (symbol, f"测试{idx}"),
+            )
+        conn.commit()
+
+    live_db = live_dir / "market_data.db"
+    with sqlite3.connect(str(live_db)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE history_daily_l2 (
+                symbol TEXT NOT NULL,
+                date TEXT NOT NULL,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                total_amount REAL,
+                l2_main_net REAL,
+                PRIMARY KEY (symbol, date)
+            )
+            """
+        )
+        day_rows = [
+            ("sz000001", 11.0, 11.0, 10.6, 11.0, 300000000.0, 50000000.0),
+            ("sz000002", 10.2, 11.0, 10.1, 10.4, 200000000.0, -10000000.0),
+            ("sz000003", 10.0, 10.3, 9.9, 10.2, 100000000.0, 2000000.0),
+            ("sz000004", 9.9, 10.1, 9.7, 9.8, 90000000.0, -3000000.0),
+            ("sz000005", 10.1, 10.8, 10.0, 10.6, 120000000.0, 8000000.0),
+        ]
+        for symbol in symbols:
+            conn.execute(
+                """
+                INSERT INTO history_daily_l2 (
+                    symbol, date, open, high, low, close, total_amount, l2_main_net
+                ) VALUES (?, '2026-06-11', 10, 10, 10, 10, 100000000, 0)
+                """,
+                (symbol,),
+            )
+        conn.executemany(
+            """
+            INSERT INTO history_daily_l2 (
+                symbol, date, open, high, low, close, total_amount, l2_main_net
+            ) VALUES (?, '2026-06-12', ?, ?, ?, ?, ?, ?)
+            """,
+            day_rows,
+        )
+        conn.commit()
+
+    monkeypatch.setenv("FORMAL_MARKET_DATA_ROOT", str(formal_root))
+    monkeypatch.setenv("RESEARCH_CURRENT_ROOT", str(research_root))
+    monkeypatch.setenv("MARKET_HEAT_ATOMIC_DB", str(atomic_db))
+    monkeypatch.setenv("TRADABLE_THEME_MAP_DB", str(theme_db))
+    monkeypatch.setenv("DB_PATH", str(live_db))
+    monkeypatch.setenv("MARKET_HEAT_LIVE_DB", str(live_db))
+    import backend.app.core.config as config
+    import backend.app.services.market_heat as market_heat
+
+    importlib.reload(config)
+    importlib.reload(market_heat)
+
+    result = market_heat.build_fine_theme_stock_detail("fine:concept:BK0001", "2026-06-12", history_days=20)
+    summary = result["stock_summary"]
+    stocks = {item["symbol"]: item for item in result["stocks"]}
+
+    assert summary["stock_count"] == 5
+    assert summary["limit_up_count"] == 1
+    assert summary["touch_limit_up_count"] == 2
+    assert summary["broken_limit_up_count"] == 1
+    assert stocks["sz000001"]["is_limit_up"] is True
+    assert stocks["sz000002"]["broken_limit_up"] is True
+    assert len(stocks["sz000001"]["history"]) == 2

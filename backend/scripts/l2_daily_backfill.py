@@ -50,6 +50,8 @@ ORDER_SIDE_MAP = {
     "B": "buy",
     "S": "sell",
 }
+TRADE_USECOLS = ["时间", "成交价格", "成交数量", "BS标志", "叫卖序号", "叫买序号"]
+ORDER_USECOLS = ["时间", "交易所委托号", "委托类型", "委托代码", "委托价格", "委托数量"]
 
 
 def normalize_symbol_dir_name(name: str) -> str:
@@ -75,8 +77,21 @@ def _format_trade_time(raw_series: pd.Series) -> pd.Series:
     return hhmmss.str[0:2] + ":" + hhmmss.str[2:4] + ":" + hhmmss.str[4:6]
 
 
-def _read_csv(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, encoding="gb18030", low_memory=False)
+def _read_csv(path: Path, usecols: Optional[Sequence[str]] = None) -> pd.DataFrame:
+    csv_usecols = None
+    if usecols:
+        wanted = {str(item).strip() for item in usecols}
+        csv_usecols = lambda column: str(column).strip() in wanted
+    read_kwargs = {
+        "low_memory": False,
+        "usecols": csv_usecols,
+        "engine": "c",
+        "memory_map": True,
+    }
+    try:
+        df = pd.read_csv(path, encoding="gb18030", **read_kwargs)
+    except UnicodeDecodeError:
+        df = pd.read_csv(path, encoding="utf-8-sig", **read_kwargs)
     bad_cols = [c for c in df.columns if str(c).strip() == "" or str(c).startswith("Unnamed")]
     if bad_cols:
         df = df.drop(columns=bad_cols)
@@ -158,11 +173,9 @@ def _build_standardized_order_events(order: pd.DataFrame, trade_date: str) -> Tu
 def build_standardized_ticks(symbol_dir: Path, trade_date: str) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]:
     trade_path = symbol_dir / "逐笔成交.csv"
     order_path = symbol_dir / "逐笔委托.csv"
-    quote_path = symbol_dir / "行情.csv"
 
-    trade = _read_csv(trade_path)
-    order = _read_csv(order_path)
-    _ = _read_csv(quote_path)  # Read once to fail fast on encoding/shape issues.
+    trade = _read_csv(trade_path, usecols=TRADE_USECOLS)
+    order = _read_csv(order_path, usecols=ORDER_USECOLS)
 
     required_trade = ["时间", "成交价格", "成交数量", "BS标志", "叫卖序号", "叫买序号"]
     missing_trade = [c for c in required_trade if c not in trade.columns]

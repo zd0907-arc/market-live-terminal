@@ -148,6 +148,8 @@ def ensure_l2_history_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_history_5m_l2_symbol_date
             ON history_5m_l2(symbol, source_date);
+            CREATE INDEX IF NOT EXISTS idx_history_5m_l2_source_date
+            ON history_5m_l2(source_date);
 
             CREATE TABLE IF NOT EXISTS history_daily_l2 (
                 symbol TEXT NOT NULL,

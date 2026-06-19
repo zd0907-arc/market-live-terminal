@@ -70,6 +70,8 @@
 4. 为恢复每日候选链路，从旧本地恢复了 55MB 被 `.gitignore` 忽略的运行时模型产物：
    - `data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/`
    - `data/selection/opportunity_discovery/postclose_exit_v0_2/`
+5. `2026-06-16` 晚间复盘 `20260616` 日跑失败时，确认双轨退出观察清单还依赖第三个被 `.gitignore` 忽略的运行时模型目录；该目录在第 4 点恢复清单中漏列，已从旧 Desktop 只读源补回新仓库：
+   - `data/selection/opportunity_discovery/postclose_exit_2025top5_heat_v0_1/`
 
 20260615 最终验收结果：
 

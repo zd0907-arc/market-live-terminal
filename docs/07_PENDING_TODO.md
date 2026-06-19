@@ -6,7 +6,7 @@
 
 ## T-014 每日盘后 L2 正式回补自动编排固化
 - 状态：`ACTIVE`
-- 当前事实：当前每日盘后正式主链是 `ops/run_daily_new_framework.sh --json`，已把 atomic、selection、市场环境指数、热点结果、热点页面缓存、model feature store 和选股工作台候选输出纳入一次日跑；`2026-05-26` 真实日跑已验证通过。剩余问题不再是“能不能跑通”，而是是否继续推进更强的无人值守编排与长期稳定性观察。
+- 当前事实：当前每日盘后正式主链是 `ops/run_daily_new_framework.sh --json --sync-nas`，已把 atomic、selection、市场环境指数、热点结果、热点页面缓存、model feature store、选股工作台候选输出、Mac 本地模型产物检查和 NAS 生产同步纳入一次日跑；`2026-05-26` 真实日跑已验证通过。剩余问题不再是“能不能跑通”，而是是否继续推进更强的无人值守编排与长期稳定性观察。
 - 下一步：
   1. 评估是否继续做 OS 级定时控制器；
   2. 固化 repair queue 导出与失败清单；

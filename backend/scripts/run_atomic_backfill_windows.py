@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import shutil
@@ -30,12 +31,16 @@ from backend.scripts.backfill_atomic_order_from_raw import (
 from backend.scripts.build_book_state_from_raw import build_book_rows, replace_book_rows
 from backend.scripts.build_limit_state_from_atomic import build_limit_state, ensure_default_rules as ensure_limit_rules, ensure_schema as ensure_limit_schema, replace_rows as replace_limit_rows
 from backend.scripts.build_open_auction_summaries import _build_l1_summary_from_frames, _build_l2_summary_from_frames, _build_manifest, _build_phase_l1_summary_from_frames, _build_phase_l2_summary_from_frames, _prepare_order_auction_df, _prepare_quote_auction_df, _prepare_trade_auction_df, _upsert as upsert_auction
+from backend.app.db.l2_history_db import ensure_l2_history_schema
+from backend.scripts.l2_daily_backfill import compute_5m_bars as compute_l2_history_5m_bars, compute_daily_row as compute_l2_history_daily_row
+from backend.scripts.merge_l2_day_delta import merge_l2_day_delta
 from backend.scripts.run_symbol_atomic_validation import (
     ATOMIC_INIT_SCRIPT,
     BOOK_STATE_SCHEMA,
     OPEN_AUCTION_PHASE_SCHEMA,
     OPEN_AUCTION_SCHEMA,
     WIN_7Z,
+    _build_quality_info,
     _build_atomic_trade_5m_rows_from_l2,
     _build_atomic_trade_5m_rows_from_ticks,
     _build_atomic_trade_5m_rows_from_legacy,
@@ -60,6 +65,8 @@ SHARD_MERGE_TABLES = [
     "atomic_open_auction_phase_l2_daily",
     "atomic_open_auction_manifest",
 ]
+
+L2_REQUIRED_FILES = ("行情.csv", "逐笔委托.csv", "逐笔成交.csv")
 
 
 @dataclass(frozen=True)
@@ -124,6 +131,127 @@ def _configure_sqlite_for_shard(conn: sqlite3.Connection) -> None:
     conn.execute("PRAGMA cache_size = -200000")
 
 
+def _ensure_l2_artifact_db(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    previous = os.environ.get("DB_PATH", "")
+    os.environ["DB_PATH"] = str(db_path)
+    try:
+        ensure_l2_history_schema()
+    finally:
+        if previous:
+            os.environ["DB_PATH"] = previous
+        else:
+            os.environ.pop("DB_PATH", None)
+
+
+def _replace_l2_history_rows(
+    conn: sqlite3.Connection,
+    symbol: str,
+    trade_date: str,
+    rows_5m: Sequence[Tuple],
+    daily_row: Optional[Tuple],
+) -> Dict[str, int]:
+    conn.execute("DELETE FROM history_5m_l2 WHERE symbol=? AND source_date=?", (symbol, trade_date))
+    if rows_5m:
+        conn.executemany(
+            """
+            INSERT INTO history_5m_l2 (
+                symbol, datetime, source_date,
+                open, high, low, close, total_amount, total_volume,
+                l1_main_buy, l1_main_sell, l1_super_buy, l1_super_sell,
+                l2_main_buy, l2_main_sell, l2_super_buy, l2_super_sell,
+                l2_add_buy_amount, l2_add_sell_amount,
+                l2_cancel_buy_amount, l2_cancel_sell_amount,
+                l2_cvd_delta, l2_oib_delta,
+                quality_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows_5m,
+        )
+    conn.execute("DELETE FROM history_daily_l2 WHERE symbol=? AND date=?", (symbol, trade_date))
+    if daily_row:
+        conn.execute(
+            """
+            INSERT INTO history_daily_l2 (
+                symbol, date,
+                open, high, low, close, total_amount,
+                l1_main_buy, l1_main_sell, l1_main_net,
+                l1_super_buy, l1_super_sell, l1_super_net,
+                l2_main_buy, l2_main_sell, l2_main_net,
+                l2_super_buy, l2_super_sell, l2_super_net,
+                l1_activity_ratio, l1_super_ratio,
+                l2_activity_ratio, l2_super_ratio,
+                l1_buy_ratio, l1_sell_ratio, l2_buy_ratio, l2_sell_ratio,
+                quality_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            daily_row,
+        )
+    return {"rows_5m": len(rows_5m), "rows_daily": 1 if daily_row else 0}
+
+
+def _build_postclose_seed_rows(
+    prepared,
+    trade_date: str,
+    large_threshold: float,
+    super_threshold: float,
+) -> Tuple[List[Tuple], Optional[Tuple], Optional[str]]:
+    quality_info = _build_quality_info(prepared.diagnostics)
+    rows_5m = compute_l2_history_5m_bars(
+        prepared.ticks,
+        prepared.order_events,
+        symbol=prepared.symbol,
+        trade_date=trade_date,
+        large_threshold=large_threshold,
+        super_threshold=super_threshold,
+    )
+    rows_with_quality = [tuple(list(row) + [quality_info]) for row in rows_5m]
+    daily_row = compute_l2_history_daily_row(prepared.symbol, trade_date, rows_with_quality)
+    return rows_with_quality, daily_row, quality_info
+
+
+def _finalize_l2_shard_db(
+    db_path: Path,
+    trade_date: str,
+    source_root: str,
+    symbol_count: int,
+    rows_5m: int,
+    rows_daily: int,
+    failures: Sequence[Tuple[str, str, str, str]],
+) -> None:
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO l2_daily_ingest_runs (
+                trade_date, source_root, mode, status, started_at, finished_at, symbol_count, rows_5m, rows_daily, message
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                trade_date,
+                source_root,
+                "daily_new_atomic_seed_shard",
+                "done" if not failures else "partial_done",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                int(symbol_count),
+                int(rows_5m),
+                int(rows_daily),
+                f"success={symbol_count}, failures={len(failures)}",
+            ),
+        )
+        run_id = int(cursor.lastrowid)
+        if failures:
+            conn.executemany(
+                """
+                INSERT INTO l2_daily_ingest_failures (
+                    run_id, symbol, trade_date, source_file, error_message
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [(run_id, symbol, trade_date, source_file, error_message) for symbol, trade_date, source_file, error_message in failures],
+            )
+        conn.commit()
+
+
 def _write_legacy_rows_to_conn(
     conn: sqlite3.Connection,
     csv_path: Path,
@@ -148,6 +276,7 @@ def _write_l2_rows_to_conn(
     trade_date: str,
     large_threshold: float,
     super_threshold: float,
+    l2_conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, object]:
     prepared = load_l2_symbol_bundle(symbol_dir, trade_date)
     symbol = prepared.symbol
@@ -176,12 +305,34 @@ def _write_l2_rows_to_conn(
     upsert_auction(conn, "atomic_open_auction_phase_l1_daily", phase_l1_row)
     upsert_auction(conn, "atomic_open_auction_phase_l2_daily", phase_l2_row)
     upsert_auction(conn, "atomic_open_auction_manifest", manifest)
+    seed_stats: Dict[str, object] = {
+        "postclose_seed_rows_5m": 0,
+        "postclose_seed_rows_daily": 0,
+        "postclose_seed_error": "",
+    }
+    if l2_conn is not None:
+        try:
+            l2_rows_5m, l2_daily_row, _ = _build_postclose_seed_rows(
+                prepared,
+                trade_date,
+                large_threshold,
+                super_threshold,
+            )
+            if l2_rows_5m and l2_daily_row is not None:
+                l2_stats = _replace_l2_history_rows(l2_conn, symbol, trade_date, l2_rows_5m, l2_daily_row)
+                seed_stats["postclose_seed_rows_5m"] = int(l2_stats["rows_5m"])
+                seed_stats["postclose_seed_rows_daily"] = int(l2_stats["rows_daily"])
+            else:
+                seed_stats["postclose_seed_error"] = "no_l2_rows"
+        except Exception as exc:
+            seed_stats["postclose_seed_error"] = str(exc)
     return {
         "symbol": symbol,
         "rows_5m": len(rows_5m_trade),
         "order_5m_rows": len(rows_5m_order),
         "book_5m_rows": len(rows_5m_book),
         **trade_stats,
+        **seed_stats,
     }
 
 
@@ -263,8 +414,14 @@ def load_config(path: Path) -> Dict[str, object]:
     data.setdefault("extract_patterns", [])
     data.setdefault("max_items_per_day", 0)
     data.setdefault("reuse_extracted_day_if_exists", False)
+    data.setdefault("force_rerun_completed_days", False)
     data.setdefault("extractor", "auto")
     data.setdefault("selection_db", "")
+    data.setdefault("postclose_seed_artifact_db", "")
+    data.setdefault("stream_extract_process", False)
+    data.setdefault("stream_process_batch_size", 64)
+    data.setdefault("stream_poll_seconds", 0.5)
+    data.setdefault("stream_ready_stable_seconds", 0.75)
     data.setdefault("state_file", str(path.with_name(path.stem + "_state.json")))
     data.setdefault("report_file", str(path.with_name(path.stem + "_report.json")))
     return data
@@ -433,40 +590,92 @@ def _run_process_shard(
     large_threshold: float,
     super_threshold: float,
     l2_trade_only: bool = False,
+    l2_shard_db: str = "",
 ) -> Dict[str, object]:
     shard_db = Path(atomic_db)
     if shard_db.exists():
         shard_db.unlink()
     ensure_atomic_db(shard_db)
+    l2_db_path = Path(l2_shard_db) if l2_shard_db else None
+    if l2_db_path is not None:
+        if l2_db_path.exists():
+            l2_db_path.unlink()
+        _ensure_l2_artifact_db(l2_db_path)
     failures: List[Dict[str, str]] = []
+    seed_failures: List[Tuple[str, str, str, str]] = []
     success_count = 0
+    seed_success_count = 0
+    seed_rows_5m_total = 0
+    seed_rows_daily_total = 0
     if kind == "legacy":
         worker_fn = _write_legacy_rows_to_conn
     elif l2_trade_only:
         worker_fn = _write_l2_trade_only_rows_to_conn
     else:
         worker_fn = _write_l2_rows_to_conn
-    with sqlite3.connect(shard_db) as conn:
+    l2_conn_cm = sqlite3.connect(l2_db_path) if l2_db_path is not None else contextlib.nullcontext()
+    with sqlite3.connect(shard_db) as conn, l2_conn_cm as l2_conn:
         _configure_sqlite_for_shard(conn)
+        if isinstance(l2_conn, sqlite3.Connection):
+            _configure_sqlite_for_shard(l2_conn)
         commit_every = 64
         pending_since_commit = 0
         for raw_path in item_paths:
             item = Path(raw_path)
             try:
-                worker_fn(conn, item, trade_date, large_threshold, super_threshold)
+                result = worker_fn(
+                    conn,
+                    item,
+                    trade_date,
+                    large_threshold,
+                    super_threshold,
+                    l2_conn if worker_fn is _write_l2_rows_to_conn else None,
+                ) if worker_fn is _write_l2_rows_to_conn else worker_fn(conn, item, trade_date, large_threshold, super_threshold)
                 success_count += 1
+                if isinstance(l2_conn, sqlite3.Connection) and worker_fn is _write_l2_rows_to_conn:
+                    seed_rows_5m_total += int(result.get("postclose_seed_rows_5m") or 0)
+                    seed_rows_daily_total += int(result.get("postclose_seed_rows_daily") or 0)
+                    if int(result.get("postclose_seed_rows_daily") or 0) > 0:
+                        seed_success_count += 1
+                    elif str(result.get("postclose_seed_error") or "").strip():
+                        seed_failures.append(
+                            (
+                                str(result.get("symbol") or normalize_symbol_dir_name(item.name)),
+                                trade_date,
+                                str(item),
+                                str(result.get("postclose_seed_error") or ""),
+                            )
+                        )
                 pending_since_commit += 1
                 if pending_since_commit >= commit_every:
                     conn.commit()
+                    if isinstance(l2_conn, sqlite3.Connection):
+                        l2_conn.commit()
                     pending_since_commit = 0
             except Exception as exc:
                 failures.append({"item": str(item), "error": repr(exc)})
         if pending_since_commit > 0:
             conn.commit()
+            if isinstance(l2_conn, sqlite3.Connection):
+                l2_conn.commit()
+    if l2_db_path is not None:
+        _finalize_l2_shard_db(
+            l2_db_path,
+            trade_date,
+            source_root=str(shard_db.parent),
+            symbol_count=seed_success_count,
+            rows_5m=seed_rows_5m_total,
+            rows_daily=seed_rows_daily_total,
+            failures=seed_failures,
+        )
     return {
         "success_count": success_count,
         "failure_count": len(failures),
         "failures": failures[:10],
+        "postclose_seed_success_count": seed_success_count,
+        "postclose_seed_rows_5m": seed_rows_5m_total,
+        "postclose_seed_rows_daily": seed_rows_daily_total,
+        "postclose_seed_failure_count": len(seed_failures),
     }
 
 
@@ -486,6 +695,294 @@ def _failure_policy(config: Dict[str, object], item_count: int, failure_count: i
         "failure_ratio": round(ratio, 6),
         "tolerated": tolerated,
     }
+
+
+def _l2_symbol_dir_signature(symbol_dir: Path) -> Optional[Tuple[Tuple[str, int, int], ...]]:
+    signature: List[Tuple[str, int, int]] = []
+    for file_name in L2_REQUIRED_FILES:
+        path = symbol_dir / file_name
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            return None
+        if stat.st_size <= 0:
+            return None
+        signature.append((file_name, int(stat.st_size), int(stat.st_mtime_ns)))
+    return tuple(signature)
+
+
+def _accumulate_shard_result(
+    shard_result: Dict[str, object],
+    failures: List[Dict[str, str]],
+    totals: Dict[str, int],
+) -> None:
+    totals["success"] += int(shard_result["success_count"])
+    failures.extend(shard_result["failures"])
+    totals["seed_success"] += int(shard_result.get("postclose_seed_success_count") or 0)
+    totals["seed_rows_5m"] += int(shard_result.get("postclose_seed_rows_5m") or 0)
+    totals["seed_rows_daily"] += int(shard_result.get("postclose_seed_rows_daily") or 0)
+    totals["seed_failures"] += int(shard_result.get("postclose_seed_failure_count") or 0)
+
+
+def _run_l2_stream_extract_process(
+    *,
+    batch: Batch,
+    trade_date: str,
+    archive_path: Path,
+    config: Dict[str, object],
+    atomic_db: Path,
+    extract_root: Path,
+    l2_day_root: Path,
+    include_bj: bool,
+    include_star: bool,
+    include_gem: bool,
+    main_board_only: bool,
+    l2_trade_only: bool,
+) -> Dict[str, object]:
+    day_started = time.perf_counter()
+    workers = max(1, int(config["workers"]))
+    batch_size = max(1, int(config.get("stream_process_batch_size", 64) or 64))
+    poll_seconds = max(0.1, float(config.get("stream_poll_seconds", 0.5) or 0.5))
+    stable_seconds = max(0.0, float(config.get("stream_ready_stable_seconds", 0.75) or 0.75))
+    seed_artifact_path = Path(str(config.get("postclose_seed_artifact_db") or "").strip()) if str(config.get("postclose_seed_artifact_db") or "").strip() else None
+    shard_root = Path(str(config["extract_root"])) / ".worker_shards" / batch.name / to_compact(trade_date)
+    shutil.rmtree(shard_root, ignore_errors=True)
+    shard_root.mkdir(parents=True, exist_ok=True)
+    if extract_root.exists():
+        shutil.rmtree(extract_root, ignore_errors=True)
+    extract_root.mkdir(parents=True, exist_ok=True)
+
+    failures: List[Dict[str, str]] = []
+    totals = {
+        "success": 0,
+        "seed_success": 0,
+        "seed_rows_5m": 0,
+        "seed_rows_daily": 0,
+        "seed_failures": 0,
+    }
+    shard_dbs: List[Path] = []
+    l2_shard_dbs: List[Path] = []
+    ready_batch: List[Path] = []
+    submitted_symbols = set()
+    stable_state: Dict[str, Tuple[Tuple[Tuple[str, int, int], ...], float]] = {}
+    extract_started = time.perf_counter()
+    process_started: Optional[float] = None
+    shard_idx = 0
+    stderr_lines: List[str] = []
+
+    print(
+        f"[atomic-backfill] day={trade_date} batch={batch.name} kind={batch.kind} "
+        f"stream_extract_start archive={archive_path} workers={workers} batch_size={batch_size}",
+        flush=True,
+    )
+    proc = subprocess.Popen(
+        ["tar", "-xf", str(archive_path), "-C", str(extract_root)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    def _read_stderr() -> None:
+        if proc.stderr is None:
+            return
+        for line in proc.stderr:
+            text = line.strip()
+            if text and len(stderr_lines) < 50:
+                stderr_lines.append(text)
+
+    stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+    stderr_thread.start()
+
+    def _submit_chunk(executor: ProcessPoolExecutor, future_map: Dict[object, int], chunk: Sequence[Path]) -> None:
+        nonlocal shard_idx, process_started
+        if not chunk:
+            return
+        shard_idx += 1
+        shard_db = shard_root / f"stream_{shard_idx}.db"
+        l2_shard_db = shard_root / f"stream_{shard_idx}.seed_l2.db"
+        shard_dbs.append(shard_db)
+        use_l2_seed = bool(seed_artifact_path and batch.kind == "l2" and not l2_trade_only)
+        if use_l2_seed:
+            l2_shard_dbs.append(l2_shard_db)
+        if process_started is None:
+            process_started = time.perf_counter()
+        future_map[
+            executor.submit(
+                _run_process_shard,
+                batch.kind,
+                trade_date,
+                str(shard_db),
+                [str(x) for x in chunk],
+                float(config["large_threshold"]),
+                float(config["super_threshold"]),
+                l2_trade_only,
+                str(l2_shard_db) if use_l2_seed else "",
+            )
+        ] = len(chunk)
+        print(
+            f"[atomic-backfill] day={trade_date} batch={batch.name} stream_submit "
+            f"shard={shard_idx} items={len(chunk)} submitted={len(submitted_symbols)}",
+            flush=True,
+        )
+
+    def _submit_ready(executor: ProcessPoolExecutor, future_map: Dict[object, int], *, force: bool = False) -> None:
+        while len(ready_batch) >= batch_size or (force and ready_batch):
+            chunk = ready_batch[:batch_size]
+            del ready_batch[:batch_size]
+            _submit_chunk(executor, future_map, chunk)
+
+    def _drain_done(future_map: Dict[object, int]) -> None:
+        for future in list(future_map):
+            if not future.done():
+                continue
+            shard_result = future.result()
+            _accumulate_shard_result(shard_result, failures, totals)
+            future_map.pop(future, None)
+            print(
+                f"[atomic-backfill] day={trade_date} batch={batch.name} shard_done "
+                f"success={totals['success']} failure={len(failures)} "
+                f"process_sec={elapsed_seconds(process_started or time.perf_counter())}",
+                flush=True,
+            )
+
+    def _scan_ready_dirs() -> None:
+        if not l2_day_root.exists():
+            return
+        now = time.perf_counter()
+        for child in sorted(l2_day_root.iterdir()):
+            if not child.is_dir():
+                continue
+            symbol = normalize_symbol_dir_name(child.name)
+            if symbol in submitted_symbols:
+                continue
+            if not in_scope(symbol, include_bj, include_star, include_gem, main_board_only):
+                continue
+            signature = _l2_symbol_dir_signature(child)
+            if signature is None:
+                continue
+            previous = stable_state.get(symbol)
+            if previous and previous[0] == signature:
+                if now - previous[1] >= stable_seconds:
+                    ready_batch.append(child)
+                    submitted_symbols.add(symbol)
+                    stable_state.pop(symbol, None)
+            else:
+                stable_state[symbol] = (signature, now)
+
+    try:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            future_map: Dict[object, int] = {}
+            while True:
+                _scan_ready_dirs()
+                _submit_ready(executor, future_map)
+                _drain_done(future_map)
+                returncode = proc.poll()
+                if returncode is not None:
+                    break
+                time.sleep(poll_seconds)
+
+            stderr_thread.join(timeout=1.0)
+            extract_elapsed = elapsed_seconds(extract_started)
+            if returncode != 0:
+                raise RuntimeError(
+                    "流式解压失败: "
+                    + json.dumps({"returncode": returncode, "stderr": stderr_lines[-10:]}, ensure_ascii=False)
+                )
+            print(
+                f"[atomic-backfill] day={trade_date} batch={batch.name} stream_extract_done "
+                f"extract_sec={extract_elapsed} submitted={len(submitted_symbols)}",
+                flush=True,
+            )
+
+            list_started = time.perf_counter()
+            final_items = list_l2_symbol_dirs(l2_day_root, include_bj, include_star, include_gem, main_board_only)
+            list_elapsed = elapsed_seconds(list_started)
+            for item in final_items:
+                symbol = normalize_symbol_dir_name(item.name)
+                if symbol in submitted_symbols:
+                    continue
+                ready_batch.append(item)
+                submitted_symbols.add(symbol)
+            _submit_ready(executor, future_map, force=True)
+            while future_map:
+                _drain_done(future_map)
+                if future_map:
+                    time.sleep(0.2)
+    except Exception:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        stderr_thread.join(timeout=1.0)
+        raise
+
+    process_elapsed = elapsed_seconds(process_started) if process_started is not None else 0.0
+    print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_start shard_db_count={len(shard_dbs)}", flush=True)
+    merge_started = time.perf_counter()
+    _merge_shard_tables(atomic_db, shard_dbs)
+    merge_elapsed = elapsed_seconds(merge_started)
+    seed_merge_report = None
+    if seed_artifact_path is not None and l2_shard_dbs:
+        if seed_artifact_path.exists():
+            seed_artifact_path.unlink()
+        seed_merge_report = merge_l2_day_delta(
+            trade_date=trade_date,
+            artifact_paths=[str(path) for path in l2_shard_dbs if path.exists()],
+            db_path=str(seed_artifact_path),
+            source_root=str(extract_root),
+            mode="daily_new_atomic_seed",
+            message=f"artifact_count={len(l2_shard_dbs)}",
+        )
+    total_elapsed = elapsed_seconds(day_started)
+    print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_done merge_sec={merge_elapsed}", flush=True)
+    print(
+        f"[atomic-backfill] day={trade_date} batch={batch.name} worker_done "
+        f"success={totals['success']} failure={len(failures)} total_sec={total_elapsed}",
+        flush=True,
+    )
+    failure_policy = _failure_policy(config, len(final_items), len(failures))
+    report = {
+        "batch": batch.name,
+        "kind": batch.kind,
+        "trade_date": trade_date,
+        "archive_path": str(archive_path),
+        "item_count": len(final_items),
+        "success_count": totals["success"],
+        "failure_count": len(failures),
+        "failures": failures[:20],
+        "failure_policy": failure_policy,
+        "timing_seconds": {
+            "extract": extract_elapsed,
+            "list_items": list_elapsed,
+            "process_shards": process_elapsed,
+            "merge_shards": merge_elapsed,
+            "total": total_elapsed,
+        },
+        "stream_extract_process": True,
+        "postclose_seed_artifact": (
+            {
+                **seed_merge_report,
+                "db_path": str(seed_artifact_path),
+                "seed_success_count": totals["seed_success"],
+                "seed_failure_count": totals["seed_failures"],
+            }
+            if seed_merge_report is not None and seed_artifact_path is not None
+            else None
+        ),
+    }
+    if failures and failure_policy["tolerated"]:
+        print(
+            f"[atomic-backfill] day={trade_date} batch={batch.name} tolerated_failures="
+            f"{len(failures)} ratio={failure_policy['failure_ratio']}",
+            flush=True,
+        )
+    if failures and bool(config.get("stop_on_failure", True)) and not failure_policy["tolerated"]:
+        raise RuntimeError(json.dumps(report, ensure_ascii=False))
+    return report
 
 
 def _merge_shard_tables(target_db: Path, shard_dbs: Sequence[Path]) -> None:
@@ -552,10 +1049,52 @@ def run_day(
     l2_trade_only = bool(config.get("l2_trade_only", False))
     reuse_extracted = bool(config.get("reuse_extracted_day_if_exists", False))
     l2_day_root = extract_root / to_compact(trade_date)
+    configured_symbols = [str(item).strip() for item in config.get("symbols", []) if str(item).strip()]
+    configured_patterns = [str(item).strip() for item in config.get("extract_patterns", []) if str(item).strip()]
+    max_items = int(config.get("max_items_per_day", 0) or 0)
     can_reuse = reuse_extracted and (
         (batch.kind == "legacy" and extract_root.exists() and any(extract_root.glob("*.csv")))
         or (batch.kind == "l2" and l2_day_root.exists())
     )
+    stream_requested = bool(config.get("stream_extract_process", False))
+    stream_supported = (
+        stream_requested
+        and batch.kind == "l2"
+        and not can_reuse
+        and not configured_symbols
+        and not configured_patterns
+        and max_items <= 0
+        and not bool(config.get("prefetch_next_day_extract", False))
+    )
+    if stream_requested and not stream_supported:
+        print(
+            f"[atomic-backfill] day={trade_date} batch={batch.name} stream_extract_process_fallback=1 "
+            f"kind={batch.kind} reuse={int(can_reuse)} symbols={len(configured_symbols)} "
+            f"patterns={len(configured_patterns)} max_items={max_items} "
+            f"prefetch={int(bool(config.get('prefetch_next_day_extract', False)))}",
+            flush=True,
+        )
+    if stream_supported:
+        try:
+            report = _run_l2_stream_extract_process(
+                batch=batch,
+                trade_date=trade_date,
+                archive_path=archive_path,
+                config=config,
+                atomic_db=atomic_db,
+                extract_root=extract_root,
+                l2_day_root=l2_day_root,
+                include_bj=include_bj,
+                include_star=include_star,
+                include_gem=include_gem,
+                main_board_only=main_board_only,
+                l2_trade_only=l2_trade_only,
+            )
+            return report, None, None
+        finally:
+            shutil.rmtree(Path(str(config["extract_root"])) / ".worker_shards" / batch.name / to_compact(trade_date), ignore_errors=True)
+            if cleanup_extracted:
+                shutil.rmtree(extract_root, ignore_errors=True)
     if can_reuse:
         print(f"[atomic-backfill] day={trade_date} batch={batch.name} kind={batch.kind} reuse_extracted=1 root={extract_root}", flush=True)
         extract_elapsed = 0.0
@@ -572,7 +1111,6 @@ def run_day(
         else:
             items = list_l2_symbol_dirs(l2_day_root, include_bj, include_star, include_gem, main_board_only)
             items = apply_symbol_filter(items, config.get("symbols", []), is_legacy=False)
-        max_items = int(config.get("max_items_per_day", 0) or 0)
         if max_items > 0:
             items = items[:max_items]
         list_elapsed = elapsed_seconds(list_started)
@@ -601,7 +1139,13 @@ def run_day(
         shard_root.mkdir(parents=True, exist_ok=True)
         shards = [items[i::workers] for i in range(workers)]
         shard_dbs = [shard_root / f"worker_{idx+1}.db" for idx in range(workers) if shards[idx]]
+        seed_artifact_path = Path(str(config.get("postclose_seed_artifact_db") or "").strip()) if str(config.get("postclose_seed_artifact_db") or "").strip() else None
+        l2_shard_dbs = [shard_root / f"worker_{idx+1}.seed_l2.db" for idx in range(workers) if shards[idx]] if (seed_artifact_path and batch.kind == "l2" and not l2_trade_only) else []
         total_success = 0
+        total_seed_success = 0
+        total_seed_rows_5m = 0
+        total_seed_rows_daily = 0
+        total_seed_failures = 0
         process_started = time.perf_counter()
         if workers == 1:
             print(f"[atomic-backfill] day={trade_date} batch={batch.name} shard_mode=single", flush=True)
@@ -613,9 +1157,14 @@ def run_day(
                 float(config["large_threshold"]),
                 float(config["super_threshold"]),
                 l2_trade_only,
+                str(l2_shard_dbs[0]) if l2_shard_dbs else "",
             )
             total_success += int(shard_result["success_count"])
             failures.extend(shard_result["failures"])
+            total_seed_success += int(shard_result.get("postclose_seed_success_count") or 0)
+            total_seed_rows_5m += int(shard_result.get("postclose_seed_rows_5m") or 0)
+            total_seed_rows_daily += int(shard_result.get("postclose_seed_rows_daily") or 0)
+            total_seed_failures += int(shard_result.get("postclose_seed_failure_count") or 0)
         else:
             print(f"[atomic-backfill] day={trade_date} batch={batch.name} shard_mode=process workers={workers}", flush=True)
             with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -634,6 +1183,7 @@ def run_day(
                             float(config["large_threshold"]),
                             float(config["super_threshold"]),
                             l2_trade_only,
+                            str(l2_shard_dbs[shard_idx]) if l2_shard_dbs else "",
                         )
                     ] = shard_idx
                     shard_idx += 1
@@ -641,6 +1191,10 @@ def run_day(
                     shard_result = future.result()
                     total_success += int(shard_result["success_count"])
                     failures.extend(shard_result["failures"])
+                    total_seed_success += int(shard_result.get("postclose_seed_success_count") or 0)
+                    total_seed_rows_5m += int(shard_result.get("postclose_seed_rows_5m") or 0)
+                    total_seed_rows_daily += int(shard_result.get("postclose_seed_rows_daily") or 0)
+                    total_seed_failures += int(shard_result.get("postclose_seed_failure_count") or 0)
                     print(
                         f"[atomic-backfill] day={trade_date} batch={batch.name} shard_done "
                         f"success={total_success}/{len(items)} failure={len(failures)} "
@@ -652,6 +1206,18 @@ def run_day(
         merge_started = time.perf_counter()
         _merge_shard_tables(atomic_db, shard_dbs)
         merge_elapsed = elapsed_seconds(merge_started)
+        seed_merge_report = None
+        if seed_artifact_path is not None and l2_shard_dbs:
+            if seed_artifact_path.exists():
+                seed_artifact_path.unlink()
+            seed_merge_report = merge_l2_day_delta(
+                trade_date=trade_date,
+                artifact_paths=[str(path) for path in l2_shard_dbs if path.exists()],
+                db_path=str(seed_artifact_path),
+                source_root=str(extract_root),
+                mode="daily_new_atomic_seed",
+                message=f"artifact_count={len(l2_shard_dbs)}",
+            )
         total_elapsed = elapsed_seconds(day_started)
         print(f"[atomic-backfill] day={trade_date} batch={batch.name} merge_done merge_sec={merge_elapsed}", flush=True)
         print(
@@ -677,6 +1243,16 @@ def run_day(
                 "merge_shards": merge_elapsed,
                 "total": total_elapsed,
             },
+            "postclose_seed_artifact": (
+                {
+                    **seed_merge_report,
+                    "db_path": str(seed_artifact_path),
+                    "seed_success_count": total_seed_success,
+                    "seed_failure_count": total_seed_failures,
+                }
+                if seed_merge_report is not None and seed_artifact_path is not None
+                else None
+            ),
         }
         if failures and failure_policy["tolerated"]:
             print(
@@ -723,7 +1299,7 @@ def main() -> None:
         "completed_days": [],
         "failed_days": [],
     }
-    if state_path.exists():
+    if state_path.exists() and not bool(config.get("force_rerun_completed_days", False)):
         try:
             prev = json.loads(state_path.read_text(encoding="utf-8"))
             if isinstance(prev.get("completed_days"), list):
@@ -806,10 +1382,18 @@ def main() -> None:
             "config": str(config_path),
             "atomic_db": str(atomic_db),
             "reports": reports,
+            "postclose_seed_artifact": next(
+                (report.get("postclose_seed_artifact") for report in reports if isinstance(report.get("postclose_seed_artifact"), dict)),
+                None,
+            ),
             "limit_state_5m_rows": None,
             "limit_state_daily_rows": len(daily_rows_limit),
             "completed_day_count": len(state["completed_days"]),
         },
+    )
+    top_seed_artifact = next(
+        (report.get("postclose_seed_artifact") for report in reports if isinstance(report.get("postclose_seed_artifact"), dict)),
+        None,
     )
     print(json.dumps({
         "status": state["status"],
@@ -818,6 +1402,7 @@ def main() -> None:
         "report_file": str(report_path),
         "state_file": str(state_path),
         "limit_state_daily_rows": len(daily_rows_limit),
+        "postclose_seed_artifact": top_seed_artifact,
     }, ensure_ascii=False))
 
 

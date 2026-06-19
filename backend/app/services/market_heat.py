@@ -12,7 +12,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from backend.app.core.config import RESEARCH_CURRENT_ROOT, ROOT_DIR, candidate_atomic_db_paths
+from backend.app.core.config import DB_FILE, RESEARCH_CURRENT_ROOT, ROOT_DIR, candidate_atomic_db_paths
 
 MARKET_HEAT_DIR = Path(os.getenv("MARKET_HEAT_DIR", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat")))
 REPO_THEME_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "themes.seed.json"
@@ -48,6 +48,7 @@ THEME_CANONICAL_RULES_FILE = Path(ROOT_DIR) / "data" / "market_heat" / "theme_ca
 TRADABLE_THEME_MAP_DB = Path(os.getenv("TRADABLE_THEME_MAP_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "tradable_theme_map.db")))
 FINE_THEME_HEAT_V2_DB = Path(os.getenv("FINE_THEME_HEAT_V2_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_daily_v2.db")))
 FINE_THEME_HEAT_FORECAST_DB = Path(os.getenv("FINE_THEME_HEAT_FORECAST_DB", os.path.join(RESEARCH_CURRENT_ROOT, "market_heat", "fine_theme_heat_forecast.db")))
+LIVE_MARKET_DB = Path(os.getenv("MARKET_HEAT_LIVE_DB", DB_FILE))
 
 
 def _formal_market_data_root() -> Path:
@@ -1244,6 +1245,83 @@ def _chunked(items: Sequence[str], size: int = 800) -> Iterable[List[str]]:
         yield list(items[idx: idx + size])
 
 
+def _limit_threshold_pct(symbol: str, name: str = "") -> float:
+    normalized = _symbol_norm(symbol)
+    label = str(name or "")
+    if "ST" in label.upper() or "*ST" in label.upper():
+        return 4.8
+    if normalized.startswith("bj"):
+        return 29.5
+    if normalized.startswith("sh688") or normalized.startswith("sh689") or normalized.startswith("sz300") or normalized.startswith("sz301"):
+        return 19.5
+    return 9.8
+
+
+def _estimate_limit_flags_from_daily(symbol: str, name: str, high: float, close: float, prev_close: float) -> Tuple[bool, bool, bool]:
+    if prev_close <= 0:
+        return False, False, False
+    threshold = _limit_threshold_pct(symbol, name)
+    high_pct = (high / prev_close - 1) * 100 if high > 0 else 0.0
+    close_pct = (close / prev_close - 1) * 100 if close > 0 else 0.0
+    touch_limit_up = high_pct >= threshold
+    is_limit_up = close_pct >= threshold
+    broken_limit_up = touch_limit_up and not is_limit_up
+    return touch_limit_up, is_limit_up, broken_limit_up
+
+
+def _live_trade_dates(end_date: str, lookback_days: int) -> List[str]:
+    if not LIVE_MARKET_DB.exists():
+        return []
+    try:
+        with sqlite3.connect(str(LIVE_MARKET_DB), timeout=30) as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date
+                FROM history_daily_l2
+                WHERE date <= ?
+                ORDER BY date DESC
+                LIMIT ?
+                """,
+                (end_date, max(2, int(lookback_days))),
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [str(row[0]) for row in reversed(rows)]
+
+
+def _fetch_live_history_rows(symbols: Sequence[str], end_date: str, lookback_days: int) -> Dict[str, List[Dict[str, Any]]]:
+    normalized = sorted({_symbol_norm(symbol) for symbol in symbols if _symbol_norm(symbol)})
+    if not normalized or not LIVE_MARKET_DB.exists():
+        return {}
+    dates = _live_trade_dates(end_date, lookback_days)
+    if not dates:
+        return {}
+    start_date = dates[0]
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    try:
+        with sqlite3.connect(str(LIVE_MARKET_DB), timeout=30) as conn:
+            conn.row_factory = sqlite3.Row
+            for chunk in _chunked(normalized):
+                placeholders = ",".join("?" for _ in chunk)
+                rows = conn.execute(
+                    f"""
+                    SELECT symbol, date AS trade_date, open, high, low, close, total_amount,
+                           l2_main_net AS l2_main_net_amount
+                    FROM history_daily_l2
+                    WHERE symbol IN ({placeholders})
+                      AND date >= ?
+                      AND date <= ?
+                    ORDER BY symbol, date
+                    """,
+                    (*chunk, start_date, end_date),
+                ).fetchall()
+                for row in rows:
+                    out.setdefault(_symbol_norm(row["symbol"]), []).append(dict(row))
+    except sqlite3.Error:
+        return {}
+    return out
+
+
 def _build_stock_signal(stock: Dict[str, Any]) -> Tuple[str, str, float, float]:
     pct_change = _safe_float(stock.get("pct_change"))
     return_5d = _safe_float(stock.get("return_5d"))
@@ -1300,7 +1378,7 @@ def _attach_theme_stock_details(
     include_history: bool = False,
     history_days: int = 30,
 ) -> None:
-    if not items or not ATOMIC_DB.exists():
+    if not items or (not ATOMIC_DB.exists() and not LIVE_MARKET_DB.exists()):
         return
     symbols = sorted({
         symbol
@@ -1310,51 +1388,70 @@ def _attach_theme_stock_details(
     })
     if not symbols:
         return
-    trade_by_symbol: Dict[str, sqlite3.Row] = {}
-    limit_by_symbol: Dict[str, sqlite3.Row] = {}
-    history_by_symbol: Dict[str, List[sqlite3.Row]] = {}
+    trade_by_symbol: Dict[str, Dict[str, Any]] = {}
+    limit_by_symbol: Dict[str, Dict[str, Any]] = {}
+    history_by_symbol: Dict[str, List[Dict[str, Any]]] = {}
     history_start_date: Optional[str] = None
-    if include_history:
-        dates = _trade_dates(trade_date, max(history_days + 20, 60))
+    history_lookback_days = max(history_days + 20, 60) if include_history else 3
+    if include_history and ATOMIC_DB.exists():
+        try:
+            dates = _trade_dates(trade_date, history_lookback_days)
+        except sqlite3.Error:
+            dates = []
         history_start_date = dates[0] if dates else None
-    with sqlite3.connect(str(ATOMIC_DB), timeout=30) as conn:
-        conn.row_factory = sqlite3.Row
-        for chunk in _chunked(symbols):
-            placeholders = ",".join("?" for _ in chunk)
-            for row in conn.execute(
-                f"""
-                SELECT symbol, open, high, low, close, total_amount, l2_main_net_amount
-                FROM atomic_trade_daily
-                WHERE trade_date = ? AND symbol IN ({placeholders})
-                """,
-                (trade_date, *chunk),
-            ):
-                trade_by_symbol[_symbol_norm(row["symbol"])] = row
-            try:
-                for row in conn.execute(
-                    f"""
-                    SELECT symbol, prev_close, up_limit_price, touch_limit_up, is_limit_up_close, broken_limit_up
-                    FROM atomic_limit_state_daily
-                    WHERE trade_date = ? AND symbol IN ({placeholders})
-                    """,
-                    (trade_date, *chunk),
-                ):
-                    limit_by_symbol[_symbol_norm(row["symbol"])] = row
-            except sqlite3.OperationalError:
-                pass
-            if include_history and history_start_date:
-                for row in conn.execute(
-                    f"""
-                    SELECT symbol, trade_date, open, high, low, close, total_amount, l2_main_net_amount
-                    FROM atomic_trade_daily
-                    WHERE symbol IN ({placeholders})
-                      AND trade_date >= ?
-                      AND trade_date <= ?
-                    ORDER BY symbol, trade_date
-                    """,
-                    (*chunk, history_start_date, trade_date),
-                ):
-                    history_by_symbol.setdefault(_symbol_norm(row["symbol"]), []).append(row)
+    if ATOMIC_DB.exists():
+        with sqlite3.connect(str(ATOMIC_DB), timeout=30) as conn:
+            conn.row_factory = sqlite3.Row
+            for chunk in _chunked(symbols):
+                placeholders = ",".join("?" for _ in chunk)
+                try:
+                    for row in conn.execute(
+                        f"""
+                        SELECT symbol, open, high, low, close, total_amount, l2_main_net_amount
+                        FROM atomic_trade_daily
+                        WHERE trade_date = ? AND symbol IN ({placeholders})
+                        """,
+                        (trade_date, *chunk),
+                    ):
+                        trade_by_symbol[_symbol_norm(row["symbol"])] = dict(row)
+                except sqlite3.OperationalError:
+                    pass
+                try:
+                    for row in conn.execute(
+                        f"""
+                        SELECT symbol, prev_close, up_limit_price, touch_limit_up, is_limit_up_close, broken_limit_up
+                        FROM atomic_limit_state_daily
+                        WHERE trade_date = ? AND symbol IN ({placeholders})
+                        """,
+                        (trade_date, *chunk),
+                    ):
+                        limit_by_symbol[_symbol_norm(row["symbol"])] = dict(row)
+                except sqlite3.OperationalError:
+                    pass
+                if include_history and history_start_date:
+                    try:
+                        for row in conn.execute(
+                            f"""
+                            SELECT symbol, trade_date, open, high, low, close, total_amount, l2_main_net_amount
+                            FROM atomic_trade_daily
+                            WHERE symbol IN ({placeholders})
+                              AND trade_date >= ?
+                              AND trade_date <= ?
+                            ORDER BY symbol, trade_date
+                            """,
+                            (*chunk, history_start_date, trade_date),
+                        ):
+                            history_by_symbol.setdefault(_symbol_norm(row["symbol"]), []).append(dict(row))
+                    except sqlite3.OperationalError:
+                        pass
+
+    live_history = _fetch_live_history_rows(symbols, trade_date, history_lookback_days)
+    for symbol, rows in live_history.items():
+        target_row = next((row for row in rows if str(row.get("trade_date")) == trade_date), None)
+        if target_row and symbol not in trade_by_symbol:
+            trade_by_symbol[symbol] = target_row
+        if include_history or symbol not in history_by_symbol:
+            history_by_symbol[symbol] = rows
 
     for item in items:
         theme_id = str(item.get("id"))
@@ -1367,13 +1464,25 @@ def _attach_theme_stock_details(
                 continue
             limit = limit_by_symbol.get(symbol)
             close = _safe_float(trade["close"])
+            high = _safe_float(trade["high"])
+            hist_rows_for_symbol = [row for row in history_by_symbol.get(symbol, []) if str(row["trade_date"]) <= trade_date]
+            previous_rows = [row for row in hist_rows_for_symbol if str(row["trade_date"]) < trade_date]
             prev_close = _safe_float(limit["prev_close"] if limit else 0)
             if prev_close <= 0:
-                prev_close = _safe_float(trade["open"])
+                prev_close = _safe_float(previous_rows[-1]["close"]) if previous_rows else _safe_float(trade["open"])
             pct_change = (close / prev_close - 1) * 100 if prev_close > 0 else 0.0
-            is_limit_up = bool(int(limit["is_limit_up_close"] or 0)) if limit else pct_change >= 9.8
-            broken_limit_up = bool(int(limit["broken_limit_up"] or 0)) if limit else False
-            touch_limit_up = bool(int(limit["touch_limit_up"] or 0)) if limit else is_limit_up
+            if limit:
+                is_limit_up = bool(int(limit["is_limit_up_close"] or 0))
+                broken_limit_up = bool(int(limit["broken_limit_up"] or 0))
+                touch_limit_up = bool(int(limit["touch_limit_up"] or 0))
+            else:
+                touch_limit_up, is_limit_up, broken_limit_up = _estimate_limit_flags_from_daily(
+                    symbol,
+                    symbol_names.get(symbol) or symbol,
+                    high,
+                    close,
+                    prev_close,
+                )
             stocks.append({
                 "symbol": symbol,
                 "name": symbol_names.get(symbol) or symbol,
@@ -1386,7 +1495,7 @@ def _attach_theme_stock_details(
                 "broken_limit_up": broken_limit_up,
             })
             if include_history:
-                hist_rows = [row for row in history_by_symbol.get(symbol, []) if str(row["trade_date"]) <= trade_date][-max(history_days + 12, history_days):]
+                hist_rows = hist_rows_for_symbol[-max(history_days + 12, history_days):]
                 mini_rows = hist_rows[-history_days:]
                 closes = [_safe_float(row["close"]) for row in hist_rows]
                 today_amount = _safe_float(trade["total_amount"])
@@ -1472,6 +1581,9 @@ def _attach_theme_stock_details(
             "touch_limit_up_count": touch_count,
             "broken_limit_up_count": broken_count,
         }
+        item["limit_up_count"] = limit_up_count
+        item["touch_limit_up_count"] = touch_count
+        item["broken_limit_up_count"] = broken_count
         item["stock_groups"] = {
             "leaders": leaders,
             "core": core,

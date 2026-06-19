@@ -44,4 +44,31 @@ do
   load_env_value "$key"
 done
 
-python3 backend/scripts/run_daily_new_framework.py "$@"
+has_arg() {
+  local needle="$1"
+  shift
+  local arg
+  for arg in "$@"; do
+    if [ "$arg" = "$needle" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if has_arg "--skip-nas" "$@"; then
+  case "${DAILY_ALLOW_SKIP_NAS:-}" in
+    1|true|TRUE|yes|YES) ;;
+    *)
+      echo "[daily-new] 正式日跑不允许直接使用 --skip-nas；如需本地排障，请显式设置 DAILY_ALLOW_SKIP_NAS=1。" >&2
+      exit 64
+      ;;
+  esac
+fi
+
+args=("$@")
+if ! has_arg "--sync-nas" "$@" && ! has_arg "--skip-nas" "$@" && ! has_arg "--dry-run" "$@" && ! has_arg "--help" "$@" && ! has_arg "-h" "$@"; then
+  args+=("--sync-nas")
+fi
+
+python3 backend/scripts/run_daily_new_framework.py "${args[@]}"

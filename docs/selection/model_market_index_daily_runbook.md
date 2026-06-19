@@ -60,7 +60,7 @@ Eastmoney push2his kline
 首次或大范围重建时，从 2024-07-01 开始拉，给 2024-09 和 2025-01 的 MA20 / 20 日收益留 warmup：
 
 ```bash
-cd /Users/dong/Desktop/AIGC/market-live-terminal
+cd /Users/dong/ZhangData/market-live-terminal
 python3 backend/scripts/sync_model_market_index_daily.py \
   --source baostock \
   --start-date 2024-07-01 \

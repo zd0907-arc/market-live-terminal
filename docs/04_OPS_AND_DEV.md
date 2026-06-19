@@ -110,9 +110,11 @@ cd /Users/dong/ZhangData/market-live-terminal
 bash ops/run_daily_new_framework.sh --json --sync-nas
 ```
 
-> 这条指令默认不需要指定日期：脚本会自动扫描 Windows `D:\MarketData` 日包，选择“最新完整日之后”Mac 尚未完整的日期补跑；完整性同时检查 atomic、selection、model_feature_store 落表、市场环境指数、热点结果、热点页面缓存、选股工作台活跃模型/策略 success 运行记录，以及选股页近期市场水位是否已覆盖当天。
+> 这条指令默认不需要指定日期：脚本会自动扫描 Windows `D:\MarketData` 日包，选择“最新完整日之后”Mac 尚未完整的日期补跑；完整性同时检查 atomic、selection、model_feature_store 落表、市场环境指数、热点结果、热点页面缓存、选股工作台活跃模型/策略 success 运行记录、Mac 本地必需模型产物，以及选股页近期市场水位是否已覆盖当天。
 > 
 > 每日主链内置顺序：Windows atomic 与指数刷新并行；atomic 完成后并行跑 selection refresh 与热点计算；随后构建模型特征、导出增量、同步回 Mac，并在 Mac 本地生成选股工作台候选。自 `2026-06-09` 起，主链本地校验通过后还会继续补一次本地 `postclose_l2` L2 历史并刷新 `stock_universe_meta`，用于收口 Mac 本地 `live/market_data.db`。自 `2026-06-12` 起，主链还会刷新运行态市场水位目录 `research/current/selection/market_environment_gate_2026-06-10`；若带 `--sync-nas`，则在这些本地步骤通过后，把正式 `live` 结果和市场水位目录同步到 NAS 生产数据卷，并后台启动一轮 NAS 数据库快照。
+>
+> 正式 wrapper 会自动补 `--sync-nas`；`--skip-nas` 只允许设置 `DAILY_ALLOW_SKIP_NAS=1` 后用于本地排障。
 >
 > 额外边界：`--sync-nas` 现在聚焦“生产库 + 小型运行态产物 + 备份”这条日常链路，不再默认把整套 `research/current` 做成每天整包发布。`research/current` 的大体量发布仍保留为单独动作。
 

@@ -47,6 +47,14 @@ def _table_exists(conn: sqlite3.Connection, table: str, schema: str = "main") ->
     return bool(row)
 
 
+def _table_columns(conn: sqlite3.Connection, table: str, schema: str = "main") -> List[str]:
+    return [str(row[1]) for row in conn.execute(f"PRAGMA {schema}.table_info({table})").fetchall()]
+
+
+def _quote_ident(name: str) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
 def export_l2_day_delta(trade_date: str, output_db: str, source_db: str = "") -> Dict[str, object]:
     normalized_date = _normalize_trade_date(trade_date)
     src_path = _resolve_source_db(source_db)
@@ -71,9 +79,16 @@ def export_l2_day_delta(trade_date: str, output_db: str, source_db: str = "") ->
             if not _table_exists(out_conn, table) or not _table_exists(out_conn, table, "src"):
                 counts[table] = 0
                 continue
+            out_columns = _table_columns(out_conn, table)
+            src_columns = set(_table_columns(out_conn, table, "src"))
+            columns = [column for column in out_columns if column in src_columns]
+            if date_col not in columns:
+                counts[table] = 0
+                continue
+            column_sql = ", ".join(_quote_ident(column) for column in columns)
             out_conn.execute(f"DELETE FROM {table} WHERE {date_col}=?", (normalized_date,))
             out_conn.execute(
-                f"INSERT INTO {table} SELECT * FROM src.{table} WHERE {date_col}=?",
+                f"INSERT INTO {table} ({column_sql}) SELECT {column_sql} FROM src.{table} WHERE {date_col}=?",
                 (normalized_date,),
             )
             row = out_conn.execute("SELECT changes()").fetchone()

@@ -171,6 +171,80 @@ def _load_models_for_trade_date(track: ExitTrackSpec, trade_date: str) -> Tuple[
     return exit_model, continuation_model
 
 
+def validate_exit_model_artifacts(asof_trade_date: str) -> Dict[str, Any]:
+    checked: List[Dict[str, Any]] = []
+    missing: List[str] = []
+    invalid: List[str] = []
+    for track in TRACK_SPECS:
+        root = _resolve_model_root(track)
+        summary_path = root / "summary.json"
+        if not summary_path.exists():
+            missing.append(str(summary_path))
+            checked.append(
+                {
+                    "track_id": track.track_id,
+                    "display_name": track.display_name,
+                    "model_root": str(root),
+                    "status": "missing_summary",
+                }
+            )
+            continue
+        try:
+            summary = _read_json(summary_path)
+            window = _window_for_trade_date(asof_trade_date, summary)
+        except Exception as exc:
+            invalid.append(f"{summary_path}: {exc}")
+            checked.append(
+                {
+                    "track_id": track.track_id,
+                    "display_name": track.display_name,
+                    "model_root": str(root),
+                    "status": "invalid_summary",
+                    "error": str(exc),
+                }
+            )
+            continue
+        if not window:
+            invalid.append(f"{summary_path}: no model window for {asof_trade_date}")
+            checked.append(
+                {
+                    "track_id": track.track_id,
+                    "display_name": track.display_name,
+                    "model_root": str(root),
+                    "status": "missing_window",
+                }
+            )
+            continue
+        artifacts = [
+            summary_path,
+            root / "models" / f"{window}_postclose_exit.joblib",
+            root / "models" / f"{window}_postclose_continuation.joblib",
+        ]
+        missing.extend(str(path) for path in artifacts if not path.exists())
+        checked.append(
+            {
+                "track_id": track.track_id,
+                "display_name": track.display_name,
+                "model_root": str(root),
+                "window": window,
+                "artifacts": [str(path) for path in artifacts],
+                "status": "ok" if all(path.exists() for path in artifacts) else "missing_artifact",
+            }
+        )
+    if missing or invalid:
+        detail = []
+        if missing:
+            detail.append("missing=" + ", ".join(missing))
+        if invalid:
+            detail.append("invalid=" + "; ".join(invalid))
+        raise RuntimeError("星火双轨退出模型产物不可用: " + " ".join(detail))
+    return {
+        "status": "ok",
+        "trade_date": asof_trade_date,
+        "tracks": checked,
+    }
+
+
 def _load_feature_panel(start_date: str, end_date: str):
     pd = _pd()
     from backend.scripts import research_opportunity_discovery_model as base
