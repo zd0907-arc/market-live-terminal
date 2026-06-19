@@ -9,6 +9,8 @@ load_dotenv(os.path.join(_root_dir, ".env.local"), override=False)
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from backend.app.core.config import RESEARCH_PAYLOADS_ROOT, SELECTION_ARTIFACTS_ROOT
 from backend.app.db.database import init_db
 from backend.app.core.calendar import TradeCalendar
 import logging
@@ -60,6 +62,19 @@ app = FastAPI(
     version="5.2.20"
 )
 
+if os.path.isdir(SELECTION_ARTIFACTS_ROOT):
+    app.mount(
+        "/data/selection",
+        StaticFiles(directory=SELECTION_ARTIFACTS_ROOT),
+        name="selection_artifacts",
+    )
+if os.path.isdir(RESEARCH_PAYLOADS_ROOT):
+    app.mount(
+        "/research",
+        StaticFiles(directory=RESEARCH_PAYLOADS_ROOT),
+        name="research_payloads",
+    )
+
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
@@ -110,7 +125,8 @@ async def startup_event():
     else:
         logger.info("Background runtime is disabled by ENABLE_BACKGROUND_RUNTIME=false")
     for route in app.routes:
-        print(f"Registered Route: {route.path} [{route.methods}]")
+        methods = getattr(route, "methods", None)
+        print(f"Registered Route: {route.path} [{methods or 'mount'}]")
 
 @app.on_event("shutdown")
 async def shutdown_event():

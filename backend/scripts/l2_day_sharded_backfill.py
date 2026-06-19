@@ -21,6 +21,7 @@ from typing import Dict, List, Sequence
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+DEFAULT_RUNS_ROOT = os.path.join(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"), "runs")
 
 from backend.scripts.l2_daily_backfill import list_symbol_dirs, normalize_symbol_dir_name
 
@@ -49,7 +50,7 @@ def run_sharded_backfill(
 
     shards = _chunk_symbols(symbols, worker_count)
     processes = []
-    logs_dir = Path(os.getenv("L2_SHARD_LOG_DIR", os.path.join(ROOT_DIR, ".run", "l2_shards")))
+    logs_dir = Path(os.getenv("L2_SHARD_LOG_DIR", os.path.join(os.getenv("RUNS_ROOT", DEFAULT_RUNS_ROOT), "l2_shards")))
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     for idx, shard_symbols in enumerate(shards, start=1):

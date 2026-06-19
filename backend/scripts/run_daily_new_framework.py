@@ -24,8 +24,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
 DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
+DEFAULT_MAC_RUNS_ROOT = DEFAULT_MAC_FORMAL_ROOT / "runs"
 DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
 DEFAULT_MAC_RUNTIME_ROOT = DEFAULT_MAC_LIVE_ROOT if DEFAULT_MAC_LIVE_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
+LOCAL_RUNS_ROOT = Path(os.getenv("DAILY_LOCAL_RUNS_ROOT") or os.getenv("RUNS_ROOT") or str(DEFAULT_MAC_RUNS_ROOT))
 
 WIN_HOST_CANDIDATES = [
     item.strip()
@@ -496,7 +498,7 @@ def _extract_postclose_local_delta(postclose_report: Dict[str, object], trade_da
         local_artifacts = day_report.get("local_artifacts") or []
         if local_artifacts:
             return Path(str(local_artifacts[0]))
-    fallback = ROOT_DIR / ".run" / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
+    fallback = LOCAL_RUNS_ROOT / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
     if fallback.exists():
         return fallback
     raise FileNotFoundError(f"未找到本地 postclose L2 日增量: trade_date={trade_date}")
@@ -533,7 +535,7 @@ def _local_live_sync_complete(report: Optional[Dict[str, object]]) -> bool:
 
 def _recover_local_live_postprocess(trade_date: str, error: str) -> Dict[str, object]:
     target_date = _compact_date(trade_date)
-    local_delta = ROOT_DIR / ".run" / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
+    local_delta = LOCAL_RUNS_ROOT / "postclose_l2" / target_date / "processed" / f"l2_day_delta_{target_date}.db"
     if not local_delta.exists():
         raise FileNotFoundError(f"无法恢复 live 同步：本地 L2 delta 不存在: {local_delta}")
     counts = _local_live_l2_counts(target_date)
@@ -574,7 +576,7 @@ def _recover_local_live_postprocess(trade_date: str, error: str) -> Dict[str, ob
 
 def _build_stock_universe_meta_sync_db(trade_date: str) -> Dict[str, object]:
     target_date = _compact_date(trade_date)
-    sync_db = ROOT_DIR / ".run" / "daily_new_framework" / target_date / "processed" / f"stock_universe_meta_sync_{target_date}.db"
+    sync_db = LOCAL_RUNS_ROOT / "daily_new_framework" / target_date / "processed" / f"stock_universe_meta_sync_{target_date}.db"
     sync_db.parent.mkdir(parents=True, exist_ok=True)
     sync_db.unlink(missing_ok=True)
     with sqlite3.connect(str(LOCAL_MARKET_DB)) as source_conn:
@@ -1760,10 +1762,10 @@ def resolve_auto_trade_dates(max_candidates: int = DEFAULT_AUTO_DETECT_LIMIT) ->
 
 
 def _write_report(trade_date: str, report: Dict[str, object]) -> None:
-    run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
+    run_root = LOCAL_RUNS_ROOT / "daily_new_framework" / trade_date
     run_root.mkdir(parents=True, exist_ok=True)
     (run_root / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    latest = ROOT_DIR / ".run" / "daily_new_framework" / "latest.json"
+    latest = LOCAL_RUNS_ROOT / "daily_new_framework" / "latest.json"
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1777,7 +1779,7 @@ def run_daily(
     include_live_sync: bool = DEFAULT_INCLUDE_LIVE_SYNC,
 ) -> Dict[str, object]:
     trade_date = _compact_date(trade_date)
-    local_run_root = ROOT_DIR / ".run" / "daily_new_framework" / trade_date
+    local_run_root = LOCAL_RUNS_ROOT / "daily_new_framework" / trade_date
     local_run_root.mkdir(parents=True, exist_ok=True)
     if dry_run:
         host = WIN_HOST or (WIN_HOST_CANDIDATES[0] if WIN_HOST_CANDIDATES else "")

@@ -34,8 +34,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_MAC_FORMAL_ROOT = Path(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"))
 DEFAULT_MAC_RESEARCH_ROOT = DEFAULT_MAC_FORMAL_ROOT / "research" / "current"
 DEFAULT_MAC_LIVE_ROOT = DEFAULT_MAC_FORMAL_ROOT / "live"
+DEFAULT_MAC_RUNS_ROOT = DEFAULT_MAC_FORMAL_ROOT / "runs"
 DEFAULT_MAC_DATA_ROOT = DEFAULT_MAC_RESEARCH_ROOT if DEFAULT_MAC_RESEARCH_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
 DEFAULT_MAC_RUNTIME_ROOT = DEFAULT_MAC_LIVE_ROOT if DEFAULT_MAC_LIVE_ROOT.exists() else DEFAULT_MAC_FORMAL_ROOT
+LOCAL_RUNS_ROOT = Path(os.getenv("L2_LOCAL_RUNS_ROOT") or os.getenv("RUNS_ROOT") or str(DEFAULT_MAC_RUNS_ROOT))
 
 WIN_HOST = os.getenv("L2_WIN_HOST", "")
 WIN_HOST_CANDIDATES = [
@@ -1568,7 +1570,7 @@ def _cleanup_remote_day(trade_date: str) -> None:
 def _write_local_report(local_day_root: Path, report: Dict[str, object]) -> None:
     local_day_root.mkdir(parents=True, exist_ok=True)
     (local_day_root / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    latest = ROOT_DIR / ".run" / "postclose_l2" / "latest.json"
+    latest = LOCAL_RUNS_ROOT / "postclose_l2" / "latest.json"
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1636,7 +1638,7 @@ def run_day(
     reuse_day_root: str = "",
     seed_artifact_db: str = "",
 ) -> Dict[str, object]:
-    local_day_root = ROOT_DIR / ".run" / "postclose_l2" / trade_date
+    local_day_root = LOCAL_RUNS_ROOT / "postclose_l2" / trade_date
     _progress(f"[{trade_date}] ===== 开始处理 =====")
     reused = _try_reuse_completed_day(trade_date, local_day_root)
     if reused is not None:

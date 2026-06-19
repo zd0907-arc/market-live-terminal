@@ -15,6 +15,7 @@ interface StockQuoteHeroCardProps {
   latestLabel?: string;
   marketCapLabel?: string;
   metaRow?: React.ReactNode;
+  compact?: boolean;
 }
 
 const getPriceColorClass = (current: number, base: number) => {
@@ -49,6 +50,7 @@ const StockQuoteHeroCard: React.FC<StockQuoteHeroCardProps> = ({
   latestLabel,
   marketCapLabel,
   metaRow,
+  compact = false,
 }) => {
   const priceColor = getPriceColorClass(price, previousClose);
   const delta = price - previousClose;
@@ -63,18 +65,41 @@ const StockQuoteHeroCard: React.FC<StockQuoteHeroCardProps> = ({
     </div>
   );
 
+  const cardPaddingClass = compact ? 'p-2 shadow-lg md:p-2.5' : 'p-2.5 shadow-lg md:p-3';
+  const layoutClass = compact
+    ? 'relative z-10 grid gap-2 lg:grid-cols-[minmax(175px,0.72fr)_minmax(0,3.25fr)_minmax(98px,0.46fr)] lg:items-center xl:grid-cols-[minmax(190px,0.72fr)_minmax(0,3.35fr)_minmax(108px,0.46fr)]'
+    : 'relative z-10 grid gap-2.5 lg:grid-cols-[minmax(220px,0.86fr)_minmax(0,2.85fr)_minmax(112px,0.52fr)] lg:items-center xl:grid-cols-[minmax(235px,0.82fr)_minmax(0,3fr)_minmax(124px,0.52fr)]';
+  const titleClass = compact
+    ? 'min-w-0 truncate text-base font-bold tracking-tight text-white md:text-lg'
+    : 'min-w-0 truncate text-lg font-bold tracking-tight text-white md:text-xl';
+  const symbolClass = compact
+    ? 'shrink-0 rounded border border-slate-800 bg-slate-950 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase text-slate-300'
+    : 'shrink-0 rounded border border-slate-800 bg-slate-950 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase text-slate-300 md:text-xs';
+  const statsWrapperClass = compact
+    ? 'min-w-0 border-t border-slate-800 pt-1.5 font-mono text-[10px] lg:border-l lg:border-t-0 lg:pl-2.5 lg:pt-0 xl:pl-3'
+    : 'min-w-0 border-t border-slate-800 pt-2 font-mono text-[11px] lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 xl:pl-4';
+  const statsGridClass = compact
+    ? 'grid min-w-0 gap-1.5 sm:grid-cols-[minmax(116px,0.9fr)_minmax(174px,1.3fr)_minmax(64px,0.5fr)] xl:grid-cols-[minmax(124px,0.9fr)_minmax(188px,1.3fr)_minmax(68px,0.5fr)]'
+    : 'grid min-w-0 gap-2 sm:grid-cols-[minmax(128px,0.95fr)_minmax(190px,1.35fr)_minmax(70px,0.55fr)] xl:grid-cols-[minmax(142px,0.95fr)_minmax(210px,1.35fr)_minmax(76px,0.55fr)]';
+  const quoteWrapperClass = compact
+    ? 'min-w-0 border-t border-slate-800 pt-1.5 text-left lg:border-l lg:border-t-0 lg:pl-2.5 lg:pt-0 lg:text-right xl:pl-3'
+    : 'min-w-0 border-t border-slate-800 pt-2 text-left lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 lg:text-right xl:pl-4';
+  const priceClass = compact
+    ? `font-mono text-[27px] font-bold leading-none tracking-tight xl:text-[29px] ${priceColor}`
+    : `font-mono text-[31px] font-bold leading-none tracking-tight xl:text-[33px] ${priceColor}`;
+
   return (
-    <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 p-2.5 shadow-lg md:p-3">
+    <div className={`relative overflow-hidden rounded-xl border border-slate-800 bg-slate-900 ${cardPaddingClass}`}>
       <div className={`pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full opacity-20 blur-[80px] ${price >= previousClose ? 'bg-red-500' : 'bg-green-500'}`} />
 
-      <div className="relative z-10 grid gap-2.5 lg:grid-cols-[minmax(220px,0.86fr)_minmax(0,2.85fr)_minmax(112px,0.52fr)] lg:items-center xl:grid-cols-[minmax(235px,0.82fr)_minmax(0,3fr)_minmax(124px,0.52fr)]">
+      <div className={layoutClass}>
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-            <h1 className="min-w-0 truncate text-lg font-bold tracking-tight text-white md:text-xl">
+            <h1 className={titleClass}>
               {name}
             </h1>
             {symbol ? (
-              <span className="shrink-0 rounded border border-slate-800 bg-slate-950 px-1.5 py-0.5 font-mono text-[10px] font-normal uppercase text-slate-300 md:text-xs">
+              <span className={symbolClass}>
                 {symbol}
               </span>
             ) : null}
@@ -87,8 +112,8 @@ const StockQuoteHeroCard: React.FC<StockQuoteHeroCardProps> = ({
           ) : null}
         </div>
 
-        <div className="min-w-0 border-t border-slate-800 pt-2 font-mono text-[11px] lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 xl:pl-4">
-          <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(128px,0.95fr)_minmax(190px,1.35fr)_minmax(70px,0.55fr)] xl:grid-cols-[minmax(142px,0.95fr)_minmax(210px,1.35fr)_minmax(76px,0.55fr)]">
+        <div className={statsWrapperClass}>
+          <div className={statsGridClass}>
             <div className="grid min-w-0 grid-cols-2 gap-x-2.5 gap-y-1">
               <StatItem label="今开" value={open.toFixed(2)} />
               <StatItem label="昨收" value={previousClose.toFixed(2)} />
@@ -107,8 +132,8 @@ const StockQuoteHeroCard: React.FC<StockQuoteHeroCardProps> = ({
           </div>
         </div>
 
-        <div className="min-w-0 border-t border-slate-800 pt-2 text-left lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0 lg:text-right xl:pl-4">
-          <div className={`font-mono text-[31px] font-bold leading-none tracking-tight xl:text-[33px] ${priceColor}`}>
+        <div className={quoteWrapperClass}>
+          <div className={priceClass}>
             {price.toFixed(2)}
           </div>
           <div className="mt-0.5 flex items-center gap-2 font-mono text-sm leading-none lg:justify-end">

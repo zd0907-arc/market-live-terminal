@@ -11,8 +11,8 @@
 - 当前已验证 NAS Git 主入口：`nas-git:zhangdong/market-live-terminal.git`
 - 当前 NAS Git 局域网备用入口：`ssh://git@192.168.3.43:2222/zhangdong/market-live-terminal.git`
 - 当前正式端口口径：本地前端 `3001`、本地后端 `8001`、NAS 项目 Web `8080`、NAS Gitea `3000`；`8000` 仅按容器内部 backend 端口理解，`5173/5174` 只按历史临时调试端口理解
-- repo 内 `data/` 只按本地回退/兼容副本理解，不是默认正式研究根目录
-- 正式数据根按 `live / research/current / cache / artifacts / incoming` 收口；repo 内 `data/` 仅兼容/fallback
+- repo 内 `data/` 只保留小型规则配置；不再保留 `data/selection` 研究产物副本
+- 正式数据根按 `live / research/current / cache / artifacts / incoming / runs` 收口
 - 当前项目真相总入口：`docs/changes/MOD-20260421-01-project-current-state-and-doc-governance-normalization.md`
 - 当前运行架构总入口：`docs/01_SYSTEM_ARCHITECTURE.md`
 - 当前唯一持续更新研究目录：`docs/selection/long_term_trends/`
@@ -28,7 +28,7 @@
 
 ## 禁止当作当前主线开发目录
 - 本地虚拟环境：`/Users/dong/ZhangData/market-live-terminal/.venv`
-- 本地运行产物：`/Users/dong/ZhangData/market-live-terminal/.run`
+- 本地运行产物：`/Users/dong/ZhangData/market-data/runs`
 
 ## 当前 worktree / 分支纪律
 - 当前唯一主工作目录：`/Users/dong/ZhangData/market-live-terminal`
@@ -57,6 +57,8 @@ bash scripts/check_baseline.sh
 5. `snapshot` 只作为验证/应急工具，不作为当前正式主方案。
 6. 若要动生产发布，先确认这次改动是否真的属于“盯盘应急版”范围。
 7. 清理 / stash / worktree 收口前，必须确认 `docs/selection/long_term_trends/` 没被隐藏或遗漏。
+8. 新研究、新模型、新回测的机器产物默认写到 `market-data/artifacts` 或 `market-data/runs`；代码仓只保留人读结论、说明文档、小型配置和必要样例。
+9. 代码仓不再使用 `.run`、`public/research`、`data/selection` 作为正式落点；页面 `/research` 和 `/data/selection` 由后端从数据仓提供。
 
 ## 当前文档阅读顺序
 1. `README.md`：确认当前工作目录、版本、模块边界

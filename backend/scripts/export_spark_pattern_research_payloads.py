@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from backend.app.core.config import RESEARCH_CURRENT_ROOT
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, RESEARCH_PAYLOADS_ROOT, SELECTION_ARTIFACTS_ROOT, first_existing_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,8 +31,14 @@ DEFAULT_SELECTION_DB = Path(
         str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
     )
 )
-DEFAULT_TRADES = ROOT / "data/selection/opportunity_discovery/postclose_exit_v0_2/postclose_exit_trades.csv"
-DEFAULT_OUT_DIR = ROOT / "public/research"
+DEFAULT_TRADES = Path(
+    first_existing_path(
+        str(Path(SELECTION_ARTIFACTS_ROOT) / "opportunity_discovery/postclose_exit_v0_2/postclose_exit_trades.csv"),
+        str(ROOT / "data/selection/opportunity_discovery/postclose_exit_v0_2/postclose_exit_trades.csv"),
+    )
+)
+DEFAULT_OUT_DIR = Path(RESEARCH_PAYLOADS_ROOT)
+DEFAULT_PUBLIC_OUT_DIR = ROOT / "public/research"
 WINDOW_BEFORE_ENTRY_DAYS = 40
 WINDOW_FROM_ENTRY_DAYS = 50
 HARD_EXIT_OFFSET = 21
@@ -419,6 +425,8 @@ def export_payloads(args: argparse.Namespace) -> None:
     selection_db = Path(args.selection_db)
     trades_path = Path(args.trades)
     out_dir = Path(args.out_dir)
+    public_out_dir_text = str(getattr(args, "public_out_dir", "") or "").strip()
+    public_out_dir = Path(public_out_dir_text) if public_out_dir_text else None
 
     rows = _load_csv_rows(trades_path)
     symbols = sorted({str(row["symbol"]).lower() for row in rows if str(row.get("symbol") or "").strip()})
@@ -428,16 +436,25 @@ def export_payloads(args: argparse.Namespace) -> None:
     end_date = max(str(row["entry_date"]) for row in rows)
     all_dates = _load_calendar_dates(atomic_db, start_date, _date_at_offset(_load_calendar_dates(atomic_db, start_date, max(str(row["exit_date"]) for row in rows)), end_date, WINDOW_FROM_ENTRY_DAYS))
     out_dir.mkdir(parents=True, exist_ok=True)
+    if public_out_dir:
+        public_out_dir.mkdir(parents=True, exist_ok=True)
 
     outputs = []
     for variant in VARIANTS:
         payload = _build_variant_payload(variant, rows, names, atomic_db, all_dates)
         out_path = out_dir / variant["out_name"]
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        public_out = None
+        if public_out_dir:
+            public_path = public_out_dir / variant["out_name"]
+            if public_path.resolve() != out_path.resolve():
+                public_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            public_out = str(public_path)
         outputs.append(
             {
                 "variant": variant["id"],
                 "out": str(out_path),
+                "public_out": public_out,
                 "top1_stock_count": payload["meta"]["top1_stock_count"],
                 "top3_stock_count": payload["meta"]["top3_stock_count"],
             }
@@ -451,6 +468,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--selection-db", default=str(DEFAULT_SELECTION_DB))
     parser.add_argument("--trades", default=str(DEFAULT_TRADES))
     parser.add_argument("--out-dir", default=str(DEFAULT_OUT_DIR))
+    parser.add_argument("--public-out-dir", default=str(DEFAULT_PUBLIC_OUT_DIR), help="页面发布副本目录；传空字符串可跳过")
     args = parser.parse_args(argv)
     export_payloads(args)
 

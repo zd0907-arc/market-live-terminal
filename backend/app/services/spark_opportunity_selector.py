@@ -9,7 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from backend.app.core.config import RESEARCH_CURRENT_ROOT, candidate_atomic_db_paths
+from backend.app.core.config import (
+    FORMAL_MARKET_DATA_ROOT,
+    RESEARCH_CURRENT_ROOT,
+    SELECTION_ARTIFACTS_ROOT,
+    candidate_atomic_db_paths,
+)
 
 SOURCE_ID = "spark_opportunity_selector"
 SOURCE_NAME = "星火机会模型 1.0"
@@ -20,7 +25,10 @@ HORIZON = "22d"
 STATUS = "watch_only"
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_MODEL_DIR = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1"
+MODEL_RELATIVE_DIR = Path("opportunity_discovery") / ARTIFACT_VERSION
+DEFAULT_MODEL_DIR = Path(SELECTION_ARTIFACTS_ROOT) / MODEL_RELATIVE_DIR
+LEGACY_MARKET_DATA_MODEL_DIR = Path(FORMAL_MARKET_DATA_ROOT) / "selection" / MODEL_RELATIVE_DIR
+LEGACY_REPO_MODEL_DIR = ROOT / "data/selection" / MODEL_RELATIVE_DIR
 DEFAULT_MARKET_DATA_ROOT = Path(os.getenv("RESEARCH_CURRENT_ROOT", RESEARCH_CURRENT_ROOT))
 DEFAULT_ATOMIC_DB = DEFAULT_MARKET_DATA_ROOT / "atomic_facts/market_atomic_mainboard_compact_current.db"
 DEFAULT_SELECTION_DB = DEFAULT_MARKET_DATA_ROOT / "selection/selection_research.db"
@@ -42,7 +50,16 @@ def source_registry_record() -> Dict[str, Any]:
 
 
 def _model_dir(model_dir: Optional[str | Path] = None) -> Path:
-    return Path(model_dir or os.getenv("SPARK_OPPORTUNITY_MODEL_DIR") or DEFAULT_MODEL_DIR)
+    if model_dir:
+        return Path(model_dir)
+    explicit = os.getenv("SPARK_OPPORTUNITY_MODEL_DIR")
+    if explicit:
+        return Path(explicit)
+    candidates = [DEFAULT_MODEL_DIR, LEGACY_MARKET_DATA_MODEL_DIR, LEGACY_REPO_MODEL_DIR]
+    for candidate in candidates:
+        if (candidate / "summary.json").exists():
+            return candidate
+    return DEFAULT_MODEL_DIR
 
 
 def required_model_artifacts(model_dir: Optional[str | Path] = None) -> List[Path]:

@@ -1,2 +1,0 @@
-run_date,idea,title,industry_trend_score,industry_trend_max,a_share_operability_score,a_share_operability_max,industry_status,operability_state,conclusion,current_view,block_reason,next_trigger,updated_at,change_hint
-2026-05-10,storage,AI 存储 / 内存涨价,86.0,100,34.4,100,行业强,等待分歧,行业强 / A股不追高,趋势成立，但当前更像高景气高拥挤，不是舒服买点。,A股核心票大多仍在主升后段/高位确认，分歧不够深，Q2 利润质量尚未验证。,江波龙/德明利等龙头回踩关键位不破，且 Q3 DRAM/NAND/eSSD 报价继续上修。,2026-05-10 12:00,若只有 1 条历史，前端展示本次基线；有历史后自动比较变化。

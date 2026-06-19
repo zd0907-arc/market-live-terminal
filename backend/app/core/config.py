@@ -8,6 +8,7 @@ DEFAULT_FORMAL_MARKET_DATA_ROOT = os.getenv(
     "FORMAL_MARKET_DATA_ROOT",
     "/Users/dong/ZhangData/market-data",
 )
+FORMAL_MARKET_DATA_ROOT = str(os.getenv("FORMAL_MARKET_DATA_ROOT", DEFAULT_FORMAL_MARKET_DATA_ROOT)).strip()
 
 
 def _first_existing_dir(*candidates: str) -> str:
@@ -24,6 +25,14 @@ def _first_nonempty(*candidates: str) -> str:
         if path:
             return path
     return ""
+
+
+def first_existing_path(*candidates: str) -> str:
+    for candidate in candidates:
+        path = str(candidate or "").strip()
+        if path and os.path.exists(path):
+            return path
+    return _first_nonempty(*candidates)
 
 
 def _parent_dir(path: str) -> str:
@@ -124,10 +133,18 @@ def _resolve_research_current_root() -> str:
 DATA_DIR = _resolve_default_data_dir()
 LIVE_DATA_ROOT = _resolve_live_data_root()
 RESEARCH_CURRENT_ROOT = _resolve_research_current_root()
+ARTIFACTS_ROOT = os.getenv("ARTIFACTS_ROOT", os.path.join(FORMAL_MARKET_DATA_ROOT, "artifacts"))
+SELECTION_ARTIFACTS_ROOT = os.getenv("SELECTION_ARTIFACTS_ROOT", os.path.join(ARTIFACTS_ROOT, "selection"))
+RESEARCH_PAYLOADS_ROOT = os.getenv("RESEARCH_PAYLOADS_ROOT", os.path.join(ARTIFACTS_ROOT, "research_payloads"))
+RUNS_ROOT = os.getenv("RUNS_ROOT", os.path.join(FORMAL_MARKET_DATA_ROOT, "runs"))
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(LIVE_DATA_ROOT, exist_ok=True)
 os.makedirs(RESEARCH_CURRENT_ROOT, exist_ok=True)
+os.makedirs(ARTIFACTS_ROOT, exist_ok=True)
+os.makedirs(SELECTION_ARTIFACTS_ROOT, exist_ok=True)
+os.makedirs(RESEARCH_PAYLOADS_ROOT, exist_ok=True)
+os.makedirs(RUNS_ROOT, exist_ok=True)
 
 DB_FILE = os.getenv("DB_PATH", os.path.join(LIVE_DATA_ROOT, "market_data.db"))
 USER_DB_FILE = os.getenv("USER_DB_PATH", os.path.join(LIVE_DATA_ROOT, "user_data.db"))

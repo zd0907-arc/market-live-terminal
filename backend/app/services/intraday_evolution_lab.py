@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+from backend.app.core.config import SELECTION_ARTIFACTS_ROOT
 from backend.app.services.selection_strategy_v2 import resolve_selection_v2_atomic_db_path
 
 try:
@@ -24,7 +25,12 @@ except Exception:  # pragma: no cover - optional PPO dependency
 
 
 LAB_VERSION = "intraday_evolution_lab_v0_1"
-DEFAULT_OUTPUT_DIR = Path("data/selection/evolution_lab")
+DEFAULT_OUTPUT_DIR = Path(
+    os.getenv(
+        "INTRADAY_EVOLUTION_OUTPUT_DIR",
+        str(Path(SELECTION_ARTIFACTS_ROOT) / "evolution_lab"),
+    )
+)
 
 
 @dataclass(frozen=True)

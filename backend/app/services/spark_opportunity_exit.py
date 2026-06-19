@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from backend.app.core.config import FORMAL_MARKET_DATA_ROOT, SELECTION_ARTIFACTS_ROOT
 from backend.app.services import spark_opportunity_selector
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -16,8 +17,33 @@ DEFAULT_TRACK_LIMIT = 3
 DEFAULT_DUAL_POLICY_ID = "spark_exit_dual_track"
 DEFAULT_DUAL_POLICY_NAME = "星火双轨持仓跟踪"
 
-PRIMARY_MODEL_ROOT = ROOT / "data/selection/opportunity_discovery/postclose_exit_v0_2"
-BALANCED_MODEL_ROOT = ROOT / "data/selection/opportunity_discovery/postclose_exit_2025top5_heat_v0_1"
+def _dedupe_paths(paths: Sequence[Path]) -> Tuple[Path, ...]:
+    out: List[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return tuple(out)
+
+
+def _selection_artifact_candidates(relative_path: str) -> Tuple[Path, ...]:
+    relative = Path(relative_path)
+    return _dedupe_paths(
+        (
+            Path(SELECTION_ARTIFACTS_ROOT) / relative,
+            Path(FORMAL_MARKET_DATA_ROOT) / "selection" / relative,
+            ROOT / "data/selection" / relative,
+        )
+    )
+
+
+PRIMARY_MODEL_ROOTS = _selection_artifact_candidates("opportunity_discovery/postclose_exit_v0_2")
+BALANCED_MODEL_ROOTS = _selection_artifact_candidates("opportunity_discovery/postclose_exit_2025top5_heat_v0_1")
+PRIMARY_MODEL_ROOT = PRIMARY_MODEL_ROOTS[0]
+BALANCED_MODEL_ROOT = BALANCED_MODEL_ROOTS[0]
 
 
 @dataclass(frozen=True)
@@ -50,7 +76,7 @@ TRACK_SPECS: Tuple[ExitTrackSpec, ...] = (
         display_name="落袋优先",
         style_summary="偏快出，优先锁定利润和控制回撤。",
         model_root_env="SPARK_OPPORTUNITY_EXIT_MODEL_ROOT",
-        model_roots=(PRIMARY_MODEL_ROOT,),
+        model_roots=PRIMARY_MODEL_ROOTS,
         policy=SparkExitPolicy(
             policy_id="pc_model_th6_stop12",
             policy_name="落袋优先",
@@ -67,7 +93,7 @@ TRACK_SPECS: Tuple[ExitTrackSpec, ...] = (
         display_name="趋势续航",
         style_summary="更愿意多拿趋势，争取多吃冲高段。",
         model_root_env="SPARK_OPPORTUNITY_TREND_EXIT_MODEL_ROOT",
-        model_roots=(BALANCED_MODEL_ROOT,),
+        model_roots=BALANCED_MODEL_ROOTS,
         policy=SparkExitPolicy(
             policy_id="pc_model_th3_stop12",
             policy_name="趋势续航",
@@ -130,7 +156,7 @@ def _resolve_model_root(track: ExitTrackSpec) -> Path:
     for candidate in track.model_roots:
         if (candidate / "summary.json").exists():
             return candidate
-    return track.model_roots[-1]
+    return track.model_roots[0]
 
 
 def _parse_window_start_dates(summary: Dict[str, Any]) -> List[Tuple[str, str]]:

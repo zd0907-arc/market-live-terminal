@@ -12,9 +12,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backend.app.db.selection_db import ensure_selection_schema, get_selection_connection  # noqa: E402
+from backend.app.core.config import RESEARCH_PAYLOADS_ROOT  # noqa: E402
 from backend.app.services.probe_signal_selector import CONFIRM_SOURCE_ID, WATCH_SOURCE_ID  # noqa: E402
 from backend.app.services.selection_daily_workbench import run_daily_selection_sources  # noqa: E402
-from backend.scripts.export_probe_signal_research_payload import build_payload  # noqa: E402
+from backend.scripts.export_probe_signal_research_payload import PUBLIC_OUT_PATH, build_payload  # noqa: E402
 
 
 def _feature_trade_dates(start_date: str, end_date: str) -> list[str]:
@@ -43,7 +44,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--sources", default=f"{WATCH_SOURCE_ID},{CONFIRM_SOURCE_ID}")
     parser.add_argument("--skip-backfill", action="store_true")
     parser.add_argument("--export-payload", action="store_true")
-    parser.add_argument("--payload-out", default=str(ROOT / "public/research/probe_signal_research_payload.json"))
+    parser.add_argument("--payload-out", default=str(Path(RESEARCH_PAYLOADS_ROOT) / "probe_signal_research_payload.json"))
+    parser.add_argument("--public-out", default=str(PUBLIC_OUT_PATH), help="页面发布副本；传空字符串可跳过")
     parser.add_argument("--payload-limit-per-source", type=int, default=24)
     args = parser.parse_args(argv)
 
@@ -73,7 +75,17 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         out_path = Path(args.payload_out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        payload_meta = {"out": str(out_path), "sections": {item["id"]: item["stock_count"] for item in payload["sections"]}}
+        public_out = str(args.public_out or "").strip()
+        if public_out:
+            public_path = Path(public_out)
+            if public_path.resolve() != out_path.resolve():
+                public_path.parent.mkdir(parents=True, exist_ok=True)
+                public_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        payload_meta = {
+            "out": str(out_path),
+            "public_out": public_out or None,
+            "sections": {item["id"]: item["stock_count"] for item in payload["sections"]},
+        }
 
     print(
         json.dumps(

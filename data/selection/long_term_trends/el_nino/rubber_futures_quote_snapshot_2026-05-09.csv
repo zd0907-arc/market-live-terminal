@@ -1,3 +1,0 @@
-run_date,secid,label,code,name,latest,prev_close,change,change_pct,open,high,low,volume,amount,quote_time,source
-2026-05-09,113.RUM,RU主连/橡胶主连,rum,橡胶主连,17860,17830,-125,-0.7,17830,17895,17720,123346,21970267550.0,2026-05-08 23:00:00,Eastmoney push2
-2026-05-09,142.NRM,NR主连/20号胶主连,nrm,20号胶主连,15075,15065,-150,-0.99,15030,15125,14985,31810,4788484900.0,2026-05-08 23:00:00,Eastmoney push2

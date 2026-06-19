@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-LATEST_JSON=".run/postclose_l2/latest.json"
+FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
+RUNS_ROOT="${RUNS_ROOT:-$FORMAL_MARKET_DATA_ROOT/runs}"
+LATEST_JSON="$RUNS_ROOT/postclose_l2/latest.json"
 if [ -f "$LATEST_JSON" ]; then
   python3 - "$LATEST_JSON" <<'PY'
 import json, sys
@@ -34,7 +36,7 @@ fi
 
 LOG_FILE="${1:-}"
 if [ -z "$LOG_FILE" ]; then
-  LOG_FILE="$(ls -t .run/postclose_daily_run*.log 2>/dev/null | head -n 1 || true)"
+  LOG_FILE="$(ls -t "$RUNS_ROOT"/postclose_daily_run*.log 2>/dev/null | head -n 1 || true)"
 fi
 if [ -z "$LOG_FILE" ] || [ ! -f "$LOG_FILE" ]; then
   echo "状态: 未找到 postclose 日跑日志"

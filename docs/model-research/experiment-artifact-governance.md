@@ -1,17 +1,18 @@
 # 实验产物命名与归档规范
 
-更新时间：2026-06-03
+更新时间：2026-06-19
 
 ## 结论
 
-以后模型训练相关产物，先分清楚是：
+以后模型训练和策略研究产物，先分清楚是：
 
 - 长期入口文档
 - 研究方向文档
-- 单次实验结果
+- 单次实验结论
+- 机器产物
 - 产品接入说明
 
-不要把它们混在一个目录里，也不要让临时 smoke 结果长期占顶层入口。
+不要把它们混在一个目录里。代码仓只放人读材料；机器产物默认进数据仓。
 
 ## 1. 四类产物分别放哪
 
@@ -28,16 +29,39 @@
 - `docs/selection/`
 - `docs/strategy-rework/`
 
-### C. 单次实验结果
+### C. 单次实验结论
 
-保留现有两种主落点：
+放在：
 
-1. 方向性模型训练结果
-   - `docs/selection/<topic>_<YYYY-MM-DD>/`
-2. 策略 / 持仓 / 环境类实验
-   - `docs/strategy-rework/strategies/<strategy>/experiments/<EXP-name>/`
+- `docs/selection/<topic>_<YYYY-MM-DD>/`
+- `docs/strategy-rework/strategies/<strategy>/experiments/<EXP-name>/`
 
-### D. 产品接入说明
+只保留：
+
+- `README.md`
+- `research_conclusion.md`
+- `model_selection_reason.md`
+- 必要的小型样例
+
+旧目录中已经存在的 CSV/JSON 先按历史实验包保留，不再扩大。
+
+### D. 机器产物
+
+默认放在：
+
+- `/Users/dong/ZhangData/market-data/artifacts/selection/`
+- `/Users/dong/ZhangData/market-data/artifacts/research_payloads/`
+- `/Users/dong/ZhangData/market-data/runs/`
+
+包括：
+
+- 模型文件
+- 大型 CSV/JSON
+- 回测明细
+- 页面 payload 源产物
+- 跑数现场和中间包
+
+### E. 产品接入说明
 
 放在：
 
@@ -45,21 +69,21 @@
 - `docs/changes/*`
 - 必要时补到 `docs/contracts/*`
 
-## 2. 单次实验最小产物包
+## 2. 单次实验最小交付
 
-以后一轮完整实验至少包含：
+以后一轮完整实验至少包含一份人读结论包：
 
 1. `README.md`
-2. `run_summary.json`
-3. `leaderboard.csv`
-4. `monthly_metrics.csv`
-5. `daily_candidates.csv` 或同类明细
-6. `research_conclusion.md`
+2. `research_conclusion.md`
+3. 关键指标摘要
+4. 机器产物位置说明
 
 如果是最终选中模型，再补：
 
-7. `model_selection_reason.md`
-8. 模型文件与特征清单
+5. `model_selection_reason.md`
+6. 模型文件与特征清单
+
+机器产物不再要求复制进 `docs`，只在结论包里写清楚数据仓位置和用途。
 
 ## 3. 命名规则
 
@@ -99,3 +123,12 @@
 4. 继续留在顶层只会误导后续 AI
 
 归档的目标是防误读，不是清空历史。
+
+## 5. 当前签收状态
+
+本轮本地收口后，旧研究材料按下面口径签收：
+
+1. `docs/selection/*_2026-*` 和 `docs/strategy-rework/**/experiments/*`：历史实验包，保留可追溯性，不再作为新产物默认落点。
+2. `public/research/*`：代码仓内不再保留；页面 `/research` 由后端从 `market-data/artifacts/research_payloads/` 提供。
+3. `.run/*`：代码仓内不再保留；跑数现场落到 `market-data/runs/`。
+4. 新增研究若继续直接写代码仓，视为违反当前规范，必须先改输出路径或在任务说明中显式说明原因。

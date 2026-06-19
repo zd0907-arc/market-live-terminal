@@ -1,8 +1,0 @@
-category,indicator,current_value,direction,importance,signal_state,status,source,frequency,next_check,decision_use,source_url
-价格,DRAM 合约价,1Q26 +90%~95%，2Q26 +58%~63% QoQ,up,S,强,已接入,TrendForce,月/季,2026-06-15,确认涨价周期是否从 Q1 延续到 Q2/Q3,https://www.trendforce.com/presscenter/news/20260202-12911.html
-价格,NAND 合约价,1Q26 +55%~60%，2Q26 +70%~75% QoQ,up,S,强,已接入,TrendForce,月/季,2026-06-15,确认 NAND / SSD 模组利润支撑是否继续强化,https://www.trendforce.com/presscenter/news/20260331-12995.html
-价格,Enterprise SSD 报价,2Q26 +48%~53% QoQ,up,S,强,半结构化接入,TrendForce,月/季,2026-06-15,验证 AI 数据中心真实拉动已传导到 eSSD 合约价,https://www.trendforce.com/research/download/RP260427NK
-价格,DDR5 / server memory 结构,server DDR5/HBM3e price convergence,up,A,偏强,半结构化接入,TrendForce insight,专题,2026-08-01,确认涨价背后有技术升级，而非单纯短缺,https://www.trendforce.com/insights/memory-wall
-价格,NAND Wafer 价格,待接入连续周度报价,watch,A,待接入,待接入,TrendForce / CFM,周/月,2026-05-15,判断模组厂低成本库存价差是否继续扩大,
-需求,Top9 CSP 2026 CapEx,US$830B，增速上修到 +79% YoY,up,S,强,已接入,TrendForce,季,2026-07-31,确认 AI 基建需求底座仍在上修,https://www.trendforce.com/presscenter/news/20260506-13033.html
-供给,HBM 产能挤占,供应商继续将产能转向 HBM / server applications,tight,A,偏强,已记录,TrendForce / Micron IR,季,next earnings,解释常规 DRAM 供给为何仍紧,https://www.trendforce.com/presscenter/news/20260331-12995.html

@@ -1,8 +1,17 @@
+import importlib
 from pathlib import Path
 
 
-def test_spark_exit_model_root_prefers_env(monkeypatch, tmp_path):
+def _reload_exit_service():
+    import backend.app.core.config as config
     import backend.app.services.spark_opportunity_exit as exit_service
+
+    importlib.reload(config)
+    return importlib.reload(exit_service)
+
+
+def test_spark_exit_model_root_prefers_env(monkeypatch, tmp_path):
+    exit_service = _reload_exit_service()
 
     model_root = tmp_path / "postclose_exit_v0_2"
     model_root.mkdir(parents=True, exist_ok=True)
@@ -14,10 +23,9 @@ def test_spark_exit_model_root_prefers_env(monkeypatch, tmp_path):
     assert resolved == model_root
 
 
-def test_spark_exit_default_model_root_stays_inside_repo():
-    import backend.app.services.spark_opportunity_exit as exit_service
+def test_spark_exit_default_model_root_prefers_selection_artifacts():
+    exit_service = _reload_exit_service()
 
     resolved = exit_service._resolve_model_root(exit_service.PRIMARY_TRACK)
-    root = Path(exit_service.ROOT).resolve()
-    assert str(resolved.resolve()).startswith(str(root))
-
+    selection_artifacts_root = Path(exit_service.SELECTION_ARTIFACTS_ROOT).resolve()
+    assert str(resolved.resolve()).startswith(str(selection_artifacts_root))

@@ -22,13 +22,14 @@ from backend.app.services.probe_signal_selector import (  # noqa: E402
     _load_daily_followthrough,
     _safe_float,
 )
-from backend.app.core.config import RESEARCH_CURRENT_ROOT  # noqa: E402
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, RESEARCH_PAYLOADS_ROOT  # noqa: E402
 from backend.app.db.selection_db import get_selection_connection  # noqa: E402
 
 
 RESEARCH_ROOT = Path(RESEARCH_CURRENT_ROOT)
 ATOMIC_DB = RESEARCH_ROOT / "atomic_facts" / "market_atomic_mainboard_compact_current.db"
-OUT_PATH = ROOT / "public/research/probe_signal_research_payload.json"
+OUT_PATH = Path(RESEARCH_PAYLOADS_ROOT) / "probe_signal_research_payload.json"
+PUBLIC_OUT_PATH = ROOT / "public/research/probe_signal_research_payload.json"
 WINDOW_BEFORE_DAYS = 45
 WINDOW_AFTER_DAYS = 45
 
@@ -230,13 +231,30 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--limit-per-source", type=int, default=24)
     parser.add_argument("--out", default=str(OUT_PATH))
+    parser.add_argument("--public-out", default=str(PUBLIC_OUT_PATH), help="页面发布副本；传空字符串可跳过")
     args = parser.parse_args(argv)
 
     payload = build_payload(str(args.start_date), str(args.end_date), int(args.limit_per_source))
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"out": str(out_path), "sections": {item["id"]: item["stock_count"] for item in payload["sections"]}}, ensure_ascii=False, indent=2))
+    public_out = str(args.public_out or "").strip()
+    if public_out:
+        public_path = Path(public_out)
+        if public_path.resolve() != out_path.resolve():
+            public_path.parent.mkdir(parents=True, exist_ok=True)
+            public_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                "out": str(out_path),
+                "public_out": public_out or None,
+                "sections": {item["id"]: item["stock_count"] for item in payload["sections"]},
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

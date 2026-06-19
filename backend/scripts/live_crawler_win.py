@@ -17,7 +17,8 @@ for k in ['http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
-RUN_DIR = os.path.join(ROOT_DIR, '.run')
+DEFAULT_RUNS_ROOT = os.path.join(os.getenv("FORMAL_MARKET_DATA_ROOT", "/Users/dong/ZhangData/market-data"), "runs")
+RUN_DIR = os.getenv("LIVE_CRAWLER_RUN_DIR") or os.path.join(os.getenv("RUNS_ROOT", DEFAULT_RUNS_ROOT), "live_crawler")
 os.makedirs(RUN_DIR, exist_ok=True)
 LOG_FILE = os.path.join(RUN_DIR, 'live_crawler_runtime.log')
 PID_FILE = os.path.join(RUN_DIR, 'live_crawler.pid')

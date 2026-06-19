@@ -114,6 +114,9 @@
 * **Windows**：当前数据主站与正式跑数真相源。
 * **Mac 本地**：当前研究、复盘、选股主消费环境；读取同步后的处理后正式库。
 * **NAS**：当前在线运行节点；线上查询和 `research/current` 发布都以它为准，但它不是盘后重跑真相源。
+* **一致性的含义**：三端一致不是目录镜像一致，而是同一业务功能能读到同一套正式结果。某一端多出来的目录，通常表示该端承担了额外职责，例如线上模型推理、发布产物、训练全量数据或历史兼容。
+* **解释优先级**：讨论目录差异时，先说“它服务哪个业务功能、删掉会影响什么”，再给具体路径。
+* **研究产物边界**：新研究、新模型、新回测的机器产物默认进入 `market-data/artifacts` 或 `market-data/runs`；代码仓只承接源代码、人读结论、说明文档、小型配置和必要样例。
 
 ## 四、 环境变量与配置依赖 (.env Blueprint)
 系统启动必须依赖以下环境配置（不可在代码中硬编码）：
@@ -122,6 +125,10 @@
 *   `FORMAL_MARKET_DATA_ROOT`: 当前正式数据根；默认 `/Users/dong/ZhangData/market-data`（Mac）或 `/runtime-data`（NAS）。
 *   `LIVE_DATA_ROOT`: 在线轻量库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/live` 推导。
 *   `RESEARCH_CURRENT_ROOT`: 正式研究库根目录；默认从 `FORMAL_MARKET_DATA_ROOT/research/current` 推导。
+*   `ARTIFACTS_ROOT`: 模型、研究产物和页面 payload 的根目录；默认从 `FORMAL_MARKET_DATA_ROOT/artifacts` 推导。
+*   `SELECTION_ARTIFACTS_ROOT`: 选股模型、策略和长期趋势产物目录；默认从 `ARTIFACTS_ROOT/selection` 推导。
+*   `RESEARCH_PAYLOADS_ROOT`: 研究页静态 payload 的源产物目录；默认从 `ARTIFACTS_ROOT/research_payloads` 推导。
+*   `RUNS_ROOT`: 跑数现场和中间包目录；默认从 `FORMAL_MARKET_DATA_ROOT/runs` 推导。
 *   `DB_PATH`: SQLite 文件的绝对路径。如果不传，默认按 `LIVE_DATA_ROOT/market_data.db` 解释；repo `data/market_data.db` 只按兼容副本理解。
 *   `USER_DB_PATH`: 用户配置数据库路径。默认按 `LIVE_DATA_ROOT/user_data.db` 解释；repo `data/user_data.db` 只按兼容副本理解。
 *   `MOCK_DATA_DATE`: 字符串 (如 `"2026-02-12"`)。非空时，后端所有当天数据的接口将欺骗前端，假装今天是该日期（由于开发通常在周末或晚上进行）。

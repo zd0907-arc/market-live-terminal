@@ -5,8 +5,16 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.app.core.config import FORMAL_MARKET_DATA_ROOT, SELECTION_ARTIFACTS_ROOT, first_existing_path
+
 ROOT = Path(__file__).resolve().parents[3]
-DATA_ROOT = ROOT / "data/selection/long_term_trends"
+DATA_ROOT = Path(
+    first_existing_path(
+        str(Path(SELECTION_ARTIFACTS_ROOT) / "long_term_trends"),
+        str(Path(FORMAL_MARKET_DATA_ROOT) / "selection/long_term_trends"),
+        str(ROOT / "data/selection/long_term_trends"),
+    )
+)
 DOC_ROOT = ROOT / "docs/selection/long_term_trends"
 IDEA_CONFIG: Dict[str, Dict[str, Any]] = {
     "storage": {

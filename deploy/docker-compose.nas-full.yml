@@ -33,8 +33,12 @@ services:
       - HOT_THEME_LOW_POSITION_L2_SAMPLES_DB=/runtime-data/research/current/market_heat/hot_theme_low_position_l2_samples.db
       - SPARK_OPPORTUNITY_SELECTION_DB=/runtime-data/research/current/selection/selection_research.db
       - SPARK_OPPORTUNITY_HEAT_DB=/runtime-data/research/current/market_heat/fine_theme_heat_daily_v2.db
-      - SPARK_OPPORTUNITY_MODEL_DIR=/runtime-data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1
-      - SPARK_OPPORTUNITY_EXIT_MODEL_ROOT=/runtime-data/selection/opportunity_discovery/postclose_exit_v0_2
+      - ARTIFACTS_ROOT=/runtime-data/artifacts
+      - SELECTION_ARTIFACTS_ROOT=/runtime-data/artifacts/selection
+      - RESEARCH_PAYLOADS_ROOT=/runtime-data/artifacts/research_payloads
+      - RUNS_ROOT=/runtime-data/runs
+      - SPARK_OPPORTUNITY_MODEL_DIR=/runtime-data/artifacts/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1
+      - SPARK_OPPORTUNITY_EXIT_MODEL_ROOT=/runtime-data/artifacts/selection/opportunity_discovery/postclose_exit_v0_2
       - AGGRESSIVE_10CM_SELECTION_DB=/runtime-data/research/current/selection/selection_research.db
       - AGGRESSIVE_10CM_FINE_HEAT_DB=/runtime-data/research/current/market_heat/fine_theme_heat_daily_v2.db
       - TZ=Asia/Shanghai
@@ -80,6 +84,7 @@ services:
       - FORMAL_MARKET_DATA_ROOT=/runtime-data
       - LIVE_DATA_ROOT=/runtime-data/live
       - RESEARCH_CURRENT_ROOT=/runtime-data/research/current
+      - RUNS_ROOT=/runtime-data/runs
       - DB_PATH=/runtime-data/live/market_data.db
       - USER_DB_PATH=/runtime-data/live/user_data.db
       - DATA_DIR=/runtime-data/live

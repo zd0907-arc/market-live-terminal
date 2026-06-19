@@ -255,6 +255,8 @@ const chooseGranularityForDateRange = (startDate: string, endDate: string): Gran
   return '1d';
 };
 
+const apiGranularityForMode = (granularity: Granularity): Granularity => (granularity === '1d' ? '1d' : '5m');
+
 const estimateVisibleCount = (rows: ReviewBar[], zoomRange: [number, number]): number => {
   if (!rows.length) return 0;
   const ratio = Math.max(0.01, (zoomRange[1] - zoomRange[0]) / 100);
@@ -377,6 +379,7 @@ const SandboxReviewPage: React.FC = () => {
   const [draftEndDate, setDraftEndDate] = useState(DEFAULT_END);
   const [activeRangeShortcut, setActiveRangeShortcut] = useState<RangeShortcut>('90d');
   const [rawData, setRawData] = useState<ReviewBar[]>([]);
+  const [loadedApiGranularity, setLoadedApiGranularity] = useState<Granularity>('5m');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [emptyMessage, setEmptyMessage] = useState('');
@@ -390,14 +393,16 @@ const SandboxReviewPage: React.FC = () => {
   const searchRef = useRef<HTMLDivElement | null>(null);
   const rangePickerRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchData = useCallback(async (symbol: string, startDate: string, endDate: string) => {
+  const fetchData = useCallback(async (symbol: string, startDate: string, endDate: string, displayGranularity: Granularity) => {
+    const apiGranularity = apiGranularityForMode(displayGranularity);
     setLoading(true);
     setError('');
     setEmptyMessage('');
     try {
-      const rows = await StockService.fetchReviewData(symbol, startDate, endDate, '5m');
+      const rows = await StockService.fetchReviewData(symbol, startDate, endDate, apiGranularity);
       if (!rows.length) {
         setRawData([]);
+        setLoadedApiGranularity(apiGranularity);
         setZoomRange([0, 100]);
         setEmptyMessage(`正式复盘暂未覆盖 ${symbol} 在 ${startDate} ~ ${endDate} 的数据。`);
         return;
@@ -405,6 +410,7 @@ const SandboxReviewPage: React.FC = () => {
 
       const sortedRows = normalizeRows(rows);
       setRawData(sortedRows);
+      setLoadedApiGranularity(apiGranularity);
       setZoomRange([0, 100]);
     } catch (err: any) {
       setRawData([]);
@@ -450,7 +456,8 @@ const SandboxReviewPage: React.FC = () => {
       setDraftStartDate(range.startDate);
       setDraftEndDate(range.endDate);
       setActiveRangeShortcut('90d');
-      setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
+      const nextGranularity = chooseGranularityForDateRange(range.startDate, range.endDate);
+      setGranularityMode(nextGranularity);
       setAnchorTs(null);
       const historyItem = {
         symbol: normalizedSymbol,
@@ -463,7 +470,7 @@ const SandboxReviewPage: React.FC = () => {
         localStorage.setItem('stock_search_history', JSON.stringify(next));
         return next;
       });
-      await fetchData(normalizedSymbol, range.startDate, range.endDate);
+      await fetchData(normalizedSymbol, range.startDate, range.endDate, nextGranularity);
     },
     [fetchData, poolItems, resolveDefaultRange]
   );
@@ -490,8 +497,9 @@ const SandboxReviewPage: React.FC = () => {
           setEndDateInput(range.endDate);
           setDraftStartDate(range.startDate);
           setDraftEndDate(range.endDate);
-          setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
-          await fetchData(picked.symbol, range.startDate, range.endDate);
+          const nextGranularity = chooseGranularityForDateRange(range.startDate, range.endDate);
+          setGranularityMode(nextGranularity);
+          await fetchData(picked.symbol, range.startDate, range.endDate, nextGranularity);
           return;
         }
         setError('正式复盘股票池为空，请先迁移历史数据并刷新股票元数据。');
@@ -653,6 +661,16 @@ const SandboxReviewPage: React.FC = () => {
 
   const aggregatedByGranularity = useMemo(() => {
     const sortedRaw = normalizeRows(rawData);
+    if (loadedApiGranularity === '1d') {
+      const dailyRows = aggregateRows(sortedRaw, '1d');
+      return {
+        '5m': [],
+        '15m': [],
+        '30m': [],
+        '60m': [],
+        '1d': dailyRows,
+      } as Record<Granularity, ReviewBar[]>;
+    }
     return {
       '5m': aggregateRows(sortedRaw, '5m'),
       '15m': aggregateRows(sortedRaw, '15m'),
@@ -660,10 +678,10 @@ const SandboxReviewPage: React.FC = () => {
       '60m': aggregateRows(sortedRaw, '60m'),
       '1d': aggregateRows(sortedRaw, '1d'),
     } as Record<Granularity, ReviewBar[]>;
-  }, [rawData]);
+  }, [loadedApiGranularity, rawData]);
 
   const viewState = useMemo(() => {
-    const baseRows = aggregatedByGranularity['5m'];
+    const baseRows = aggregatedByGranularity[loadedApiGranularity === '1d' ? '1d' : '5m'];
     const visibleDays = calcVisibleDays(baseRows, zoomRange);
     const granularity: Granularity = granularityMode;
 
@@ -673,7 +691,7 @@ const SandboxReviewPage: React.FC = () => {
       visibleDays,
       visibleCount: estimateVisibleCount(aggregatedByGranularity[granularity], zoomRange),
     };
-  }, [aggregatedByGranularity, granularityMode, zoomRange]);
+  }, [aggregatedByGranularity, granularityMode, loadedApiGranularity, zoomRange]);
 
   const correlationData = useMemo(() => {
     const rows = aggregatedByGranularity['5m'];
@@ -933,7 +951,14 @@ const SandboxReviewPage: React.FC = () => {
   );
 
   const executeReviewQuery = useCallback(
-    async (symbol: string, startDate: string, endDate: string, minDate?: string, maxDate?: string) => {
+    async (
+      symbol: string,
+      startDate: string,
+      endDate: string,
+      minDate?: string,
+      maxDate?: string,
+      displayGranularity: Granularity = granularityMode
+    ) => {
       if (!symbol) {
         setError('请先选择股票');
         return;
@@ -947,9 +972,9 @@ const SandboxReviewPage: React.FC = () => {
         return;
       }
       setAnchorTs(null);
-      await fetchData(symbol, startDate, endDate);
+      await fetchData(symbol, startDate, endDate, displayGranularity);
     },
-    [fetchData]
+    [fetchData, granularityMode]
   );
 
   const handleExecuteQuery = useCallback(async () => {
@@ -974,8 +999,8 @@ const SandboxReviewPage: React.FC = () => {
       setIsSearchDirty(false);
     }
     const matched = poolItems.find((item) => item.symbol === symbol) || null;
-    await executeReviewQuery(symbol, startDateInput, endDateInput, matched?.min_date, matched?.max_date);
-  }, [applySelectedStock, endDateInput, executeReviewQuery, isSearchDirty, poolItems, searchQuery, searchResults, selectedSearchStock?.name, startDateInput, symbolInput]);
+    await executeReviewQuery(symbol, startDateInput, endDateInput, matched?.min_date, matched?.max_date, granularityMode);
+  }, [applySelectedStock, endDateInput, executeReviewQuery, granularityMode, isSearchDirty, poolItems, searchQuery, searchResults, selectedSearchStock?.name, startDateInput, symbolInput]);
 
   const handleSelectSearchResult = useCallback(
     async (stock: SearchResult) => {
@@ -998,13 +1023,14 @@ const SandboxReviewPage: React.FC = () => {
         return;
       }
       const range = resolveShortcutRange(shortcut);
+      const nextGranularity = chooseGranularityForDateRange(range.startDate, range.endDate);
       setActiveRangeShortcut(shortcut);
       setStartDateInput(range.startDate);
       setEndDateInput(range.endDate);
       setDraftStartDate(range.startDate);
       setDraftEndDate(range.endDate);
-      setGranularityMode(chooseGranularityForDateRange(range.startDate, range.endDate));
-      await executeReviewQuery(symbol, range.startDate, range.endDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date);
+      setGranularityMode(nextGranularity);
+      await executeReviewQuery(symbol, range.startDate, range.endDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date, nextGranularity);
     },
     [executeReviewQuery, resolveShortcutRange, selectedInputPoolItem?.max_date, selectedInputPoolItem?.min_date, symbolInput]
   );
@@ -1017,10 +1043,28 @@ const SandboxReviewPage: React.FC = () => {
     }
     setStartDateInput(draftStartDate);
     setEndDateInput(draftEndDate);
-    setGranularityMode(chooseGranularityForDateRange(draftStartDate, draftEndDate));
+    const nextGranularity = chooseGranularityForDateRange(draftStartDate, draftEndDate);
+    setGranularityMode(nextGranularity);
     setIsRangePickerOpen(false);
-    await executeReviewQuery(symbol, draftStartDate, draftEndDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date);
+    await executeReviewQuery(symbol, draftStartDate, draftEndDate, selectedInputPoolItem?.min_date, selectedInputPoolItem?.max_date, nextGranularity);
   }, [draftEndDate, draftStartDate, executeReviewQuery, selectedInputPoolItem?.max_date, selectedInputPoolItem?.min_date, symbolInput]);
+
+  const handleGranularityChange = useCallback(
+    async (nextGranularity: Granularity) => {
+      setGranularityMode(nextGranularity);
+      const symbol = symbolInput.trim().toLowerCase();
+      if (!symbol || !startDateInput || !endDateInput) return;
+      await executeReviewQuery(
+        symbol,
+        startDateInput,
+        endDateInput,
+        selectedInputPoolItem?.min_date,
+        selectedInputPoolItem?.max_date,
+        nextGranularity
+      );
+    },
+    [endDateInput, executeReviewQuery, selectedInputPoolItem?.max_date, selectedInputPoolItem?.min_date, startDateInput, symbolInput]
+  );
 
   const handleDataZoom = useCallback((event: any) => {
     const payload = event?.batch?.[0] ?? event;
@@ -1664,7 +1708,7 @@ const SandboxReviewPage: React.FC = () => {
               {GRANULARITY_OPTIONS.map((option) => (
                 <button
                   key={option.key}
-                  onClick={() => setGranularityMode(option.key)}
+                  onClick={async () => handleGranularityChange(option.key)}
                   className={`rounded-md border px-1.5 py-1 text-[11px] leading-none ${
                     granularityMode === option.key
                       ? 'border-violet-500 bg-violet-700/30 text-violet-200'

@@ -1,4 +1,0 @@
-object,indicator,current_signal,positive_threshold,negative_threshold,status,next_check,source,source_url
-农业供给,关键产区作物生长期天气,仍需区域实况确认,旱涝持续并导致产量预期下修,产区天气正常或库存足以缓冲,待验证,2026-05-31,FAO / USDA / 气象部门,https://www.fao.org/el-nino/en/
-水资源,水库水位 / 土壤墒情 / 降雨距平,还没有项目内结构化数据,重点区域水资源压力上升,降雨正常或政策需求未放大,待接入,2026-06-15,气象/水利部门,
-电力负荷,高温天数 / 尖峰负荷,作为高温链旁路观察,高温持续推升制冷和调峰需求,区域温度异常不明显,观察,2026-06-30,气象/电力数据,

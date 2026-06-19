@@ -28,4 +28,7 @@ def test_config_prefers_live_and_research_current_roots(monkeypatch, tmp_path):
     assert Path(config.DB_FILE) == live_root / "market_data.db"
     assert Path(config.USER_DB_FILE) == live_root / "user_data.db"
     assert Path(config.ATOMIC_FACTS_DIR) == research_root / "atomic_facts"
-
+    assert Path(config.ARTIFACTS_ROOT) == formal_root / "artifacts"
+    assert Path(config.SELECTION_ARTIFACTS_ROOT) == formal_root / "artifacts" / "selection"
+    assert Path(config.RESEARCH_PAYLOADS_ROOT) == formal_root / "artifacts" / "research_payloads"
+    assert Path(config.RUNS_ROOT) == formal_root / "runs"

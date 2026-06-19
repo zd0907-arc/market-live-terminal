@@ -1,6 +1,0 @@
-demand_link,indicator,current_signal,decision_weight,positive_signal,risk_signal,next_check,source,source_url
-CSP CapEx,Top9 北美 CSP 2026 CapEx,US$830B，+79% YoY（此前 +61%）,S,CapEx 继续上修，服务器与存储订单跟进,CapEx 下修或 GPU 交付放缓,2026-07-31,TrendForce,https://www.trendforce.com/presscenter/news/20260506-13033.html
-数据中心功率,Global data-center installed power,155GW，+29% YoY,A,建设与电力同步扩张,电力/建设约束导致装机放缓,2026-07-31,TrendForce,https://www.trendforce.com/presscenter/news/20260506-13033.html
-AI Server,AI server / GPU 交付,TrendForce 与 Micron 均指向需求继续上修,S,AI server 出货继续上修,交付放缓或订单取消,next earnings,TrendForce / Micron IR,https://www.trendforce.com/presscenter/news/20260331-12995.html
-Enterprise SSD,eSSD 合约价 / 订单,2Q26 合约价 +48%~53%，订单无放缓迹象,S,eSSD 报价与订单同步紧张,只有消费 SSD 涨，没有企业订单,2026-06-15,TrendForce,https://www.trendforce.com/research/download/RP260427NK
-RAG / 企业知识库,企业存储连接 AI query agents,长期方向明确，短期仍需订单验证,B,更多企业存储厂商接入 AI 平台,长期故事不转化为短期订单,2026-08-01,TrendForce / NVIDIA,https://www.trendforce.com/insights/memory-wall

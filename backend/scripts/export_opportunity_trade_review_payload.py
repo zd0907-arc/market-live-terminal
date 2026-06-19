@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
-from backend.app.core.config import RESEARCH_CURRENT_ROOT
+from backend.app.core.config import RESEARCH_CURRENT_ROOT, RESEARCH_PAYLOADS_ROOT, SELECTION_ARTIFACTS_ROOT, first_existing_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,9 +30,20 @@ DEFAULT_SELECTION_DB = Path(
         str(DEFAULT_RESEARCH_ROOT / "selection" / "selection_research.db"),
     )
 )
-DEFAULT_TRADES = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_trades.csv"
-DEFAULT_SUMMARY = ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_summary.csv"
-DEFAULT_OUT = ROOT / "public/research/opportunity_trade_review_payload.json"
+DEFAULT_TRADES = Path(
+    first_existing_path(
+        str(Path(SELECTION_ARTIFACTS_ROOT) / "opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_trades.csv"),
+        str(ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_trades.csv"),
+    )
+)
+DEFAULT_SUMMARY = Path(
+    first_existing_path(
+        str(Path(SELECTION_ARTIFACTS_ROOT) / "opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_summary.csv"),
+        str(ROOT / "data/selection/opportunity_discovery/opportunity_discovery_trade_l2_v0_1/holding_model_portfolio_summary.csv"),
+    )
+)
+DEFAULT_OUT = Path(RESEARCH_PAYLOADS_ROOT) / "opportunity_trade_review_payload.json"
+DEFAULT_PUBLIC_OUT = ROOT / "public/research/opportunity_trade_review_payload.json"
 DEFAULT_CALENDAR_START = "2025-01-02"
 
 
@@ -349,7 +360,18 @@ def export_payload(args: argparse.Namespace) -> None:
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"out": str(out_path), "trades": len(detail_trades), "curve_rows": len(curve)}, ensure_ascii=False))
+    public_out = str(getattr(args, "public_out", "") or "").strip()
+    if public_out:
+        public_path = Path(public_out)
+        if public_path.resolve() != out_path.resolve():
+            public_path.parent.mkdir(parents=True, exist_ok=True)
+            public_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(
+        json.dumps(
+            {"out": str(out_path), "public_out": public_out or None, "trades": len(detail_trades), "curve_rows": len(curve)},
+            ensure_ascii=False,
+        )
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -365,6 +387,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--review-lookback-days", type=int, default=10)
     parser.add_argument("--review-forward-days", type=int, default=22)
     parser.add_argument("--out", default=str(DEFAULT_OUT))
+    parser.add_argument("--public-out", default=str(DEFAULT_PUBLIC_OUT), help="页面发布副本；传空字符串可跳过")
     args = parser.parse_args(argv)
     export_payload(args)
 

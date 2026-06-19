@@ -84,7 +84,17 @@ def _date(value: Any) -> Optional[str]:
 def _load_metrics(end_date: str, start_date: Optional[str] = None) -> pd.DataFrame:
     start = start_date or (pd.Timestamp(end_date) - pd.Timedelta(days=MAX_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
     raw = load_atomic_daily_window(start, end_date)
-    metrics = add_ma(compute_v2_metrics(raw))
+    if raw.empty:
+        return pd.DataFrame()
+    metrics = compute_v2_metrics(raw)
+    if metrics.empty:
+        return pd.DataFrame()
+    try:
+        metrics = add_ma(metrics)
+    except ValueError as exc:
+        if "No objects to concatenate" in str(exc):
+            return pd.DataFrame()
+        raise
     return metrics.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
 
 
@@ -94,6 +104,8 @@ def _cached_metrics(end_date: str, start_date: Optional[str] = None) -> pd.DataF
 
 
 def _select_trade_date(trade_date: Optional[str], metrics: pd.DataFrame) -> str:
+    if metrics.empty or "trade_date" not in metrics.columns:
+        return str(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))
     dates = sorted(metrics["trade_date"].dropna().astype(str).unique().tolist())
     if not dates:
         return str(trade_date or pd.Timestamp.today().strftime("%Y-%m-%d"))

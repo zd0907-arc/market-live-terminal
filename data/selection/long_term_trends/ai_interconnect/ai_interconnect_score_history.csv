@@ -1,2 +1,0 @@
-date,updated_at,topic_id,topic_name,industry_trend_score,industry_trend_max,a_share_operability_score,a_share_operability_max,conclusion,industry_status,operability_state,stage,notes
-2026-05-11,2026-05-11 00:39 Asia/Shanghai,ai_interconnect,AI高速互联,85,100,46,100,值得跟踪 / 先研究后入池,行业趋势强,观察池已收敛，等待分歧确认,价格热度回流 / 公司研究卡重建,公司池改为研究卡：先拆产业分支，再决定include_decision；只有进入观察池的公司才计入watchlist。

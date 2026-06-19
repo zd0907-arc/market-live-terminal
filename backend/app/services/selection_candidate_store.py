@@ -807,6 +807,21 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
         ).fetchall()
         run_rows = conn.execute(
             """
+            WITH latest AS (
+                SELECT
+                    trade_date,
+                    source_id,
+                    run_status,
+                    candidate_count,
+                    finished_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY trade_date, source_id
+                        ORDER BY COALESCE(finished_at, started_at) DESC, id DESC
+                    ) AS rn
+                FROM selection_strategy_runs
+                WHERE (? IS NULL OR trade_date >= ?)
+                  AND (? IS NULL OR trade_date <= ?)
+            )
             SELECT
                 trade_date,
                 COUNT(*) AS run_count,
@@ -814,9 +829,8 @@ def query_daily_trade_dates(start_date: Optional[str] = None, end_date: Optional
                 SUM(CASE WHEN run_status='failed' THEN 1 ELSE 0 END) AS failed_count,
                 SUM(candidate_count) AS run_candidate_count,
                 MAX(finished_at) AS last_finished_at
-            FROM selection_strategy_runs
-            WHERE (? IS NULL OR trade_date >= ?)
-              AND (? IS NULL OR trade_date <= ?)
+            FROM latest
+            WHERE rn = 1
             GROUP BY trade_date
             """,
             (start_date, start_date, end_date, end_date),

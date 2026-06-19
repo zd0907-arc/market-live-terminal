@@ -13,6 +13,11 @@ REPO_RESEARCH_DIR = ROOT / "docs" / "selection" / RESEARCH_DIR_NAME
 POLICY_ID = "market_gate_v0_20260610"
 POLICY_VERSION = "research_v0"
 
+try:
+    from backend.app.core.config import RESEARCH_CURRENT_ROOT as CONFIG_RESEARCH_CURRENT_ROOT
+except Exception:
+    CONFIG_RESEARCH_CURRENT_ROOT = ""
+
 
 def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
     try:
@@ -37,12 +42,17 @@ def _candidate_research_dirs() -> List[Path]:
     explicit = os.getenv("MARKET_ENVIRONMENT_GATE_DIR", "").strip()
     if explicit:
         candidates.append(Path(explicit).expanduser())
+    daily_local = os.getenv("DAILY_LOCAL_MARKET_ENVIRONMENT_GATE_DIR", "").strip()
+    if daily_local:
+        candidates.append(Path(daily_local).expanduser())
     selection_dir = os.getenv("SELECTION_DATA_DIR", "").strip()
     if selection_dir:
         candidates.append(Path(selection_dir).expanduser() / RESEARCH_DIR_NAME)
     research_root = os.getenv("RESEARCH_CURRENT_ROOT", "").strip()
     if research_root:
         candidates.append(Path(research_root).expanduser() / "selection" / RESEARCH_DIR_NAME)
+    if CONFIG_RESEARCH_CURRENT_ROOT:
+        candidates.append(Path(CONFIG_RESEARCH_CURRENT_ROOT).expanduser() / "selection" / RESEARCH_DIR_NAME)
     candidates.append(REPO_RESEARCH_DIR)
 
     out: List[Path] = []
@@ -65,6 +75,10 @@ def _research_dir() -> Path:
 
 def _csv_signature(name: str) -> tuple[str, int, int]:
     path = _research_dir() / name
+    return _path_signature(path)
+
+
+def _path_signature(path: Path) -> tuple[str, int, int]:
     if not path.exists():
         return str(path), -1, -1
     stat = path.stat()
@@ -85,6 +99,11 @@ def _read_csv(name: str) -> List[Dict[str, Any]]:
     return _read_csv_cached(path_text, mtime_ns, size)
 
 
+def _read_csv_from_dir(base_dir: Path, name: str) -> List[Dict[str, Any]]:
+    path_text, mtime_ns, size = _path_signature(base_dir / name)
+    return _read_csv_cached(path_text, mtime_ns, size)
+
+
 def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for key, value in row.items():
@@ -101,8 +120,14 @@ def _clean_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def market_state_by_date() -> Dict[str, Dict[str, Any]]:
-    rows = [_clean_row(row) for row in _read_csv("market_state_daily.csv")]
-    return {str(row.get("trade_date")): row for row in rows if row.get("trade_date")}
+    rows_by_date: Dict[str, Dict[str, Any]] = {}
+    for base_dir in reversed(_candidate_research_dirs()):
+        for raw_row in _read_csv_from_dir(base_dir, "market_state_daily.csv"):
+            row = _clean_row(raw_row)
+            trade_date = str(row.get("trade_date") or "")
+            if trade_date:
+                rows_by_date[trade_date] = row
+    return rows_by_date
 
 
 def gate_policy_summary() -> Dict[str, List[Dict[str, Any]]]:

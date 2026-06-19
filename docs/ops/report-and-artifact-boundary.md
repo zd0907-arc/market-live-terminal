@@ -10,7 +10,7 @@
 1. `market-data/research/current/`：正式研究真相库
 2. `docs/selection/`、`docs/strategy-rework/`：人读结论与长期研究材料
 3. `market-data/artifacts/`：仓外研究导出、页面快照、专题分析副产物
-4. `.run/`、`logs/`、`public/research/`、`dist/research/`：运行态、页面 payload、构建产物
+4. `market-data/runs/`、`logs/`、`dist/research/`：运行现场、日志、构建产物
 
 ## 2. 当前正式真相层
 
@@ -49,6 +49,7 @@
 1. 这里放的是“给人看”的结论，不是页面必须依赖的唯一数据源。
 2. 如果某个目录名字带日期、`v1/v2/v3`、`formal`，默认先当实验包看，不当当前正式版本。
 3. 真正当前仍持续维护的方向，需要在 README 或总览文档里显式写清。
+4. 新研究不再把大批 CSV/JSON 直接写进 `docs`；`docs` 只保留结论、业务解释、运行说明和少量必要样例。
 
 ## 4. 仓外 artifacts 层
 
@@ -59,28 +60,28 @@
 | `market-data/artifacts/market_heat/` | 热点专题分析、快照、案例导出 |
 | `market-data/artifacts/selection/` | 选股研究导出与校验结果 |
 | `market-data/artifacts/reports/` | 运行态合并报告、历史兼容报告 |
+| `market-data/artifacts/research_payloads/` | 研究页静态 payload 的源产物 |
 
 规则：
 
 1. `artifacts/` 不是正式研究真相层。
-2. `artifacts/` 适合放 `json / md / csv / html` 这类导出物。
-3. 新的一次性专题分析，优先落到 `artifacts/`，不要再混进正式库目录。
+2. `artifacts/` 适合放 `json / md / csv / html / model` 这类机器导出物。
+3. 新的一次性专题分析，优先落到 `artifacts/`，不要再混进正式库目录或代码仓 `docs`。
 
 ## 5. 运行态与页面副产物层
 
 | 路径 | 角色 |
 |---|---|
-| `.run/*` | 任务现场、阶段报告、临时产物 |
+| `market-data/runs/*` | 任务现场、阶段报告、临时产物 |
 | `logs/*` | 运行日志与临时摘要 |
-| `public/research/*` | 前端研究页 payload 源文件 |
 | `dist/research/*` | 构建后的静态研究页 payload |
 
 规则：
 
 1. 这层默认不进入“正式研究结论”解释。
-2. `public/research/*` 是页面输入，不是正式研究主库。
+2. 页面 `/research/*` 由后端从 `market-data/artifacts/research_payloads/` 提供，不再依赖代码仓 `public/research`。
 3. `dist/research/*` 只是 build 结果，永远不是真相源。
-4. `.run/` 和 `logs/` 里的 `report.json`、`summary.md` 默认按任务副产物理解。
+4. `market-data/runs/` 和 `logs/` 里的 `report.json`、`summary.md` 默认按任务副产物理解。
 
 ## 6. 哪些脚本最像 report builder
 
@@ -107,14 +108,15 @@
 1. `docs/selection/*_2026-*`：默认先按 dated experiment bundle 理解
 2. `docs/selection/*_v3_formal`：名字带 `formal`，但仍可能只是某次实验包
 3. `data/selection/selection_research.db`：当前默认已不存在；即使将来被旧兼容链重建，也不当正式真相
-4. `public/research/*`：页面 payload，不是正式研究结果
+4. `public/research/*`：代码仓内不再保留；若重新出现，默认按错误落点处理
 5. `logs/*report*`：运行副产物，不是正式报告总册
 
 ## 8. 后续规则
 
-以后默认按这 4 条执行：
+以后默认按这 5 条执行：
 
 1. 正式研究真相只进 `market-data/research/current/`
 2. 人读长期材料只进 `docs/selection/*`、`docs/strategy-rework/*`
 3. 机器导出物优先进 `market-data/artifacts/*`
 4. 运行态和页面 payload 不再拿来充当“正式研究报告”
+5. 旧实验包先保留业务可追溯性；新增研究必须按“数据仓存产物、代码仓存结论”执行。

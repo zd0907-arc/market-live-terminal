@@ -22,6 +22,16 @@ export default defineConfig(({ mode }) => {
                 }
               });
             },
+          },
+          '/data': {
+            target: apiProxyTarget,
+            changeOrigin: true,
+            secure: false,
+          },
+          '/research': {
+            target: apiProxyTarget,
+            changeOrigin: true,
+            secure: false,
           }
         }
       },

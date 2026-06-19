@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-LATEST_JSON=".run/daily_new_framework/latest.json"
+FORMAL_MARKET_DATA_ROOT="${FORMAL_MARKET_DATA_ROOT:-/Users/dong/ZhangData/market-data}"
+RUNS_ROOT="${RUNS_ROOT:-$FORMAL_MARKET_DATA_ROOT/runs}"
+LATEST_JSON="$RUNS_ROOT/daily_new_framework/latest.json"
 if [ ! -f "$LATEST_JSON" ]; then
   echo "状态: 未找到新框架日跑状态"
   exit 0
